@@ -20,7 +20,14 @@ let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
 	down: [0], // defined base anim
 });
 
-let silhouette = App.loadSpritesheet("silhouette.png");
+let gunEffect = App.loadSpritesheet("bullet_sprite.png", 12, 12, {
+	left: [0], // defined base anim
+	right: [1], // defined base anim
+	up: [2], // defined base anim
+	down: [3], // defined base anim
+});
+
+let silhouette = App.loadSpritesheet("silhouette2.png");
 
 let _playerCount = 0;
 let _players = App.players;
@@ -30,9 +37,17 @@ let _stateTimer = 0;
 let _state = STATE_INIT;
 let _widget = null;
 
+let _mafiaTarget;
+let _doctorTarget;
+
 App.onJoinPlayer.Add(function (p) {
 	// p.sprite = tomb;
 	// p.hidden = true;
+	p.attackType = 1;
+	p.attackSprite = null;
+	p.attackParam1 = 0;
+	p.attackParam2 = 0;
+
 	p.moveSpeed = 80;
 	p.sprite = null;
 	p.title = 0;
@@ -51,6 +66,14 @@ App.onJoinPlayer.Add(function (p) {
 });
 
 App.onLeavePlayer.Add(function (p) {
+	p.tag = {
+		joined: false,
+		role: "",
+		voted: false,
+		title: 0,
+		votecount: 0,
+		healed: false,
+	};
 	switch (_state) {
 		case STATE_INIT:
 			_playerCount--;
@@ -100,10 +123,12 @@ App.onDestroy.Add(function () {
 		p.hidden = false;
 		p.tag = {};
 		p.sendUpdated();
+		p.title = null;
 	}
 });
 
 App.onStart.Add(function () {
+	Map.clearAllObjects();
 	startState(STATE_INIT);
 });
 
@@ -114,11 +139,11 @@ App.onSay.add(function (player, text) {
 				if (player.tag.joined == false) {
 					_playerCount++;
 					player.tag.title = _playerCount;
-					player.title = _playerCount;
+					player.title = _playerCount + "번 참가자";
 					player.tag.joined = true;
 					player.spawnAt(
-						coordinates[player.title * 1].x,
-						coordinates[player.title * 1].y
+						coordinates[player.tag.title * 1].x,
+						coordinates[player.tag.title * 1].y
 					);
 					player.moveSpeed = 0;
 					player.sendUpdated();
@@ -157,6 +182,32 @@ App.onSay.add(function (player, text) {
 	if (_state == STATE_PLAYING_NIGHT) {
 		if (player.tag.joined == true) {
 		}
+	}
+});
+
+App.onUnitAttacked.Add(function (p, x, y, target) {
+	p.moveSpeed = 0;
+	p.attackType = 1;
+	p.attackSprite = null;
+	p.attackParam1 = 0;
+	p.attackParam2 = 0;
+	p.spawnAt(
+		coordinates[player.tag.title * 1].x,
+		coordinates[player.tag.title * 1].y
+	);
+	p.sendUpdated();
+
+	switch (p.tag.role) {
+		case "경찰":
+			let targetRole = target.tag.role;
+			p.showCenterLabel(
+				`${target.title}번 참가자의 직업은 ${targetRole}입니다.`,
+				0xffffff,
+				0x000000,
+				115
+			);
+			break;
+		case "마피아":
 	}
 });
 
@@ -256,14 +307,29 @@ function startState(state) {
 				startState(STATE_PLAYING_NIGHT);
 			}, _stateTimer);
 			// 위젯 타이머
-			// 투표 끝 -> 한명 죽고 직업 공개
-			// 한명 죽고 직업 공개 -> 밤
+			// 투표 끝 -> 한명 죽고
+			// 한명 죽고  -> 밤
 			break;
 		case STATE_PLAYING_NIGHT:
 			destroyAppWidget();
 			tagReset();
 			createSilhouette();
 			allHidden();
+
+			for (let i in _players) {
+				let p = _players[i];
+				if (p.tag.joined == true) {
+					let role = p.tag.role;
+					if (role != "시민") {
+						p.moveSpeed = 80;
+						p.attackType = 2;
+						p.attackSprite = gunEffect;
+						p.attackParam1 = 3;
+						p.attackParam2 = 3;
+						p.sendUpdated();
+					}
+				}
+			}
 
 			_widget = App.showWidget("timer.html", "top", 200, 300);
 			_widget.sendMessage({
