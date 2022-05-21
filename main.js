@@ -28,6 +28,75 @@ let monster = App.loadSpritesheet(
 	8
 );
 
+let policeSprite = App.loadSpritesheet(
+	"policeSprite.png",
+	48,
+	48,
+	{
+		// defined base anim
+		left: [3, 4, 5],
+		up: [9, 10, 11],
+		down: [0, 1, 2],
+		right: [6, 7, 8],
+	},
+	8
+);
+
+let mafiaSprite = App.loadSpritesheet(
+	"mafiaSprite.png",
+	48,
+	48,
+	{
+		// defined base anim
+		left: [3, 4, 5],
+		up: [9, 10, 11],
+		down: [0, 1, 2],
+		right: [6, 7, 8],
+	},
+	8
+);
+
+let doctorSprite = App.loadSpritesheet(
+	"doctorSprite.png",
+	48,
+	48,
+	{
+		// defined base anim
+		left: [3, 4, 5],
+		up: [9, 10, 11],
+		down: [0, 1, 2],
+		right: [6, 7, 8],
+	},
+	8
+);
+
+let doctorAttackSprite = App.loadSpritesheet("doctorAttackSprite.png", 24, 24, {
+	left: [0], // defined base anim
+	right: [0], // defined base anim
+	up: [0], // defined base anim
+	down: [0], // defined base anim
+});
+
+let policeAttackSprite = App.loadSpritesheet("policeAttackSprite.png", 24, 29, {
+	left: [0], // defined base anim
+	right: [0], // defined base anim
+	up: [0], // defined base anim
+	down: [0], // defined base anim
+});
+
+let mafiaAttackSprite = App.loadSpritesheet(
+	"bulletSprite2.png",
+	24,
+	24,
+	{
+		left: [2], // defined base anim
+		right: [0], // defined base anim
+		up: [3], // defined base anim
+		down: [1], // defined base anim
+	},
+	8
+);
+
 let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
 	left: [0], // defined base anim
 	right: [0], // defined base anim
@@ -35,19 +104,19 @@ let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
 	down: [0], // defined base anim
 });
 
-let gunEffect = App.loadSpritesheet(
-	"bullet_sprite.png",
-	12,
-	12,
-	{
-		left: [0], // defined base anim
-		right: [1], // defined base anim
-		up: [2], // defined base anim
-		down: [3], // defined base anim
-		rotate: [0, 1, 2, 3],
-	},
-	8
-);
+// let mafiaAttackSprite = App.loadSpritesheet(
+// 	"bullet_sprite.png",
+// 	12,
+// 	12,
+// 	{
+// 		left: [0], // defined base anim
+// 		right: [1], // defined base anim
+// 		up: [2], // defined base anim
+// 		down: [3], // defined base anim
+// 		rotate: [0, 1, 2, 3],
+// 	},
+// 	8
+// );
 
 let silhouette = App.loadSpritesheet("silhouette2.png");
 
@@ -62,6 +131,10 @@ let _widget = null;
 let _mafiaTarget;
 let _doctorTarget;
 let _turnCount = 0;
+
+function playAttackSound() {}
+
+App.addOnKeyDown(90, callback);
 
 App.onJoinPlayer.Add(function (p) {
 	// p.sprite = tomb;
@@ -85,9 +158,14 @@ App.onJoinPlayer.Add(function (p) {
 		mafiaTarget: false,
 	};
 
-	Map.putObject(10, 10, monster);
+	Map.putObject(10, 10, monster, {
+		overlap: true,
+		animation: {
+			rotate: [1, 4, 5, 7],
+		},
+	});
 
-	Map.playObjectAnimation(10, 10, "rotate", 100);
+	Map.playObjectAnimation(10, 10, "animation", 100);
 
 	for (const [key, value] of Object.entries(monster)) {
 		// App.sayToAll(`${key}: ${value}`);
@@ -95,9 +173,10 @@ App.onJoinPlayer.Add(function (p) {
 
 	p.moveSpeed = 80;
 	p.attackType = 0;
-	p.attackSprite = gunEffect;
+	p.attackSprite = mafiaAttackSprite;
 	p.attackParam1 = 3;
 	p.attackParam2 = 3;
+	// App.sayToAll(`공격 거리: ${p.attackParam2}`);
 
 	p.sendUpdated();
 
@@ -133,17 +212,11 @@ App.onLeavePlayer.Add(function (p) {
 			break;
 		case STATE_PLAYING_DAY:
 			playerLeft(p);
-			// 위젯 -> 2분 30초간 이야기를 나누세요.
-			// 카운트 끝 -> 투표
-			// 투표 끝 -> 한명 죽고 직업 공개
-			// 한명 죽고 직업 공개 -> 밤
+
 			break;
 		case STATE_PLAYING_VOTE:
 			playerLeft(p);
-			// 위젯 -> 2분 30초간 이야기를 나누세요.
-			// 카운트 끝 -> 투표
-			// 투표 끝 -> 한명 죽고 직업 공개
-			// 한명 죽고 직업 공개 -> 밤
+
 			break;
 		case STATE_END:
 			if (_widget) {
@@ -169,11 +242,30 @@ App.onDestroy.Add(function () {
 });
 
 App.onStart.Add(function () {
-	Map.clearAllObjects();
 	startState(STATE_INIT);
 });
 
 App.onSay.add(function (player, text) {
+	if (text == "의사") {
+		player.sprite = doctorSprite;
+		player.attackSprite = doctorAttackSprite;
+		player.attackType = 3;
+		player.attackParam1 = 2;
+		player.attackParam2 = 4;
+	} else if (text == "마피아") {
+		player.sprite = mafiaSprite;
+		player.attackSprite = mafiaAttackSprite;
+		player.attackType = 3;
+		player.attackParam1 = 2;
+		player.attackParam2 = 4;
+	} else if (text == "경찰") {
+		player.sprite = policeSprite;
+		player.attackSprite = policeAttackSprite;
+		player.attackType = 3;
+		player.attackParam1 = 2;
+		player.attackParam2 = 4;
+	}
+	player.sendUpdated();
 	if (_state == STATE_INIT) {
 		if (text == "참가") {
 			if (_playerCount < 6) {
@@ -305,6 +397,7 @@ function startState(state) {
 
 	switch (_state) {
 		case STATE_INIT:
+			Map.clearAllObjects();
 			_turnCount = 0;
 			App.showCenterLabel(
 				`채팅창에 '참가'를 입력해 마피아 게임에 참여할 수 있습니다.`,
@@ -337,6 +430,7 @@ function startState(state) {
 			}, 10); // 나중에 바꿈
 			break;
 		case STATE_PLAYING_DAY:
+			gameEndCheck();
 			nightResult(++_turnCount);
 			destroyAppWidget();
 			clearHidden();
@@ -378,10 +472,12 @@ function startState(state) {
 			// 한명 죽고  -> 밤
 			break;
 		case STATE_PLAYING_NIGHT:
+			gameEndCheck();
 			destroyAppWidget();
 			tagReset();
 			createSilhouette();
 			allHidden();
+			App.playSound("nightSound.mp3");
 
 			for (let i in _players) {
 				let p = _players[i];
@@ -390,7 +486,7 @@ function startState(state) {
 					if (role != "시민") {
 						p.moveSpeed = 80;
 						p.attackType = 1;
-						p.attackSprite = gunEffect;
+						p.attackSprite = mafiaAttackSprite;
 						p.attackParam1 = 3;
 						p.attackParam2 = 3;
 						p.sendUpdated();
@@ -569,7 +665,7 @@ function createSilhouette() {
 }
 
 function nightResult(turnCount) {
-	if(turnCount != 1){
+	if (turnCount != 1) {
 		for (let i in _players) {
 			p = _players[i];
 			if (p.tag.joined == true) {
@@ -598,21 +694,27 @@ function nightResult(turnCount) {
 function gameEndCheck() {
 	let mafiaCount = 0;
 	let citizenCount = 0;
-	for (let i in _players){
+	for (let i in _players) {
 		let p = _players[i];
-		if(p.tag.joined == true){
-			if(p.tag.role == "마피아") mafiaCount++;
+		if (p.tag.joined == true) {
+			if (p.tag.role == "마피아") mafiaCount++;
 			else citizenCount++;
 		}
 	}
 
-	if(mafiaCount == 0){
+	if (mafiaCount == 0) {
 		// 시민 승리
-	}
-	else if(mafiaCount == 1){
-		if(mafiaCount == citizenCount){
+		destroyAppWidget();
+		startState(STATE_INIT);
+		return true;
+	} else if (mafiaCount == 1) {
+		if (mafiaCount == citizenCount) {
 			// 마피아 승리
+			destroyAppWidget();
+			startState(STATE_INIT);
+			return true;
 		}
 	}
-	else if()
+
+	return false;
 }
