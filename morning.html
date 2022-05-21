@@ -20,8 +20,8 @@
         text-align: center;
         width: 100%;
         position: absolute;
-        bottom: 15px;
-        font-size: 23px;
+        bottom: 5px;
+        font-size: 14px;
       }
       .timer {
         margin-left: auto;
@@ -32,15 +32,18 @@
       }
       .description {
         position: absolute;
-        bottom: 100px;
-        font-size: 20px;
+        bottom: 40px;
+        font-size: 18px;
         font-weight: 550;
-        width: 100%;
+        width: 80%;
         text-align: center;
+        word-break: break-all;
       }
       .wrapper {
         width: 100%;
         position: relative;
+        display: flex;
+        justify-content: center;
       }
     </style>
   </head>
@@ -52,7 +55,9 @@
         class="background"
       />
       <div class="timer" id="timer">00:00</div>
-      <div class="description" id="description">description</div>
+      <div class="description" id="description">
+        마피아, 경찰, 의사는 밤에 움직일 수 있습니다.
+      </div>
       <div class="situation" id="situation">총인원 -명, 생존 -명</div>
     </div>
   </body>
