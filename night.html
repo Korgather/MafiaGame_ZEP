@@ -6,43 +6,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
     <style>
+      body {
+        overflow: hidden;
+        color: #c3c3c3;
+      }
       .background {
-        background-image: url("https://i.imgur.com/g45ubkf.png");
-        background-size: contain;
-        background-repeat: no-repeat;
-        width: 600px;
-        height: 300px;
+        width: 100%;
+        height: auto;
         display: flex;
         flex-direction: column;
       }
       .situation {
-        color: #c3c3c3;
-
         text-align: center;
         width: 100%;
-        margin-bottom: 20px;
+        position: absolute;
+        bottom: 15px;
         font-size: 23px;
       }
       .timer {
-        color: #c3c3c3;
         margin-left: auto;
-        margin-right: 20px;
-        margin-top: 10px;
+        top: 5px;
+        right: 20px;
         font-size: 45px;
+        position: absolute;
       }
       .description {
-        margin-top: auto;
-        margin-bottom: 40px;
+        position: absolute;
+        bottom: 100px;
         font-size: 20px;
         font-weight: 550;
-        color: #c3c3c3;
         width: 100%;
         text-align: center;
+      }
+      .wrapper {
+        width: 100%;
+        position: relative;
       }
     </style>
   </head>
   <body>
-    <div class="background">
+    <div class="wrapper">
+      <img
+        src="https://i.imgur.com/g45ubkf.png"
+        alt="morningImage"
+        class="background"
+      />
       <div class="timer" id="timer">00:00</div>
       <div class="description" id="description">description</div>
       <div class="situation" id="situation">총인원 -명, 생존 -명</div>
