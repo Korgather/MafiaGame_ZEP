@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      .background {
+        background-image: url("https://i.imgur.com/aNZkEkP.png");
+        background-size: contain;
+        background-repeat: no-repeat;
+        width: 600px;
+        height: 300px;
+        display: flex;
+        flex-direction: column;
+      }
+      .situation {
+        color: #484848;
+        margin-top: auto;
+        text-align: center;
+        width: 100%;
+        margin-bottom: 20px;
+        font-size: 23px;
+      }
+      .timer {
+        color: #484848;
+        margin-left: auto;
+        margin-right: 20px;
+        margin-top: 10px;
+        font-size: 45px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="background">
+      <div class="timer" id="timer">00:00</div>
+      <div class="situation" id="situation">총인원 6명, 생존 3명</div>
+    </div>
+  </body>
+  <script type="text/javascript">
+    const toHHMMSS = (time) => {
+      var hours = Math.floor(time / 3600);
+      var minutes = Math.floor((time - hours * 3600) / 60);
+      var seconds = Math.floor(time - hours * 3600 - minutes * 60);
+      if (hours < 10) {
+        hours = "0" + hours;
+      }
+      if (minutes < 10) {
+        minutes = "0" + minutes;
+      }
+      if (seconds < 10) {
+        seconds = "0" + seconds;
+      }
+      return hours + ":" + minutes + ":" + seconds;
+    };
+    const timerDom = document.getElementById("timer");
+    const situationDom = document.getElementById("situation");
+    window.addEventListener("message", function (e) {
+      let timer = e.data.timer;
+      let total = e.data.total;
+      let alive = e.data.alive;
+      let timerInterval;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        if (timer === 11) {
+          timerDom.style.color = "red";
+        }
+        if (--timer >= 0) {
+          timerDom.innerText = toHHMMSS(timer);
+        } else {
+          timerDom.style.color = "#484848";
+          clearInterval(timerInterval);
+        }
+      }, 1000);
+      timerDom.innerText = toHHMMSS(timer);
+      situationDom.innerText = `총인원 ${total}명, 생존 ${alive}명`;
+    });
+  </script>
+</html>
