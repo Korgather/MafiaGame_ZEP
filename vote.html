@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        overflow: hidden;
+        color: #a84b11;
+      }
+      .background {
+        width: 100%;
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .situation {
+        text-align: center;
+        width: 100%;
+        position: absolute;
+        bottom: 5px;
+        font-size: 14px;
+      }
+      .timer {
+        margin-left: auto;
+        top: 5px;
+        right: 20px;
+        font-size: 45px;
+        position: absolute;
+      }
+      .description {
+        position: absolute;
+        bottom: 40px;
+        font-size: 18px;
+        font-weight: 550;
+        width: 80%;
+        text-align: center;
+        word-break: break-all;
+      }
+      .wrapper {
+        width: 100%;
+        position: relative;
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <img
+        src="https://i.imgur.com/QGtAo3G.png"
+        alt="nightImage"
+        class="background"
+      />
+      <div class="timer" id="timer">00:00</div>
+      <div class="description" id="description">
+        마피아, 경찰, 의사는 밤에 움직일 수 있습니다.
+      </div>
+      <div class="situation" id="situation">총인원 -명, 생존 -명</div>
+    </div>
+  </body>
+  <script type="text/javascript">
+    const toHHMMSS = (time) => {
+      var hours = Math.floor(time / 3600);
+      var minutes = Math.floor((time - hours * 3600) / 60);
+      var seconds = Math.floor(time - hours * 3600 - minutes * 60);
+      if (hours < 10) {
+        hours = "0" + hours;
+      }
+      if (minutes < 10) {
+        minutes = "0" + minutes;
+      }
+      if (seconds < 10) {
+        seconds = "0" + seconds;
+      }
+      return hours + ":" + minutes + ":" + seconds;
+    };
+    const timerDom = document.getElementById("timer");
+    const situationDom = document.getElementById("situation");
+    const descriptionDom = document.getElementById("description");
+    window.addEventListener("message", function (e) {
+      let timer = e.data.timer;
+      let total = e.data.total;
+      let alive = e.data.alive;
+      let description = e.data.description;
+      let timerInterval;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        if (timer === 11) {
+          timerDom.style.color = "red";
+        }
+        if (--timer >= 0) {
+          timerDom.innerText = toHHMMSS(timer);
+        } else {
+          timerDom.style.color = "#A84B11";
+          clearInterval(timerInterval);
+        }
+      }, 1000);
+      timerDom.innerText = toHHMMSS(timer);
+      situationDom.innerText = `총인원 ${total}명, 생존 ${alive}명`;
+      descriptionDom.innerText = description;
+    });
+  </script>
+</html>
