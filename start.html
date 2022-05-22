@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        overflow: hidden;
+        color: #333333;
+      }
+      .background {
+        width: 100%;
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .situation {
+        text-align: center;
+        width: 100%;
+        position: absolute;
+        bottom: 10px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+      .description {
+        position: absolute;
+        bottom: 50px;
+        font-size: 18px;
+        font-weight: 550;
+        width: 90%;
+
+        word-break: break-all;
+      }
+      .wrapper {
+        width: 100%;
+        position: relative;
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <img
+        src="https://i.imgur.com/fMwTGHe.png"
+        alt="startImage"
+        class="background"
+      />
+      <div class="description" id="description">
+        채팅창에 "참가"를 입력해 게임에 <br />참여하세요.
+      </div>
+      <div class="situation" id="situation">현재 참가인원 -명/ -명</div>
+    </div>
+  </body>
+  <script type="text/javascript">
+    const situationDom = document.getElementById("situation");
+    const descriptionDom = document.getElementById("description");
+    window.addEventListener("message", function (e) {
+      let total = e.data.total;
+      let current = e.data.current;
+      let description = e.data.description;
+      situationDom.innerText = `현재 참가인원 ${current}명/ ${total}명`;
+      descriptionDom.innerText = description;
+    });
+  </script>
+</html>
