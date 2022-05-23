@@ -81,7 +81,7 @@
     const situationDom = document.getElementById("situation");
     const descriptionDom = document.getElementById("description");
     window.addEventListener("message", function (e) {
-      let timer = e.data.timer;
+      let timer = e.data.timer - 2;
       let total = e.data.total;
       let alive = e.data.alive;
       let description = e.data.description;
