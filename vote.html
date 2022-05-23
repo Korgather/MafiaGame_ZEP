@@ -8,7 +8,7 @@
     <style>
       body {
         overflow: hidden;
-        color: #a84b11;
+        color: #484848;
       }
       .background {
         width: 100%;
@@ -27,7 +27,7 @@
         margin-left: auto;
         top: 5px;
         right: 20px;
-        font-size: 45px;
+        font-size: 35px;
         position: absolute;
       }
       .description {
@@ -94,7 +94,7 @@
         if (--timer >= 0) {
           timerDom.innerText = toHHMMSS(timer);
         } else {
-          timerDom.style.color = "#A84B11";
+          timerDom.style.color = "#484848";
           clearInterval(timerInterval);
         }
       }, 1000);
