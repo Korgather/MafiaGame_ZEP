@@ -29,6 +29,20 @@ let monster = App.loadSpritesheet(
 	8
 );
 
+let ghost = App.loadSpritesheet(
+	"ghost.png",
+	48,
+	48,
+	{
+		// defined base anim
+		left: [3, 4, 5],
+		up: [9, 10, 11],
+		down: [0, 1, 2],
+		right: [6, 7, 8],
+	},
+	8
+);
+
 let policeSprite = App.loadSpritesheet(
 	"policeSprite.png",
 	48,
@@ -248,11 +262,6 @@ App.onLeavePlayer.Add(function (p) {
 
 			break;
 		case STATE_END:
-			if (_widget) {
-				_widget.destroy();
-				_widget = null; // must to do for using again
-			}
-			_start = false;
 			break;
 	}
 
@@ -351,6 +360,16 @@ App.onSay.add(function (player, text) {
 
 	if (_state == STATE_PLAYING_NIGHT) {
 		if (player.tag.joined == true) {
+		}
+	}
+});
+
+App.onUpdate.Add(function (dt) {
+	if (_stateTimer > 0) {
+		_stateTimer -= dt;
+		if (_stateTimer < 9) {
+			_stateTimer = 0;
+			App.playSound("tickTockSound.mp3");
 		}
 	}
 });
@@ -490,7 +509,7 @@ function dead(player) {
 	player.tag.mafiaTarget = false;
 	player.tag.votecount = 0;
 	player.tag.joined = false;
-	player.sprite = tomb;
+	player.sprite = ghost;
 	player.sendUpdated();
 
 	// gameEndCheck();
@@ -502,6 +521,33 @@ function startState(state) {
 
 	switch (_state) {
 		case STATE_INIT:
+			_players = App.players;
+			for (let i in _players) {
+				let p = _players[i];
+				p.attackType = 1;
+				p.attackSprite = null;
+				p.attackParam1 = 1;
+				p.attackParam2 = 0;
+
+				p.moveSpeed = 80;
+				p.sprite = null;
+				p.title = 0;
+				p.hidden = false;
+				p.tag = {
+					joined: false,
+					role: "",
+					voted: false,
+					title: 0,
+					votecount: 0,
+					healed: false,
+					mafiaTarget: false,
+				};
+				p.spawnAt(
+					parseInt(Math.random() * 14 + 18),
+					parseInt(Math.random() * 11 + 31)
+				);
+				p.sendUpdated();
+			}
 			destroyAppWidget();
 			Map.clearAllObjects();
 			_turnCount = 0;
@@ -514,13 +560,17 @@ function startState(state) {
 
 			break;
 		case STATE_READY:
+			_players = App.players;
 			_start = true;
-			const n = _players.length;
-			const roleArray = createRole(n);
-
+			// const n = _players.length;
+			const roleArray = createRole(6);
+			let arrIndex = 0;
 			for (i in _players) {
 				p = _players[i];
-				setRole(p, i, roleArray);
+				if (p.tag.joined == true) {
+					setRole(p, arrIndex, roleArray);
+					arrIndex++;
+				}
 			}
 			// 위젯 -> 10초 타이머
 			_widget.sendMessage({
@@ -645,7 +695,7 @@ function setRole(player, index, roleArray) {
 			App.sayToAll("오류!");
 		}
 		player.tag.role = roleArray[index];
-		App.sayToAll(`${player.name}은 ${player.tag.role} 역할, ${index}`);
+		// App.sayToAll(`${player.name}은 ${player.tag.role} 역할, ${index}`);
 
 		showRoleWidget(player);
 	}
@@ -720,7 +770,9 @@ function voteResult() {
 	let voteArray = [];
 	for (let i in _players) {
 		p = _players[i];
-		voteArray.push([p.tag.title, p.tag.votecount]);
+		if (p.tag.joined == true) {
+			voteArray.push([p.tag.title, p.tag.votecount]);
+		}
 	}
 	voteArray.sort((a, b) => b[1] - a[1]);
 
@@ -832,13 +884,13 @@ function nightResult(turnCount) {
 				}
 			}
 		}
+		App.showCenterLabel(
+			`이번 밤에 아무도 죽지 않았습니다.`,
+			0xffffff,
+			0x000000,
+			300
+		);
 	}
-	App.showCenterLabel(
-		`이번 밤에 아무도 죽지 않았습니다.`,
-		0xffffff,
-		0x000000,
-		300
-	);
 }
 
 function gameEndCheck() {
