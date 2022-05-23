@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        overflow: hidden;
+        color: #333333;
+      }
+      .background {
+        width: 100%;
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .situation {
+        text-align: center;
+        width: 100%;
+        position: absolute;
+        bottom: 10px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+      .description {
+        position: absolute;
+        top: 50px;
+        left: 120px;
+        font-size: 17px;
+        font-weight: 550;
+        width: 90%;
+        display: grid;
+        grid-template-columns: 140px 140px;
+        grid-template-rows: 30px 30px 30px;
+        word-break: break-all;
+      }
+      .wrapper {
+        width: 100%;
+        position: relative;
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <img
+        src="https://i.imgur.com/XgdnAFO.png"
+        alt="startImage"
+        class="background"
+      />
+      <div class="description" id="description">
+        <div>-번 : -표</div>
+        <div>-번 : -표</div>
+        <div>-번 : -표</div>
+        <div>-번 : -표</div>
+        <div>-번 : -표</div>
+        <div>-번 : -표</div>
+      </div>
+    </div>
+  </body>
+  <script type="text/javascript">
+    const descriptionDom = document.getElementById("description");
+    window.addEventListener("message", function (e) {
+      const result = e.data.result; // [1, 2, 3, 4, 5, 6];
+      const n = result.length;
+      descriptionDom.innerText = "";
+      for (let i = 0; i < n; i++) {
+        const div = document.createElement("div");
+        const text = document.createTextNode(`${i + 1}번 : ${result[i]}표`);
+        descriptionDom.append(div);
+        div.appendChild(text);
+      }
+    });
+  </script>
+</html>
