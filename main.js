@@ -364,7 +364,26 @@ App.onSay.add(function (player, text) {
 	}
 });
 
+let apiRequestDelay = 30;
+
 App.onUpdate.Add(function (dt) {
+	// modumeta서버로 플레이어 카운트 보내기
+	if (apiRequestDelay > 0) {
+		apiRequestDelay -= dt;
+		if (apiRequestDelay < 1) {
+			apiRequestDelay = 30;
+			App.sayToAll(`${App.mapHashID}`);
+			App.httpPost(
+				"https://api.metabusstation.shop/api/v1/posts/zep/playercount",
+				{ "Content-Type": "application/json" },
+				{
+					hashId: App.mapHashID,
+					playerCount: App.playerCount,
+				}
+			);
+		}
+	}
+
 	if (_stateTimer > 0) {
 		_stateTimer -= dt;
 		if (_stateTimer < 9) {
