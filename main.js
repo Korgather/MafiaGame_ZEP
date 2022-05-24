@@ -257,7 +257,7 @@ App.onLeavePlayer.Add(function (p) {
 			playerLeft(p);
 
 			break;
-		case STATE_PLAYING_VOTE:
+		case STATE_VOTE:
 			playerLeft(p);
 
 			break;
@@ -420,7 +420,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 	// p.showCenterLabel(`오브젝트를 때렸다.`, 0xffffff, 0x000000, 115);
 	let target = null;
 	let targetNum = 0;
-	if (p.tag.role != "시민") {
+	if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰") {
 		// App.sayToAll(`오브젝트를 때렸다. 좌표 ${x}, ${y}`);
 
 		targetNum = Object.keys(coordinates).find(
@@ -551,6 +551,7 @@ function startState(state) {
 			destroyAppWidget();
 			Map.clearAllObjects();
 			_turnCount = 0;
+			``;
 			_widget = App.showWidget("start.html", "top", 400, 200);
 			_widget.sendMessage({
 				total: 6,
@@ -607,29 +608,31 @@ function startState(state) {
 			}
 			break;
 		case STATE_VOTE:
-			destroyAppWidget();
-			App.playSound("voteSound.wav");
-			_stateTimer = 17;
-			// 투표가 시작되었습니다.
-			_widget = App.showWidget("vote.html", "top", 400, 200);
-			_widget.sendMessage({
-				total: 6,
-				alive: _mafiaCount + _citizenCount,
-				timer: _stateTimer,
-				description:
-					"채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
-			});
+			if (gameEndCheck() == false) {
+				destroyAppWidget();
+				App.playSound("voteSound.wav");
+				_stateTimer = 17;
+				// 투표가 시작되었습니다.
+				_widget = App.showWidget("vote.html", "top", 400, 200);
+				_widget.sendMessage({
+					total: 6,
+					alive: _mafiaCount + _citizenCount,
+					timer: _stateTimer,
+					description:
+						"채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
+				});
 
-			App.runLater(() => {
-				voteResult();
-			}, _stateTimer);
+				App.runLater(() => {
+					voteResult();
+				}, _stateTimer);
 
-			App.runLater(() => {
-				startState(STATE_PLAYING_NIGHT);
-			}, _stateTimer + 5);
-			// 위젯 타이머
-			// 투표 끝 -> 한명 죽고
-			// 한명 죽고  -> 밤
+				App.runLater(() => {
+					startState(STATE_PLAYING_NIGHT);
+				}, _stateTimer + 5);
+				// 위젯 타이머
+				// 투표 끝 -> 한명 죽고
+				// 한명 죽고  -> 밤
+			}
 			break;
 		case STATE_PLAYING_NIGHT:
 			if (gameEndCheck() == false) {
@@ -730,14 +733,14 @@ function playerLeft(p) {
 	if (p.tag.joined == true) {
 		if (p.tag.role == "마피아") {
 			App.showCenterLabel(
-				"마피아가 나갔습니다. 게임을 종료합니다.",
+				`${p.name} 님이 나갔습니다.`,
 				0xffffff,
 				0x000000,
 				300
 			);
 		} else {
 			App.showCenterLabel(
-				`${p.name} 님이 나갔습니다. 그는 마피아가 아니었습니다.`,
+				`${p.name} 님이 나갔습니다.`,
 				0xffffff,
 				0x000000,
 				300
