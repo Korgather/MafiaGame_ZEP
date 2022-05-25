@@ -3,7 +3,8 @@ const STATE_READY = 3001;
 const STATE_PLAYING_NIGHT = 3002;
 const STATE_PLAYING_DAY = 3003;
 const STATE_VOTE = 3004;
-const STATE_END = 3005;
+const STATE_VOTE_RESULT = 3005;
+const STATE_END = 3006;
 const coordinates = {
 	1: { x: 23, y: 11 },
 	2: { x: 26, y: 11 },
@@ -158,6 +159,7 @@ let _turnCount = 0;
 
 let _mafiaCount = 0;
 let _citizenCount = 0;
+let _tickTockSoundOn = false;
 
 // function playAttackSound() {
 // 	for (let i in _players) {
@@ -182,6 +184,15 @@ App.onJoinPlayer.Add(function (p) {
 	// p.sprite = tomb;
 	// p.hidden = true;
 
+	if (p.isEmail) {
+		if (p.storage == null) {
+			p.storage = JSON.stringify({
+				exp: 0,
+			});
+			p.save();
+		}
+	}
+
 	p.attackType = 1;
 	p.attackSprite = null;
 	p.attackParam1 = 0;
@@ -189,7 +200,7 @@ App.onJoinPlayer.Add(function (p) {
 
 	p.moveSpeed = 80;
 	p.sprite = null;
-	p.title = 0;
+	p.title = levelCalc(p);
 	p.hidden = false;
 	p.tag = {
 		joined: false,
@@ -221,20 +232,40 @@ App.onJoinPlayer.Add(function (p) {
 	p.sendUpdated();
 
 	if (_state == STATE_INIT) {
-		_widget.sendMessage({
-			total: 6,
-			current: _playerCount,
-			description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
-		});
+		if (_widget) {
+			_widget.sendMessage({
+				total: 6,
+				current: _playerCount,
+				description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
+			});
+		}
 	}
 	_players = App.players;
 });
 
 App.onLeavePlayer.Add(function (p) {
+	if (App.playerCount == 1) {
+		App.httpGet(
+			"https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" +
+				App.mapHashID +
+				"&playerCount=" +
+				0,
+			{},
+			(a) => {}
+		);
+	}
+
 	switch (_state) {
 		case STATE_INIT:
 			if (p.tag.joined == true) {
 				_playerCount--;
+				if (_widget) {
+					_widget.sendMessage({
+						total: 6,
+						current: _playerCount,
+						description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
+					});
+				}
 			}
 			break;
 		case STATE_READY:
@@ -274,7 +305,6 @@ App.onDestroy.Add(function () {
 		p.hidden = false;
 		p.tag = {};
 		p.sendUpdated();
-		p.title = null;
 	}
 });
 
@@ -283,6 +313,9 @@ App.onStart.Add(function () {
 });
 
 App.onSay.add(function (player, text) {
+	if (text == "/경험치") {
+		giveExp(player, 10);
+	}
 	// if (text == "의사") {
 	// 	player.sprite = doctorSprite;
 	// 	player.attackSprite = doctorAttackSprite;
@@ -354,11 +387,7 @@ App.onSay.add(function (player, text) {
 	}
 });
 
-let apiRequestDelay = 10;
-let data = {
-	hashId: App.mapHashID,
-	playerCount: App.playerCount,
-};
+let apiRequestDelay = 15;
 
 App.onUpdate.Add(function (dt) {
 	// modumeta서버로 플레이어 카운트 보내기
@@ -374,10 +403,7 @@ App.onUpdate.Add(function (dt) {
 					"&playerCount=" +
 					App.playerCount,
 				{},
-				(a) => {
-					// App.sayToAll("hi");
-					// App.sayToAll(a);
-				}
+				(a) => {}
 			);
 
 			// App.httpPost(
@@ -394,54 +420,37 @@ App.onUpdate.Add(function (dt) {
 
 	if (_stateTimer > 0) {
 		_stateTimer -= dt;
-		if (_stateTimer < 9) {
-			_stateTimer = 0;
-			App.playSound("tickTockSound.mp3");
+		if (_state != STATE_READY && _tickTockSoundOn == false) {
+			if (_stateTimer < 9) {
+				_tickTockSoundOn = true;
+				App.playSound("tickTockSound.mp3");
+			}
+		}
+	}
+
+	if (_stateTimer < 0) {
+		_stateTimer = 0;
+		switch (_state) {
+			case STATE_READY:
+				startState(STATE_PLAYING_DAY);
+				break;
+			case STATE_PLAYING_DAY:
+				startState(STATE_VOTE);
+				break;
+			case STATE_VOTE:
+				startState(STATE_VOTE_RESULT);
+				break;
+			case STATE_VOTE_RESULT:
+				startState(STATE_PLAYING_NIGHT);
+				break;
+			case STATE_PLAYING_NIGHT:
+				startState(STATE_PLAYING_DAY);
+				break;
 		}
 	}
 });
 
-App.onUnitAttacked.Add(function (player, x, y, target) {
-	// player.showCenterLabel(`사람을 때렸다.`, 0xffffff, 0x000000, 115);
-	// player.moveSpeed = 0;
-	// player.attackType = 1;
-	// player.attackSprite = null;
-	// player.attackParam1 = 0;
-	// player.attackParam2 = 0;
-	// player.sendUpdated();
-	// player.spawnAt(
-	// 	coordinates[player.tag.title].x,
-	// 	coordinates[player.tag.title].y
-	// );
-	// switch (player.tag.role) {
-	// 	case "경찰":
-	// 		let targetRole = target.tag.role;
-	// 		player.showCenterLabel(
-	// 			`${target.title}의 직업은 ${targetRole}입니다.`,
-	// 			0xffffff,
-	// 			0x000000
-	// 		);
-	// 		break;
-	// 	case "마피아":
-	// 		player.showCenterLabel(
-	// 			`${target.title}를 죽이기로 결졍했습니다.`,
-	// 			0xffffff,
-	// 			0x000000,
-	// 			115
-	// 		);
-	// 		target.tag.mafiaTarget = true;
-	// 		break;
-	// 	case "의사":
-	// 		player.showCenterLabel(
-	// 			`${target.title}를 살리기로 결졍했습니다.`,
-	// 			0xffffff,
-	// 			0x000000
-	// 		);
-	// 		player.tag.healed = false;
-	// 		target.tag.healed = true;
-	// 		break;
-	// }
-});
+App.onUnitAttacked.Add(function (player, x, y, target) {});
 
 App.onObjectAttacked.Add(function (p, x, y) {
 	// p.showCenterLabel(`오브젝트를 때렸다.`, 0xffffff, 0x000000, 115);
@@ -520,6 +529,7 @@ function dead(player) {
 			0x000000,
 			300
 		);
+		giveExp(player, 2);
 	} else {
 		App.showCenterLabel(
 			`${p.name} 님이 처형당했습니다. 그는 마피아였습니다.`,
@@ -545,6 +555,7 @@ function dead(player) {
 function startState(state) {
 	_state = state;
 	_stateTimer = 0;
+	_tickTockSoundOn = false;
 
 	switch (_state) {
 		case STATE_INIT:
@@ -558,7 +569,7 @@ function startState(state) {
 
 				p.moveSpeed = 80;
 				p.sprite = null;
-				p.title = 0;
+				p.title = levelCalc(p);
 				p.hidden = false;
 				p.tag = {
 					joined: false,
@@ -589,6 +600,7 @@ function startState(state) {
 			break;
 		case STATE_READY:
 			_players = App.players;
+			_stateTimer = 5;
 			_start = true;
 			// const n = _players.length;
 			const roleArray = createRole(6);
@@ -607,9 +619,9 @@ function startState(state) {
 				description: `마피아 게임이 곧 시작됩니다.`,
 			});
 
-			App.runLater(() => {
-				startState(STATE_PLAYING_DAY);
-			}, 10); // 나중에 바꿈
+			// App.runLater(() => {
+			// 	startState(STATE_PLAYING_DAY);
+			// }, 10); // 나중에 바꿈
 			break;
 		case STATE_PLAYING_DAY:
 			nightResult(++_turnCount);
@@ -629,9 +641,9 @@ function startState(state) {
 				});
 				// 위젯 -> 2분 30초간 이야기를 나누세요.
 				// 카운트 끝 -> 투표
-				App.runLater(() => {
-					startState(STATE_VOTE);
-				}, _stateTimer);
+				// App.runLater(() => {
+				// 	startState(STATE_VOTE);
+				// }, _stateTimer);
 			}
 			break;
 		case STATE_VOTE:
@@ -649,16 +661,22 @@ function startState(state) {
 						"채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
 				});
 
-				App.runLater(() => {
-					voteResult();
-				}, _stateTimer);
+				// App.runLater(() => {
+				// 	voteResult();
+				// }, _stateTimer);
 
-				App.runLater(() => {
-					startState(STATE_PLAYING_NIGHT);
-				}, _stateTimer + 5);
+				// App.runLater(() => {
+				// 	startState(STATE_PLAYING_NIGHT);
+				// }, _stateTimer + 5);
 				// 위젯 타이머
 				// 투표 끝 -> 한명 죽고
 				// 한명 죽고  -> 밤
+			}
+			break;
+		case STATE_VOTE_RESULT:
+			if (gameEndCheck() == false) {
+				_stateTimer = 7;
+				voteResult();
 			}
 			break;
 		case STATE_PLAYING_NIGHT:
@@ -687,9 +705,9 @@ function startState(state) {
 					}
 				}
 
-				App.runLater(() => {
-					startState(STATE_PLAYING_DAY);
-				}, _stateTimer);
+				// App.runLater(() => {
+				// 	startState(STATE_PLAYING_DAY);
+				// }, _stateTimer);
 			}
 			break;
 		case STATE_END:
@@ -774,6 +792,9 @@ function playerLeft(p) {
 			);
 		}
 	}
+	App.runLater(() => {
+		gameEndCheck();
+	}, 2);
 }
 
 function voteResult() {
@@ -940,6 +961,16 @@ function gameEndCheck() {
 
 	if (_mafiaCount == 0) {
 		// 시민 승리
+		for (let i in _players) {
+			let p = _players[i];
+			if (p.tag.joined == true) {
+				if (p.tag.role == "마피아") {
+					giveExp(p, 2);
+				} else {
+					giveExp(p, 5);
+				}
+			}
+		}
 		destroyAppWidget();
 		gameReset();
 		App.playSound("citizenWinSound.mp3");
@@ -951,6 +982,16 @@ function gameEndCheck() {
 	} else if (_mafiaCount == 1) {
 		if (_mafiaCount == _citizenCount) {
 			// 마피아 승리
+			for (let i in _players) {
+				let p = _players[i];
+				if (p.tag.joined == true) {
+					if (p.tag.role == "마피아") {
+						giveExp(p, 10);
+					} else {
+						giveExp(p, 5);
+					}
+				}
+			}
 			App.playSound("mafiaWinSound.mp3");
 			destroyAppWidget();
 			gameReset();
@@ -1002,7 +1043,7 @@ function gameReset() {
 
 		p.moveSpeed = 80;
 		p.sprite = null;
-		p.title = 0;
+		p.title = levelCalc(p);
 		p.hidden = false;
 		p.tag = {
 			joined: false,
@@ -1045,4 +1086,42 @@ function changeCharacterImage(player, text) {
 		player.attackParam2 = 4;
 	} else return;
 	player.sendUpdated();
+}
+
+function giveExp(p, point) {
+	if (p.isEmail) {
+		if (p.storage == null) {
+			p.storage = JSON.stringify({
+				exp: 0,
+			});
+			p.save();
+		}
+		let myExp = JSON.parse(p.storage).exp;
+
+		p.storage = JSON.stringify({
+			exp: myExp + point,
+			// exp: 10,
+		});
+
+		p.showCenterLabel("경험치: " + JSON.parse(p.storage).exp);
+
+		p.save();
+		// App.sayToAll(JSON.parse(p.storage).exp);
+	}
+	App.sayToAll(App.worldHashID);
+}
+
+function levelCalc(player) {
+	if (player.isEmail) {
+		let i = 0;
+		let myExp = JSON.parse(player.storage).exp;
+
+		while (myExp > 0) {
+			myExp -= (i + 15) * i;
+			i++;
+		}
+		return "Lv." + i;
+	} else {
+		return "비로그인 유저";
+	}
 }
