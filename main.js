@@ -20,7 +20,6 @@ let monster = App.loadSpritesheet(
 	96,
 	96,
 	{
-		// defined base anim
 		left: [8, 9, 10, 11],
 		up: [12, 13, 14, 15],
 		down: [4, 5, 6, 7],
@@ -34,7 +33,6 @@ let ghost = App.loadSpritesheet(
 	48,
 	48,
 	{
-		// defined base anim
 		left: [3, 4, 5],
 		up: [9, 10, 11],
 		down: [0, 1, 2],
@@ -48,7 +46,6 @@ let policeSprite = App.loadSpritesheet(
 	48,
 	48,
 	{
-		// defined base anim
 		left: [3, 4, 5],
 		up: [9, 10, 11],
 		down: [0, 1, 2],
@@ -62,7 +59,6 @@ let mafiaSprite = App.loadSpritesheet(
 	48,
 	48,
 	{
-		// defined base anim
 		left: [3, 4, 5],
 		up: [9, 10, 11],
 		down: [0, 1, 2],
@@ -76,7 +72,6 @@ let doctorSprite = App.loadSpritesheet(
 	48,
 	48,
 	{
-		// defined base anim
 		left: [3, 4, 5],
 		up: [9, 10, 11],
 		down: [0, 1, 2],
@@ -86,17 +81,17 @@ let doctorSprite = App.loadSpritesheet(
 );
 
 let doctorAttackSprite = App.loadSpritesheet("doctorAttackSprite.png", 24, 24, {
-	left: [0], // defined base anim
-	right: [0], // defined base anim
-	up: [0], // defined base anim
-	down: [0], // defined base anim
+	left: [0],
+	right: [0],
+	up: [0],
+	down: [0],
 });
 
 let policeAttackSprite = App.loadSpritesheet("policeAttackSprite.png", 24, 29, {
-	left: [0], // defined base anim
-	right: [0], // defined base anim
-	up: [0], // defined base anim
-	down: [0], // defined base anim
+	left: [0],
+	right: [0],
+	up: [0],
+	down: [0],
 });
 
 let mafiaAttackSprite = App.loadSpritesheet(
@@ -104,19 +99,19 @@ let mafiaAttackSprite = App.loadSpritesheet(
 	24,
 	24,
 	{
-		left: [2], // defined base anim
-		right: [0], // defined base anim
-		up: [3], // defined base anim
-		down: [1], // defined base anim
+		left: [2],
+		right: [0],
+		up: [3],
+		down: [1],
 	},
 	8
 );
 
 let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
-	left: [0], // defined base anim
-	right: [0], // defined base anim
-	up: [0], // defined base anim
-	down: [0], // defined base anim
+	left: [0],
+	right: [0],
+	up: [0],
+	down: [0],
 });
 
 // let mafiaAttackSprite = App.loadSpritesheet(
@@ -124,27 +119,27 @@ let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
 // 	12,
 // 	12,
 // 	{
-// 		left: [0], // defined base anim
-// 		right: [1], // defined base anim
-// 		up: [2], // defined base anim
-// 		down: [3], // defined base anim
+// 		left: [0],
+// 		right: [1],
+// 		up: [2],
+// 		down: [3],
 // 		rotate: [0, 1, 2, 3],
 // 	},
 // 	8
 // );
 
 let silhouette = App.loadSpritesheet("silhouette2.png", 48, 48, {
-	left: [0], // defined base anim
-	right: [0], // defined base anim
-	up: [0], // defined base anim
-	down: [0], // defined base anim
+	left: [0],
+	right: [0],
+	up: [0],
+	down: [0],
 });
 
 let blankObject = App.loadSpritesheet("blank.png", 32, 32, {
-	left: [0], // defined base anim
-	right: [0], // defined base anim
-	up: [0], // defined base anim
-	down: [0], // defined base anim
+	left: [0],
+	right: [0],
+	up: [0],
+	down: [0],
 });
 
 let _playerCount = 0;
@@ -240,11 +235,6 @@ App.onLeavePlayer.Add(function (p) {
 		case STATE_INIT:
 			if (p.tag.joined == true) {
 				_playerCount--;
-				_widget.sendMessage({
-					total: 6,
-					current: _playerCount,
-					description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
-				});
 			}
 			break;
 		case STATE_READY:
@@ -364,7 +354,11 @@ App.onSay.add(function (player, text) {
 	}
 });
 
-let apiRequestDelay = 30;
+let apiRequestDelay = 10;
+let data = {
+	hashId: App.mapHashID,
+	playerCount: App.playerCount,
+};
 
 App.onUpdate.Add(function (dt) {
 	// modumeta서버로 플레이어 카운트 보내기
@@ -372,15 +366,29 @@ App.onUpdate.Add(function (dt) {
 		apiRequestDelay -= dt;
 		if (apiRequestDelay < 1) {
 			apiRequestDelay = 30;
-			App.sayToAll(`${App.mapHashID}`);
-			App.httpPost(
-				"https://api.metabusstation.shop/api/v1/posts/zep/playercount",
-				{ "Content-Type": "application/json" },
-				{
-					hashId: App.mapHashID,
-					playerCount: App.playerCount,
+			// App.sayToAll(`testCall`);
+
+			App.httpGet(
+				"https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" +
+					App.mapHashID +
+					"&playerCount=" +
+					App.playerCount,
+				{},
+				(a) => {
+					// App.sayToAll("hi");
+					// App.sayToAll(a);
 				}
 			);
+
+			// App.httpPost(
+			// 	"https://api.metabusstation.shop/api/v1/posts/zep/playercount",
+			// 	{},
+			// 	JSON.stringify(data),
+			// 	function (a) {
+			// 		App.sayToAll(App.mapHashID);
+			// 		App.sayToAll(a);
+			// 	}
+			// );
 		}
 	}
 
