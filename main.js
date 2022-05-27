@@ -160,6 +160,7 @@ let _turnCount = 0;
 let _mafiaCount = 0;
 let _citizenCount = 0;
 let _tickTockSoundOn = false;
+let _widgetHtml = null;
 
 // function playAttackSound() {
 // 	for (let i in _players) {
@@ -183,8 +184,56 @@ let _tickTockSoundOn = false;
 App.onJoinPlayer.Add(function (p) {
 	// p.sprite = tomb;
 	// p.hidden = true;
+	if (_widget) {
+		App.runLater(() => {
+			destroyAppWidget();
+			// App.sayToAll(_widgetHtml);
 
-	if (p.isEmail) {
+			_widget = App.showWidget(_widgetHtml, "top", 400, 200);
+			// App.sayToAll(_widget);
+			// App.sayToAll(_widget.id);
+			switch (_state) {
+				case STATE_INIT:
+					_widget.sendMessage({
+						total: 6,
+						current: _playerCount,
+						description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
+					});
+					break;
+				case STATE_PLAYING_DAY:
+					_widget.sendMessage({
+						total: 6,
+						alive: _mafiaCount + _citizenCount,
+						timer: _stateTimer,
+						description: "투표 전까지 이야기를 나누세요.",
+					});
+					break;
+				case STATE_VOTE:
+					_widget.sendMessage({
+						total: 6,
+						alive: _mafiaCount + _citizenCount,
+						timer: _stateTimer,
+						description:
+							"채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
+					});
+
+					break;
+				case STATE_PLAYING_NIGHT:
+					_widget.sendMessage({
+						total: 6,
+						alive: _mafiaCount + _citizenCount,
+						timer: _stateTimer,
+						description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
+					});
+
+					break;
+			}
+		}, 2);
+
+		// _widget.id;
+	}
+
+	if (p.id.indexOf("GUEST") === -1) {
 		if (p.storage == null) {
 			p.storage = JSON.stringify({
 				exp: 0,
@@ -231,20 +280,11 @@ App.onJoinPlayer.Add(function (p) {
 
 	p.sendUpdated();
 
-	if (_state == STATE_INIT) {
-		if (_widget) {
-			_widget.sendMessage({
-				total: 6,
-				current: _playerCount,
-				description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
-			});
-		}
-	}
 	_players = App.players;
 });
 
 App.onLeavePlayer.Add(function (p) {
-	if (App.playerCount == 1) {
+	if (App.playerCount == 0) {
 		App.httpGet(
 			"https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" +
 				App.mapHashID +
@@ -309,7 +349,7 @@ App.onDestroy.Add(function () {
 });
 
 App.onStart.Add(function () {
-	startState(STATE_INIT);
+	App.runLater(() => startState(STATE_INIT), 2);
 });
 
 App.onSay.add(function (player, text) {
@@ -336,6 +376,12 @@ App.onSay.add(function (player, text) {
 	// 	player.attackParam2 = 4;
 	// }
 	player.sendUpdated();
+	if (text == "참가") {
+		if (_start == true) {
+			player.showCenterLabel("이미 게임이 진행중 입니다.");
+		}
+	}
+
 	if (_state == STATE_INIT) {
 		if (text == "참가") {
 			if (_playerCount < 6) {
@@ -352,11 +398,14 @@ App.onSay.add(function (player, text) {
 					player.sendUpdated();
 					App.playSound("joinSound.m4a");
 				}
-				_widget.sendMessage({
-					total: 6,
-					current: _playerCount,
-					description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
-				});
+				if (_widget) {
+					_widget.sendMessage({
+						total: 6,
+						current: _playerCount,
+						description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
+					});
+				}
+
 				if (_playerCount === 6) {
 					App.showCenterLabel("참가 마감.", 0xffffff, 0x000000, 300);
 					startState(STATE_READY);
@@ -559,6 +608,17 @@ function startState(state) {
 
 	switch (_state) {
 		case STATE_INIT:
+			Map.clearAllObjects();
+			destroyAppWidget();
+			_widgetHtml = "init.html";
+			_turnCount = 0;
+			_widget = App.showWidget(_widgetHtml, "top", 400, 200);
+			_widget.sendMessage({
+				total: 6,
+				current: 0,
+				description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
+			});
+
 			_players = App.players;
 			for (let i in _players) {
 				let p = _players[i];
@@ -586,16 +646,6 @@ function startState(state) {
 				);
 				p.sendUpdated();
 			}
-			destroyAppWidget();
-			Map.clearAllObjects();
-			_turnCount = 0;
-			``;
-			_widget = App.showWidget("start.html", "top", 400, 200);
-			_widget.sendMessage({
-				total: 6,
-				current: 0,
-				description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
-			});
 
 			break;
 		case STATE_READY:
@@ -632,7 +682,8 @@ function startState(state) {
 				Map.clearAllObjects();
 				App.playSound("morningSound.wav");
 				_stateTimer = 92;
-				_widget = App.showWidget("morning.html", "top", 400, 200);
+				_widgetHtml = "morning.html";
+				_widget = App.showWidget(_widgetHtml, "top", 400, 200);
 				_widget.sendMessage({
 					total: 6,
 					alive: _mafiaCount + _citizenCount,
@@ -652,7 +703,8 @@ function startState(state) {
 				App.playSound("voteSound.wav");
 				_stateTimer = 17;
 				// 투표가 시작되었습니다.
-				_widget = App.showWidget("vote.html", "top", 400, 200);
+				_widgetHtml = "vote.html";
+				_widget = App.showWidget(_widgetHtml, "top", 400, 200);
 				_widget.sendMessage({
 					total: 6,
 					alive: _mafiaCount + _citizenCount,
@@ -687,7 +739,8 @@ function startState(state) {
 				allHidden();
 				_stateTimer = 22;
 				App.playSound("nightSound.mp3");
-				_widget = App.showWidget("night.html", "top", 400, 200);
+				_widgetHtml = "night.html";
+				_widget = App.showWidget(_widgetHtml, "top", 400, 200);
 				_widget.sendMessage({
 					total: 6,
 					alive: _mafiaCount + _citizenCount,
@@ -846,8 +899,8 @@ function voteResult() {
 	}
 
 	destroyAppWidget();
-
-	_widget = App.showWidget("voteResult.html", "top", 400, 200);
+	_widgetHtml = "voteResult.html";
+	_widget = App.showWidget(_widgetHtml, "top", 400, 200);
 	_widget.sendMessage({
 		result: voteArray,
 	});
@@ -974,10 +1027,11 @@ function gameEndCheck() {
 		destroyAppWidget();
 		gameReset();
 		App.playSound("citizenWinSound.mp3");
-		_widget = App.showWidget("winCitizen.html", "top", 400, 200);
+		_widgetHtml = "winCitizen.html";
+		_widget = App.showWidget(_widgetHtml, "top", 400, 200);
 		App.runLater(() => {
 			startState(STATE_INIT);
-		}, 10);
+		}, 8);
 		return true;
 	} else if (_mafiaCount == 1) {
 		if (_mafiaCount == _citizenCount) {
@@ -995,11 +1049,12 @@ function gameEndCheck() {
 			App.playSound("mafiaWinSound.mp3");
 			destroyAppWidget();
 			gameReset();
+
 			_widget = App.showWidget("winMafia.html", "top", 400, 200);
 
 			App.runLater(() => {
 				startState(STATE_INIT);
-			}, 10);
+			}, 8);
 
 			return true;
 		}
@@ -1009,6 +1064,7 @@ function gameEndCheck() {
 }
 
 function gameReset() {
+	_start = false;
 	_players = App.players;
 	_playerCount = 0;
 	if (_citizenWidget.length !== 0) {
@@ -1089,7 +1145,7 @@ function changeCharacterImage(player, text) {
 }
 
 function giveExp(p, point) {
-	if (p.isEmail) {
+	if (p.id.indexOf("GUEST") === -1) {
 		if (p.storage == null) {
 			p.storage = JSON.stringify({
 				exp: 0,
@@ -1112,7 +1168,9 @@ function giveExp(p, point) {
 }
 
 function levelCalc(player) {
-	if (player.isEmail) {
+	if (player.role == 3000) {
+		return "운영자";
+	} else if (player.id.indexOf("GUEST") === -1) {
 		let i = 0;
 		let myExp = JSON.parse(player.storage).exp;
 
