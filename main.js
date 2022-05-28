@@ -184,10 +184,33 @@ let _widgetHtml = null;
 App.onJoinPlayer.Add(function (p) {
 	// p.sprite = tomb;
 	// p.hidden = true;
+
+	if (p.id.indexOf("GUEST") === -1) {
+		if (p.storage == null) {
+			p.storage = JSON.stringify({
+				exp: 0,
+			});
+			p.save();
+		}
+	}
+
+	// JSON.parse(p.storage).widget = p.showWidget(
+	// 	"mafia.html",
+	// 	"topleft",
+	// 	400,
+	// 	200
+	// );
+
+	// JSON.parse(p.storage).widget2 = p.showWidget(
+	// 	"police.html",
+	// 	"bottomright",
+	// 	400,
+	// 	200
+	// );
+
 	if (_widget) {
 		App.runLater(() => {
 			destroyAppWidget();
-			// App.sayToAll(_widgetHtml);
 
 			_widget = App.showWidget(_widgetHtml, "top", 400, 200);
 			// App.sayToAll(_widget);
@@ -231,15 +254,6 @@ App.onJoinPlayer.Add(function (p) {
 		}, 2);
 
 		// _widget.id;
-	}
-
-	if (p.id.indexOf("GUEST") === -1) {
-		if (p.storage == null) {
-			p.storage = JSON.stringify({
-				exp: 0,
-			});
-			p.save();
-		}
 	}
 
 	p.attackType = 1;
