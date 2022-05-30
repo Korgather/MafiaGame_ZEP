@@ -180,47 +180,54 @@ App.onJoinPlayer.Add(function (p) {
 	let p_widget = p.showWidget(_widgetHtml, "top", 400, 200);
 	_userMainWidget.push(p_widget);
 
-	if (p_widget) {
-		App.runLater(() => {
-			// destroyAppWidget();
+	// p.showWidget("Channel.html", "topleft", 400, 750);
 
-			switch (_state) {
-				case STATE_INIT:
+	if (p_widget) {
+		// App.runLater(() => {
+		// destroyAppWidget();
+
+		switch (_state) {
+			case STATE_INIT:
+				try {
 					p_widget.sendMessage({
 						total: 6,
 						current: _playerCount,
 						description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
 					});
-					break;
-				case STATE_PLAYING_DAY:
-					p_widget.sendMessage({
-						total: 6,
-						alive: _mafiaCount + _citizenCount,
-						timer: _stateTimer,
-						description: "투표 전까지 이야기를 나누세요.",
-					});
-					break;
-				case STATE_VOTE:
-					p_widget.sendMessage({
-						total: 6,
-						alive: _mafiaCount + _citizenCount,
-						timer: _stateTimer,
-						description:
-							"채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
-					});
+				} catch (e) {
+					App.sayToAll("hey");
+				}
 
-					break;
-				case STATE_PLAYING_NIGHT:
-					p_widget.sendMessage({
-						total: 6,
-						alive: _mafiaCount + _citizenCount,
-						timer: _stateTimer,
-						description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
-					});
+				break;
+			case STATE_PLAYING_DAY:
+				p_widget.sendMessage({
+					total: 6,
+					alive: _mafiaCount + _citizenCount,
+					timer: _stateTimer,
+					description: "투표 전까지 이야기를 나누세요.",
+				});
+				break;
+			case STATE_VOTE:
+				p_widget.sendMessage({
+					total: 6,
+					alive: _mafiaCount + _citizenCount,
+					timer: _stateTimer,
+					description:
+						"채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
+				});
 
-					break;
-			}
-		}, 2);
+				break;
+			case STATE_PLAYING_NIGHT:
+				p_widget.sendMessage({
+					total: 6,
+					alive: _mafiaCount + _citizenCount,
+					timer: _stateTimer,
+					description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
+				});
+
+				break;
+		}
+		// }, 2);
 
 		// _widget.id;
 	}
@@ -309,7 +316,8 @@ App.onDestroy.Add(function () {
 });
 
 App.onStart.Add(function () {
-	App.runLater(() => startState(STATE_INIT), 2);
+	// App.runLater(() => startState(STATE_INIT), 2);
+	startState(STATE_INIT);
 });
 
 App.onSay.add(function (player, text) {
@@ -1073,7 +1081,7 @@ function updatePlayerWidget(htmlName) {
 				// } else {
 				// 	w.destroy();
 				// }
-				App.sayToAll(i);
+				// App.sayToAll(i);
 				w.destroy();
 
 				// App.sayToAll(_userMainWidget.length);
@@ -1099,11 +1107,16 @@ function sendMessageToPlayerWidget() {
 			if (p_widget) {
 				switch (_state) {
 					case STATE_INIT:
-						p_widget.sendMessage({
-							total: 6,
-							current: _playerCount,
-							description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
-						});
+						try {
+							p_widget.sendMessage({
+								total: 6,
+								current: _playerCount,
+								description: `채팅창에 "참가"를 입력해 게임에 참여할 수 있습니다.`,
+							});
+						} catch (e) {
+							App.sayToAll("hey");
+						}
+
 						break;
 					case STATE_READY:
 						p_widget.sendMessage({
