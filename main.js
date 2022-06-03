@@ -570,7 +570,7 @@ function startState(state) {
 				};
 				p.spawnAt(
 					parseInt(Math.random() * 14 + 18),
-					parseInt(Math.random() * 11 + 31)
+					parseInt(Math.random() * 10 + 31)
 				);
 				p.sendUpdated();
 			}
@@ -602,7 +602,7 @@ function startState(state) {
 				clearHidden();
 				Map.clearAllObjects();
 				App.playSound("morningSound.wav");
-				_stateTimer = 92;
+				_stateTimer = 62;
 				_widgetHtml = "morning.html";
 				updatePlayerWidget(_widgetHtml);
 				// sendMessageToPlayerWidget();
@@ -739,6 +739,7 @@ function voteResult() {
 	let max = 0;
 	let index = -1;
 	let maxCount = 0;
+	let voteArray = [];
 	for (let i in _players) {
 		p = _players[i];
 		if (p.tag.votecount > max) {
@@ -756,7 +757,6 @@ function voteResult() {
 		}
 	}
 
-	let voteArray = [];
 	for (let i in _players) {
 		p = _players[i];
 		if (p.tag.joined == true) {
@@ -786,7 +786,7 @@ function voteResult() {
 	// destroyAppWidget();
 	_widgetHtml = "voteResult.html";
 	updatePlayerWidget(_widgetHtml);
-	sendMessageToPlayerWidget();
+	sendMessageToPlayerWidget(voteArray);
 }
 
 function destroyAppWidget() {
@@ -998,8 +998,8 @@ function gameReset() {
 			parseInt(Math.random() * 14 + 18),
 			parseInt(Math.random() * 11 + 31)
 		);
-		p.sendUpdated();
 	}
+	p.sendUpdated();
 }
 
 function changeCharacterImage(player, text) {
@@ -1097,7 +1097,7 @@ function updatePlayerWidget(htmlName) {
 	sendMessageToPlayerWidget();
 }
 
-function sendMessageToPlayerWidget() {
+function sendMessageToPlayerWidget(data = null) {
 	// _players = App.players;
 
 	if (_userMainWidget.length !== 0) {
@@ -1145,7 +1145,7 @@ function sendMessageToPlayerWidget() {
 						break;
 					case STATE_VOTE_RESULT:
 						p_widget.sendMessage({
-							result: voteArray,
+							result: data,
 						});
 						break;
 					case STATE_PLAYING_NIGHT:
