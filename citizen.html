@@ -1,27 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
-    <style>
-      .wrapper {
-        display: flex;
-        align-items: center;
-      }
-      img {
-        width: 100%;
-        height: auto;
-      }
-      body {
-        overflow: hidden;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="wrapper">
-      <img src="https://i.imgur.com/AdI2872.png" />
-    </div>
-  </body>
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css"
+			integrity="sha512-KfkfwYDsLkIlwQp6LFnl8zNdLGxu9YAA1QvwINks4PhcElQSvqcyVLLD9aMhXd13uQjoXtEKNosOWaZqXgel0g=="
+			crossorigin="anonymous"
+			referrerpolicy="no-referrer"
+		/>
+		<title>Document</title>
+		<style>
+			.wrapper {
+				box-sizing: border-box;
+				padding-top: 15px;
+				padding-right: 20px;
+				display: flex;
+				align-items: baseline;
+				justify-content: flex-end;
+				width: 221px;
+				height: 400px;
+				background-image: url(https://i.imgur.com/AdI2872.png);
+				background-size: contain;
+				background-repeat: no-repeat;
+				margin-top: 30px;
+			}
+			img {
+				width: 100%;
+				height: auto;
+				position: relative;
+			}
+
+			i {
+				cursor: pointer;
+			}
+
+			body {
+				overflow: hidden;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wrapper">
+			<i onclick="closeWidget()" class="fa-solid fa-xmark"></i>
+		</div>
+		<script type="text/javascript">
+			// 버튼을 누르면 호출되는 함수
+			function closeWidget() {
+				// App으로 메시지를 보냄.
+				window.parent.postMessage(
+					{
+						type: "close",
+					},
+					"*"
+				);
+			}
+		</script>
+	</body>
 </html>
