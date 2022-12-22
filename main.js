@@ -6,12 +6,12 @@ const STATE_VOTE = 3004;
 const STATE_VOTE_RESULT = 3005;
 const STATE_END = 3006;
 const coordinates = {
-	1: { x: 23, y: 18 },
-	2: { x: 26, y: 18 },
-	3: { x: 28, y: 20 },
-	4: { x: 28, y: 23 },
-	5: { x: 21, y: 23 },
-	6: { x: 21, y: 20 },
+	1: { x: 28, y: 16 },
+	2: { x: 29, y: 21 },
+	3: { x: 28, y: 26 },
+	4: { x: 21, y: 26 },
+	5: { x: 20, y: 21 },
+	6: { x: 21, y: 16 },
 };
 
 // 18,31 - 31,40
@@ -304,9 +304,6 @@ App.onDestroy.Add(function () {
 });
 
 App.onStart.Add(function () {
-	// App.runLater(() => startState(STATE_INIT), 2);
-	App.displayRatio = 1.2;
-	App.sendUpdated();
 	startState(STATE_INIT);
 });
 
@@ -338,7 +335,7 @@ App.onSay.add(function (player, text) {
 					);
 					player.moveSpeed = 0;
 					player.sendUpdated();
-					App.playSound("joinSound.m4a");
+					App.playSound("joinSound.mp3");
 				}
 				sendMessageToPlayerWidget();
 
@@ -379,7 +376,7 @@ App.onUpdate.Add(function (dt) {
 	if (apiRequestDelay > 0) {
 		apiRequestDelay -= dt;
 		if (apiRequestDelay < 1) {
-			apiRequestDelay = 30;
+			apiRequestDelay = 15;
 
 			App.httpGet(
 				"https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" +
@@ -423,8 +420,6 @@ App.onUpdate.Add(function (dt) {
 		}
 	}
 });
-
-App.onUnitAttacked.Add(function (player, x, y, target) {});
 
 App.onObjectAttacked.Add(function (p, x, y) {
 	// p.showCustomLabel(`오브젝트를 때렸다.`, 0xffffff, 0x000000, 115);
@@ -551,9 +546,6 @@ function startState(state) {
 				p.title = levelCalc(p);
 				p.hidden = false;
 				p.moveSpeed = 80;
-				p.sprite = null;
-				p.title = levelCalc(p);
-				p.hidden = false;
 
 				p.tag.joined = false;
 				p.tag.role = "";
@@ -767,15 +759,13 @@ function voteResult() {
 			if (p.tag.votecount == max) {
 				maxCount++;
 			}
+
+			if (p.tag.joined == true) {
+				voteArray.push([p.tag.title, p.tag.votecount]);
+			}
 		}
 	}
 
-	for (let i in _players) {
-		p = _players[i];
-		if (p.tag.joined == true) {
-			voteArray.push([p.tag.title, p.tag.votecount]);
-		}
-	}
 	voteArray.sort((a, b) => b[1] - a[1]);
 
 	if (index == -1) {
@@ -887,69 +877,70 @@ function nightResult(turnCount) {
 }
 
 function gameEndCheck() {
-	_mafiaCount = 0;
-	_citizenCount = 0;
-	for (let i in _players) {
-		let p = _players[i];
-		if (p.tag.joined == true) {
-			if (p.tag.role == "마피아") {
-				// App.sayToAll(`마피아 : ${p.title}`);
-				_mafiaCount++;
-			} else _citizenCount++;
-		}
-	}
-
-	// App.sayToAll(`마피아 수: ${_mafiaCount}`);
-
-	if (_mafiaCount == 0) {
-		// 시민 승리
+	if(_start){
+		_mafiaCount = 0;
+		_citizenCount = 0;
 		for (let i in _players) {
 			let p = _players[i];
 			if (p.tag.joined == true) {
 				if (p.tag.role == "마피아") {
-					giveExp(p, 2);
-				} else {
-					giveExp(p, 5);
-				}
+					// App.sayToAll(`마피아 : ${p.title}`);
+					_mafiaCount++;
+				} else _citizenCount++;
 			}
 		}
-		// destroyAppWidget();
-		gameReset();
-		App.playSound("citizenWinSound.mp3");
-		_widgetHtml = "winCitizen.html";
-		updatePlayerWidget(_widgetHtml);
-
-		App.runLater(() => {
-			startState(STATE_INIT);
-		}, 8);
-		return true;
-	} else if (_mafiaCount == 1) {
-		if (_mafiaCount == _citizenCount) {
-			// 마피아 승리
+	
+		// App.sayToAll(`마피아 수: ${_mafiaCount}`);
+	
+		if (_mafiaCount == 0) {
+			// 시민 승리
 			for (let i in _players) {
 				let p = _players[i];
 				if (p.tag.joined == true) {
 					if (p.tag.role == "마피아") {
-						giveExp(p, 10);
+						giveExp(p, 2);
 					} else {
 						giveExp(p, 5);
 					}
 				}
 			}
-			App.playSound("mafiaWinSound.mp3");
 			// destroyAppWidget();
 			gameReset();
-			_widgetHtml = "winMafia.html";
+			App.playSound("citizenWinSound.mp3");
+			_widgetHtml = "winCitizen.html";
 			updatePlayerWidget(_widgetHtml);
-
+	
 			App.runLater(() => {
 				startState(STATE_INIT);
 			}, 8);
-
 			return true;
+		} else if (_mafiaCount == 1) {
+			if (_mafiaCount == _citizenCount) {
+				// 마피아 승리
+				for (let i in _players) {
+					let p = _players[i];
+					if (p.tag.joined == true) {
+						if (p.tag.role == "마피아") {
+							giveExp(p, 10);
+						} else {
+							giveExp(p, 5);
+						}
+					}
+				}
+				App.playSound("mafiaWinSound.mp3");
+				// destroyAppWidget();
+				gameReset();
+				_widgetHtml = "winMafia.html";
+				updatePlayerWidget(_widgetHtml);
+	
+				App.runLater(() => {
+					startState(STATE_INIT);
+				}, 8);
+	
+				return true;
+			}
 		}
 	}
-
 	return false;
 }
 
@@ -1063,7 +1054,10 @@ function updatePlayerWidget(htmlName) {
 		}
 		p.tag.widget = p.showWidget(htmlName, "top", 400, 200);
 	}
-	sendMessageToPlayerWidget();
+	if(_state != STATE_VOTE_RESULT){
+		sendMessageToPlayerWidget();
+	}
+
 }
 
 function sendMessageToPlayerWidget(data = null) {
