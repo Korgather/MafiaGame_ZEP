@@ -432,7 +432,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 			case "경찰":
 				p.playSound("policeAttackSound.mp3");
 				let targetRole = target.tag.role;
-				p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300);
+				p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
 				break;
 			case "마피아":
 				App.playSound("gunSound.WAV");
@@ -453,10 +453,10 @@ function dead(player) {
 	// 위젯 메시지
 	// 이 사람의 직업 + 죽었습니다
 	if (player.tag.role != "마피아") {
-		App.showCustomLabel(`${player.name} 님이 처형당했습니다. 그는 마피아가 아니었습니다.`, 0xffffff, 0x000000, 300);
+		App.showCustomLabel(`${player.name} 님이 처형당했습니다. 그는 마피아가 아니었습니다.`, 0xffffff, 0x000000, 300, 5000);
 		giveExp(player, 2);
 	} else {
-		App.showCustomLabel(`${player.name} 님이 처형당했습니다. 그는 마피아였습니다.`, 0xffffff, 0x000000, 300);
+		App.showCustomLabel(`${player.name} 님이 처형당했습니다. 그는 마피아였습니다!`, 0xffffff, 0x000000, 300, 5000);
 	}
 
 	player.moveSpeed = 80;
@@ -466,6 +466,7 @@ function dead(player) {
 	player.tag.mafiaTarget = false;
 	player.tag.votecount = 0;
 	player.tag.joined = false;
+	_playerCount--;
 	player.sprite = ghost;
 	player.sendUpdated();
 
@@ -507,6 +508,9 @@ function startState(state) {
 				p.tag.votecount = 0;
 				p.tag.healed = false;
 				p.tag.mafiaTarget = false;
+				p.tag.kickList = [];
+				p.tag.ready = false;
+				p.tag.kickCount = 0;
 
 				p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 10 + 37));
 				p.sendUpdated();
@@ -715,9 +719,9 @@ function voteResult() {
 	voteArray.sort((a, b) => b[1] - a[1]);
 
 	if (index == -1) {
-		App.showCustomLabel(`투표 결과 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300);
+		App.showCustomLabel(`투표 결과 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
 	} else if (maxCount > 1) {
-		App.showCustomLabel(`투표 결과 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300);
+		App.showCustomLabel(`투표 결과 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
 	} else {
 		dead(_players[index]);
 	}
@@ -785,17 +789,17 @@ function nightResult(turnCount) {
 			if (p.tag.joined == true) {
 				if (p.tag.mafiaTarget == true) {
 					if (p.tag.healed == true) {
-						App.showCustomLabel(`어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`, 0xffffff, 0x000000, 300);
+						App.showCustomLabel(`어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`, 0xffffff, 0x000000, 300, 5000);
 						return;
 					} else {
-						App.showCustomLabel(`이번 밤에 ${p.title}가 죽었습니다.`, 0xffffff, 0x000000, 300);
+						App.showCustomLabel(`이번 밤에 ${p.title}가 죽었습니다.`, 0xffffff, 0x000000, 300, 5000);
 						dead(p);
 						return;
 					}
 				}
 			}
 		}
-		App.showCustomLabel(`이번 밤에 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300);
+		App.showCustomLabel(`이번 밤에 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
 	}
 }
 
@@ -1172,11 +1176,12 @@ function WatingRoomOnMessage(player, data) {
 				target?.tag.kickCount ? target.tag.kickCount++ : (target.tag.kickCount = 1);
 				if (target.tag.kickCount >= 3) {
 					target.tag.joined = false;
-					target.tag.ready = false;
+
 					target.tag.kickCount = 0;
 					_playerCount--;
 					if (target.tag.ready) {
 						_readyCount--;
+						target.tag.ready = false;
 					}
 					target.tag.widget.sendMessage({
 						type: "kicked",
