@@ -142,25 +142,26 @@ let _state = STATE_INIT;
 let _widget = null;
 
 let _turnCount = 0;
+let _readyCount = 0;
 
 let _mafiaCount = 0;
 let _citizenCount = 0;
 let _tickTockSoundOn = false;
 let _widgetHtml = "WatingRoom.html";
 
-App.addOnTileTouched(ZONE_MAFIA[0], ZONE_MAFIA[1], function (player) {
+App.addOnLocationTouched("m", function (player) {
 	player.sprite = mafiaSprite;
 	player.attackSprite = mafiaAttackSprite;
 	player.sendUpdated();
 });
 
-App.addOnTileTouched(ZONE_DOCTOR[0], ZONE_DOCTOR[1], function (player) {
+App.addOnLocationTouched("d", function (player) {
 	player.sprite = doctorSprite;
 	player.attackSprite = doctorAttackSprite;
 	player.sendUpdated();
 });
 
-App.addOnTileTouched(ZONE_POLICE[0], ZONE_POLICE[1], function (player) {
+App.addOnLocationTouched("p", function (player) {
 	player.sprite = policeSprite;
 	player.attackSprite = policeAttackSprite;
 	player.sendUpdated();
@@ -184,7 +185,7 @@ App.onJoinPlayer.Add(function (p) {
 		});
 		p.save();
 	}
-	p.tag.widget = p.showWidget(_widgetHtml, "top", 400, 600);
+	p.tag.widget = p.showWidget(_widgetHtml, "top", 400, 350);
 	p.tag.widget.sendMessage({ type: "setID", id: p.id });
 	p_widget = p.tag.widget;
 
@@ -206,72 +207,7 @@ App.onJoinPlayer.Add(function (p) {
 					}
 				}
 
-				p_widget.onMessage.Add(function (player, data) {
-					if (data.type == "join") {
-						if (_start) return;
-						if (player.tag.joined) return;
-						if (_playerCount < 6) {
-							_playerCount++;
-							if (!player.tag.joined) {
-								// player.tag.title = _playerCount;
-								// player.title = _playerCount + "번 참가자";
-								player.tag.joined = true;
-								// player.sendUpdated();
-								App.playSound("joinSound.mp3");
-							}
-							let pStorage = JSON.parse(player.storage);
-							sendMessageToPlayerWidget({
-								type: "join",
-								id: player.id,
-								name: player.name,
-								level: levelCalc(player),
-								runCount: pStorage.runCount,
-							});
-						}
-					} else if (data.type == "ready") {
-						player.tag.ready = true;
-						sendMessageToPlayerWidget({
-							type: "ready",
-							id: player.id,
-						});
-						if (_playerCount === 6) {
-							App.showCustomLabel("참가 마감.", 0xffffff, 0x000000, 300);
-							startState(STATE_READY);
-						}
-					} else if (data.type == "cancle-ready") {
-						sendMessageToPlayerWidget({
-							type: "cancle-ready",
-							id: player.id,
-						});
-					} else if (data.type == "kick") {
-						let kickList = player.tag.kickList;
-						if (kickList && kickList.includes(data.id)) {
-							kickList.splice(kickList.indexOf(data.id), 1);
-							player.tag.kickList = kickList;
-							sendMessageToPlayerWidget({
-								type: "cancle-kick",
-								id: data.id,
-							});
-							let target = App.getPlayerByID(data.id);
-							target.tag.kickCount--;
-						} else {
-							player.tag.kickList ? player.tag.kickList.push(data.id) : (player.tag.kickList = [data.id]);
-							sendMessageToPlayerWidget({
-								type: "kick",
-								id: data.id,
-							});
-							let target = App.getPlayerByID(data.id);
-							target?.tag.kickCount ? target.tag.kickCount++ : (target.tag.kickCount = 1);
-							if (target.tag.kickCount >= 3) {
-								target.tag.joined = false;
-								target.tag.ready = false;
-								target.tag.widget.sendMessage({
-									type: "kicked",
-								});
-							}
-						}
-					}
-				});
+				p_widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
 
 				break;
 			case STATE_PLAYING_DAY:
@@ -328,6 +264,10 @@ App.onLeavePlayer.Add(function (p) {
 		case STATE_INIT:
 			if (p.tag.joined == true) {
 				_playerCount--;
+				if (p.tag.ready) {
+					_readyCount--;
+				}
+				let kickList = p.tag.kickList;
 				sendMessageToPlayerWidget({
 					type: "leave",
 					id: p.id,
@@ -539,8 +479,10 @@ function startState(state) {
 			Map.clearAllObjects();
 			// destroyAppWidget();
 			_widgetHtml = "WatingRoom.html";
+
 			updatePlayerWidget(_widgetHtml);
 			_turnCount = 0;
+			_readyCount = 0;
 
 			for (let i in _players) {
 				let p = _players[i];
@@ -580,6 +522,9 @@ function startState(state) {
 				pStorage["playCount"] ? pStorage["playCount"]++ : (pStorage["playCount"] = 1);
 				p.storage = JSON.stringify(pStorage);
 				if (p.tag.joined == true) {
+					// p.spawnAt(coordinates[arrIndex + 1].x, coordinates[arrIndex + 1].y);
+					p.title = `${arrIndex + 1} 번 참가자`;
+					p.tag.title = arrIndex + 1;
 					setRole(p, arrIndex, roleArray);
 					arrIndex++;
 				}
@@ -596,7 +541,7 @@ function startState(state) {
 				clearHidden();
 				Map.clearAllObjects();
 				App.playSound("morningSound.wav");
-				_stateTimer = 62;
+				_stateTimer = 10 * _playerCount;
 				_widgetHtml = "morning.html";
 				updatePlayerWidget(_widgetHtml);
 				// sendMessageToPlayerWidget();
@@ -625,7 +570,7 @@ function startState(state) {
 				tagReset();
 				createSilhouette();
 				allHidden();
-				_stateTimer = 22;
+				_stateTimer = 17;
 				App.playSound("nightSound.mp3");
 				_widgetHtml = "night.html";
 				updatePlayerWidget(_widgetHtml);
@@ -633,10 +578,14 @@ function startState(state) {
 
 				for (let i in _players) {
 					let p = _players[i];
-					if (p.tag.joined == true) {
-						let role = p.tag.role;
-						if (role != "시민") {
-							changeCharacterImage(p, role);
+					if (p.tag.joined) {
+						p.chatEnabled = false;
+						p.sendUpdated();
+						if (p.tag.joined == true) {
+							let role = p.tag.role;
+							if (role != "시민") {
+								changeCharacterImage(p, role);
+							}
 						}
 					}
 				}
@@ -802,9 +751,10 @@ function clearHidden() {
 		if (p.tag.joined == true) {
 			p = _players[i];
 			p.moveSpeed = 0;
-			p.spawnAt(coordinates[p.tag.title].x, coordinates[p.tag.title].y);
+			p.spawnAt(coordinates[p.tag.title]?.x, coordinates[p.tag.title]?.y);
 			p.sprite = null;
 			p.hidden = false;
+			p.chatEnabled = true;
 			p.sendUpdated();
 		}
 	}
@@ -1018,7 +968,9 @@ function updatePlayerWidget(htmlName) {
 			p.tag.widget.destroy();
 			p.tag.widget = null;
 		}
-		p.tag.widget = p.showWidget(htmlName, "top", 400, 200);
+		p.tag.widget = p.showWidget(htmlName, "top", 400, 350);
+		p.tag.widget.sendMessage({ type: "setID", id: p.id });
+		p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
 	}
 	if (_state != STATE_VOTE_RESULT) {
 		sendMessageToPlayerWidget();
@@ -1139,5 +1091,99 @@ function sendMessageToPlayerWidget(data = null) {
 					break;
 			}
 		}
+	}
+}
+
+function WatingRoomOnMessage(player, data) {
+	switch (data.type) {
+		case "join":
+			if (_start) return;
+			if (player.tag.joined) return;
+			if (_playerCount < 6) {
+				if (!player.tag.joined) {
+					_playerCount++;
+					// player.tag.title = _playerCount;
+					// player.title = _playerCount + "번 참가자";
+					player.tag.joined = true;
+					// player.sendUpdated();
+					App.playSound("joinSound.mp3");
+					let pStorage = JSON.parse(player.storage);
+					sendMessageToPlayerWidget({
+						type: "join",
+						id: player.id,
+						name: player.name,
+						level: levelCalc(player),
+						runCount: pStorage.runCount,
+					});
+				}
+			} else {
+				if (!player.tag.joined) {
+					player.showCustomLabel("게임 인원이 다 찼습니다.", 0xffffff, 0x000000, 300);
+				}
+			}
+			break;
+		case "ready":
+			sendMessageToPlayerWidget({
+				type: "ready",
+				id: player.id,
+			});
+			if (!player.tag.ready) {
+				player.tag.ready = true;
+				_readyCount++;
+				if (_readyCount == 6) {
+					App.showCustomLabel("게임이 곧 시작됩니다.", 0xffffff, 0x000000, 300);
+					startState(STATE_READY);
+				}
+			}
+
+			break;
+		case "cancle-ready":
+			if (player.tag.ready) {
+				_readyCount--;
+				player.tag.ready = false;
+			}
+			sendMessageToPlayerWidget({
+				type: "cancle-ready",
+				id: player.id,
+			});
+			break;
+		case "kick":
+			let kickList = player.tag.kickList;
+			if (kickList && kickList.includes(data.id)) {
+				kickList.splice(kickList.indexOf(data.id), 1);
+				player.tag.kickList = kickList;
+				sendMessageToPlayerWidget({
+					type: "cancle-kick",
+					id: data.id,
+				});
+				let target = App.getPlayerByID(data.id);
+				target.tag.kickCount--;
+			} else {
+				player.tag.kickList ? player.tag.kickList.push(data.id) : (player.tag.kickList = [data.id]);
+				sendMessageToPlayerWidget({
+					type: "kick",
+					id: data.id,
+				});
+				let target = App.getPlayerByID(data.id);
+				target?.tag.kickCount ? target.tag.kickCount++ : (target.tag.kickCount = 1);
+				if (target.tag.kickCount >= 3) {
+					target.tag.joined = false;
+					target.tag.ready = false;
+					_playerCount--;
+					if (target.tag.ready) {
+						_readyCount--;
+					}
+					target.tag.widget.sendMessage({
+						type: "kicked",
+					});
+
+					sendMessageToPlayerWidget({
+						type: "leave",
+						id: target.id,
+						kickList: target.tag.kickList,
+					});
+				}
+			}
+			break;
 	}
 }

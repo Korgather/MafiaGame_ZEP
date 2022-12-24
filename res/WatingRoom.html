@@ -21,6 +21,9 @@
         }
 
         body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
             padding: 0px;
             margin: 0px;
         }
@@ -191,6 +194,7 @@
                 마피아게임 대기실
             </div>
             <div class="list">
+
                 <div class="li-header">
                     <div class="header-level">레벨</div>
                     <div class="header-player">닉네임</div>
@@ -198,6 +202,7 @@
                     <div></div>
                     <div></div>
                 </div>
+                <!--
                 <div class="li">
                     <div class="level">Lv1</div>
                     <div class="name">닉네임</div>
@@ -208,6 +213,7 @@
                         <span style="height: 100%;" class="kick-count">0</span>
                     </button>
                 </div>
+                -->
             </div>
         </div>
     </div>
@@ -233,6 +239,11 @@
                     AppendList(e.data?.data);
                     break;
                 case "join":
+                    if (e.data?.data.id == myID) {
+                        document.querySelector(".container-ready").classList.add("hidden");
+                        document.querySelector(".container").classList.remove("hidden");
+                    }
+
                     AppendList(e.data?.data);
 
                     break;
@@ -257,13 +268,12 @@
                 case "kicked":
                     document.querySelector(".container-ready").classList.remove("hidden");
                     document.querySelector(".container").classList.add("hidden");
+                    DeleteList(e.data.id);
                     break;
             }
         })
 
         document.querySelector(".button-join").addEventListener("click", (e) => {
-            document.querySelector(".container-ready").classList.add("hidden");
-            document.querySelector(".container").classList.remove("hidden");
             window.parent.postMessage({ type: "join" }, "*")
         })
 
