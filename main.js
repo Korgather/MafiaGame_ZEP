@@ -149,6 +149,8 @@ let _citizenCount = 0;
 let _tickTockSoundOn = false;
 let _widgetHtml = "WatingRoom.html";
 
+const spawnPoint = [25, 40];
+
 App.addOnLocationTouched("m", function (player) {
 	player.sprite = mafiaSprite;
 	player.attackSprite = mafiaAttackSprite;
@@ -168,6 +170,7 @@ App.addOnLocationTouched("p", function (player) {
 });
 
 App.onJoinPlayer.Add(function (p) {
+	p.spawnAt(spawnPoint[0], spawnPoint[1]);
 	_players = App.players;
 	p.tag = {
 		joined: false,
@@ -732,6 +735,7 @@ function tagReset() {
 		p.tag.healed = false;
 		p.tag.votecount = 0;
 		p.tag.mafiaTarget = false;
+		p.tag.kickCount = 0;
 		p.attackSprite = null;
 		p.sendUpdated();
 	}
@@ -1169,6 +1173,7 @@ function WatingRoomOnMessage(player, data) {
 				if (target.tag.kickCount >= 3) {
 					target.tag.joined = false;
 					target.tag.ready = false;
+					target.tag.kickCount = 0;
 					_playerCount--;
 					if (target.tag.ready) {
 						_readyCount--;
@@ -1182,6 +1187,7 @@ function WatingRoomOnMessage(player, data) {
 						id: target.id,
 						kickList: target.tag.kickList,
 					});
+					target.tag.kickList = [];
 				}
 			}
 			break;
