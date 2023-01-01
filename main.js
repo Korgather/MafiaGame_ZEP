@@ -170,7 +170,7 @@ App.addOnLocationTouched("p", function (player) {
 });
 
 App.onJoinPlayer.Add(function (p) {
-	p.spawnAt(spawnPoint[0], spawnPoint[1]);
+	p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 11 + 37));
 	_players = App.players;
 	p.tag = {
 		joined: false,
