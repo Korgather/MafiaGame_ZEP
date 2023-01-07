@@ -391,7 +391,7 @@
 
                         document.querySelectorAll(".room").forEach((el) => {
                             el.querySelector(".player-count").innerHTML = gameRooms[el.dataset.roomnum].players.length;
-                            if (gameRooms.start == true) {
+                            if (gameRooms[el.dataset.roomnum].start == true) {
                                 el.querySelector(".button-join").classList.add("ing");
                                 el.querySelector(".button-join").innerHTML = "게임중";
                             } else {

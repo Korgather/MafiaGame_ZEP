@@ -154,6 +154,7 @@ const GAMEROOM = {
 		alive: 0,
 		total: 0,
 		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
 	},
 	2: {
 		start: false,
@@ -167,6 +168,7 @@ const GAMEROOM = {
 		alive: 0,
 		total: 0,
 		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
 	},
 	3: {
 		start: false,
@@ -180,6 +182,7 @@ const GAMEROOM = {
 		alive: 0,
 		total: 0,
 		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
 	},
 	4: {
 		start: false,
@@ -193,6 +196,7 @@ const GAMEROOM = {
 		alive: 0,
 		total: 0,
 		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
 	},
 };
 
@@ -462,13 +466,7 @@ function startState(roomNum, state) {
 
 	switch (room.state) {
 		case STATE_INIT:
-			Map.clearAllObjects();
-			widgetHtml = "WatingRoom.html";
-
-			updatePlayerWidget(roomNum, widgetHtml);
-			room.turnCount = 0;
-			room.readyCount = 0;
-
+			clearRoomObjects(roomNum);
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
 				p.attackType = 2;
@@ -493,13 +491,15 @@ function startState(roomNum, state) {
 				p.tag.data.ready = false;
 				p.tag.data.kickCount = 0;
 
-				p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 10 + 37));
+				// p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 10 + 37));
 				p.sendUpdated();
 			}
-
+			widgetHtml = "WatingRoom.html";
+			updatePlayerWidget(roomNum, widgetHtml);
+			gameReset(roomNum);
 			break;
 		case STATE_READY:
-			room.stateTimer = 5;
+			room.stateTimer = 0.1;
 			room.start = true;
 			room.total = room.players.length;
 			const roleArray = createRole(room.players.length);
@@ -604,6 +604,9 @@ function createRole(playerCount) {
 		if (i === 2) {
 			return "경찰";
 		}
+		if (i === 3) {
+			return "정치인";
+		}
 		return "시민";
 	});
 	return shuffle(roleArray);
@@ -634,6 +637,9 @@ function showRoleWidget(player) {
 		case "시민":
 			widgetName = `citizen.html`;
 			break;
+		case "정치인":
+			widgetName = `politician.html`;
+			break;
 	}
 	let align = player.isMobile ? "middle" : "topleft";
 
@@ -657,6 +663,7 @@ function shuffle(array) {
 
 function playerLeft(p) {
 	if (p.tag.data.joined == true) {
+		p.tag.data.joined = false;
 		let pStorage = JSON.parse(p.storage);
 		let roomNum = p.tag.data.roomNum;
 		pStorage.runCount ? pStorage.runCount++ : (pStorage.runCount = 1);
@@ -707,7 +714,11 @@ function voteResult(roomNum) {
 	if (targetPlayer == -1 || maxCount > 1) {
 		showLabelToRoom(roomNum, `투표 결과 아무도 죽지 않았습니다.`);
 	} else {
-		dead(targetPlayer);
+		if (targetPlayer.tag.role == "정치인") {
+			showLabelToRoom(roomNum, `정치인은 투표로 죽지 않습니다.`);
+		} else {
+			dead(targetPlayer);
+		}
 	}
 
 	// destroyAppWidget();
@@ -764,6 +775,7 @@ function createSilhouette(roomNum) {
 			let y = coordinates[p.tag.data.title].y;
 			Map.putObject(x, y - 1, silhouette);
 			Map.putObject(x, y, blankObject);
+			room.SilhouetteTracker.push([x, y - 1]);
 		}
 	}
 }
@@ -820,16 +832,14 @@ function gameEndCheck(roomNum) {
 					}
 				}
 			}
-			// destroyAppWidget();
-			gameReset(roomNum);
+
 			playSoundToRoom(roomNum, "citizenWinSound.mp3");
 			widgetHtml = "winCitizen.html";
 			updatePlayerWidget(roomNum, widgetHtml);
-			sendMessageToPlayerWidget(roomNum);
-
 			App.runLater(() => {
 				startState(roomNum, STATE_INIT);
-			}, 8);
+			}, 5);
+
 			return true;
 		} else if (mafiaCount == 1) {
 			if (mafiaCount == citizenCount) {
@@ -845,15 +855,11 @@ function gameEndCheck(roomNum) {
 					}
 				}
 				playSoundToRoom(roomNum, "mafiaWinSound.mp3");
-				// destroyAppWidget();
-				gameReset(roomNum);
 				widgetHtml = "winMafia.html";
 				updatePlayerWidget(roomNum, widgetHtml);
-				sendMessageToPlayerWidget(roomNum);
-
 				App.runLater(() => {
 					startState(roomNum, STATE_INIT);
-				}, 8);
+				}, 5);
 
 				return true;
 			}
@@ -864,7 +870,6 @@ function gameEndCheck(roomNum) {
 
 function gameReset(roomNum) {
 	let room = GAMEROOM[roomNum];
-	room.start = false;
 
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
@@ -895,19 +900,18 @@ function gameReset(roomNum) {
 		p.sendUpdated();
 	}
 
-	room = {
-		start: false,
-		state: STATE_INIT,
-		stateTimer: 0,
-		startPoint: GAMEROOM_START_POINT[roomNum],
-		players: [],
-		readyCount: 0,
-		tickTockSoundOn: false,
-		turnCount: 0,
-		alive: 0,
-		total: 0,
-		startWaitTime: START_WAIT_TIME,
-	};
+	room.start = false;
+	room.state = STATE_INIT;
+	room.stateTimer = 0;
+	room.startPoint = GAMEROOM_START_POINT[roomNum];
+	room.players = [];
+	room.readyCount = 0;
+	room.tickTockSoundOn = false;
+	room.turnCount = 0;
+	room.alive = 0;
+	room.total = 0;
+	room.startWaitTime = START_WAIT_TIME;
+	room.SilhouetteTracker = [];
 }
 
 function changeCharacterImage(player, text) {
@@ -996,9 +1000,17 @@ function updatePlayerWidget(roomNum, htmlName) {
 
 function sendMessageToPlayerWidget(roomNum, data = null) {
 	let room = GAMEROOM[roomNum];
+	let aliveCount = 0;
+	if (room.start) {
+		room.players.forEach((data) => {
+			if (data.joined) aliveCount++;
+		});
+	}
+
 	for (let roomPlayerData of room.players) {
 		let id = roomPlayerData.id;
 		let p = App.getPlayerByID(id);
+
 		if (!p) continue;
 		let p_widget = p.tag.widget;
 		if (p_widget) {
@@ -1048,14 +1060,14 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 				case STATE_READY:
 					p_widget.sendMessage({
 						total: room.total,
-						current: 6,
+						current: room.total,
 						description: `마피아 게임이 곧 시작됩니다.`,
 					});
 					break;
 				case STATE_PLAYING_DAY:
 					p_widget.sendMessage({
 						total: room.total,
-						alive: room.mafiaCount + room.citizenCount,
+						alive: aliveCount,
 						timer: room.stateTimer,
 						description: "투표 전까지 이야기를 나누세요.",
 					});
@@ -1071,7 +1083,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 					}
 					p_widget.sendMessage({
 						total: room.total,
-						alive: room.mafiaCount + room.citizenCount,
+						alive: aliveCount,
 						timer: room.stateTimer,
 						liveList: liveList,
 						description: "",
@@ -1084,7 +1096,11 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 								for (let playerData of room.players) {
 									let p = App.getPlayerByID(playerData.id);
 									if (p.tag.data.title == data.vote) {
-										p.tag.data.votecount++;
+										if (player.tag.role == "정치인") {
+											p.tag.data.votecount += 2;
+										} else {
+											p.tag.data.votecount++;
+										}
 									}
 								}
 								player.tag.widget.destroy();
@@ -1104,7 +1120,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 				case STATE_PLAYING_NIGHT:
 					p_widget.sendMessage({
 						total: room.total,
-						alive: room.mafiaCount + room.citizenCount,
+						alive: aliveCount,
 						timer: room.stateTimer,
 						description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
 					});
@@ -1316,4 +1332,13 @@ function quitPlayer(player) {
 	player.tag.data.kickCount = 0;
 
 	updatePlayerCount();
+}
+
+function clearRoomObjects(roomNum) {
+	let room = GAMEROOM[roomNum];
+
+	for (let coords of room.SilhouetteTracker) {
+		Map.putObject(coords[0], coords[1], null);
+	}
+	room.SilhouetteTracker = [];
 }
