@@ -1,190 +1,200 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Document</title>
-		<style>
-			body {
-				padding: 0;
-				margin: 0;
-				box-sizing: border-box;
-				overflow: hidden;
-				color: #484848;
-				width: 100vw;
-				height: 100vh;
-			}
-			.background {
-				width: 100%;
-				height: auto;
-				display: flex;
-				flex-direction: column;
-			}
-			.situation {
-				text-align: center;
-				width: 100%;
-				font-size: 14px;
-			}
-			.timer {
-				margin-left: auto;
-				top: 10px;
-				right: 20px;
-				font-size: 35px;
-				position: absolute;
-			}
-			.description {
-				bottom: 40px;
-				font-size: 18px;
-				font-weight: 550;
-				width: 100%;
-				text-align: center;
-				word-break: break-all;
-			}
-			.wrapper {
-				box-sizing: border-box;
-				width: 400px;
-				height: 200px;
-				border-radius: 15px;
-				display: flex;
-				flex-direction: column;
-				column-gap: 30px;
-				align-items: flex-end;
-				justify-content: flex-end;
-				background-image: url(https://i.imgur.com/QGtAo3G.png);
-				background-repeat: no-repeat;
-				background-size: contain;
-				padding-bottom: 10px;
-			}
-			.vote {
-				box-sizing: border-box;
-				padding-right: 50px;
-				padding-left: 50px;
-				width: 100%;
-				display: grid;
-				grid-template-columns: repeat(3, 1fr);
-				justify-items: center;
-				column-gap: 30px;
-				row-gap: 10px;
-				margin-bottom: 10px;
-			}
-			.button {
-				display: flex;
-				width: 100%;
-				height: 30px;
-				justify-content: center;
-				align-items: center;
-				border-radius: 2px;
-				font-size: 0.9em;
-				color: #646464;
-				background-color: #eee;
-				transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-				transition-delay: 0.2s;
-				box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.26);
-				font-weight: bold;
-				cursor: pointer;
-				user-select: none;
-			}
 
-			.disabled {
-				background-color: rgb(59, 57, 57);
-				color: white;
-				cursor: unset;
-				text-decoration: line-through;
-				text-decoration-color: red;
-				text-decoration-thickness: 3px;
-			}
-
-			img {
-				border-radius: 15px;
-			}
-		</style>
-	</head>
-	<body>
-		<div class="wrapper">
-			<div class="timer" id="timer">00:00</div>
-			<div class="vote">
-				<div class="button">1번 참가자</div>
-				<div class="button">2번 참가자</div>
-				<div class="button">3번 참가자</div>
-				<div class="button">4번 참가자</div>
-				<div class="button">5번 참가자</div>
-				<div class="button">6번 참가자</div>
-			</div>
-			<!-- <div class="description" id="description">asdasd</div>
-			<div class="situation" id="situation">총인원 -명, 생존 -명</div> -->
-		</div>
-	</body>
-	<script type="text/javascript">
-		const toHHMMSS = (time) => {
-			var hours = Math.floor(time / 3600);
-			var minutes = Math.floor((time - hours * 3600) / 60);
-			var seconds = Math.floor(time - hours * 3600 - minutes * 60);
-			if (hours < 10) {
-				hours = "0" + hours;
-			}
-			if (minutes < 10) {
-				minutes = "0" + minutes;
-			}
-			if (seconds < 10) {
-				seconds = "0" + seconds;
-			}
-			return hours + ":" + minutes + ":" + seconds;
-		};
-		const timerDom = document.getElementById("timer");
-		const situationDom = document.getElementById("situation");
-		const descriptionDom = document.getElementById("description");
-		const audioDom = document.getElementById("audio");
-		const tabList = document.querySelectorAll(".button");
-		let liveList = [];
-		let isVoted = false;
-
-		function init() {
-			for (let i = 0; i < tabList.length; i++) {
-				let index = i + 1;
-				if (!liveList.includes(index)) {
-					tabList[i].classList.add("disabled");
-				} else {
-					tabList[i].addEventListener("click", function (e) {
-						if (!isVoted) {
-							window.parent.postMessage(
-								{
-									vote: index,
-								},
-								"*"
-							);
-							isVoted = true;
-						}
-					});
-				}
-			}
+<head>
+	<meta charset="UTF-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Document</title>
+	<style>
+		body {
+			padding: 0;
+			margin: 0;
+			box-sizing: border-box;
+			overflow: hidden;
+			color: #484848;
+			width: 100vw;
+			height: 100vh;
 		}
 
-		window.addEventListener("message", function (e) {
-			if (e.data.liveList) {
-				liveList = e.data.liveList;
-				console.log(liveList);
-				init();
-			}
-			let timer = e.data.timer - 2;
-			let total = e.data.total;
-			let alive = e.data.alive;
-			let timerInterval;
+		.background {
+			width: 100%;
+			height: auto;
+			display: flex;
+			flex-direction: column;
+		}
 
-			clearInterval(timerInterval);
-			timerInterval = setInterval(() => {
-				if (timer === 11) {
-					timerDom.style.color = "red";
-				}
-				if (--timer >= 0) {
-					timerDom.innerText = toHHMMSS(timer);
-				} else {
-					timerDom.style.color = "#484848";
-					clearInterval(timerInterval);
-				}
-			}, 1000);
-			timerDom.innerText = toHHMMSS(timer);
-			situationDom.innerText = `총인원 ${total}명, 생존 ${alive}명`;
-		});
-	</script>
+		.situation {
+			text-align: center;
+			width: 100%;
+			font-size: 14px;
+		}
+
+		.timer {
+			margin-left: auto;
+			top: 10px;
+			right: 20px;
+			font-size: 35px;
+			position: absolute;
+		}
+
+		.description {
+			bottom: 40px;
+			font-size: 18px;
+			font-weight: 550;
+			width: 100%;
+			text-align: center;
+			word-break: break-all;
+		}
+
+		.wrapper {
+			box-sizing: border-box;
+			width: 400px;
+			height: 200px;
+			border-radius: 15px;
+			display: flex;
+			flex-direction: column;
+			column-gap: 30px;
+			align-items: flex-end;
+			justify-content: flex-end;
+			background-image: url(https://i.imgur.com/QGtAo3G.png);
+			background-repeat: no-repeat;
+			background-size: contain;
+			padding-bottom: 10px;
+		}
+
+		.vote {
+			box-sizing: border-box;
+			padding-right: 50px;
+			padding-left: 50px;
+			width: 100%;
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			justify-items: center;
+			column-gap: 30px;
+			row-gap: 10px;
+			margin-bottom: 10px;
+		}
+
+		.button {
+			display: flex;
+			width: 100%;
+			height: 30px;
+			justify-content: center;
+			align-items: center;
+			border-radius: 2px;
+			font-size: 0.9em;
+			color: #646464;
+			background-color: #eee;
+			transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+			transition-delay: 0.2s;
+			box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.26);
+			font-weight: bold;
+			cursor: pointer;
+			user-select: none;
+		}
+
+		.disabled {
+			background-color: rgb(59, 57, 57);
+			color: white;
+			cursor: unset;
+			text-decoration: line-through;
+			text-decoration-color: red;
+			text-decoration-thickness: 3px;
+		}
+
+		img {
+			border-radius: 15px;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="wrapper">
+		<div class="timer" id="timer">00:00</div>
+		<div class="vote">
+			<div class="button">1번 참가자</div>
+			<div class="button">2번 참가자</div>
+			<div class="button">3번 참가자</div>
+			<div class="button">4번 참가자</div>
+			<div class="button">5번 참가자</div>
+			<div class="button">6번 참가자</div>
+		</div>
+		<!-- <div class="description" id="description">asdasd</div> -->
+		<div class="situation" id="situation">총인원 -명, 생존 -명</div>
+	</div>
+</body>
+<script type="text/javascript">
+	const toHHMMSS = (time) => {
+		var hours = Math.floor(time / 3600);
+		var minutes = Math.floor((time - hours * 3600) / 60);
+		var seconds = Math.floor(time - hours * 3600 - minutes * 60);
+		if (hours < 10) {
+			hours = "0" + hours;
+		}
+		if (minutes < 10) {
+			minutes = "0" + minutes;
+		}
+		if (seconds < 10) {
+			seconds = "0" + seconds;
+		}
+		return hours + ":" + minutes + ":" + seconds;
+	};
+	const timerDom = document.getElementById("timer");
+	const situationDom = document.getElementById("situation");
+	const descriptionDom = document.getElementById("description");
+	const audioDom = document.getElementById("audio");
+	const tabList = document.querySelectorAll(".button");
+	let liveList = [];
+	let isVoted = false;
+
+	function init() {
+		for (let i = 0; i < tabList.length; i++) {
+			let index = i + 1;
+			if (!liveList.includes(index)) {
+				tabList[i].classList.add("disabled");
+			} else {
+				tabList[i].addEventListener("click", function (e) {
+					if (!isVoted) {
+						window.parent.postMessage(
+							{
+								vote: index,
+							},
+							"*"
+						);
+						isVoted = true;
+					}
+				});
+			}
+		}
+	}
+
+	window.addEventListener("message", function (e) {
+		if (e.data.liveList) {
+			liveList = e.data.liveList;
+			console.log(liveList);
+			init();
+		}
+		let timer = e.data.timer - 2;
+		let total = e.data.total;
+		let alive = e.data.alive;
+		let timerInterval;
+
+		clearInterval(timerInterval);
+		timerInterval = setInterval(() => {
+			if (timer === 11) {
+				timerDom.style.color = "red";
+			}
+			if (--timer >= 0) {
+				timerDom.innerText = toHHMMSS(timer);
+			} else {
+				timerDom.style.color = "#484848";
+				clearInterval(timerInterval);
+			}
+		}, 1000);
+		timerDom.innerText = toHHMMSS(timer);
+		situationDom.innerText = `총인원 ${total}명, 생존 ${alive}명`;
+	});
+</script>
+
 </html>
