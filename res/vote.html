@@ -113,12 +113,12 @@
 	<div class="wrapper">
 		<div class="timer" id="timer">00:00</div>
 		<div class="vote">
-			<div class="button">1번 참가자</div>
+			<!-- <div class="button">1번 참가자</div>
 			<div class="button">2번 참가자</div>
 			<div class="button">3번 참가자</div>
 			<div class="button">4번 참가자</div>
 			<div class="button">5번 참가자</div>
-			<div class="button">6번 참가자</div>
+			<div class="button">6번 참가자</div> -->
 		</div>
 		<!-- <div class="description" id="description">asdasd</div> -->
 		<div class="situation" id="situation">총인원 -명, 생존 -명</div>
@@ -144,12 +144,16 @@
 	const situationDom = document.getElementById("situation");
 	const descriptionDom = document.getElementById("description");
 	const audioDom = document.getElementById("audio");
-	const tabList = document.querySelectorAll(".button");
+
 	let liveList = [];
 	let isVoted = false;
-
+	let total = 0;
 	function init() {
-		for (let i = 0; i < tabList.length; i++) {
+		for (let i = 0; i < total; i++) {
+			document.querySelector(".vote").innerHTML += `<div class="button">${i + 1}번 참가자</div>`
+		}
+		const tabList = document.querySelectorAll(".button");
+		for (let i = 0; i < total; i++) {
 			let index = i + 1;
 			if (!liveList.includes(index)) {
 				tabList[i].classList.add("disabled");
@@ -170,30 +174,34 @@
 	}
 
 	window.addEventListener("message", function (e) {
-		if (e.data.liveList) {
-			liveList = e.data.liveList;
-			console.log(liveList);
-			init();
-		}
-		let timer = e.data.timer - 2;
-		let total = e.data.total;
-		let alive = e.data.alive;
-		let timerInterval;
+		if (e.data.type == "init") {
+			total = e.data.total;
+			if (e.data.liveList) {
+				liveList = e.data.liveList;
 
-		clearInterval(timerInterval);
-		timerInterval = setInterval(() => {
-			if (timer === 11) {
-				timerDom.style.color = "red";
+				console.log(liveList);
+				init();
 			}
-			if (--timer >= 0) {
-				timerDom.innerText = toHHMMSS(timer);
-			} else {
-				timerDom.style.color = "#484848";
-				clearInterval(timerInterval);
-			}
-		}, 1000);
-		timerDom.innerText = toHHMMSS(timer);
-		situationDom.innerText = `총인원 ${total}명, 생존 ${alive}명`;
+			let timer = e.data.timer - 2;
+			let alive = e.data.alive;
+			let timerInterval;
+
+			clearInterval(timerInterval);
+			timerInterval = setInterval(() => {
+				if (timer === 11) {
+					timerDom.style.color = "red";
+				}
+				if (--timer >= 0) {
+					timerDom.innerText = toHHMMSS(timer);
+				} else {
+					timerDom.style.color = "#484848";
+					clearInterval(timerInterval);
+				}
+			}, 1000);
+			timerDom.innerText = toHHMMSS(timer);
+			situationDom.innerText = `총인원 ${total}명, 생존 ${alive}명`;
+		}
+
 	});
 </script>
 

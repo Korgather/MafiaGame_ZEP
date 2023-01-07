@@ -5,16 +5,6 @@ const STATE_PLAYING_DAY = 3003;
 const STATE_VOTE = 3004;
 const STATE_VOTE_RESULT = 3005;
 const STATE_END = 3006;
-const coordinates = {
-	1: { x: 6, y: 4 },
-	2: { x: 10, y: 4 },
-	3: { x: 14, y: 4 },
-	4: { x: 5, y: 8 },
-	5: { x: 15, y: 8 },
-	6: { x: 6, y: 12 },
-	7: { x: 10, y: 12 },
-	8: { x: 14, y: 12 },
-};
 
 const START_WAIT_TIME = 10;
 // 18,31 - 31,40
@@ -136,15 +126,26 @@ const ZONE_MAFIA = [26, 38];
 const ZONE_DOCTOR = [28, 38];
 const ZONE_POLICE = [30, 38];
 
+const coordinates = {
+	1: { x: 7, y: 3 },
+	2: { x: 11, y: 3 },
+	3: { x: 15, y: 3 },
+	4: { x: 6, y: 7 },
+	5: { x: 16, y: 7 },
+	6: { x: 7, y: 11 },
+	7: { x: 11, y: 11 },
+	8: { x: 15, y: 11 },
+};
+
 const GAMEROOM_START_POINT = {
-	1: [4, 18],
-	2: [38, 18],
-	3: [72, 18],
-	4: [4, 39],
-	5: [72, 39],
-	6: [4, 60],
-	7: [38, 60],
-	8: [72, 60],
+	1: [19, 18],
+	2: [53, 18],
+	3: [87, 18],
+	4: [19, 39],
+	5: [87, 39],
+	6: [19, 60],
+	7: [53, 60],
+	8: [87, 60],
 };
 
 const GAMEROOM = {
@@ -152,7 +153,7 @@ const GAMEROOM = {
 		start: false,
 		state: STATE_INIT,
 		stateTimer: 0,
-		startPoint: [18, 17],
+		startPoint: GAMEROOM_START_POINT[1],
 		players: [],
 		readyCount: 0,
 		tickTockSoundOn: false,
@@ -166,7 +167,7 @@ const GAMEROOM = {
 		start: false,
 		state: STATE_INIT,
 		stateTimer: 0,
-		startPoint: [18, 17],
+		startPoint: GAMEROOM_START_POINT[2],
 		players: [],
 		readyCount: 0,
 		tickTockSoundOn: false,
@@ -180,7 +181,7 @@ const GAMEROOM = {
 		start: false,
 		state: STATE_INIT,
 		stateTimer: 0,
-		startPoint: [18, 17],
+		startPoint: GAMEROOM_START_POINT[3],
 		players: [],
 		readyCount: 0,
 		tickTockSoundOn: false,
@@ -194,7 +195,63 @@ const GAMEROOM = {
 		start: false,
 		state: STATE_INIT,
 		stateTimer: 0,
-		startPoint: [18, 17],
+		startPoint: GAMEROOM_START_POINT[4],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	5: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[5],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	6: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[6],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	7: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[7],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	8: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[8],
 		players: [],
 		readyCount: 0,
 		tickTockSoundOn: false,
@@ -238,7 +295,7 @@ App.addOnLocationTouched("p", function (player) {
 
 App.onJoinPlayer.Add(function (p) {
 	_players = App.players;
-	p.spawnAt(parseInt(Math.random() * 43 + 14), parseInt(Math.random() * 43 + 7));
+	InitSpawnPlayer(p);
 
 	p.tag = {
 		data: {
@@ -254,7 +311,7 @@ App.onJoinPlayer.Add(function (p) {
 		p.save();
 	}
 
-	p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
+	p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 	p.tag.widget.sendMessage({ type: "setID", id: p.id });
 	p.tag.widget.sendMessage({
 		type: "updatePlayerCount",
@@ -390,7 +447,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 	let target = null;
 	let targetNum = 0;
 	if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰") {
-		let room = GAMEROOM[p.tag.roomNum];
+		let room = GAMEROOM[p.tag.data.roomNum];
 		let startPoint = room.startPoint;
 		targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x - startPoint[0], y: y - startPoint[1] }));
 		p.moveSpeed = 0;
@@ -768,7 +825,7 @@ function clearHidden(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
-			let room = GAMEROOM[p.tag.roomNum];
+			let room = GAMEROOM[p.tag.data.roomNum];
 			let startPoint = room.startPoint;
 			p.moveSpeed = 0;
 			p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
@@ -786,7 +843,7 @@ function createSilhouette(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
-			let room = GAMEROOM[p.tag.roomNum];
+			let room = GAMEROOM[p.tag.data.roomNum];
 			let startPoint = room.startPoint;
 			let x = startPoint[0] + coordinates[p.tag.data.title].x;
 			let y = startPoint[1] + coordinates[p.tag.data.title].y;
@@ -917,14 +974,13 @@ function gameReset(roomNum) {
 		p.tag.healed = false;
 		p.tag.mafiaTarget = false;
 
-		p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 11 + 37));
+		InitSpawnPlayer(p);
 		p.sendUpdated();
 	}
 
 	room.start = false;
 	room.state = STATE_INIT;
 	room.stateTimer = 0;
-	room.startPoint = GAMEROOM_START_POINT[roomNum];
 	room.players = [];
 	room.readyCount = 0;
 	room.tickTockSoundOn = false;
@@ -1109,11 +1165,13 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						}
 					}
 					p_widget.sendMessage({
+						type: "init",
 						total: room.total,
 						alive: aliveCount,
 						timer: room.stateTimer,
 						liveList: liveList,
 						description: "",
+						total: room.total,
 					});
 
 					p_widget.onMessage.Add(function (player, data) {
@@ -1133,6 +1191,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 								}
 								player.tag.widget.destroy();
 								player.tag.widget = null;
+								player.showCustomLabel(`${data.vote}번 참가자에게 투표했습니다.`);
 							}
 						} else {
 							player.showCustomLabel("투표 권한이 없습니다");
@@ -1142,6 +1201,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 					break;
 				case STATE_VOTE_RESULT:
 					p_widget.sendMessage({
+						type: "voteResult",
 						result: data,
 					});
 					break;
@@ -1369,4 +1429,8 @@ function clearRoomObjects(roomNum) {
 		Map.putObject(coords[0], coords[1], null);
 	}
 	room.SilhouetteTracker = [];
+}
+
+function InitSpawnPlayer(p) {
+	p.spawnAt(parseInt(Math.random() * 14 + 58), parseInt(Math.random() * 7 + 43));
 }
