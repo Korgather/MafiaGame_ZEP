@@ -68,7 +68,8 @@
             align-items: center;
             gap: 15px;
             width: 380px;
-            height: 150px;
+            height: max-content;
+            padding: 20px 20px;
         }
 
         .button-join>span {
@@ -77,20 +78,20 @@
             align-items: center;
             font-family: "Pretendard";
             font-weight: bold;
-            font-size: 40px;
         }
 
         .button-join {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 60px;
-            width: 80%;
+            height: 100%;
+            width: 55px;
             cursor: pointer;
             border-radius: 2px;
             background-color: #448f5d;
             color: white;
             border: none;
+            padding: 2px 0px;
         }
 
         .header {
@@ -146,7 +147,6 @@
             color: white;
             text-align: center;
             margin-bottom: 10px;
-            font-size: 13px;
         }
 
         .button-ready {
@@ -174,21 +174,39 @@
             gap: 5px;
         }
 
-        span {
+        .room-list {
             display: flex;
+            margin-top: 10px;
+            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            line-height: 21px;
-            font-size: 14px;
+            gap: 8px;
+            width: 100%;
+            height: max-content;
         }
 
-        button {
+        .room {
+            display: flex;
             font-family: 'Pretendard-Regular';
+            color: white;
+            justify-content: space-between;
+            width: 100%;
+            font-size: 20px;
+            background-color: #3c3030;
+            padding: 8px 8px;
+            border-radius: 8px;
+        }
+
+        .right {
+            display: flex;
+            font-size: 16px;
+            gap: 10px;
         }
     </style>
 </head>
 
 <body>
-    <div class="container hidden">
+    <div class="container ">
         <div class="box">
             <div class="header">
                 마피아게임 대기실
@@ -220,122 +238,205 @@
     <div class="container-ready">
         <div class="box small">
             <div class="header">
-                마피아게임에 참가하시겠습니까?
+                마피아게임
             </div>
-            <button class="button-join"><span style="height: 100%;">참 가</span></button>
+            <div class="room-list">
+                <div class="room" data-roomNum="1">
+                    <div class="room-num">
+                        1번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="2">
+                    <div class="room-num">
+                        2번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="3">
+                    <div class="room-num">
+                        3번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="4">
+                    <div class="room-num">
+                        4번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
-    </div>
-    <script>
-        let myID;
-        window.addEventListener("message", (e) => {
-            switch (e.data.type) {
-                case "setID":
-                    if (myID === undefined) {
-                        myID = e.data?.id;
+        <script>
+            let myID;
+            let roomNum;
+            window.addEventListener("message", (e) => {
+                switch (e.data.type) {
+                    case "setID":
+                        if (myID === undefined) {
+                            myID = e.data?.id;
+                        }
+                        break;
+                    case "init":
+                        AppendList(e.data?.data);
+                        break;
+                    case "join":
+                        let data = e.data?.data;
+
+                        if (data.id == myID) {
+                            document.querySelector(".container-ready").classList.add("hidden");
+                            document.querySelector(".container").classList.remove("hidden");
+                            AppendList(data.roomData.players);
+                        } else {
+                            for (let playerData of data.roomData.players) {
+                                if (playerData.id == data.id) {
+                                    AppendList(playerData);
+                                    break;
+                                }
+                            }
+                        }
+
+                        break;
+                    case "ready":
+                        let button = document.getElementById(e.data.id).querySelector(".button-ready");
+                        button.classList.add("ready");
+                        break;
+                    case "cancle-ready":
+                        document.getElementById(e.data.id).querySelector(".button-ready").classList.remove("ready");
+                        break;
+                    case "leave":
+                        console.log(e.data);
+                        DeleteList(e.data.id);
+                        DecreaseKickCount(e.data.kickList);
+                        break;
+                    case "kick":
+                        IncreaseKickCount(e.data.id);
+                        break;
+                    case "cancle-kick":
+                        DecreaseKickCount(e.data.id);
+                        break;
+                    case "kicked":
+                        document.querySelector(".container-ready").classList.remove("hidden");
+                        document.querySelector(".container").classList.add("hidden");
+                        DeleteList(e.data.id);
+                        break;
+                }
+            })
+
+            function join(el) {
+                let parentElement = el.parentElement
+                while (true) {
+                    if (parentElement.classList.contains("room")) {
+                        let roomNum = parentElement.dataset.roomnum;
+                        window.parent.postMessage({ type: "join", roomNum: roomNum }, "*")
+                        break;
                     }
-                    break;
-                case "init":
-
-                    AppendList(e.data?.data);
-                    break;
-                case "join":
-                    if (e.data?.data.id == myID) {
-                        document.querySelector(".container-ready").classList.add("hidden");
-                        document.querySelector(".container").classList.remove("hidden");
-                    }
-
-                    AppendList(e.data?.data);
-
-                    break;
-                case "ready":
-                    let button = document.getElementById(e.data.id).querySelector(".button-ready");
-                    button.classList.add("ready");
-                    break;
-                case "cancle-ready":
-                    document.getElementById(e.data.id).querySelector(".button-ready").classList.remove("ready");
-                    break;
-                case "leave":
-                    console.log(e.data);
-                    DeleteList(e.data.id);
-                    DecreaseKickCount(e.data.kickList);
-                    break;
-                case "kick":
-                    IncreaseKickCount(e.data.id);
-                    break;
-                case "cancle-kick":
-                    DecreaseKickCount(e.data.id);
-                    break;
-                case "kicked":
-                    document.querySelector(".container-ready").classList.remove("hidden");
-                    document.querySelector(".container").classList.add("hidden");
-                    DeleteList(e.data.id);
-                    break;
-            }
-        })
-
-        document.querySelector(".button-join").addEventListener("click", (e) => {
-            window.parent.postMessage({ type: "join" }, "*")
-        })
-
-        function AppendList(data) {
-            let listTemplate = `
-            <div class="li" id=${data.id}>
-                <div class="level">${isNaN(data.level) ? (data.level == "비로그인 유저" ? "비로그인" : data.level) : "Lv." + data.level}</div>
-                <div class="name">${data.name}</div>
-                <div class="run-count">${data.runCount ? data.runCount : 0}</div>
-                <button onClick="Ready(this)" class="button-ready ${data.isReady ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
-                <button onClick="Kick(this)" class="button-kick">
-                    <span style="height: 100%;">강퇴</span>
-                    <span style="height: 100%;" class="kick-count">${data.kickCount ? data.kickCount : 0}</span>
-                </button>
-            </div>`
-
-            document.querySelector(".list").innerHTML += listTemplate;
-        }
-
-        function Kick(el) {
-            window.parent.postMessage({ type: "kick", id: el.parentElement.id }, "*")
-        }
-
-        function Ready(el) {
-            if (el.parentElement.id == myID) {
-                if (el.classList.contains("ready")) {
-                    window.parent.postMessage({ type: "cancle-ready" }, "*")
-                } else {
-                    window.parent.postMessage({ type: "ready" }, "*")
+                    parentElement = parentElement.parentElement
                 }
             }
-        }
 
-        function DeleteList(id) {
-            let targetEl = document.getElementById(id);
-            targetEl.parentNode.removeChild(targetEl);
-        }
 
-        function IncreaseKickCount(id) {
-            let targetEl = document.getElementById(id);
-            targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) + 1;
-        }
 
-        function DecreaseKickCount(arr) {
-            if (Array.isArray(arr)) {
-                for (let id of arr) {
+            function AppendList(data) {
+                if (Array.isArray(data)) {
+                    for (let sd of data) {
+                        let listTemplate = `
+                        <div class="li" id=${sd.id}>
+                            <div class="level">${isNaN(sd.level) ? (sd.level == "비로그인 유저" ? "비로그인" : sd.level) : "Lv." + sd.level}</div>
+                            <div class="name">${sd.name}</div>
+                            <div class="run-count">${sd.runCount ? sd.runCount : 0}</div>
+                            <button onClick="Ready(this)" class="button-ready ${sd.isReady ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
+                            <button onClick="Kick(this)" class="button-kick">
+                                <span style="height: 100%;">강퇴</span>
+                                <span style="height: 100%;" class="kick-count">${sd.kickCount ? sd.kickCount : 0}</span>
+                            </button>
+                        </div>`
+                        document.querySelector(".list").innerHTML += listTemplate;
+                    }
+                } else {
+                    let listTemplate = `
+                        <div class="li" id=${data.id}>
+                            <div class="level">${isNaN(data.level) ? (data.level == "비로그인 유저" ? "비로그인" : data.level) : "Lv." + data.level}</div>
+                            <div class="name">${data.name}</div>
+                            <div class="run-count">${data.runCount ? data.runCount : 0}</div>
+                            <button onClick="Ready(this)" class="button-ready ${data.isReady ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
+                            <button onClick="Kick(this)" class="button-kick">
+                                <span style="height: 100%;">강퇴</span>
+                                <span style="height: 100%;" class="kick-count">${data.kickCount ? data.kickCount : 0}</span>
+                            </button>
+                        </div>`
+                    document.querySelector(".list").innerHTML += listTemplate;
+                }
+            }
+
+            function Kick(el) {
+                window.parent.postMessage({ type: "kick", id: el.parentElement.id }, "*")
+            }
+
+            function Ready(el) {
+                if (el.parentElement.id == myID) {
+                    if (el.classList.contains("ready")) {
+                        window.parent.postMessage({ type: "cancle-ready" }, "*")
+                    } else {
+                        window.parent.postMessage({ type: "ready" }, "*")
+                    }
+                }
+            }
+
+            function DeleteList(id) {
+                let targetEl = document.getElementById(id);
+                targetEl.parentNode.removeChild(targetEl);
+            }
+
+            function IncreaseKickCount(id) {
+                let targetEl = document.getElementById(id);
+                targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) + 1;
+            }
+
+            function DecreaseKickCount(arr) {
+                if (Array.isArray(arr)) {
+                    for (let id of arr) {
+                        let targetEl = document.getElementById(id);
+                        if (targetEl) {
+                            targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
+                        }
+                    }
+                } else {
+                    let id = arr;
                     let targetEl = document.getElementById(id);
                     if (targetEl) {
                         targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
                     }
-                }
-            } else {
-                let id = arr;
-                let targetEl = document.getElementById(id);
-                if (targetEl) {
-                    targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
+
                 }
 
             }
-
-        }
-    </script>
+        </script>
 </body>
 
 </html>
