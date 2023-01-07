@@ -6,12 +6,14 @@ const STATE_VOTE = 3004;
 const STATE_VOTE_RESULT = 3005;
 const STATE_END = 3006;
 const coordinates = {
-	1: { x: 28, y: 16 },
-	2: { x: 29, y: 21 },
-	3: { x: 28, y: 26 },
-	4: { x: 21, y: 26 },
-	5: { x: 20, y: 21 },
-	6: { x: 21, y: 16 },
+	1: { x: 6, y: 4 },
+	2: { x: 10, y: 4 },
+	3: { x: 14, y: 4 },
+	4: { x: 5, y: 8 },
+	5: { x: 15, y: 8 },
+	6: { x: 6, y: 12 },
+	7: { x: 10, y: 12 },
+	8: { x: 14, y: 12 },
 };
 
 const START_WAIT_TIME = 10;
@@ -135,10 +137,14 @@ const ZONE_DOCTOR = [28, 38];
 const ZONE_POLICE = [30, 38];
 
 const GAMEROOM_START_POINT = {
-	1: [18, 17],
-	2: [18, 17],
-	3: [18, 17],
-	4: [18, 17],
+	1: [4, 18],
+	2: [38, 18],
+	3: [72, 18],
+	4: [4, 39],
+	5: [72, 39],
+	6: [4, 60],
+	7: [38, 60],
+	8: [72, 60],
 };
 
 const GAMEROOM = {
@@ -232,7 +238,7 @@ App.addOnLocationTouched("p", function (player) {
 
 App.onJoinPlayer.Add(function (p) {
 	_players = App.players;
-	p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 11 + 37));
+	p.spawnAt(parseInt(Math.random() * 43 + 14), parseInt(Math.random() * 43 + 7));
 
 	p.tag = {
 		data: {
@@ -384,18 +390,19 @@ App.onObjectAttacked.Add(function (p, x, y) {
 	let target = null;
 	let targetNum = 0;
 	if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰") {
-		targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x, y: y }));
-
+		let room = GAMEROOM[p.tag.roomNum];
+		let startPoint = room.startPoint;
+		targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x - startPoint[0], y: y - startPoint[1] }));
 		p.moveSpeed = 0;
 		p.attackType = 2;
 		p.attackSprite = null;
 		p.attackParam1 = 2;
 		p.attackParam2 = 3;
 		p.sendUpdated();
-		p.spawnAt(coordinates[p.tag.data.title].x, coordinates[p.tag.data.title].y);
+		p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
 	} else return;
 
-	if (targetNum === undefined) return;
+	if (!targetNum) return;
 
 	for (let i in _players) {
 		let player = _players[i];
@@ -761,8 +768,10 @@ function clearHidden(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
+			let room = GAMEROOM[p.tag.roomNum];
+			let startPoint = room.startPoint;
 			p.moveSpeed = 0;
-			p.spawnAt(coordinates[p.tag.data.title]?.x, coordinates[p.tag.data.title]?.y);
+			p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
 			p.sprite = null;
 			p.hidden = false;
 			p.chatEnabled = true;
@@ -777,8 +786,10 @@ function createSilhouette(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
-			let x = coordinates[p.tag.data.title].x;
-			let y = coordinates[p.tag.data.title].y;
+			let room = GAMEROOM[p.tag.roomNum];
+			let startPoint = room.startPoint;
+			let x = startPoint[0] + coordinates[p.tag.data.title].x;
+			let y = startPoint[1] + coordinates[p.tag.data.title].y;
 			Map.putObject(x, y - 1, silhouette);
 			Map.putObject(x, y, blankObject);
 			room.SilhouetteTracker.push([x, y - 1]);
@@ -998,7 +1009,12 @@ function updatePlayerWidget(roomNum, htmlName) {
 			p.tag.widget.destroy();
 			p.tag.widget = null;
 		}
-		p.tag.widget = p.showWidget(htmlName, "top", 400, 350);
+		if (p.isMobile) {
+			p.tag.widget = p.showWidget(htmlName, "top", 400, 350);
+		} else {
+			p.tag.widget = p.showWidget(htmlName, "topright", 400, 350);
+		}
+
 		if (htmlName == "WatingRoom.html") {
 			p.tag.widget.sendMessage({ type: "setID", id: p.id });
 			p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
