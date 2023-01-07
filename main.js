@@ -469,6 +469,7 @@ function startState(roomNum, state) {
 			clearRoomObjects(roomNum);
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
 				p.attackType = 2;
 				p.attackSprite = null;
 				p.attackParam1 = 2;
@@ -573,6 +574,7 @@ function startState(roomNum, state) {
 
 				for (let playerData of room.players) {
 					let p = App.getPlayerByID(playerData.id);
+					if (!p) continue;
 					if (p.tag.data.joined) {
 						p.chatEnabled = false;
 						p.sendUpdated();
@@ -732,6 +734,7 @@ function tagReset(roomNum) {
 	if (!room) return;
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		p.tag.data.voted = false;
 		p.tag.healed = false;
 		p.tag.data.votecount = 0;
@@ -746,6 +749,7 @@ function allHidden(roomNum) {
 	let room = GAMEROOM[roomNum];
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		p.hidden = true;
 		p.sendUpdated();
 	}
@@ -755,6 +759,7 @@ function clearHidden(roomNum) {
 	let room = GAMEROOM[roomNum];
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		if (p.tag.data.joined == true) {
 			p.moveSpeed = 0;
 			p.spawnAt(coordinates[p.tag.data.title]?.x, coordinates[p.tag.data.title]?.y);
@@ -770,6 +775,7 @@ function createSilhouette(roomNum) {
 	let room = GAMEROOM[roomNum];
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		if (p.tag.data.joined == true) {
 			let x = coordinates[p.tag.data.title].x;
 			let y = coordinates[p.tag.data.title].y;
@@ -786,6 +792,7 @@ function nightResult(roomNum) {
 	if (room.turnCount * 1 > 1) {
 		for (let playerData of room.players) {
 			let p = App.getPlayerByID(playerData.id);
+			if (!p) continue;
 			if (p.tag.data.joined == true) {
 				if (p.tag.mafiaTarget == true) {
 					if (p.tag.healed == true) {
@@ -810,6 +817,7 @@ function gameEndCheck(roomNum) {
 		let citizenCount = 0;
 		for (let playerData of room.players) {
 			let p = App.getPlayerByID(playerData.id);
+			if (!p) continue;
 			if (p.tag.data.joined == true) {
 				if (p.tag.role == "마피아") {
 					// App.sayToAll(`마피아 : ${p.title}`);
@@ -824,6 +832,7 @@ function gameEndCheck(roomNum) {
 			// 시민 승리
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
 				if (p.tag.data.joined == true) {
 					if (p.tag.role == "마피아") {
 						giveExp(p, 2);
@@ -846,6 +855,7 @@ function gameEndCheck(roomNum) {
 				// 마피아 승리
 				for (let playerData of room.players) {
 					let p = App.getPlayerByID(playerData.id);
+					if (!p) continue;
 					if (p.tag.data.joined == true) {
 						if (p.tag.role == "마피아") {
 							giveExp(p, 10);
@@ -983,6 +993,7 @@ function updatePlayerWidget(roomNum, htmlName) {
 	let room = GAMEROOM[roomNum];
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		if (p.tag.widget) {
 			p.tag.widget.destroy();
 			p.tag.widget = null;
@@ -1076,7 +1087,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 					let liveList = [];
 					for (let playerData of room.players) {
 						let p = App.getPlayerByID(playerData.id);
-
+						if (!p) continue;
 						if (p.tag.data.joined) {
 							liveList.push(parseInt(p.tag.data.title));
 						}
@@ -1095,6 +1106,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 							if (data.vote) {
 								for (let playerData of room.players) {
 									let p = App.getPlayerByID(playerData.id);
+									if (!p) continue;
 									if (p.tag.data.title == data.vote) {
 										if (player.tag.role == "정치인") {
 											p.tag.data.votecount += 2;
