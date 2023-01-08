@@ -296,7 +296,12 @@ App.addOnLocationTouched("p", function (player) {
 App.onJoinPlayer.Add(function (p) {
 	_players = App.players;
 	InitSpawnPlayer(p);
-
+	if (!p.storage) {
+		p.storage = JSON.stringify({
+			exp: 0,
+		});
+		p.save();
+	}
 	p.tag = {
 		data: {
 			id: p.id,
@@ -304,14 +309,13 @@ App.onJoinPlayer.Add(function (p) {
 			level: levelCalc(p),
 		},
 	};
-	if (p.storage == null) {
-		p.storage = JSON.stringify({
-			exp: 0,
-		});
-		p.save();
+
+	if (p.isMobile) {
+		p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
+	} else {
+		p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 	}
 
-	p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 	p.tag.widget.sendMessage({ type: "setID", id: p.id });
 	p.tag.widget.sendMessage({
 		type: "updatePlayerCount",
@@ -864,10 +868,10 @@ function nightResult(roomNum) {
 			if (p.tag.data.joined == true) {
 				if (p.tag.mafiaTarget == true) {
 					if (p.tag.healed == true) {
-						App.showCustomLabel(`어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`, 0xffffff, 0x000000, 300, 5000);
+						showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
 						return;
 					} else {
-						App.showCustomLabel(`이번 밤에 ${p.title}가 죽었습니다.`, 0xffffff, 0x000000, 300, 5000);
+						showLabelToRoom(roomNum, `이번 밤에 ${p.title}가 죽었습니다.`);
 						dead(p);
 						return;
 					}
@@ -961,7 +965,7 @@ function gameReset(roomNum) {
 		p.attackSprite = null;
 		p.attackParam1 = 2;
 		p.attackParam2 = 3;
-
+		p.chatEnabled = true;
 		p.moveSpeed = 80;
 		p.sprite = null;
 		p.title = levelCalc(p);
@@ -1043,8 +1047,14 @@ function levelCalc(player) {
 	if (player.role >= 3000) {
 		return "운영자";
 	} else if (player.id.indexOf("GUEST") === -1) {
+		let pStorage = JSON.parse(player.storage);
+		if (!pStorage.exp) {
+			pStorage.exp = 0;
+			player.storage = JSON.stringify(pStorage);
+			player.save();
+		}
 		let i = 0;
-		let myExp = JSON.parse(player.storage).exp;
+		let myExp = pStorage.exp;
 
 		while (myExp > 0) {
 			myExp -= (i + 15) * i;
@@ -1304,7 +1314,7 @@ function WatingRoomOnMessage(player, data) {
 					id: data.id,
 				});
 				let target = App.getPlayerByID(data.id);
-				target?.tag.kickCount ? target.tag.data.kickCount++ : (target.tag.data.kickCount = 1);
+				target?.tag.data.kickCount ? target.tag.data.kickCount++ : (target.tag.data.kickCount = 1);
 				if (target.tag.data.kickCount >= 3) {
 					quitPlayer(target);
 				}
@@ -1313,15 +1323,6 @@ function WatingRoomOnMessage(player, data) {
 		case "quit":
 			quitPlayer(player);
 			break;
-	}
-}
-class GamaPlayer {
-	constructor(player) {
-		let pStorage = JSON.parse(player.storage);
-		this.id = player.id;
-		this.name = player.name;
-		this.level = levelCalc(player);
-		this.runCount = pStorage.runCount;
 	}
 }
 
@@ -1392,6 +1393,12 @@ function updatePlayerCount() {
 function quitPlayer(player) {
 	let roomNum = player.tag.data.roomNum;
 	let room;
+	for (let p of _players) {
+		let kickList = p.tag.data.kickList;
+		if (kickList && kickList.includes(player.id)) {
+			kickList.splice(kickList.indexOf(player.id), 1);
+		}
+	}
 	if (!GAMEROOM.hasOwnProperty(roomNum)) return;
 	room = GAMEROOM[roomNum];
 	let players = GAMEROOM[roomNum].players;
