@@ -88,6 +88,26 @@ let policeAttackSprite = App.loadSpritesheet("policeAttackSprite.png", 24, 29, {
 	down: [0],
 });
 
+let spySprite = App.loadSpritesheet("spySprite.png", 64, 70, {
+	left: [6, 7, 8, 9, 10, 11],
+	right: [12, 13, 14, 15, 16, 17],
+	up: [18, 19, 20, 21, 22, 23],
+	down: [0, 1, 2, 3, 4, 5],
+});
+
+let detectiveSprite = App.loadSpritesheet(
+	"detectiveSprite.png",
+	64,
+	64,
+	{
+		left: [4, 5, 6, 7],
+		up: [12, 13, 14, 15],
+		down: [0, 1, 2, 3],
+		right: [8, 9, 10, 11],
+	},
+	8
+);
+
 let mafiaAttackSprite = App.loadSpritesheet(
 	"bulletSprite2.png",
 	24,
@@ -100,13 +120,6 @@ let mafiaAttackSprite = App.loadSpritesheet(
 	},
 	8
 );
-
-let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
-	left: [0],
-	right: [0],
-	up: [0],
-	down: [0],
-});
 
 let silhouette = App.loadSpritesheet("silhouette2.png", 48, 48, {
 	left: [0],
@@ -281,6 +294,18 @@ App.addOnLocationTouched("d", function (player) {
 App.addOnLocationTouched("p", function (player) {
 	player.sprite = policeSprite;
 	player.attackSprite = policeAttackSprite;
+	player.sendUpdated();
+});
+
+App.addOnLocationTouched("spy", function (player) {
+	player.sprite = spySprite;
+	player.attackSprite = null;
+	player.sendUpdated();
+});
+
+App.addOnLocationTouched("detective", function (player) {
+	player.sprite = detectiveSprite;
+	player.attackSprite = null;
 	player.sendUpdated();
 });
 
@@ -594,8 +619,8 @@ function startState(roomNum, state) {
 			updatePlayerCount();
 			break;
 		case STATE_PLAYING_DAY:
-			room.turnCount++;
 			nightResult(roomNum);
+			room.turnCount++;
 			if (gameEndCheck(roomNum) == false) {
 				tagReset(roomNum);
 				// destroyAppWidget();
@@ -711,7 +736,7 @@ function showRoleWidget(player) {
 			widgetName = `politician.html`;
 			break;
 	}
-	let align = player.isMobile ? "middle" : "topleft";
+	let align = player.isMobile ? "middle" : "middleright";
 
 	player.tag.roleWidget = player.showWidget(`${widgetName}`, `${align}`, 300, 400);
 
