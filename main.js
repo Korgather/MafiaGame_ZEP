@@ -490,7 +490,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				target.tag.mafiaTarget = true;
 				break;
 			case "의사":
-				p.playSound("healSound.wav");
+				p.playSound("healSound.WAV");
 				p.showCustomLabel(`${target.title}를 살리기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
 				// p.tag.healed = false;
 				target.tag.healed = true;
