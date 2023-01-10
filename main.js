@@ -341,7 +341,7 @@ App.onJoinPlayer.Add(function (p) {
 		p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 	}
 
-	p.tag.widget.sendMessage({ type: "setID", id: p.id });
+	p.tag.widget.sendMessage({ type: "setID", id: p.id, isMobile: p.isMobile });
 	p.tag.widget.sendMessage({
 		type: "updatePlayerCount",
 		data: GAMEROOM,
@@ -451,7 +451,7 @@ App.onUpdate.Add(function (dt) {
 					gameRoom.stateTimer = 0;
 					switch (gameRoom.state) {
 						case STATE_READY:
-							startState(roomNum, STATE_PLAYING_DAY);
+							startState(roomNum, STATE_PLAYING_NIGHT);
 							break;
 						case STATE_PLAYING_DAY:
 							startState(roomNum, STATE_VOTE);
@@ -656,6 +656,17 @@ function startState(roomNum, state) {
 			if (gameEndCheck(roomNum) == false) {
 				// destroyAppWidget();
 				tagReset(roomNum);
+				for (let playerData of GAMEROOM[roomNum].players) {
+					let p = App.getPlayerByID(playerData.id);
+					if (!p) continue;
+					if (p.tag.data.joined == true) {
+						let room = GAMEROOM[p.tag.data.roomNum];
+						let startPoint = room.startPoint;
+						p.moveSpeed = 0;
+						p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
+						p.sendUpdated();
+					}
+				}
 				createSilhouette(roomNum);
 				allHidden(roomNum);
 				room.stateTimer = 17;
@@ -886,25 +897,25 @@ function createSilhouette(roomNum) {
 function nightResult(roomNum) {
 	// App.sayToAll(`턴 : ${turnCount}`);
 	let room = GAMEROOM[roomNum];
-	if (room.turnCount * 1 > 1) {
-		for (let playerData of room.players) {
-			let p = App.getPlayerByID(playerData.id);
-			if (!p) continue;
-			if (p.tag.data.joined == true) {
-				if (p.tag.mafiaTarget == true) {
-					if (p.tag.healed == true) {
-						showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
-						return;
-					} else {
-						showLabelToRoom(roomNum, `이번 밤에 ${p.title}가 죽었습니다.`);
-						dead(p);
-						return;
-					}
+	// if (room.turnCount * 1 > 1) {
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined == true) {
+			if (p.tag.mafiaTarget == true) {
+				if (p.tag.healed == true) {
+					showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
+					return;
+				} else {
+					showLabelToRoom(roomNum, `이번 밤에 ${p.title}가 죽었습니다.`);
+					dead(p);
+					return;
 				}
 			}
 		}
-		App.showCustomLabel(`이번 밤에 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
 	}
+	App.showCustomLabel(`이번 밤에 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
+	// }
 }
 
 function gameEndCheck(roomNum) {
@@ -1022,6 +1033,7 @@ function gameReset(roomNum) {
 
 function changeCharacterImage(player, text) {
 	if (text == "의사") {
+		player.showCenterLabel("살리고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 300, 6000);
 		player.sprite = doctorSprite;
 		player.moveSpeed = 80;
 		player.attackSprite = doctorAttackSprite;
@@ -1029,6 +1041,7 @@ function changeCharacterImage(player, text) {
 		player.attackParam1 = 2;
 		player.attackParam2 = 4;
 	} else if (text == "마피아") {
+		player.showCenterLabel("죽이고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 300, 6000);
 		player.sprite = mafiaSprite;
 		player.moveSpeed = 80;
 		player.attackSprite = mafiaAttackSprite;
@@ -1036,6 +1049,7 @@ function changeCharacterImage(player, text) {
 		player.attackParam1 = 2;
 		player.attackParam2 = 4;
 	} else if (text == "경찰") {
+		player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 300, 6000);
 		player.sprite = policeSprite;
 		player.moveSpeed = 80;
 		player.attackSprite = policeAttackSprite;
@@ -1101,9 +1115,9 @@ function updatePlayerWidget(roomNum, htmlName) {
 			p.tag.widget = null;
 		}
 		if (p.isMobile) {
-			p.tag.widget = p.showWidget(htmlName, "top", 400, 350);
+			p.tag.widget = p.showWidget(htmlName, "top", 400, 260);
 		} else {
-			p.tag.widget = p.showWidget(htmlName, "topright", 400, 350);
+			p.tag.widget = p.showWidget(htmlName, "topright", 400, 260);
 		}
 
 		if (htmlName == "WatingRoom.html") {
@@ -1263,19 +1277,19 @@ function WatingRoomOnMessage(player, data) {
 	switch (data.type) {
 		case "join":
 			if (player.tag.data.joined) {
-				player.showCenterLabel("이미 참여중입니다.");
+				player.showCenterLabel("이미 참여중입니다.", 0xffffff, 0x000000, 300, 5000);
 				return;
 			}
 			roomNum = parseInt(data.roomNum);
 			room = GAMEROOM[roomNum];
 			if (room.start) {
-				player.showCenterLabel("이미 게임을 시작했습니다.");
+				player.showCenterLabel("이미 게임을 시작했습니다.", 0xffffff, 0x000000, 300, 5000);
 				return;
 			}
 			let roomPlayers = room.players;
 			roomPlayers.forEach((data) => {
 				if (data.id == player.id) {
-					player.showCenterLabel("이미 참여중입니다.");
+					player.showCenterLabel("이미 참여중입니다.", 0xffffff, 0x000000, 300, 5000);
 					return;
 				}
 			});
@@ -1356,7 +1370,7 @@ function showLabelToRoom(roomNum, message) {
 	for (let playerData of gameRoom.players) {
 		let player = App.getPlayerByID(playerData.id);
 		if (!player) continue;
-		player.showCenterLabel(message, 0xffffff, 0x000000, 300);
+		player.showCenterLabel(message, 0xffffff, 0x000000, 300, 4000);
 	}
 }
 

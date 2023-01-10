@@ -92,7 +92,7 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 15px;
+            gap: 5x;
             width: 380px;
             height: max-content;
             padding: 20px 20px;
@@ -231,7 +231,7 @@
 
         .room-list {
             display: flex;
-            margin-top: 10px;
+            margin-top: 5px;
             flex-direction: column;
             align-items: center;
             gap: 8px;
@@ -406,15 +406,24 @@
         <script>
             let myID;
             let roomNum;
-            window.parent.postMessage({
-                type: 'WidgetRearrange',
-                top: '-60px', // 위치조정
-            }, "*");
+
             window.addEventListener("message", (e) => {
                 switch (e.data.type) {
                     case "setID":
                         if (myID === undefined) {
                             myID = e.data?.id;
+                        }
+                        if (e.data.isMobile) {
+                            window.parent.postMessage({
+                                type: 'WidgetRearrange',
+                                top: '-12px', // 위치조정
+                            }, "*");
+                        } else {
+                            window.parent.postMessage({
+                                type: 'WidgetRearrange',
+                                top: '-12px', // 위치조정
+                                left: `80px`
+                            }, "*");
                         }
                         break;
                     case "init":
