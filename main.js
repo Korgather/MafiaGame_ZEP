@@ -340,6 +340,7 @@ App.onJoinPlayer.Add(function (p) {
 
 	if (p.isMobile) {
 		p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
+		App.putMobilePunch();
 	} else {
 		p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 	}
