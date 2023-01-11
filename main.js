@@ -499,12 +499,12 @@ App.onObjectAttacked.Add(function (p, x, y) {
 			target = player;
 		}
 	}
-
+	let targetRole;
 	if (target !== null) {
 		switch (p.tag.role) {
 			case "경찰":
 				p.playSound("policeAttackSound.mp3");
-				let targetRole = target.tag.role;
+				targetRole = target.tag.role;
 				if (targetRole == "마피아") {
 					p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
 				} else {
@@ -524,6 +524,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				target.tag.healed = true;
 				break;
 			case "스파이":
+				targetRole = target.tag.role;
 				if (targetRole == "마피아") {
 					p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.`, 0xffffff, 0x000000, 200, 6000);
 					p.sendMessage("[정보] 밤에 마피아와 채팅을 공유할 수 있게 되었습니다.", 0xff0000);
@@ -1111,9 +1112,9 @@ function changeCharacterImage(player, text) {
 
 		case "스파이":
 			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
-			// player.sprite = policeSprite;
+			player.sprite = spySprite;
 			player.moveSpeed = 80;
-			player.attackSprite = spySprite;
+			// player.attackSprite = spySprite;
 			player.attackType = 3;
 			player.attackParam1 = 2;
 			player.attackParam2 = 4;
