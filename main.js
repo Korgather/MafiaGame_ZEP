@@ -533,10 +533,10 @@ App.onObjectAttacked.Add(function (p, x, y) {
 					p.chatEnabled = true;
 					p.chatGroupID = MAFIA_CHATTING_CHANNEL;
 					p.sendUpdated();
-					for (let playerData of GAMEROOM[p.tag.roomNum].players) {
+					for (let playerData of GAMEROOM[p.tag.data.roomNum].players) {
 						let player = App.getPlayerByID(playerData.id);
-						if (!player.tag.team || !player.tag.team == "mafia") continue;
-						p.sendMessage(`[정보] ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.`, 0xff0000);
+						if (!player.tag.team || !player.tag.team == "mafia" || !player.tag.data.joined) continue;
+						player.sendMessage(`───────────────────────\n[정보] ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n───────────────────────`, 0xff0000);
 					}
 				} else {
 					p.showCustomLabel(`${target.title}은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
@@ -569,7 +569,7 @@ function dead(player) {
 	player.sprite = ghost;
 	player.chatGroupID = GHOST_CHATTING_CHANNEL;
 	player.chatEnabled = true;
-	player.sendMessage(`[정보] 유령들끼리 대화할 수 있습니다.`, 0xff0000);
+	player.sendMessage(`───────────────────────\n당신은 죽었습니다.\n유령들끼리 대화를 할 수 있습니다.\n밤에는 영매와 대화할 수 있습니다.\n───────────────────────`, 0x00ff00);
 	player.sendUpdated();
 
 	// gameEndCheck(roomNum);
@@ -653,6 +653,7 @@ function startState(roomNum, state) {
 				Map.clearAllObjects();
 				playSoundToRoom(roomNum, "morningSound.wav");
 				room.stateTimer = 10 * room.alive > 60 ? 60 : 10 * room.alive;
+
 				widgetHtml = "morning.html";
 				updatePlayerWidget(roomNum, widgetHtml);
 				sendMessageToPlayerWidget(roomNum);
@@ -711,7 +712,11 @@ function startState(roomNum, state) {
 							let role = p.tag.role;
 							if (role != "시민") {
 								changeCharacterImage(p, role);
+							} else {
+								p.sendMessage(`───────────────────────\n밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
 							}
+						} else {
+							p.sendMessage(`───────────────────────\n밤이 되었습니다.\n영매와 대화 할 수 있습니다.\n───────────────────────`, 0x00ff00);
 						}
 					}
 				}
@@ -877,6 +882,10 @@ function tagReset(roomNum) {
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
+		if (room.turnCount == 0) {
+			p.tag.name = p.name;
+			p.sendUpdated();
+		}
 		p.tag.data.voted = false;
 		p.tag.healed = false;
 		p.tag.data.votecount = 0;
@@ -941,6 +950,8 @@ function nightResult(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
+			p.name = p.tag.name;
+			p.sendUpdated();
 			if (p.tag.mafiaTarget == true) {
 				if (p.tag.healed == true) {
 					showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
@@ -962,10 +973,14 @@ function gameEndCheck(roomNum) {
 	if (room.start) {
 		let mafiaCount = 0;
 		let citizenCount = 0;
+		let mafiaTeamCount = 0;
 		for (let playerData of room.players) {
 			let p = App.getPlayerByID(playerData.id);
 			if (!p) continue;
 			if (p.tag.data.joined == true) {
+				if (p.tag.team == "mafia") {
+					mafiaTeamCount++;
+				}
 				if (p.tag.role == "마피아") {
 					// App.sayToAll(`마피아 : ${p.title}`);
 					mafiaCount++;
@@ -997,8 +1012,8 @@ function gameEndCheck(roomNum) {
 			}, 5);
 
 			return true;
-		} else if (mafiaCount == 1) {
-			if (mafiaCount == citizenCount) {
+		} else if (mafiaCount >= 1) {
+			if (mafiaTeamCount == citizenCount) {
 				// 마피아 승리
 				for (let playerData of room.players) {
 					let p = App.getPlayerByID(playerData.id);
@@ -1053,6 +1068,7 @@ function gameReset(roomNum) {
 		p.tag.mafiaTarget = false;
 		p.chatGroupID = 0;
 		p.chatEnabled = true;
+		p.tag.team = undefined;
 
 		InitSpawnPlayer(p);
 		p.sendUpdated();
@@ -1075,6 +1091,7 @@ function changeCharacterImage(player, text) {
 	switch (text) {
 		case "의사":
 			player.showCenterLabel("살리고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
+			player.sendMessage(`───────────────────────\n밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
 			player.sprite = doctorSprite;
 			player.moveSpeed = 80;
 			player.attackSprite = doctorAttackSprite;
@@ -1093,11 +1110,12 @@ function changeCharacterImage(player, text) {
 			player.attackParam2 = 4;
 			player.chatEnabled = true;
 			player.chatGroupID = MAFIA_CHATTING_CHANNEL;
-			player.sendMessage(`[정보] 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.`, 0xff0000);
+			player.sendMessage(`───────────────────────\n밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n───────────────────────`, 0x00ff00);
 			break;
 
 		case "경찰":
 			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
+			player.sendMessage(`───────────────────────\n밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
 			player.sprite = policeSprite;
 			player.moveSpeed = 80;
 			player.attackSprite = policeAttackSprite;
@@ -1106,11 +1124,13 @@ function changeCharacterImage(player, text) {
 			player.attackParam2 = 4;
 			break;
 		case "영매":
-			player.showCenterLabel("죽은 혼령들과 대화할 수 있습니다.", 0xffffff, 0x000000, 250, 6000);
+			player.sendMessage(`───────────────────────\n죽은 혼령들과 대화할 수 있습니다.\n───────────────────────`, 0x00ff00);
 			player.chatEnabled = true;
 			player.chatGroupID = GHOST_CHATTING_CHANNEL;
 			break;
-
+		case "정치인":
+			player.sendMessage(`───────────────────────\n밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
+			break;
 		case "스파이":
 			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
 			player.sprite = spySprite;
@@ -1277,6 +1297,9 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						timer: room.stateTimer,
 						description: "투표 전까지 이야기를 나누세요.",
 					});
+					if (p.tag.joined) {
+						p.sendMessage(`───────────────────────\n🌞 ${room.turnCount}번째 아침\n───────────────────────`, 0x00ff00);
+					}
 					break;
 				case STATE_VOTE:
 					let liveList = [];
