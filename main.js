@@ -535,6 +535,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 					p.sendUpdated();
 					for (let playerData of GAMEROOM[p.tag.data.roomNum].players) {
 						let player = App.getPlayerByID(playerData.id);
+						if (!player) continue;
 						if (!player.tag.team || !player.tag.team == "mafia" || !player.tag.data.joined) continue;
 						player.sendMessage(`───────────────────────\n[정보] ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n───────────────────────`, 0xff0000);
 					}
