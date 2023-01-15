@@ -487,7 +487,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 		p.attackType = 2;
 		p.attackSprite = null;
 		p.attackParam1 = 2;
-		p.attackParam2 = 3;
+		p.attackParam2 = 2;
 		p.sendUpdated();
 	} else return;
 
@@ -512,6 +512,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				}
 				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
 				p.moveSpeed = 0;
+				p.sendUpdated();
 				break;
 			case "마피아":
 				playSoundToRoom(p.tag.data.roomNum, "gunSound.WAV");
@@ -519,6 +520,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				target.tag.mafiaTarget = true;
 				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
 				p.moveSpeed = 0;
+				p.sendUpdated();
 				break;
 			case "의사":
 				p.playSound("healSound.WAV");
@@ -527,13 +529,14 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				target.tag.healed = true;
 				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
 				p.moveSpeed = 0;
+				p.sendUpdated();
 				break;
 			case "스파이":
 				targetRole = target.tag.role;
 				if (targetRole == "마피아") {
-					p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.`, 0xffffff, 0x000000, 200, 6000);
-					p.sendMessage("[정보] 밤에 마피아와 채팅을 공유할 수 있게 되었습니다.", 0xff0000);
-					p.sendMessage("[정보] 능력을 한번 더 사용할 수 있습니다.", 0xff0000);
+					p.showCustomLabel(`🕵️‍♀️ ${target.title}의 직업은 ${targetRole}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
+					// p.sendMessage("[정보] 밤에 마피아와 채팅을 공유할 수 있게 되었습니다.", 0x00ff00);
+					// p.sendMessage("[정보] 능력을 한번 더 사용할 수 있습니다.", 0x00ff00);
 					p.tag.team = "mafia";
 					p.chatEnabled = true;
 					p.chatGroupID = MAFIA_CHATTING_CHANNEL;
@@ -542,12 +545,13 @@ App.onObjectAttacked.Add(function (p, x, y) {
 						let player = App.getPlayerByID(playerData.id);
 						if (!player) continue;
 						if (!player.tag.team || !player.tag.team == "mafia" || !player.tag.data.joined) continue;
-						player.sendMessage(`───────────────────────\n[정보] ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n───────────────────────`, 0xff0000);
+						player.sendMessage(`─────────────────\n🕵️‍♀️ ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
 					}
 				} else {
 					p.showCustomLabel(`${target.title}은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
 					p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
 					p.moveSpeed = 0;
+					p.sendUpdated();
 				}
 				break;
 		}
@@ -580,7 +584,7 @@ function dead(player) {
 	player.sprite = ghost;
 	player.chatGroupID = GHOST_CHATTING_CHANNEL;
 	player.chatEnabled = true;
-	player.sendMessage(`───────────────────────\n☠️ 당신은 죽었습니다.\n 유령들끼리 대화를 할 수 있습니다.\n 밤에는 영매와 대화할 수 있습니다.\n───────────────────────`, 0x00ff00);
+	player.sendMessage(`─────────────────\n☠️ 당신은 죽었습니다.\n 유령들끼리 대화를 할 수 있습니다.\n 밤에는 영매와 대화할 수 있습니다.\n─────────────────`, 0x00ff00);
 	player.sendUpdated();
 
 	// gameEndCheck(roomNum);
@@ -602,7 +606,7 @@ function startState(roomNum, state) {
 				p.attackType = 2;
 				p.attackSprite = null;
 				p.attackParam1 = 2;
-				p.attackParam2 = 3;
+				p.attackParam2 = 2;
 
 				p.moveSpeed = 80;
 				p.sprite = null;
@@ -700,7 +704,7 @@ function startState(roomNum, state) {
 						let room = GAMEROOM[roomNum];
 						let startPoint = room.startPoint;
 						p.moveSpeed = 0;
-						p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
+						p.spawnAt(parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.title]?.x), parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.title]?.y));
 						p.sendUpdated();
 					}
 				}
@@ -724,10 +728,10 @@ function startState(roomNum, state) {
 							if (role != "시민") {
 								changeCharacterImage(p, role);
 							} else {
-								p.sendMessage(`───────────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
+								p.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 							}
 						} else {
-							p.sendMessage(`───────────────────────\n🌙 밤이 되었습니다.\n영매와 대화 할 수 있습니다.\n───────────────────────`, 0x00ff00);
+							p.sendMessage(`─────────────────\n🌙 밤이 되었습니다.\n영매와 대화 할 수 있습니다.\n─────────────────`, 0x00ff00);
 						}
 					}
 				}
@@ -959,6 +963,7 @@ function createSilhouette(roomNum) {
 function nightResult(roomNum) {
 	// App.sayToAll(`턴 : ${turnCount}`);
 	let room = GAMEROOM[roomNum];
+	let text = "";
 	room.turnCount++;
 	// if (room.turnCount * 1 > 1) {
 	for (let playerData of room.players) {
@@ -967,17 +972,26 @@ function nightResult(roomNum) {
 		if (p.tag.data.joined == true) {
 			if (p.tag.mafiaTarget == true) {
 				if (p.tag.healed == true) {
-					showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
-					return;
+					// showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
+					text += `💖 어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`;
+					// p.sendMessage(`─────────────────\n💖 어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.\n─────────────────`, 0x00ff00);
+					// return;
 				} else {
-					showLabelToRoom(roomNum, `이번 밤에 ${p.title}가 죽었습니다.`);
+					text += `☠️ 이번 밤에 ${p.title}가 죽었습니다.`;
+					// showLabelToRoom(roomNum, `이번 밤에 ${p.title}가 죽었습니다.`);
 					dead(p);
-					return;
+					// return;
 				}
+				text += `\n`;
 			}
 		}
 	}
-	showLabelToRoom(roomNum, `이번 밤에 아무도 죽지 않았습니다.`);
+	if (text == "") {
+		sendMessageToRoom(roomNum, `✨ 이번 밤에 아무도 죽지 않았습니다.`);
+	} else {
+		sendMessageToRoom(roomNum, `─────────────────\n${text}─────────────────`);
+	}
+
 	// }
 }
 
@@ -1106,7 +1120,7 @@ function changeCharacterImage(player, text) {
 	switch (text) {
 		case "의사":
 			player.showCenterLabel("살리고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
-			player.sendMessage(`───────────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			player.sprite = doctorSprite;
 			player.moveSpeed = 80;
 			player.attackSprite = doctorAttackSprite;
@@ -1125,12 +1139,12 @@ function changeCharacterImage(player, text) {
 			player.attackParam2 = 4;
 			player.chatEnabled = true;
 			player.chatGroupID = MAFIA_CHATTING_CHANNEL;
-			player.sendMessage(`───────────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n───────────────────────`, 0x00ff00);
+			player.sendMessage(`─────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
 			break;
 
 		case "경찰":
 			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
-			player.sendMessage(`───────────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			player.sprite = policeSprite;
 			player.moveSpeed = 80;
 			player.attackSprite = policeAttackSprite;
@@ -1139,12 +1153,12 @@ function changeCharacterImage(player, text) {
 			player.attackParam2 = 4;
 			break;
 		case "영매":
-			player.sendMessage(`───────────────────────\n🌙 죽은 혼령들과 대화할 수 있습니다.\n───────────────────────`, 0x00ff00);
+			player.sendMessage(`─────────────────\n🌙 죽은 혼령들과 대화할 수 있습니다.\n─────────────────`, 0x00ff00);
 			player.chatEnabled = true;
 			player.chatGroupID = GHOST_CHATTING_CHANNEL;
 			break;
 		case "정치인":
-			player.sendMessage(`───────────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			break;
 		case "스파이":
 			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
@@ -1157,9 +1171,9 @@ function changeCharacterImage(player, text) {
 			if (player.tag.team && player.tag.team == "mafia") {
 				player.chatEnabled = true;
 				player.chatGroupID = MAFIA_CHATTING_CHANNEL;
-				player.sendMessage(`───────────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n───────────────────────`, 0x00ff00);
+				player.sendMessage(`─────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
 			} else {
-				player.sendMessage(`───────────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n───────────────────────`, 0x00ff00);
+				player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			}
 			break;
 	}
@@ -1195,8 +1209,15 @@ function giveExp(p, point) {
 function levelCalc(player) {
 	if (player.role >= 3000) {
 		return "운영자";
-	} else if (player.id.indexOf("GUEST") === -1) {
+	} else if (!player.isGuest) {
 		let pStorage = JSON.parse(player.storage);
+		let title = "";
+		if (player.role == 0) {
+			title += `< 멤버 >\n`;
+			player.titleColor = 0x00ff00;
+		} else {
+			player.titleColor = 0xc5c5c5;
+		}
 		if (!pStorage.exp) {
 			pStorage.exp = 0;
 			player.storage = JSON.stringify(pStorage);
@@ -1209,7 +1230,8 @@ function levelCalc(player) {
 			myExp -= (i + 15) * i;
 			i++;
 		}
-		return "Lv." + i;
+		title += `Lv.${i}`;
+		return title;
 	} else {
 		return "비로그인 유저";
 	}
@@ -1320,7 +1342,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						description: "투표 전까지 이야기를 나누세요.",
 					});
 					if (p.tag.joined) {
-						p.sendMessage(`───────────────────────\n🌞 ${room.turnCount}번째 아침\n───────────────────────`, 0x00ff00);
+						p.sendMessage(`─────────────────\n🌞 ${room.turnCount}번째 아침\n─────────────────`, 0x00ff00);
 					}
 					break;
 				case STATE_VOTE:
@@ -1493,6 +1515,15 @@ function showLabelToRoom(roomNum, message) {
 	}
 }
 
+function sendMessageToRoom(roomNum, message) {
+	let gameRoom = GAMEROOM[roomNum];
+	for (let playerData of gameRoom.players) {
+		let player = App.getPlayerByID(playerData.id);
+		if (!player) continue;
+		player.sendMessage(message, 0x00ff00);
+	}
+}
+
 function playSoundToRoom(roomNum, soundName) {
 	let gameRoom = GAMEROOM[roomNum];
 	for (let playerData of gameRoom.players) {
@@ -1562,5 +1593,5 @@ function clearRoomObjects(roomNum) {
 }
 
 function InitSpawnPlayer(p) {
-	p.spawnAt(parseInt(Math.random() * 14 + 58), parseInt(Math.random() * 7 + 43));
+	p.spawnAt(parseInt(Math.random() * 13 + 63), parseInt(Math.random() * 4 + 42));
 }
