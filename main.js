@@ -484,7 +484,6 @@ App.onObjectAttacked.Add(function (p, x, y) {
 		let room = GAMEROOM[p.tag.data.roomNum];
 		startPoint = room.startPoint;
 		targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x - startPoint[0], y: y - startPoint[1] }));
-		p.moveSpeed = 0;
 		p.attackType = 2;
 		p.attackSprite = null;
 		p.attackParam1 = 2;
@@ -512,12 +511,14 @@ App.onObjectAttacked.Add(function (p, x, y) {
 					p.showCustomLabel(`${target.title}은 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
 				}
 				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
+				p.moveSpeed = 0;
 				break;
 			case "마피아":
 				playSoundToRoom(p.tag.data.roomNum, "gunSound.WAV");
 				p.showCustomLabel(`${target.title}를 죽이기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
 				target.tag.mafiaTarget = true;
 				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
+				p.moveSpeed = 0;
 				break;
 			case "의사":
 				p.playSound("healSound.WAV");
@@ -525,6 +526,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				// p.tag.healed = false;
 				target.tag.healed = true;
 				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
+				p.moveSpeed = 0;
 				break;
 			case "스파이":
 				targetRole = target.tag.role;
@@ -545,6 +547,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				} else {
 					p.showCustomLabel(`${target.title}은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
 					p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
+					p.moveSpeed = 0;
 				}
 				break;
 		}
@@ -567,7 +570,9 @@ function dead(player) {
 	player.attackSprite = blankObject;
 	player.tag.role = "";
 	player.title = "유령";
-	player.name = `${player.tag.name}(유령)`;
+	if (player.tag.name) {
+		player.name = `${player.tag.name}(유령)`;
+	}
 	player.tag.healed = false;
 	player.tag.mafiaTarget = false;
 	player.tag.data.votecount = 0;
@@ -692,7 +697,7 @@ function startState(roomNum, state) {
 					let p = App.getPlayerByID(playerData.id);
 					if (!p) continue;
 					if (p.tag.data.joined == true) {
-						let room = GAMEROOM[p.tag.data.roomNum];
+						let room = GAMEROOM[roomNum];
 						let startPoint = room.startPoint;
 						p.moveSpeed = 0;
 						p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
@@ -701,7 +706,7 @@ function startState(roomNum, state) {
 				}
 				createSilhouette(roomNum);
 				allHidden(roomNum);
-				room.stateTimer = 17;
+				room.stateTimer = 22;
 				playSoundToRoom(roomNum, "nightSound.mp3");
 				widgetHtml = "night.html";
 				updatePlayerWidget(roomNum, widgetHtml);
@@ -755,6 +760,7 @@ function createRole(playerCount) {
 		if (i === 5) {
 			return "스파이";
 		}
+		if (i === 7) return "마피아";
 		return "시민";
 	});
 	return shuffle(roleArray);
@@ -890,7 +896,6 @@ function tagReset(roomNum) {
 		if (!p) continue;
 		if (room.turnCount == 0) {
 			p.tag.name = p.name;
-			p.sendUpdated();
 		}
 		p.tag.data.voted = false;
 		p.tag.healed = false;
@@ -921,7 +926,9 @@ function clearHidden(roomNum) {
 			let room = GAMEROOM[p.tag.data.roomNum];
 			let startPoint = room.startPoint;
 			p.moveSpeed = 0;
-			p.name = p.tag.name;
+			if (p.tag.name) {
+				p.name = `${p.tag.name}`;
+			}
 			p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
 			p.sprite = null;
 			p.hidden = false;
@@ -958,7 +965,6 @@ function nightResult(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
-			p.sendUpdated();
 			if (p.tag.mafiaTarget == true) {
 				if (p.tag.healed == true) {
 					showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
@@ -997,13 +1003,13 @@ function gameEndCheck(roomNum) {
 
 		// App.sayToAll(`마피아 수: ${_mafiaCount}`);
 
-		if (mafiaCount == 0) {
+		if (mafiaTeamCount <= 0) {
 			// 시민 승리
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
 				if (!p) continue;
 				if (p.tag.data.joined == true) {
-					if (p.tag.role == "마피아") {
+					if (p.tag.role == "마피아" || p.tag.role == "스파이") {
 						giveExp(p, 2);
 					} else {
 						giveExp(p, 5);
@@ -1019,29 +1025,27 @@ function gameEndCheck(roomNum) {
 			}, 5);
 
 			return true;
-		} else if (mafiaCount >= 1) {
-			if (mafiaTeamCount >= citizenCount) {
-				// 마피아 승리
-				for (let playerData of room.players) {
-					let p = App.getPlayerByID(playerData.id);
-					if (!p) continue;
-					if (p.tag.data.joined == true) {
-						if (p.tag.role == "마피아") {
-							giveExp(p, 10);
-						} else {
-							giveExp(p, 5);
-						}
+		} else if (mafiaTeamCount >= citizenCount) {
+			// 마피아 승리
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.data.joined == true) {
+					if (p.tag.role == "마피아") {
+						giveExp(p, 10);
+					} else {
+						giveExp(p, 5);
 					}
 				}
-				playSoundToRoom(roomNum, "mafiaWinSound.mp3");
-				widgetHtml = "winMafia.html";
-				updatePlayerWidget(roomNum, widgetHtml);
-				App.runLater(() => {
-					startState(roomNum, STATE_INIT);
-				}, 5);
-
-				return true;
 			}
+			playSoundToRoom(roomNum, "mafiaWinSound.mp3");
+			widgetHtml = "winMafia.html";
+			updatePlayerWidget(roomNum, widgetHtml);
+			App.runLater(() => {
+				startState(roomNum, STATE_INIT);
+			}, 5);
+
+			return true;
 		}
 	}
 	return false;
@@ -1076,7 +1080,9 @@ function gameReset(roomNum) {
 		p.chatGroupID = 0;
 		p.chatEnabled = true;
 		p.tag.team = undefined;
-		p.name = p.tag.name;
+		if (p.tag.name) {
+			p.name = `${p.tag.name}`;
+		}
 
 		InitSpawnPlayer(p);
 		p.sendUpdated();
@@ -1157,7 +1163,10 @@ function changeCharacterImage(player, text) {
 			}
 			break;
 	}
-	player.name = `${player.tag.name}(${text})`;
+	if (player.tag.name) {
+		player.name = `${player.tag.name}(${text})[${player.tag.data.title}번]`;
+	}
+
 	player.sendUpdated();
 }
 
@@ -1405,7 +1414,7 @@ function WatingRoomOnMessage(player, data) {
 			});
 
 			let playerCount = roomPlayers.length;
-			if (playerCount < 7) {
+			if (playerCount < 8) {
 				if (!player.tag.data.joined) {
 					player.tag.data.joined = true;
 					player.tag.data.roomNum = roomNum;
