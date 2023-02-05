@@ -174,7 +174,7 @@
         <div class="chat-wrapper hidden">
             <div class="chat-box">
                 <div class="system message">
-                    <div class="text">${message}</div>
+                    <div class="text">채팅을 입력할 수 있습니다.</div>
                 </div>
             </div>
             <input type="text" tabindex="0" class="chat-input" autofocus>
@@ -223,12 +223,25 @@
                     if (e.data.isMobile) {
                         //태블릿
                         if (window.screen.width >= 768) {
-
+                            window.parent.postMessage({
+                                type: 'WidgetRearrange',
+                                width: "30%",
+                                anchor: "top"
+                            }, "*");
                         } else {
+                            window.parent.postMessage({
+                                type: 'WidgetRearrange',
+                                width: "100%",
+                                anchor: "top"
+                            }, "*");
 
                         }
                     } else {
-
+                        window.parent.postMessage({
+                            type: 'WidgetRearrange',
+                            width: "30%",
+                            anchor: "top"
+                        }, "*");
                     }
                     if (e.data.chatEnable) {
                         document.querySelector(".chat-wrapper").classList.remove("hidden");

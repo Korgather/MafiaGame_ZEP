@@ -259,6 +259,54 @@
             font-size: 16px;
             gap: 10px;
         }
+
+        @media (max-width: 325px) {
+
+            .button-kick,
+            .button-ready {
+                font-size: 11px;
+            }
+
+            .container>div>div.header {
+                display: none;
+            }
+
+            .level {
+                font-size: 11px;
+            }
+
+            .box.small {
+                width: 320px;
+            }
+
+            .box {
+                width: 320px;
+                height: 200px;
+                font-size: 12px;
+            }
+
+            .container {
+                width: 320px;
+                height: 200px;
+            }
+
+            .room {
+                font-size: 16px;
+            }
+
+            .right {
+                font-size: 14px;
+            }
+
+            .header {
+                font-size: 18px;
+                height: 22px;
+            }
+
+            .body {
+                width: 300px;
+            }
+        }
     </style>
 </head>
 
@@ -414,17 +462,38 @@
                             myID = e.data?.id;
                         }
                         if (e.data.isMobile) {
-                            window.parent.postMessage({
-                                type: 'WidgetRearrange',
-                                top: '-12px', // 위치조정
-                            }, "*");
+                            //태블릿
+                            if (window.screen.width >= 768) {
+                                window.parent.postMessage({
+                                    type: 'WidgetRearrange',
+                                    top: '-40px', // 위치조정
+                                    left: '60px',
+                                    anchor: 'topright'
+                                }, "*");
+                            } else {
+
+                                document.querySelector(".room-list").style.height = "120px";
+                                document.querySelector(".box.small").style.padding = "10px";
+
+                                window.parent.postMessage({
+                                    type: 'WidgetRearrange',
+                                    top: '-50px', // 위치조정
+                                    width: '320px',
+                                    anchor: "top",
+                                    left: "30px"
+                                }, "*");
+
+                            }
                         } else {
+                            /*
                             window.parent.postMessage({
                                 type: 'WidgetRearrange',
                                 top: '-12px', // 위치조정
                                 left: `80px`
                             }, "*");
+                            */
                         }
+
                         break;
                     case "init":
                         AppendList(e.data?.data);

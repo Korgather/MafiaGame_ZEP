@@ -326,6 +326,7 @@ App.onJoinPlayer.Add(function (p) {
 	};
 
 	if (p.isMobile) {
+		p.displayRatio = 0.75;
 		p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
 		App.putMobilePunch();
 	} else {
@@ -670,6 +671,7 @@ function startState(roomNum, state) {
 				Map.clearAllObjects();
 				playSoundToRoom(roomNum, "morningSound.wav");
 				room.stateTimer = 10 * room.alive > 60 ? 60 : 10 * room.alive;
+				// room.stateTimer = 1000 * room.alive > 60 ? 60 : 10 * room.alive;
 
 				widgetHtml = "morning.html";
 				switchAllPlayersWidget(roomNum, widgetHtml);
@@ -1232,9 +1234,8 @@ function nightPlayerEvent(player, text, roomNum) {
 											type: "selectResponse",
 											num: targetNum,
 										});
+										break;
 									}
-
-									break;
 								}
 							}
 						} else {
@@ -1570,7 +1571,9 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						total: room.total,
 						alive: aliveCount,
 						timer: room.stateTimer,
+						// timer: 1000,
 						description: "투표 전까지 이야기를 나누세요.",
+						isMobile: p.isMobile,
 					});
 					if (p.tag.data.joined) {
 						p.sendMessage(`─────────────────\n🌞 ${room.turnCount}번째 아침\n─────────────────`, 0x00ff00);
@@ -1592,6 +1595,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						timer: room.stateTimer,
 						liveList: liveList,
 						description: "",
+						isMobile: p.isMobile,
 					});
 
 					p_widget.onMessage.Add(function (player, data) {
@@ -1623,6 +1627,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 					p_widget.sendMessage({
 						type: "voteResult",
 						result: data,
+						isMobile: p.isMobile,
 					});
 					break;
 				case STATE_PLAYING_NIGHT:
