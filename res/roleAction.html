@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 7px;
+        }
+
+        ::-webkit-scrollbar-track {
+            border-radius: 1em;
+            background-color: rgba(50, 50, 50, 0);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            border-radius: 1em;
+            background-color: rgba(50, 50, 50, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 10px;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+        }
+
+        .target-list {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+
+        .target-box {
+            aspect-ratio: 1/1;
+            padding: 5px;
+            background-color: #dbdbdb;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .chhat-wrapper {
+            height: max-content;
+            width: 100%;
+            padding: 5px 5px 2px 5px;
+        }
+
+        .chat-box {
+            border-radius: 8px 8px 0 0;
+            padding: 5px 5px 2px 5px;
+
+            flex-direction: column;
+            justify-content: end;
+            width: 100%;
+            height: 100px;
+            max-height: 100px;
+            background-color: #f7ffff;
+            overflow-x: hidden;
+            overflow-y: scroll;
+            gap: 10px;
+            flex-grow: 1;
+
+        }
+
+
+
+        .my-chat {
+            display: flex;
+            justify-content: end;
+        }
+
+        .other-chat {
+            align-self: flex-start;
+        }
+
+        .message {
+            margin-top: 5px;
+            height: 25px;
+
+        }
+
+        .text {
+            background-color: #ffa6a6;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 14px
+        }
+
+        .chat-input {
+            background-color: #f7ffff;
+            box-sizing: border-box;
+            color: #000000;
+            border-radius: 0 0 8px 8px;
+            border: none;
+            padding: 9px 12px;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+            text-overflow: ellipsis;
+            width: 100%;
+            outline: none;
+            border-top: 1px solid;
+        }
+
+        .selected {
+            box-shadow: 0 0 0 4px red;
+        }
+
+        .header {
+            display: flex;
+            justify-content: flex-end;
+            color: white;
+        }
+
+        .disabled {
+            background-color: red;
+            cursor: default;
+            text-decoration: line-through;
+            text-decoration-color: red;
+            text-decoration-thickness: 3px;
+        }
+
+        .system>.text {
+            width: 100%;
+            text-align: center;
+            background-color: #abffa6;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="header">
+            <div id="timer"></div>
+        </div>
+        <div class="target-list-wrapper">
+            <div class="target-list">
+                <!--
+                <div class="target-box" data-num="1" onclick="select(this)">${i + 1}번 참가자</div>
+                <div class="target-box" data-num="1" onclick="select(this)">${i + 1}번 참가자</div>
+                <div class="target-box" data-num="1" onclick="select(this)">${i + 1}번 참가자</div>
+                <div class="target-box" data-num="1" onclick="select(this)">${i + 1}번 참가자</div>
+                -->
+            </div>
+        </div>
+
+        <div class="chat-wrapper hidden">
+            <div class="chat-box">
+                <div class="system message">
+                    <div class="text">${message}</div>
+                </div>
+            </div>
+            <input type="text" tabindex="0" class="chat-input" autofocus>
+        </div>
+    </div>
+
+    <script>
+        let input = document.querySelector("input");
+        let myNum;
+        let myRole;
+
+        /*
+        window.parent.postMessage({
+            type: 'WidgetRearrange',
+            top: '392px', // 위치조정
+        }, "*");
+        */
+        input.onkeypress = function (e) {
+            if (e.keyCode === 13) {
+                if (document.querySelector("input").focus) {
+                    let message = document.querySelector("input").value;
+                    let el_chatbox = document.querySelector(".chat-box");
+                    window.parent.postMessage({
+                        type: 'sendMessage',
+                        num: myNum,
+                        message, // 위치조정
+                    }, "*");
+                    el_chatbox.innerHTML += `<div class="my-chat message"><div class="text">${message}</div></div>`
+                    document.querySelector("input").value = "";
+
+                    let maxScrollTop = el_chatbox.scrollHeight - el_chatbox.offsetHeight;
+                    document.querySelector(".chat-box").scrollTo({ top: maxScrollTop, behavior: "smooth" })
+                } else {
+                    document.querySelector("input").focus();
+                }
+            }
+        };
+
+        window.addEventListener("message", (e) => {
+            let num;
+            switch (e.data.type) {
+                case "init":
+                    myNum = e.data.num;
+                    myRole = e.data.role;
+                    let time = -1;
+                    if (e.data.isMobile) {
+                        //태블릿
+                        if (window.screen.width >= 768) {
+
+                        } else {
+
+                        }
+                    } else {
+
+                    }
+                    if (e.data.chatEnable) {
+                        document.querySelector(".chat-wrapper").classList.remove("hidden");
+                    }
+                    let liveList = e.data.liveList;
+                    if (liveList) {
+                        let total = e.data.total;
+                        time = e.data.time - 2;
+                        for (let i = 0; i < total; i++) {
+                            document.querySelector(".target-list").innerHTML += `<div class="target-box" data-num="${i + 1}" onclick="select(this)">${i + 1}번 참가자</div>`
+                        }
+
+
+                        const targetList = document.querySelectorAll(".target-box");
+                        for (let i = 0; i < total; i++) {
+                            let index = i + 1;
+                            if (!liveList.includes(index)) {
+                                targetList[i].classList.add("disabled");
+                            } else {
+
+                            }
+                        }
+                    }
+                    if (time >= 0) {
+                        initTimer(time)
+                    }
+
+                    break;
+                case "chatNotify":
+                    num = e.data.num;
+                    let el_chatbox = document.querySelector(".chat-box");
+                    let maxScrollTop = el_chatbox.scrollHeight - el_chatbox.offsetHeight;
+                    if (num == 0) {
+                        let message = e.data.message;
+                        document.querySelector(".chat-wrapper").classList.remove("hidden");
+                        document.querySelector(".chat-box").innerHTML += `<div class="system message"><div class="text">${message}</diva></div>`
+                    } else {
+                        let message = e.data.message;
+                        document.querySelector(".chat-box").innerHTML += `<div class="other-chat message"><span class="name">${num}번</span><span class="text">${message}</span></div>`
+                    }
+                    document.querySelector(".chat-box").scrollTo({ top: maxScrollTop, behavior: "smooth" })
+                    break;
+                case "selectResponse":
+                    num = e.data.num;
+                    let el = document.querySelector(`[data-num~="${num}"]`);
+                    el.classList.add("selected");
+                    break;
+                case "chatEnable":
+                    document.querySelector(".chat-wrapper").classList.remove("hidden");
+                    break;
+            }
+        })
+
+        function select(el) {
+            if (!el.classList.contains("selected") && !el.classList.contains("disabled")) {
+                window.parent.postMessage({
+                    type: "select",
+                    num: el.dataset.num
+                }, "*")
+            }
+        }
+
+        function initTimer(time) {
+
+            document.querySelector("input").focus();
+            let timerInterval;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (time === 11) {
+                    timerDom.style.color = "red";
+                }
+                if (--time >= 0) {
+                    timerDom.innerText = toHHMMSS(time);
+                } else {
+                    timerDom.style.color = "white";
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
+            timerDom.innerText = toHHMMSS(time);
+        }
+
+        const toHHMMSS = (time) => {
+            var hours = Math.floor(time / 3600);
+            var minutes = Math.floor((time - hours * 3600) / 60);
+            var seconds = Math.floor(time - hours * 3600 - minutes * 60);
+            if (hours < 10) {
+                hours = "0" + hours;
+            }
+            if (minutes < 10) {
+                minutes = "0" + minutes;
+            }
+            if (seconds < 10) {
+                seconds = "0" + seconds;
+            }
+            return hours + ":" + minutes + ":" + seconds;
+        };
+        const timerDom = document.getElementById("timer");
+    </script>
+</body>
+
+</html>

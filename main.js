@@ -12,19 +12,6 @@ const START_WAIT_TIME = 10;
 const MAFIA_CHATTING_CHANNEL = 1;
 const GHOST_CHATTING_CHANNEL = 2;
 
-let monster = App.loadSpritesheet(
-	"monster.png",
-	96,
-	96,
-	{
-		left: [8, 9, 10, 11],
-		up: [12, 13, 14, 15],
-		down: [4, 5, 6, 7],
-		right: [16, 17, 18, 19],
-	},
-	8
-);
-
 let ghost = App.loadSpritesheet(
 	"ghost.png",
 	48,
@@ -495,7 +482,7 @@ App.onObjectAttacked.Add(function (p, x, y) {
 
 	for (let i in _players) {
 		let player = _players[i];
-		if (player.tag.data.title == targetNum) {
+		if (player.tag.data.index == targetNum) {
 			target = player;
 		}
 	}
@@ -510,49 +497,49 @@ App.onObjectAttacked.Add(function (p, x, y) {
 				} else {
 					p.showCustomLabel(`${target.title}은 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
 				}
-				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
+				p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
 				p.moveSpeed = 0;
 				p.sendUpdated();
 				break;
-			case "마피아":
-				playSoundToRoom(p.tag.data.roomNum, "gunSound.WAV");
-				p.showCustomLabel(`${target.title}를 죽이기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
-				target.tag.mafiaTarget = true;
-				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
-				p.moveSpeed = 0;
-				p.sendUpdated();
-				break;
-			case "의사":
-				p.playSound("healSound.WAV");
-				p.showCustomLabel(`${target.title}를 살리기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
-				// p.tag.healed = false;
-				target.tag.healed = true;
-				p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
-				p.moveSpeed = 0;
-				p.sendUpdated();
-				break;
+			// case "마피아":
+			// 	playSoundToRoom(p.tag.data.roomNum, "gunSound.WAV");
+			// 	p.showCustomLabel(`${target.title}를 죽이기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
+			// 	target.tag.mafiaTarget = true;
+			// 	p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+			// 	p.moveSpeed = 0;
+			// 	p.sendUpdated();
+			// 	break;
+			// case "의사":
+			// 	p.playSound("healSound.WAV");
+			// 	p.showCustomLabel(`${target.title}를 살리기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
+			// 	// p.tag.healTarget = false;
+			// 	target.tag.healTarget = true;
+			// 	p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+			// 	p.moveSpeed = 0;
+			// 	p.sendUpdated();
+			// 	break;
 			case "스파이":
-				targetRole = target.tag.role;
-				if (targetRole == "마피아") {
-					p.showCustomLabel(`🕵️‍♀️ ${target.title}의 직업은 ${targetRole}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
-					// p.sendMessage("[정보] 밤에 마피아와 채팅을 공유할 수 있게 되었습니다.", 0x00ff00);
-					// p.sendMessage("[정보] 능력을 한번 더 사용할 수 있습니다.", 0x00ff00);
-					p.tag.team = "mafia";
-					p.chatEnabled = true;
-					p.chatGroupID = MAFIA_CHATTING_CHANNEL;
-					p.sendUpdated();
-					for (let playerData of GAMEROOM[p.tag.data.roomNum].players) {
-						let player = App.getPlayerByID(playerData.id);
-						if (!player) continue;
-						if (!player.tag.team || !player.tag.team == "mafia" || !player.tag.data.joined) continue;
-						player.sendMessage(`─────────────────\n🕵️‍♀️ ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
-					}
-				} else {
-					p.showCustomLabel(`${target.title}은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
-					p.spawnAt(startPoint[0] + coordinates[p.tag.data.title].x, startPoint[1] + coordinates[p.tag.data.title].y);
-					p.moveSpeed = 0;
-					p.sendUpdated();
-				}
+				// targetRole = target.tag.role;
+				// if (targetRole == "마피아") {
+				// 	p.showCustomLabel(`🕵️‍♀️ ${target.title}의 직업은 ${targetRole}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
+				// 	// p.sendMessage("[정보] 밤에 마피아와 채팅을 공유할 수 있게 되었습니다.", 0x00ff00);
+				// 	// p.sendMessage("[정보] 능력을 한번 더 사용할 수 있습니다.", 0x00ff00);
+				// 	p.tag.team = "mafia";
+				// 	// p.chatEnabled = true;
+				// 	// p.chatGroupID = MAFIA_CHATTING_CHANNEL;
+				// 	p.sendUpdated();
+				// 	for (let playerData of GAMEROOM[p.tag.data.roomNum].players) {
+				// 		let player = App.getPlayerByID(playerData.id);
+				// 		if (!player) continue;
+				// 		if (!player.tag.team || !player.tag.team == "mafia" || !player.tag.data.joined) continue;
+				// 		player.sendMessage(`─────────────────\n🕵️‍♀️ ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
+				// 	}
+				// } else {
+				// 	p.showCustomLabel(`${target.title}은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
+				// 	p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+				// 	p.moveSpeed = 0;
+				// 	p.sendUpdated();
+				// }
 				break;
 		}
 	}
@@ -577,13 +564,28 @@ function dead(player) {
 	if (player.tag.name) {
 		player.name = `${player.tag.name}(유령)`;
 	}
-	player.tag.healed = false;
+	player.tag.healTarget = false;
 	player.tag.mafiaTarget = false;
 	player.tag.data.votecount = 0;
 	player.tag.data.joined = false;
 	player.sprite = ghost;
-	player.chatGroupID = GHOST_CHATTING_CHANNEL;
-	player.chatEnabled = true;
+	// player.chatGroupID = GHOST_CHATTING_CHANNEL;
+	// player.chatEnabled = true;
+	player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
+	player.tag.ghostWidget.sendMessage({
+		type: "init",
+		num: player.tag.data.index,
+		role: player.tag.role,
+		isMobile: player.isMobile,
+		chatEnable: true,
+	});
+	player.tag.ghostWidget.onMessage.Add(function (player, data) {
+		switch (data.type) {
+			case "sendMessage":
+				ghostChatNotify(roomNum, data.num, data.message);
+				break;
+		}
+	});
 	player.sendMessage(`─────────────────\n☠️ 당신은 죽었습니다.\n 유령들끼리 대화를 할 수 있습니다.\n 밤에는 영매와 대화할 수 있습니다.\n─────────────────`, 0x00ff00);
 	player.sendUpdated();
 
@@ -617,9 +619,9 @@ function startState(roomNum, state) {
 				p.tag.data.joined = false;
 				p.tag.role = "";
 				p.tag.data.voted = false;
-				p.tag.data.title = 0;
+				p.tag.data.index = 0;
 				p.tag.data.votecount = 0;
-				p.tag.healed = false;
+				p.tag.healTarget = false;
 				p.tag.mafiaTarget = false;
 				p.tag.data.kickList = [];
 				p.tag.data.ready = false;
@@ -629,7 +631,7 @@ function startState(roomNum, state) {
 				p.sendUpdated();
 			}
 			widgetHtml = "WatingRoom.html";
-			updatePlayerWidget(roomNum, widgetHtml);
+			switchAllPlayersWidget(roomNum, widgetHtml);
 			gameReset(roomNum);
 			break;
 		case STATE_READY:
@@ -650,7 +652,7 @@ function startState(roomNum, state) {
 				p.storage = JSON.stringify(pStorage);
 				// p.spawnAt(coordinates[arrIndex + 1].x, coordinates[arrIndex + 1].y);
 				p.title = `${arrIndex + 1} 번 참가자`;
-				p.tag.data.title = arrIndex + 1;
+				p.tag.data.index = arrIndex + 1;
 				setRole(p, arrIndex, roleArray);
 				arrIndex++;
 			}
@@ -670,7 +672,7 @@ function startState(roomNum, state) {
 				room.stateTimer = 10 * room.alive > 60 ? 60 : 10 * room.alive;
 
 				widgetHtml = "morning.html";
-				updatePlayerWidget(roomNum, widgetHtml);
+				switchAllPlayersWidget(roomNum, widgetHtml);
 				sendMessageToPlayerWidget(roomNum);
 				// sendMessageToPlayerWidget();
 			}
@@ -682,7 +684,7 @@ function startState(roomNum, state) {
 				room.stateTimer = 17;
 				// 투표가 시작되었습니다.
 				widgetHtml = "vote.html";
-				updatePlayerWidget(roomNum, widgetHtml);
+				switchAllPlayersWidget(roomNum, widgetHtml);
 				sendMessageToPlayerWidget(roomNum);
 				// sendMessageToPlayerWidget();
 			}
@@ -704,7 +706,7 @@ function startState(roomNum, state) {
 						let room = GAMEROOM[roomNum];
 						let startPoint = room.startPoint;
 						p.moveSpeed = 0;
-						p.spawnAt(parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.title]?.x), parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.title]?.y));
+						p.spawnAt(parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index]?.x), parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index]?.y));
 						p.sendUpdated();
 					}
 				}
@@ -712,24 +714,17 @@ function startState(roomNum, state) {
 				allHidden(roomNum);
 				room.stateTimer = 22;
 				playSoundToRoom(roomNum, "nightSound.mp3");
-				widgetHtml = "night.html";
-				updatePlayerWidget(roomNum, widgetHtml);
-				sendMessageToPlayerWidget(roomNum);
+
 				// sendMessageToPlayerWidget();
 
 				for (let playerData of room.players) {
 					let p = App.getPlayerByID(playerData.id);
 					if (!p) continue;
 					if (p.tag.data.joined) {
-						p.chatEnabled = false;
 						p.sendUpdated();
 						if (p.tag.data.joined == true) {
 							let role = p.tag.role;
-							if (role != "시민") {
-								changeCharacterImage(p, role);
-							} else {
-								p.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
-							}
+							nightPlayerEvent(p, role, roomNum);
 						} else {
 							p.sendMessage(`─────────────────\n🌙 밤이 되었습니다.\n영매와 대화 할 수 있습니다.\n─────────────────`, 0x00ff00);
 						}
@@ -869,7 +864,7 @@ function voteResult(roomNum) {
 			}
 
 			if (p.tag.data.joined == true) {
-				voteArray.push([p.tag.data.title, p.tag.data.votecount]);
+				voteArray.push([p.tag.data.index, p.tag.data.votecount]);
 			}
 		}
 	}
@@ -888,7 +883,7 @@ function voteResult(roomNum) {
 
 	// destroyAppWidget();
 	widgetHtml = "voteResult.html";
-	updatePlayerWidget(roomNum, widgetHtml);
+	switchAllPlayersWidget(roomNum, widgetHtml);
 	sendMessageToPlayerWidget(roomNum, voteArray);
 }
 
@@ -901,8 +896,9 @@ function tagReset(roomNum) {
 		if (room.turnCount == 0) {
 			p.tag.name = p.name;
 		}
+		p.tag.useSkill = false;
 		p.tag.data.voted = false;
-		p.tag.healed = false;
+		p.tag.healTarget = false;
 		p.tag.data.votecount = 0;
 		p.tag.mafiaTarget = false;
 		p.tag.data.kickCount = 0;
@@ -933,11 +929,11 @@ function clearHidden(roomNum) {
 			if (p.tag.name) {
 				p.name = `${p.tag.name}`;
 			}
-			p.spawnAt(startPoint[0] + coordinates[p.tag.data.title]?.x, startPoint[1] + coordinates[p.tag.data.title]?.y);
+			p.spawnAt(startPoint[0] + coordinates[p.tag.data.index]?.x, startPoint[1] + coordinates[p.tag.data.index]?.y);
 			p.sprite = null;
 			p.hidden = false;
-			p.chatEnabled = true;
-			p.chatGroupID = 0;
+			// p.chatEnabled = true;
+			// p.chatGroupID = 0;
 			p.sendUpdated();
 		}
 	}
@@ -951,8 +947,8 @@ function createSilhouette(roomNum) {
 		if (p.tag.data.joined == true) {
 			let room = GAMEROOM[p.tag.data.roomNum];
 			let startPoint = room.startPoint;
-			let x = startPoint[0] + coordinates[p.tag.data.title].x;
-			let y = startPoint[1] + coordinates[p.tag.data.title].y;
+			let x = startPoint[0] + coordinates[p.tag.data.index].x;
+			let y = startPoint[1] + coordinates[p.tag.data.index].y;
 			Map.putObject(x, y - 1, silhouette);
 			Map.putObject(x, y, blankObject);
 			room.SilhouetteTracker.push([x, y - 1]);
@@ -970,17 +966,25 @@ function nightResult(roomNum) {
 		let p = App.getPlayerByID(playerData.id);
 		if (!p) continue;
 		if (p.tag.data.joined == true) {
+			if (p.tag.role == "영매") {
+				if (p.tag.ghostWidget) {
+					p.tag.ghostWidget.destroy();
+					p.tag.ghostWidget = null;
+				}
+			}
+		}
+	}
+
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined == true) {
 			if (p.tag.mafiaTarget == true) {
-				if (p.tag.healed == true) {
-					// showLabelToRoom(roomNum, `어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`);
+				if (p.tag.healTarget == true) {
 					text += `💖 어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`;
-					// p.sendMessage(`─────────────────\n💖 어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.\n─────────────────`, 0x00ff00);
-					// return;
 				} else {
 					text += `☠️ 이번 밤에 ${p.title}가 죽었습니다.`;
-					// showLabelToRoom(roomNum, `이번 밤에 ${p.title}가 죽었습니다.`);
 					dead(p);
-					// return;
 				}
 				text += `\n`;
 			}
@@ -1022,6 +1026,10 @@ function gameEndCheck(roomNum) {
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
 				if (!p) continue;
+				if (p.tag.ghostWidget) {
+					p.tag.ghostWidget.destroy();
+					p.tag.ghostWidget = null;
+				}
 				if (p.tag.data.joined == true) {
 					if (p.tag.role == "마피아" || p.tag.role == "스파이") {
 						giveExp(p, 2);
@@ -1033,7 +1041,7 @@ function gameEndCheck(roomNum) {
 
 			playSoundToRoom(roomNum, "citizenWinSound.mp3");
 			widgetHtml = "winCitizen.html";
-			updatePlayerWidget(roomNum, widgetHtml);
+			switchAllPlayersWidget(roomNum, widgetHtml);
 			App.runLater(() => {
 				startState(roomNum, STATE_INIT);
 			}, 5);
@@ -1044,6 +1052,10 @@ function gameEndCheck(roomNum) {
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
 				if (!p) continue;
+				if (p.tag.ghostWidget) {
+					p.tag.ghostWidget.destroy();
+					p.tag.ghostWidget = null;
+				}
 				if (p.tag.data.joined == true) {
 					if (p.tag.role == "마피아") {
 						giveExp(p, 10);
@@ -1054,7 +1066,7 @@ function gameEndCheck(roomNum) {
 			}
 			playSoundToRoom(roomNum, "mafiaWinSound.mp3");
 			widgetHtml = "winMafia.html";
-			updatePlayerWidget(roomNum, widgetHtml);
+			switchAllPlayersWidget(roomNum, widgetHtml);
 			App.runLater(() => {
 				startState(roomNum, STATE_INIT);
 			}, 5);
@@ -1087,12 +1099,12 @@ function gameReset(roomNum) {
 		p.tag.data.joined = false;
 		p.tag.role = "";
 		p.tag.data.voted = false;
-		p.tag.data.title = 0;
+		p.tag.data.index = 0;
 		p.tag.data.votecount = 0;
-		p.tag.healed = false;
+		p.tag.healTarget = false;
 		p.tag.mafiaTarget = false;
-		p.chatGroupID = 0;
-		p.chatEnabled = true;
+		// p.chatGroupID = 0;
+		// p.chatEnabled = true;
 		p.tag.team = undefined;
 		if (p.tag.name) {
 			p.name = `${p.tag.name}`;
@@ -1116,70 +1128,289 @@ function gameReset(roomNum) {
 	updatePlayerCount();
 }
 
-function changeCharacterImage(player, text) {
+function nightPlayerEvent(player, text, roomNum) {
+	let room = GAMEROOM[roomNum];
+	let liveList = [];
+	let mafiaTeamCount = 0;
+	if (player.tag.widget) {
+		player.tag.widget.destroy();
+		player.tag.widget = null;
+	}
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined) {
+			liveList.push(parseInt(p.tag.data.index));
+		}
+	}
 	switch (text) {
 		case "의사":
-			player.showCenterLabel("살리고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
 			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			player.showCenterLabel("살리고 싶은 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
 			player.sprite = doctorSprite;
-			player.moveSpeed = 80;
-			player.attackSprite = doctorAttackSprite;
-			player.attackType = 3;
-			player.attackParam1 = 2;
-			player.attackParam2 = 4;
+			player.tag.widget.sendMessage({
+				type: "init",
+				total: room.total,
+				isMobile: player.isMobile,
+				liveList,
+				time: room.stateTimer,
+				role: player.tag.role,
+			});
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									p.tag.healTarget = true;
+									player.showCustomLabel(`${targetNum}번 참가자를 치료하기로 결정했습니다.`, 0xffffff, 0x000000, 300);
+									player.tag.useSkill = true;
+									player.tag.widget.sendMessage({
+										type: "selectResponse",
+										num: targetNum,
+									});
+									break;
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+						break;
+				}
+			});
 			break;
 
 		case "마피아":
-			player.showCenterLabel("죽이고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
 			player.sprite = mafiaSprite;
-			player.moveSpeed = 80;
+			player.showCenterLabel("처형할 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
 			player.attackSprite = mafiaAttackSprite;
-			player.attackType = 3;
-			player.attackParam1 = 2;
-			player.attackParam2 = 4;
-			player.chatEnabled = true;
-			player.chatGroupID = MAFIA_CHATTING_CHANNEL;
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+			mafiaTeamCount = 0;
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.data.joined == true && p.tag.team == "mafia") {
+					mafiaTeamCount++;
+				}
+			}
+			player.tag.widget.sendMessage({
+				type: "init",
+				num: player.tag.data.index,
+				isMobile: player.isMobile,
+				total: room.total,
+				liveList,
+				time: room.stateTimer,
+				chatEnable: mafiaTeamCount > 1,
+				role: player.tag.role,
+			});
+
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "sendMessage":
+						mafiaChatNotify(roomNum, data.num, data.message);
+						break;
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									if (p.tag.data.index == targetNum && p.tag.mafiaTarget) {
+										player.showCustomLabel(`다른 마피아가 선택한 대상입니다.`, 0xffffff, 0x000000, 300);
+										return;
+									}
+									if (p.tag.data.index == targetNum) {
+										p.tag.mafiaTarget = true;
+										player.showCustomLabel(`${targetNum}번 참가자를 죽이기로 결정했습니다.`, 0xffffff, 0x000000, 300);
+										player.tag.useSkill = true;
+										player.tag.widget.sendMessage({
+											type: "selectResponse",
+											num: targetNum,
+										});
+									}
+
+									break;
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+
+						break;
+				}
+			});
 			player.sendMessage(`─────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
 			break;
 
 		case "경찰":
-			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
+			player.showCenterLabel("조사하고 싶은 대상을 선택하세요", 0xffffff, 0x000000, 250, 6000);
 			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			player.sprite = policeSprite;
-			player.moveSpeed = 80;
-			player.attackSprite = policeAttackSprite;
-			player.attackType = 3;
-			player.attackParam1 = 2;
-			player.attackParam2 = 4;
+
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.tag.widget.sendMessage({
+				type: "init",
+				isMobile: player.isMobile,
+				total: room.total,
+				liveList,
+				time: room.stateTimer,
+				role: player.tag.role,
+			});
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									if (p.tag.data.index == targetNum) {
+										if (p.tag.role == "마피아") {
+											player.showCustomLabel(`${p.title}는 마피아입니다!`, 0xffffff, 0x000000, 300, 6000);
+										} else {
+											player.showCustomLabel(`${p.title}는 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
+										}
+										player.tag.useSkill = true;
+										player.tag.widget.sendMessage({
+											type: "selectResponse",
+											num: targetNum,
+										});
+									}
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+						break;
+				}
+			});
+
+			// player.moveSpeed = 80;
+			// player.attackSprite = policeAttackSprite;
+			// player.attackType = 3;
+			// player.attackParam1 = 2;
+			// player.attackParam2 = 4;
 			break;
 		case "영매":
 			player.sendMessage(`─────────────────\n🌙 죽은 혼령들과 대화할 수 있습니다.\n─────────────────`, 0x00ff00);
-			player.chatEnabled = true;
-			player.chatGroupID = GHOST_CHATTING_CHANNEL;
+			player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.tag.ghostWidget.sendMessage({
+				type: "init",
+				num: player.tag.data.index,
+				time: room.stateTimer,
+				role: player.tag.role,
+				isMobile: player.isMobile,
+				chatEnable: true,
+			});
+			player.tag.ghostWidget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "sendMessage":
+						ghostChatNotify(roomNum, data.num, data.message);
+						break;
+				}
+			});
 			break;
 		case "정치인":
 			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			break;
 		case "스파이":
-			player.showCenterLabel("조사하고 싶은 대상에게 가서\nZ 키를 누르세요", 0xffffff, 0x000000, 250, 6000);
+			mafiaTeamCount = 0;
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.data.joined == true && p.tag.team == "mafia") {
+					mafiaTeamCount++;
+				}
+			}
+			player.showCenterLabel("조사하고 싶은 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
 			player.sprite = spySprite;
-			player.moveSpeed = 80;
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.tag.widget.sendMessage({
+				type: "init",
+				num: player.tag.data.index,
+				total: room.total,
+				liveList,
+				time: room.stateTimer,
+				isMobile: player.isMobile,
+				chatEnable: mafiaTeamCount > 1 && player.tag.team == "mafia",
+				role: player.tag.role,
+			});
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "sendMessage":
+						if (player.tag.team == "mafia") {
+							mafiaChatNotify(roomNum, data.num, data.message);
+						}
+						break;
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									if (p.tag.data.index == targetNum) {
+										if (p.tag.role == "마피아") {
+											player.tag.widget.sendMessage({ type: "chatEnable" });
+											mafiaChatNotify(roomNum, 0, `${player.tag.data.index}번 참가자(스파이)가 채팅에 합류했습니다.`);
+											player.showCustomLabel(`🕵️‍♀️ ${p.title}의 직업은 ${p.tag.role}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
+											player.tag.team = "mafia";
+										} else {
+											player.showCustomLabel(`${p.title}의 직업은 ${p.tag.role}입니다.`, 0xffffff, 0x000000, 300, 6000);
+											player.tag.useSkill = true;
+											player.tag.widget.sendMessage({
+												type: "selectResponse",
+												num: targetNum,
+											});
+										}
+									}
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+
+						break;
+				}
+			});
+
+			// player.moveSpeed = 80;
 			// player.attackSprite = spySprite;
-			player.attackType = 3;
-			player.attackParam1 = 2;
-			player.attackParam2 = 4;
+			// player.attackType = 3;
+			// player.attackParam1 = 2;
+			// player.attackParam2 = 4;
 			if (player.tag.team && player.tag.team == "mafia") {
-				player.chatEnabled = true;
-				player.chatGroupID = MAFIA_CHATTING_CHANNEL;
+				// player.chatEnabled = true;
+				// player.chatGroupID = MAFIA_CHATTING_CHANNEL;
 				player.sendMessage(`─────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
 			} else {
 				player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
 			}
 			break;
+		default:
+			if (player.isMobile) {
+				player.tag.widget = player.showWidget("night.html", "top", 400, 260);
+			} else {
+				player.tag.widget = player.showWidget("night.html", "topright", 400, 260);
+			}
+			player.tag.widget.sendMessage({
+				total: room.total,
+				alive: aliveCount,
+				timer: room.stateTimer,
+				description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
+			});
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			break;
 	}
-	if (player.tag.name) {
-		player.name = `${player.tag.name}(${text})[${player.tag.data.title}번]`;
-	}
+	// if (player.tag.name) {
+	// 	player.name = `${player.tag.name}(${text})[${player.tag.data.index}번]`;
+	// }
 
 	player.sendUpdated();
 }
@@ -1237,7 +1468,7 @@ function levelCalc(player) {
 	}
 }
 
-function updatePlayerWidget(roomNum, htmlName) {
+function switchAllPlayersWidget(roomNum, htmlName) {
 	let room = GAMEROOM[roomNum];
 	for (let playerData of room.players) {
 		let p = App.getPlayerByID(playerData.id);
@@ -1254,6 +1485,7 @@ function updatePlayerWidget(roomNum, htmlName) {
 				p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 			}
 			p.tag.widget.sendMessage({ type: "setID", id: p.id, isMobile: p.isMobile });
+			p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
 		} else {
 			if (p.isMobile) {
 				p.tag.widget = p.showWidget(htmlName, "top", 400, 260);
@@ -1261,7 +1493,6 @@ function updatePlayerWidget(roomNum, htmlName) {
 				p.tag.widget = p.showWidget(htmlName, "topright", 400, 260);
 			}
 		}
-		p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
 	}
 	// if (_state != STATE_VOTE_RESULT) {
 	// 	sendMessageToPlayerWidget();
@@ -1341,7 +1572,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						timer: room.stateTimer,
 						description: "투표 전까지 이야기를 나누세요.",
 					});
-					if (p.tag.joined) {
+					if (p.tag.data.joined) {
 						p.sendMessage(`─────────────────\n🌞 ${room.turnCount}번째 아침\n─────────────────`, 0x00ff00);
 					}
 					break;
@@ -1351,7 +1582,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						let p = App.getPlayerByID(playerData.id);
 						if (!p) continue;
 						if (p.tag.data.joined) {
-							liveList.push(parseInt(p.tag.data.title));
+							liveList.push(parseInt(p.tag.data.index));
 						}
 					}
 					p_widget.sendMessage({
@@ -1361,7 +1592,6 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						timer: room.stateTimer,
 						liveList: liveList,
 						description: "",
-						total: room.total,
 					});
 
 					p_widget.onMessage.Add(function (player, data) {
@@ -1371,7 +1601,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 								for (let playerData of room.players) {
 									let p = App.getPlayerByID(playerData.id);
 									if (!p) continue;
-									if (p.tag.data.title == data.vote) {
+									if (p.tag.data.index == data.vote) {
 										if (player.tag.role == "정치인") {
 											p.tag.data.votecount += 2;
 										} else {
@@ -1396,13 +1626,6 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 					});
 					break;
 				case STATE_PLAYING_NIGHT:
-					p_widget.sendMessage({
-						total: room.total,
-						alive: aliveCount,
-						timer: room.stateTimer,
-						description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
-					});
-
 					break;
 			}
 		}
@@ -1594,4 +1817,42 @@ function clearRoomObjects(roomNum) {
 
 function InitSpawnPlayer(p) {
 	p.spawnAt(parseInt(Math.random() * 13 + 63), parseInt(Math.random() * 4 + 42));
+}
+
+function mafiaChatNotify(roomNum, num, message) {
+	let players = GAMEROOM[roomNum].players;
+	for (let i = 0; i < players.length; i++) {
+		let player = App.getPlayerByID(players[i].id);
+		if (!player) return;
+		if (player.tag.team == "mafia") {
+			if (num != player.tag.data.index) {
+				if (player.tag.widget) {
+					player.tag.widget.sendMessage({
+						type: "chatNotify",
+						num,
+						message,
+					});
+				}
+			}
+		}
+	}
+}
+
+function ghostChatNotify(roomNum, num, message) {
+	let players = GAMEROOM[roomNum].players;
+	for (let i = 0; i < players.length; i++) {
+		let player = App.getPlayerByID(players[i].id);
+		if (!player) return;
+		if (!player.tag.data.joined || player.tag.role == "영매") {
+			if (num != player.tag.data.index) {
+				if (player.tag.ghostWidget) {
+					player.tag.ghostWidget.sendMessage({
+						type: "chatNotify",
+						num,
+						message,
+					});
+				}
+			}
+		}
+	}
 }
