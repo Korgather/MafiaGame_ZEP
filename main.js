@@ -326,7 +326,7 @@ App.onJoinPlayer.Add(function (p) {
 	};
 
 	if (p.isMobile) {
-		p.displayRatio = 0.75;
+		p.displayRatio = 0.7;
 		p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
 		App.putMobilePunch();
 	} else {
@@ -571,7 +571,7 @@ function dead(player) {
 	player.tag.data.joined = false;
 	player.sprite = ghost;
 	// player.chatGroupID = GHOST_CHATTING_CHANNEL;
-	// player.chatEnabled = true;
+	player.chatEnabled = false;
 	player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
 	player.tag.ghostWidget.sendMessage({
 		type: "init",
@@ -708,6 +708,7 @@ function startState(roomNum, state) {
 						let room = GAMEROOM[roomNum];
 						let startPoint = room.startPoint;
 						p.moveSpeed = 0;
+						p.chatEnabled = false;
 						p.spawnAt(parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index]?.x), parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index]?.y));
 						p.sendUpdated();
 					}
@@ -934,7 +935,7 @@ function clearHidden(roomNum) {
 			p.spawnAt(startPoint[0] + coordinates[p.tag.data.index]?.x, startPoint[1] + coordinates[p.tag.data.index]?.y);
 			p.sprite = null;
 			p.hidden = false;
-			// p.chatEnabled = true;
+			p.chatEnabled = true;
 			// p.chatGroupID = 0;
 			p.sendUpdated();
 		}
@@ -1106,7 +1107,7 @@ function gameReset(roomNum) {
 		p.tag.healTarget = false;
 		p.tag.mafiaTarget = false;
 		// p.chatGroupID = 0;
-		// p.chatEnabled = true;
+		p.chatEnabled = true;
 		p.tag.team = undefined;
 		if (p.tag.name) {
 			p.name = `${p.tag.name}`;
