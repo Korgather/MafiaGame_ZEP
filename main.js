@@ -1288,6 +1288,7 @@ function nightPlayerEvent(player, text, roomNum) {
 											type: "selectResponse",
 											num: targetNum,
 										});
+										player.playSound("policeAttackSound.mp3");
 									}
 								}
 							}
@@ -1363,6 +1364,7 @@ function nightPlayerEvent(player, text, roomNum) {
 								if (!p) continue;
 								if (p.tag.data.joined) {
 									if (p.tag.data.index == targetNum) {
+										player.playSound("policeAttackSound.mp3");
 										if (p.tag.role == "마피아") {
 											player.tag.widget.sendMessage({ type: "chatEnable" });
 											mafiaChatNotify(roomNum, 0, `🕵️‍♀️ ${player.tag.data.index}번 참가자(스파이)가 채팅에 합류했습니다.`);
