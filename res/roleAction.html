@@ -37,7 +37,7 @@
             display: flex;
             flex-direction: column;
             gap: 5px;
-            padding: 10px;
+            padding: 20px;
             width: 100%;
             height: 100%;
             background-color: black;
@@ -131,8 +131,10 @@
 
         .header {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             color: white;
+            font-size: 18px;
+            font-weight: bold;
         }
 
         .disabled {
@@ -158,6 +160,7 @@
 <body>
     <div class="wrapper">
         <div class="header">
+            <div class="title">능력을 사용할 대상을 선택하세요</div>
             <div id="timer"></div>
         </div>
         <div class="target-list-wrapper">
@@ -221,6 +224,36 @@
                     myNum = e.data.num;
                     myRole = e.data.role;
                     let time = -1;
+                    switch (myRole) {
+                        case "영매":
+                            document.querySelector(".title").innerHTML = "죽은 유령들과 대화할 수 있습니다.";
+                            break;
+
+                        case "경찰":
+                            document.querySelector(".title").innerHTML = "상대가 마피아인지 아닌지 알아낼 수 있습니다.";
+                            document.querySelector(".title").style.color = "blue";
+                            break;
+
+                        case "마피아":
+                            document.querySelector(".title").innerHTML = "☠️ 처형할 대상을 선택하세요.";
+                            document.querySelector(".title").style.color = "red";
+                            break;
+
+                        case "스파이":
+                            document.querySelector(".title").innerHTML = "상대의 직업을 알아낼 수 있습니다.<br/>상대가 마피아라면 마피아 팀 채팅에 합류하고, 능력을 한번 더 사용 할 수 있습니다.";
+                            document.querySelector(".title").style.color = "#ebbc52";
+                            break;
+
+                        case "의사":
+                            document.querySelector(".title").innerHTML = "💖 살리고 싶은 대상을 선택하세요.";
+                            document.querySelector(".title").style.color = "pink";
+                            break;
+
+                        default:
+                            document.querySelector(".title").innerHTML = "☠️ 유령들끼리 대화를 할 수 있습니다";
+                            break;
+                    }
+
                     if (e.data.isMobile) {
                         //태블릿
                         if (window.screen.width >= 768) {
@@ -289,9 +322,15 @@
                     num = e.data.num;
                     let el = document.querySelector(`[data-num~="${num}"]`);
                     el.classList.add("selected");
+                    document.querySelector(".title").innerHTML = "능력 사용 완료!";
+                    document.querySelector(".title").style.color = "white";
                     break;
                 case "chatEnable":
                     document.querySelector(".chat-wrapper").classList.remove("hidden");
+                    if (myRole == "스파이") {
+                        document.querySelector(".title").innerHTML = "능력을 한번 더 사용할 수 있습니다.";
+                        document.querySelector(".title").style.color = "#53eb21";
+                    }
                     break;
             }
         })

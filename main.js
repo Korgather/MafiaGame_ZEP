@@ -468,39 +468,39 @@ App.onObjectAttacked.Add(function (p, x, y) {
 	let target = null;
 	let targetNum = 0;
 	let startPoint;
-	if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰" || p.tag.role == "스파이") {
-		let room = GAMEROOM[p.tag.data.roomNum];
-		startPoint = room.startPoint;
-		targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x - startPoint[0], y: y - startPoint[1] }));
-		p.attackType = 2;
-		p.attackSprite = null;
-		p.attackParam1 = 2;
-		p.attackParam2 = 2;
-		p.sendUpdated();
-	} else return;
+	// if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰" || p.tag.role == "스파이") {
+	// 	let room = GAMEROOM[p.tag.data.roomNum];
+	// 	startPoint = room.startPoint;
+	// 	targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x - startPoint[0], y: y - startPoint[1] }));
+	// 	p.attackType = 2;
+	// 	p.attackSprite = null;
+	// 	p.attackParam1 = 2;
+	// 	p.attackParam2 = 2;
+	// 	p.sendUpdated();
+	// } else return;
 
 	if (!targetNum) return;
 
-	for (let i in _players) {
-		let player = _players[i];
-		if (player.tag.data.index == targetNum) {
-			target = player;
-		}
-	}
+	// for (let i in _players) {
+	// 	let player = _players[i];
+	// 	if (player.tag.data.index == targetNum) {
+	// 		target = player;
+	// 	}
+	// }
 	let targetRole;
 	if (target !== null) {
 		switch (p.tag.role) {
 			case "경찰":
-				p.playSound("policeAttackSound.mp3");
-				targetRole = target.tag.role;
-				if (targetRole == "마피아") {
-					p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
-				} else {
-					p.showCustomLabel(`${target.title}은 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
-				}
-				p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
-				p.moveSpeed = 0;
-				p.sendUpdated();
+				// p.playSound("policeAttackSound.mp3");
+				// targetRole = target.tag.role;
+				// if (targetRole == "마피아") {
+				// 	p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
+				// } else {
+				// 	p.showCustomLabel(`${target.title}은 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
+				// }
+				// p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+				// p.moveSpeed = 0;
+				// p.sendUpdated();
 				break;
 			// case "마피아":
 			// 	playSoundToRoom(p.tag.data.roomNum, "gunSound.WAV");
@@ -1014,11 +1014,13 @@ function gameEndCheck(roomNum) {
 			if (p.tag.data.joined == true) {
 				if (p.tag.team == "mafia") {
 					mafiaTeamCount++;
+				} else {
+					citizenCount++;
 				}
 				if (p.tag.role == "마피아") {
 					// App.sayToAll(`마피아 : ${p.title}`);
 					mafiaCount++;
-				} else citizenCount++;
+				}
 			}
 		}
 
@@ -1168,7 +1170,7 @@ function nightPlayerEvent(player, text, roomNum) {
 							for (let playerData of room.players) {
 								let p = App.getPlayerByID(playerData.id);
 								if (!p) continue;
-								if (p.tag.data.joined) {
+								if (p.tag.data.joined && p.tag.data.index == targetNum) {
 									p.tag.healTarget = true;
 									player.showCustomLabel(`${targetNum}번 참가자를 치료하기로 결정했습니다.`, 0xffffff, 0x000000, 300);
 									player.tag.useSkill = true;
@@ -1176,6 +1178,7 @@ function nightPlayerEvent(player, text, roomNum) {
 										type: "selectResponse",
 										num: targetNum,
 									});
+									player.playSound("healSound.WAV");
 									break;
 								}
 							}
@@ -1192,6 +1195,7 @@ function nightPlayerEvent(player, text, roomNum) {
 			player.showCenterLabel("처형할 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
 			player.attackSprite = mafiaAttackSprite;
 			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+
 			mafiaTeamCount = 0;
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
@@ -1235,6 +1239,7 @@ function nightPlayerEvent(player, text, roomNum) {
 											type: "selectResponse",
 											num: targetNum,
 										});
+										playSoundToRoom(player.tag.data.roomNum, "gunSound.WAV");
 										break;
 									}
 								}
@@ -1360,8 +1365,8 @@ function nightPlayerEvent(player, text, roomNum) {
 									if (p.tag.data.index == targetNum) {
 										if (p.tag.role == "마피아") {
 											player.tag.widget.sendMessage({ type: "chatEnable" });
-											mafiaChatNotify(roomNum, 0, `${player.tag.data.index}번 참가자(스파이)가 채팅에 합류했습니다.`);
-											player.showCustomLabel(`🕵️‍♀️ ${p.title}의 직업은 ${p.tag.role}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
+											mafiaChatNotify(roomNum, 0, `🕵️‍♀️ ${player.tag.data.index}번 참가자(스파이)가 채팅에 합류했습니다.`);
+											// player.showCustomLabel(`🕵️‍♀️ ${p.title}의 직업은 ${p.tag.role}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
 											player.tag.team = "mafia";
 										} else {
 											player.showCustomLabel(`${p.title}의 직업은 ${p.tag.role}입니다.`, 0xffffff, 0x000000, 300, 6000);
