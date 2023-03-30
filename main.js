@@ -1453,7 +1453,6 @@ function levelCalc(player) {
 		let pStorage = JSON.parse(player.storage);
 		let title = "";
 		if (player.role == 0) {
-			title += `< 멤버 >\n`;
 			player.titleColor = 0x00ff00;
 		} else {
 			player.titleColor = 0xc5c5c5;
