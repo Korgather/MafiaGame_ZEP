@@ -1161,6 +1161,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				liveList,
 				time: room.stateTimer,
 				role: player.tag.role,
+				myNum: player.tag.data.index
 			});
 			player.tag.widget.onMessage.Add(function (player, data) {
 				switch (data.type) {
@@ -1206,13 +1207,13 @@ function nightPlayerEvent(player, text, roomNum) {
 			}
 			player.tag.widget.sendMessage({
 				type: "init",
-				num: player.tag.data.index,
 				isMobile: player.isMobile,
 				total: room.total,
 				liveList,
 				time: room.stateTimer,
 				chatEnable: mafiaTeamCount > 1,
 				role: player.tag.role,
+				myNum: player.tag.data.index
 			});
 
 			player.tag.widget.onMessage.Add(function (player, data) {
@@ -1267,6 +1268,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				liveList,
 				time: room.stateTimer,
 				role: player.tag.role,
+				myNum: player.tag.data.index
 			});
 			player.tag.widget.onMessage.Add(function (player, data) {
 				switch (data.type) {
@@ -1410,7 +1412,7 @@ function nightPlayerEvent(player, text, roomNum) {
 			}
 			player.tag.widget.sendMessage({
 				total: room.total,
-				alive: aliveCount,
+				alive: room.alive,
 				timer: room.stateTimer,
 				description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
 			});
@@ -1438,7 +1440,7 @@ function giveExp(p, point) {
 			exp: myExp + point,
 		});
 
-		p.showCustomLabel("경험치: " + JSON.parse(p.storage).exp);
+		p.showCustomLabel(`경험치: ${point} 흭득`);
 
 		p.save();
 		// App.sayToAll(JSON.parse(p.storage).exp);
@@ -1509,13 +1511,12 @@ function switchAllPlayersWidget(roomNum, htmlName) {
 
 function sendMessageToPlayerWidget(roomNum, data = null) {
 	let room = GAMEROOM[roomNum];
-	let aliveCount = 0;
 	if (room.start) {
 		room.players.forEach((data) => {
-			if (data.joined) aliveCount++;
+			if (data.joined) room.alive++;
 		});
 	}
-	room.alive = aliveCount;
+	room.alive = room.alive;
 	for (let roomPlayerData of room.players) {
 		let id = roomPlayerData.id;
 		let p = App.getPlayerByID(id);
@@ -1576,7 +1577,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 				case STATE_PLAYING_DAY:
 					p_widget.sendMessage({
 						total: room.total,
-						alive: aliveCount,
+						alive: room.alive,
 						timer: room.stateTimer,
 						// timer: 1000,
 						description: "투표 전까지 이야기를 나누세요.",
@@ -1598,7 +1599,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 					p_widget.sendMessage({
 						type: "init",
 						total: room.total,
-						alive: aliveCount,
+						alive: room.alive,
 						timer: room.stateTimer,
 						liveList: liveList,
 						description: "",
@@ -1841,6 +1842,7 @@ function mafiaChatNotify(roomNum, num, message) {
 				if (player.tag.widget) {
 					player.tag.widget.sendMessage({
 						type: "chatNotify",
+						name: player.name,
 						num,
 						message,
 					});
@@ -1860,6 +1862,7 @@ function ghostChatNotify(roomNum, num, message) {
 				if (player.tag.ghostWidget) {
 					player.tag.ghostWidget.sendMessage({
 						type: "chatNotify",
+						name: player.name,
 						num,
 						message,
 					});

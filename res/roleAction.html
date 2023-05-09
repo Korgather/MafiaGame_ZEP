@@ -89,24 +89,32 @@
 
         .my-chat {
             display: flex;
-            justify-content: end;
+            align-items: end;
+            flex-direction: column;
         }
 
         .other-chat {
             align-self: flex-start;
+            display: flex;
+            flex-direction: column;
+            width: max-content;
         }
 
         .message {
             margin-top: 5px;
-            height: 25px;
 
+        }
+
+        .name {
+            font-size: 14px;
         }
 
         .text {
             background-color: #ffa6a6;
             border-radius: 4px;
             padding: 4px;
-            font-size: 14px
+            font-size: 14px;
+            width: max-content;
         }
 
         .chat-input {
@@ -148,6 +156,10 @@
         .system>.text {
             width: 100%;
             text-align: center;
+            background-color: #abffa6;
+        }
+
+        .green {
             background-color: #abffa6;
         }
 
@@ -221,7 +233,7 @@
             let num;
             switch (e.data.type) {
                 case "init":
-                    myNum = e.data.num;
+                    myNum = e.data.myNum;
                     myRole = e.data.role;
                     let time = -1;
                     switch (myRole) {
@@ -285,7 +297,11 @@
                         let total = e.data.total;
                         time = e.data.time - 2;
                         for (let i = 0; i < total; i++) {
-                            document.querySelector(".target-list").innerHTML += `<div class="target-box" data-num="${i + 1}" onclick="select(this)">${i + 1}번 참가자</div>`
+                            if (i + 1 == myNum) {
+                                document.querySelector(".target-list").innerHTML += `<div class="target-box green" data-num="${i + 1}" onclick="select(this)">${i + 1}번 참가자 (나)</div>`
+                            } else {
+                                document.querySelector(".target-list").innerHTML += `<div class="target-box" data-num="${i + 1}" onclick="select(this)">${i + 1}번 참가자</div>`
+                            }
                         }
 
 
@@ -306,6 +322,7 @@
                     break;
                 case "chatNotify":
                     num = e.data.num;
+                    name = e.data.name;
                     let el_chatbox = document.querySelector(".chat-box");
                     let maxScrollTop = el_chatbox.scrollHeight - el_chatbox.offsetHeight;
                     if (num == 0) {
@@ -314,7 +331,7 @@
                         document.querySelector(".chat-box").innerHTML += `<div class="system message"><div class="text">${message}</diva></div>`
                     } else {
                         let message = e.data.message;
-                        document.querySelector(".chat-box").innerHTML += `<div class="other-chat message"><span class="name">${num}번</span><span class="text">${message}</span></div>`
+                        document.querySelector(".chat-box").innerHTML += `<div class="other-chat message"><span class="name">${name}[${num}번]</span><span class="text">${message}</span></div>`
                     }
                     document.querySelector(".chat-box").scrollTo({ top: maxScrollTop, behavior: "smooth" })
                     break;
