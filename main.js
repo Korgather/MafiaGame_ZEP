@@ -317,6 +317,8 @@ App.onJoinPlayer.Add(function (p) {
 		});
 		p.save();
 	}
+	p.tag = {};
+	p.tag.data = {};
 	p.tag = {
 		data: {
 			id: p.id,
@@ -575,7 +577,7 @@ function dead(player) {
 	player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
 	player.tag.ghostWidget.sendMessage({
 		type: "init",
-		num: player.tag.data.index,
+		myNum: player.tag.data.index,
 		role: player.tag.role,
 		isMobile: player.isMobile,
 		chatEnable: true,
@@ -1036,10 +1038,16 @@ function gameEndCheck(roomNum) {
 					p.tag.ghostWidget = null;
 				}
 				if (p.tag.data.joined == true) {
-					if (p.tag.role == "마피아" || p.tag.role == "스파이") {
-						giveExp(p, 2);
+					if (p.tag.team == "마피아") {
+						giveExp(p, 4);
 					} else {
-						giveExp(p, 5);
+						giveExp(p, 5, true);
+					}
+				} else {
+					if (p.tag.team == "마피아") {
+						giveExp(p, 3);
+					} else {
+						giveExp(p, 3, true);
 					}
 				}
 			}
@@ -1062,10 +1070,16 @@ function gameEndCheck(roomNum) {
 					p.tag.ghostWidget = null;
 				}
 				if (p.tag.data.joined == true) {
-					if (p.tag.role == "마피아") {
-						giveExp(p, 10);
+					if (p.tag.team == "마피아") {
+						giveExp(p, 12, true);
 					} else {
-						giveExp(p, 5);
+						giveExp(p, 4);
+					}
+				} else {
+					if (p.tag.team == "마피아") {
+						giveExp(p, 8, true);
+					} else {
+						giveExp(p, 2);
 					}
 				}
 			}
@@ -1161,7 +1175,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				liveList,
 				time: room.stateTimer,
 				role: player.tag.role,
-				myNum: player.tag.data.index
+				myNum: player.tag.data.index,
 			});
 			player.tag.widget.onMessage.Add(function (player, data) {
 				switch (data.type) {
@@ -1213,7 +1227,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				time: room.stateTimer,
 				chatEnable: mafiaTeamCount > 1,
 				role: player.tag.role,
-				myNum: player.tag.data.index
+				myNum: player.tag.data.index,
 			});
 
 			player.tag.widget.onMessage.Add(function (player, data) {
@@ -1268,7 +1282,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				liveList,
 				time: room.stateTimer,
 				role: player.tag.role,
-				myNum: player.tag.data.index
+				myNum: player.tag.data.index,
 			});
 			player.tag.widget.onMessage.Add(function (player, data) {
 				switch (data.type) {
@@ -1312,7 +1326,7 @@ function nightPlayerEvent(player, text, roomNum) {
 			player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
 			player.tag.ghostWidget.sendMessage({
 				type: "init",
-				num: player.tag.data.index,
+				myNum: player.tag.data.index,
 				time: room.stateTimer,
 				role: player.tag.role,
 				isMobile: player.isMobile,
@@ -1426,7 +1440,7 @@ function nightPlayerEvent(player, text, roomNum) {
 	player.sendUpdated();
 }
 
-function giveExp(p, point) {
+function giveExp(p, point, win = false) {
 	if (!p.isGuest) {
 		if (p.storage == null) {
 			p.storage = JSON.stringify({
@@ -1434,14 +1448,42 @@ function giveExp(p, point) {
 			});
 			p.save();
 		}
-		let myExp = JSON.parse(p.storage).exp;
 
-		p.storage = JSON.stringify({
-			exp: myExp + point,
-		});
+		const pStorage = JSON.parse(p.storage);
 
-		p.showCustomLabel(`경험치: ${point} 흭득`);
+		if (!pStorage.hasOwnProperty("mafiaWin")) {
+			pStorage.mafiaWin = 0;
+		}
+		if (!pStorage.hasOwnProperty("mafiaLose")) {
+			pStorage.mafiaLose = 0;
+		}
+		if (!pStorage.hasOwnProperty("citizenWin")) {
+			pStorage.citizenWin = 0;
+		}
 
+		if (!pStorage.hasOwnProperty("citizenLose")) {
+			pStorage.citizenLose = 0;
+		}
+
+		if (win) {
+			if (p.tag.team == "mafia") {
+				pStorage.mafiaWin++;
+			} else {
+				pStorage.citizenWin++;
+			}
+		} else {
+			if (p.tag.team == "mafia") {
+				pStorage.mafiaLose++;
+			} else {
+				pStorage.citizenLose++;
+			}
+		}
+
+		
+		p.showCustomLabel(`경험치: ${point} 흭득`, );
+		pStorage.exp += point;
+
+		p.storage = JSON.stringify(pStorage);
 		p.save();
 		// App.sayToAll(JSON.parse(p.storage).exp);
 	}
@@ -1472,6 +1514,9 @@ function levelCalc(player) {
 			i++;
 		}
 		title += `Lv.${i}`;
+		title += `\n마피아 ${pStorage.mafiaWin || 0}승 ${pStorage.mafiaLose || 0}패`;
+		title += `\n시민 ${pStorage.citizenWin || 0}승 ${pStorage.citizenLose || 0}패`;
+		player.tag.data.level = `Lv.${i}`;
 		return title;
 	} else {
 		return "비로그인 유저";
