@@ -585,7 +585,7 @@ function dead(player) {
 	player.tag.ghostWidget.onMessage.Add(function (player, data) {
 		switch (data.type) {
 			case "sendMessage":
-				ghostChatNotify(roomNum, data.num, data.message);
+				ghostChatNotify(roomNum, data.num, data.message, player.name);
 				break;
 		}
 	});
@@ -643,6 +643,7 @@ function startState(roomNum, state) {
 			room.total = room.players.length;
 			const roleArray = createRole(room.players.length);
 			let arrIndex = 0;
+			room.players = shuffle(room.players);
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
 				if (!p) continue;
@@ -1233,7 +1234,7 @@ function nightPlayerEvent(player, text, roomNum) {
 			player.tag.widget.onMessage.Add(function (player, data) {
 				switch (data.type) {
 					case "sendMessage":
-						mafiaChatNotify(roomNum, data.num, data.message);
+						mafiaChatNotify(roomNum, data.num, data.message, player.name);
 						break;
 					case "select":
 						if (!player.tag.useSkill) {
@@ -1335,7 +1336,7 @@ function nightPlayerEvent(player, text, roomNum) {
 			player.tag.ghostWidget.onMessage.Add(function (player, data) {
 				switch (data.type) {
 					case "sendMessage":
-						ghostChatNotify(roomNum, data.num, data.message);
+						ghostChatNotify(roomNum, data.num, data.message, player.name);
 						break;
 				}
 			});
@@ -1357,7 +1358,7 @@ function nightPlayerEvent(player, text, roomNum) {
 			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
 			player.tag.widget.sendMessage({
 				type: "init",
-				num: player.tag.data.index,
+				myNum: player.tag.data.index,
 				total: room.total,
 				liveList,
 				time: room.stateTimer,
@@ -1369,7 +1370,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				switch (data.type) {
 					case "sendMessage":
 						if (player.tag.team == "mafia") {
-							mafiaChatNotify(roomNum, data.num, data.message);
+							mafiaChatNotify(roomNum, data.num, data.message, player.name);
 						}
 						break;
 					case "select":
@@ -1877,7 +1878,7 @@ function InitSpawnPlayer(p) {
 	p.spawnAt(parseInt(Math.random() * 13 + 63), parseInt(Math.random() * 4 + 42));
 }
 
-function mafiaChatNotify(roomNum, num, message) {
+function mafiaChatNotify(roomNum, num, message, name) {
 	let players = GAMEROOM[roomNum].players;
 	for (let i = 0; i < players.length; i++) {
 		let player = App.getPlayerByID(players[i].id);
@@ -1887,7 +1888,7 @@ function mafiaChatNotify(roomNum, num, message) {
 				if (player.tag.widget) {
 					player.tag.widget.sendMessage({
 						type: "chatNotify",
-						name: player.name,
+						name: name,
 						num,
 						message,
 					});
@@ -1897,7 +1898,7 @@ function mafiaChatNotify(roomNum, num, message) {
 	}
 }
 
-function ghostChatNotify(roomNum, num, message) {
+function ghostChatNotify(roomNum, num, message, name) {
 	let players = GAMEROOM[roomNum].players;
 	for (let i = 0; i < players.length; i++) {
 		let player = App.getPlayerByID(players[i].id);
@@ -1907,7 +1908,7 @@ function ghostChatNotify(roomNum, num, message) {
 				if (player.tag.ghostWidget) {
 					player.tag.ghostWidget.sendMessage({
 						type: "chatNotify",
-						name: player.name,
+						name: name,
 						num,
 						message,
 					});
