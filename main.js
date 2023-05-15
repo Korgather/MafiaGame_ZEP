@@ -999,7 +999,7 @@ function nightResult(roomNum) {
 	if (text == "") {
 		sendMessageToRoom(roomNum, `✨ 이번 밤에 아무도 죽지 않았습니다.`);
 	} else {
-		sendMessageToRoom(roomNum, `─────────────────\n${text}─────────────────`);
+		sendMessageToRoom(roomNum, `${text}`);
 	}
 
 	// }
@@ -1212,12 +1212,17 @@ function nightPlayerEvent(player, text, roomNum) {
 			player.attackSprite = mafiaAttackSprite;
 			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
 
+			const teamIndexArray = [];
 			mafiaTeamCount = 0;
 			for (let playerData of room.players) {
 				let p = App.getPlayerByID(playerData.id);
 				if (!p) continue;
 				if (p.tag.data.joined == true && p.tag.team == "mafia") {
 					mafiaTeamCount++;
+					teamIndexArray.push({
+						index: p.tag.data.index,
+						role: p.tag.role
+					})
 				}
 			}
 			player.tag.widget.sendMessage({
@@ -1229,6 +1234,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				chatEnable: mafiaTeamCount > 1,
 				role: player.tag.role,
 				myNum: player.tag.data.index,
+				teamIndexArray: teamIndexArray
 			});
 
 			player.tag.widget.onMessage.Add(function (player, data) {
@@ -1562,7 +1568,6 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 			if (data.joined) room.alive++;
 		});
 	}
-	room.alive = room.alive;
 	for (let roomPlayerData of room.players) {
 		let id = roomPlayerData.id;
 		let p = App.getPlayerByID(id);
@@ -1630,7 +1635,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						isMobile: p.isMobile,
 					});
 					if (p.tag.data.joined) {
-						p.sendMessage(`─────────────────\n🌞 ${room.turnCount}번째 아침\n─────────────────`, 0x00ff00);
+						p.sendMessage(`🌞 ${room.turnCount}번째 아침`, 0x00ff00);
 					}
 					break;
 				case STATE_VOTE:
@@ -1776,9 +1781,11 @@ function WatingRoomOnMessage(player, data) {
 					id: data.id,
 				});
 				let target = App.getPlayerByID(data.id);
-				target?.tag.data.kickCount ? target.tag.data.kickCount++ : (target.tag.data.kickCount = 1);
-				if (target.tag.data.kickCount >= 3) {
-					quitPlayer(target);
+				if(target){
+					target?.tag.data.kickCount ? target.tag.data.kickCount++ : (target.tag.data.kickCount = 1);
+					if (target.tag.data.kickCount >= 3) {
+						quitPlayer(target);
+					}
 				}
 			}
 			break;
