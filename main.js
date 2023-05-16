@@ -1449,16 +1449,16 @@ function nightPlayerEvent(player, text, roomNum) {
     player.sendUpdated();
 }
 
-function giveExp(p, point, mafiaWin = false) {
-    if (!p.isGuest) {
-        if (p.storage == null) {
-            p.storage = JSON.stringify({
+function giveExp(player, point, mafiaWin = false) {
+    if (!player.isGuest) {
+        if (player.storage == null) {
+            player.storage = JSON.stringify({
                 exp: 0,
             });
-            p.save();
+            player.save();
         }
 
-        const pStorage = JSON.parse(p.storage);
+        const pStorage = JSON.parse(player.storage);
 
         if (!pStorage.hasOwnProperty("mafiaWin")) {
             pStorage.mafiaWin = 0;
@@ -1474,18 +1474,18 @@ function giveExp(p, point, mafiaWin = false) {
             pStorage.citizenLose = 0;
         }
 
-        if (win) {
-            if (p.tag.role == "스파이") {
+        if (mafiaWin) {
+            if (player.tag.role == "스파이") {
                 pStorage.mafiaWin++;
-            } else if (p.tag.team == "mafia") {
+            } else if (player.tag.team == "mafia") {
                 pStorage.mafiaWin++;
             } else {
                 pStorage.citizenLose++;
             }
         } else {
-            if (p.tag.role == "스파이") {
+            if (player.tag.role == "스파이") {
                 pStorage.mafiaLose++;
-            } else if (p.tag.team == "mafia") {
+            } else if (player.tag.team == "mafia") {
                 pStorage.mafiaLose++;
             } else {
                 pStorage.citizenWin++;
@@ -1493,11 +1493,11 @@ function giveExp(p, point, mafiaWin = false) {
         }
 
 
-        p.showCustomLabel(`경험치: ${point} 흭득`,);
+        player.showCustomLabel(`경험치: ${point} 흭득`,);
         pStorage.exp += point;
 
-        p.storage = JSON.stringify(pStorage);
-        p.save();
+        player.storage = JSON.stringify(pStorage);
+        player.save();
         // App.sayToAll(JSON.parse(p.storage).exp);
     }
     // App.sayToAll(App.worldHashID);
