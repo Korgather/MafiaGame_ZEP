@@ -928,21 +928,21 @@ function allHidden(roomNum) {
 function clearHidden(roomNum) {
     let room = GAMEROOM[roomNum];
     for (let playerData of room.players) {
-        let p = App.getPlayerByID(playerData.id);
-        if (!p) continue;
-        if (p.tag.data.joined == true) {
-            let room = GAMEROOM[p.tag.data.roomNum];
+        let player = App.getPlayerByID(playerData.id);
+        if (!player) continue;
+        if (player.tag.data.joined == true) {
+            let room = GAMEROOM[player.tag.data.roomNum];
             let startPoint = room.startPoint;
-            p.moveSpeed = 0;
-            if (p.tag.name) {
-                p.name = `${p.tag.name}`;
+            player.moveSpeed = 0;
+            if (player.tag.name) {
+                player.name = `${player.tag.name}`;
             }
-            p.spawnAt(startPoint[0] + coordinates[p.tag.data.index]?.x, startPoint[1] + coordinates[p.tag.data.index]?.y);
-            p.sprite = null;
-            p.hidden = false;
-            p.chatEnabled = true;
+            player.spawnAt(startPoint[0] + coordinates[player.tag.data.index]?.x, startPoint[1] + coordinates[player.tag.data.index]?.y);
+            player.sprite = null;
+            player.hidden = false;
+            player.chatEnabled = true;
             // p.chatGroupID = 0;
-            p.sendUpdated();
+            player.sendUpdated();
         }
     }
 }
@@ -1569,6 +1569,7 @@ function switchAllPlayersWidget(roomNum, htmlName) {
 
 function sendMessageToPlayerWidget(roomNum, data = null) {
     let room = GAMEROOM[roomNum];
+    if(!room) return;
     if (room.start) {
         room.players.forEach((data) => {
             if (data.joined) room.alive++;
