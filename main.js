@@ -1731,6 +1731,12 @@ function WatingRoomOnMessage(player, data) {
 
             let playerCount = roomPlayers.length;
             if (playerCount < 8) {
+                if(player.tag.kickUntil){
+                    if(player.tag.kickUntil < Time.GetUtcTime()){
+                        player.showCenterLabel("강퇴를 당해서 30초간 게임에 참가할 수 없습니다.");
+                        return;
+                    }
+                }
                 if (!player.tag.data.joined) {
                     player.tag.data.joined = true;
                     player.tag.data.roomNum = roomNum;
@@ -1791,7 +1797,7 @@ function WatingRoomOnMessage(player, data) {
                 if (target) {
                     target?.tag.data.kickCount ? target.tag.data.kickCount++ : (target.tag.data.kickCount = 1);
                     if (target.tag.data.kickCount >= 3) {
-                        quitPlayer(target);
+                        quitPlayer(target, true);
                     }
                 }
             }
@@ -1840,7 +1846,7 @@ function updatePlayerCount() {
     }
 }
 
-function quitPlayer(player) {
+function quitPlayer(player, kick = false) {
     let roomNum = player.tag.data.roomNum;
     let room;
     for (let p of _players) {
@@ -1870,6 +1876,10 @@ function quitPlayer(player) {
         id: player.id,
         kickList: player.tag.data.kickList,
     });
+    
+    if(kick) {
+        player.tag.kickUntil = Time.GetUtcTime() + 30000;
+    }
 
     player.tag.data.roomNum = -1;
     player.tag.data.joined = false;
