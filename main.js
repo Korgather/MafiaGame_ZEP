@@ -1732,7 +1732,7 @@ function WatingRoomOnMessage(player, data) {
             let playerCount = roomPlayers.length;
             if (playerCount < 8) {
                 if(player.tag.kickUntil){
-                    if(player.tag.kickUntil < Time.GetUtcTime()){
+                    if(player.tag.kickUntil > Time.GetUtcTime()){
                         player.showCenterLabel("강퇴를 당해서 30초간 게임에 참가할 수 없습니다.");
                         return;
                     }
