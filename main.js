@@ -709,12 +709,12 @@ function startState(roomNum, state) {
                 for (let playerData of GAMEROOM[roomNum].players) {
                     let p = App.getPlayerByID(playerData.id);
                     if (!p) continue;
-                    if (p.tag.data.joined == true) {
+                    if (p.tag.data.joined == true && coordinates.hasOwnProperty(player.tag.data.index)) {
                         let room = GAMEROOM[roomNum];
                         let startPoint = room.startPoint;
                         p.moveSpeed = 0;
                         p.chatEnabled = false;
-                        p.spawnAt(parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index]?.x), parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index]?.y));
+                        p.spawnAt(parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index].x), parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index].y));
                         p.sendUpdated();
                     }
                 }
@@ -930,14 +930,14 @@ function clearHidden(roomNum) {
     for (let playerData of room.players) {
         let player = App.getPlayerByID(playerData.id);
         if (!player) continue;
-        if (player.tag.data.joined == true) {
+        if (player.tag.data.joined == true && coordinates.hasOwnProperty(player.tag.data.index)) {
             let room = GAMEROOM[player.tag.data.roomNum];
             let startPoint = room.startPoint;
             player.moveSpeed = 0;
             if (player.tag.name) {
                 player.name = `${player.tag.name}`;
             }
-            player.spawnAt(startPoint[0] + coordinates[player.tag.data.index]?.x, startPoint[1] + coordinates[player.tag.data.index]?.y);
+            player.spawnAt(startPoint[0] + coordinates[player.tag.data.index].x, startPoint[1] + coordinates[player.tag.data.index].y);
             player.sprite = null;
             player.hidden = false;
             player.chatEnabled = true;
