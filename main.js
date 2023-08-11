@@ -815,12 +815,18 @@ function showRoleWidget(player) {
     }
     let align = player.isMobile ? "middle" : "middleright";
 
+	if(player.tag.roleWidget){
+		player.tag.roleWidget.destroy();
+		player.tag.roleWidget = null;
+	}
     player.tag.roleWidget = player.showWidget(`${widgetName}`, `${align}`, 300, 400);
 
     player.tag.roleWidget.onMessage.Add(function (player, data) {
         if (data.type == "close") {
-            player.tag.roleWidget.destroy();
-            player.tag.roleWidget = null;
+			if(player.tag.roleWidget){
+				player.tag.roleWidget.destroy();
+				player.tag.roleWidget = null;
+			}
         }
     });
 }
@@ -941,7 +947,11 @@ function clearHidden(roomNum) {
             if (player.tag.name) {
                 player.name = `${player.tag.name}`;
             }
-            player.spawnAt(startPoint[0] + coordinates[player.tag.data.index]?.x, startPoint[1] + coordinates[player.tag.data.index]?.y);
+			let x = startPoint[0] + coordinates[player.tag.data.index]?.x;
+			let y = tartPoint[1] + coordinates[player.tag.data.index]?.y;
+			if(Number.isInteger(x) && Number.isInteger(y)){
+				player.spawnAt(X, y);
+			}
             player.sprite = null;
             player.hidden = false;
             player.chatEnabled = true;
