@@ -1586,11 +1586,17 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 			if (data.joined) room.alive++;
 		});
 	}
-	for (let roomPlayerData of room.players) {
+	const toRemove = [];
+
+	for (let i = 0; i < room.players.length; i++) {
+		let roomPlayerData = room.players[i];
 		let id = roomPlayerData.id;
 		let p = App.getPlayerByID(id);
 
-		if (!p) continue;
+		if (!p) {
+			toRemove.push(i);
+			continue;
+		}
 		let p_widget = p.tag.widget;
 		if (p_widget) {
 			switch (room.state) {
@@ -1712,6 +1718,10 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 			}
 		}
 	}
+
+	for (let i = toRemove.length - 1; i >= 0; i--) {
+		room.players.splice(toRemove[i], 1);
+	}
 }
 
 function WatingRoomOnMessage(player, data) {
@@ -1767,25 +1777,24 @@ function WatingRoomOnMessage(player, data) {
 			}
 			break;
 		case "ready":
-			sendMessageToPlayerWidget(roomNum, {
-				type: "ready",
-				id: player.id,
-			});
 			if (!player.tag.data.ready) {
 				player.tag.data.ready = true;
 				room.readyCount++;
+				sendMessageToPlayerWidget(roomNum, {
+					type: "ready",
+					id: player.id,
+				});
 			}
-
 			break;
 		case "cancle-ready":
 			if (player.tag.data.ready) {
 				room.readyCount--;
 				player.tag.data.ready = false;
+				sendMessageToPlayerWidget(roomNum, {
+					type: "cancle-ready",
+					id: player.id,
+				});
 			}
-			sendMessageToPlayerWidget(roomNum, {
-				type: "cancle-ready",
-				id: player.id,
-			});
 			break;
 		case "kick":
 			let kickList = player.tag.data.kickList;
