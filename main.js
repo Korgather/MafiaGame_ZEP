@@ -712,8 +712,8 @@ function startState(roomNum, state) {
 						let startPoint = room.startPoint;
 						p.moveSpeed = 0;
 						p.chatEnabled = false;
-						let x = parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index]?.x);
-						let y = parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index]?.y);
+						let x = parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index].x);
+						let y = parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index].y);
 						if (Number.isInteger(x) && Number.isInteger(y)) {
 							p.spawnAt(x, y);
 							p.sendUpdated();
@@ -945,8 +945,8 @@ function clearHidden(roomNum) {
 			if (player.tag.name) {
 				player.name = `${player.tag.name}`;
 			}
-			let x = startPoint[0] + coordinates[player.tag.data.index]?.x;
-			let y = tartPoint[1] + coordinates[player.tag.data.index]?.y;
+			let x = startPoint[0] + coordinates[player.tag.data.index].x;
+			let y = startPoint[1] + coordinates[player.tag.data.index].y;
 			if (Number.isInteger(x) && Number.isInteger(y)) {
 				player.spawnAt(X, y);
 			}
@@ -1601,7 +1601,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 		if (p_widget) {
 			switch (room.state) {
 				case STATE_INIT:
-					switch (data?.type) {
+					switch (data.type) {
 						case "join":
 							p_widget.sendMessage({
 								type: "join",
