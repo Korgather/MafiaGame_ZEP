@@ -948,7 +948,7 @@ function clearHidden(roomNum) {
 			let x = startPoint[0] + coordinates[player.tag.data.index].x;
 			let y = startPoint[1] + coordinates[player.tag.data.index].y;
 			if (Number.isInteger(x) && Number.isInteger(y)) {
-				player.spawnAt(X, y);
+				player.spawnAt(x, y);
 			}
 			player.sprite = null;
 			player.hidden = false;
