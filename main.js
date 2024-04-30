@@ -308,6 +308,11 @@ App.addOnLocationTouched("detective", function (player) {
 // mafiaTarget: false,
 // widget: null,
 
+App.onStart.Add(function () {
+	App.enableFreeView = false;
+	App.sendUpdated();
+});
+
 App.onJoinPlayer.Add(function (p) {
 	_players = App.players;
 	InitSpawnPlayer(p);
