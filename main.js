@@ -363,7 +363,7 @@ App.onJoinPlayer.Add(function (p) {
 App.onLeavePlayer.Add(function (p) {
 	_players = App.players;
 	if (App.playerCount == 0) {
-		App.httpGet("https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" + App.mapHashID + "&playerCount=" + 0, {}, (a) => {});
+		sendPlayerCountDataToServer();
 	}
 
 	if (p.tag.data.joined == true) {
@@ -412,16 +412,16 @@ App.onSay.add(function (player, text) {
 	}
 });
 
-let apiRequestDelay = 15;
+let apiRequestDelay = 5;
 
 App.onUpdate.Add(function (dt) {
 	// modumeta서버로 플레이어 카운트 보내기
 	if (apiRequestDelay > 0) {
 		apiRequestDelay -= dt;
 		if (apiRequestDelay < 1) {
-			apiRequestDelay = 15;
+			apiRequestDelay = 5;
 
-			App.httpGet("https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" + App.mapHashID + "&playerCount=" + App.playerCount, {}, (a) => {});
+			sendPlayerCountDataToServer();
 		}
 	}
 
@@ -1967,4 +1967,21 @@ function ghostChatNotify(roomNum, num, message, name) {
 			}
 		}
 	}
+}
+
+
+function sendPlayerCountDataToServer() {
+    App.httpPostJson(
+        "https://us-central1-server-for-zep-app.cloudfunctions.net/api/setOnlineUsers",
+        {
+            Authorization: "zep-omok",
+        },
+        {
+            gameId: 'mafia',
+            channelId: App.mapHashID,
+            onlineUsers: App.playerCount,
+        },
+        function (res) {
+        }
+    );
 }
