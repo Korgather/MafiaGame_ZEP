@@ -314,6 +314,8 @@ App.onStart.Add(function () {
 });
 
 App.onJoinPlayer.Add(function (p) {
+	apiRequestDelay = 3;
+
 	_players = App.players;
 	InitSpawnPlayer(p);
 	if (!p.storage) {
@@ -361,6 +363,8 @@ App.onJoinPlayer.Add(function (p) {
 });
 
 App.onLeavePlayer.Add(function (p) {
+	apiRequestDelay = 3;
+
 	_players = App.players;
 	if (App.playerCount == 0) {
 		sendPlayerCountDataToServer();
@@ -418,9 +422,7 @@ App.onUpdate.Add(function (dt) {
 	// modumeta서버로 플레이어 카운트 보내기
 	if (apiRequestDelay > 0) {
 		apiRequestDelay -= dt;
-		if (apiRequestDelay < 1) {
-			apiRequestDelay = 5;
-
+		if (apiRequestDelay < 0) {
 			sendPlayerCountDataToServer();
 		}
 	}
