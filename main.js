@@ -367,7 +367,7 @@ App.onLeavePlayer.Add(function (p) {
 
 	_players = App.players;
 	if (App.playerCount == 0) {
-		sendPlayerCountDataToServer();
+		sendPlayerCountDataToServer2();
 	}
 
 	if (p.tag.data.joined == true) {
@@ -423,7 +423,7 @@ App.onUpdate.Add(function (dt) {
 	if (apiRequestDelay > 0) {
 		apiRequestDelay -= dt;
 		if (apiRequestDelay < 0) {
-			sendPlayerCountDataToServer();
+			sendPlayerCountDataToServer2();
 		}
 	}
 
@@ -1971,6 +1971,9 @@ function ghostChatNotify(roomNum, num, message, name) {
 	}
 }
 
+const AWS_API = 'https://jstvymmti6.execute-api.ap-northeast-2.amazonaws.com/liveAppDBRequest';
+const mapHashId = App.mapHashID;
+const spaceHashId = App.spaceHashID;
 
 function sendPlayerCountDataToServer() {
     App.httpPostJson(
@@ -1986,4 +1989,24 @@ function sendPlayerCountDataToServer() {
         function (res) {
         }
     );
+}
+
+function sendPlayerCountDataToServer2(callback = null) {
+	const category = "mafia";
+	const data = {
+		category: category,
+		channelId: mapHashId,
+		onlineUsers: App.playerCount,
+	};
+	let saveObject = { ...data, collection: "CCU", spaceHashID: spaceHashId, key: `CCU_${category}_${spaceHashId}_${mapHashId}` };
+
+	App.httpPostJson(AWS_API, null, saveObject, (res) => {
+		if (callback) {
+			if (res.startsWith("success", 1)) {
+				callback(true);
+			} else {
+				callback(false);
+			}
+		}
+	});
 }
