@@ -26,6 +26,28 @@
             align-items: center;
             padding: 0px;
             margin: 0px;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+            /*스크롤바의 너비*/
+        }
+
+        ::-webkit-scrollbar-thumb {
+            /* 스크롤바의 길이 */
+            background: #5e5743;
+            /* 스크롤바의 색상 */
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            border-radius: 10px;
+            background-color: rgba(218, 222, 226, 0.6);
+            /*스크롤바 뒷 배경 색상*/
         }
 
         .hidden {
@@ -34,6 +56,10 @@
 
         .ready {
             background-color: #448f5d !important;
+        }
+
+        .level {
+            font-size: 13px;
         }
 
         .container {
@@ -66,9 +92,10 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 15px;
+            gap: 5x;
             width: 380px;
-            height: 150px;
+            height: max-content;
+            padding: 20px 20px;
         }
 
         .button-join>span {
@@ -77,20 +104,20 @@
             align-items: center;
             font-family: "Pretendard";
             font-weight: bold;
-            font-size: 40px;
         }
 
         .button-join {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 60px;
-            width: 80%;
+            height: 100%;
+            width: 55px;
             cursor: pointer;
             border-radius: 2px;
             background-color: #448f5d;
             color: white;
             border: none;
+            padding: 2px 0px;
         }
 
         .header {
@@ -137,6 +164,31 @@
 
         }
 
+        .li-func {
+            color: white;
+            box-sizing: border-box;
+            padding: 0px 0px 5px;
+            display: grid;
+            grid-template-columns: 2fr 4fr 2fr 3fr 3fr;
+            gap: 5px;
+            justify-content: center;
+            border-bottom: solid 1px lightgray;
+            margin-bottom: 6px;
+        }
+
+        .li-func>div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            height: 20px;
+        }
+
+        .li-func>.quit {
+            cursor: pointer;
+            background-color: #f22323;
+        }
+
         .li {
             display: grid;
             grid-template-columns: 2fr 4fr 2fr 3fr 3fr;
@@ -146,7 +198,6 @@
             color: white;
             text-align: center;
             margin-bottom: 10px;
-            font-size: 13px;
         }
 
         .button-ready {
@@ -174,15 +225,87 @@
             gap: 5px;
         }
 
-        span {
-            display: flex;
-            align-items: center;
-            line-height: 21px;
-            font-size: 14px;
+        .ing {
+            background-color: #f22323;
         }
 
-        button {
+        .room-list {
+            display: flex;
+            margin-top: 5px;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            height: 184px;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            padding-right: 5px;
+        }
+
+        .room {
+            display: flex;
             font-family: 'Pretendard-Regular';
+            color: white;
+            justify-content: space-between;
+            width: 95%;
+            font-size: 20px;
+            background-color: #3c3030;
+            padding: 8px 8px;
+            border-radius: 8px;
+        }
+
+        .right {
+            display: flex;
+            font-size: 16px;
+            gap: 10px;
+        }
+
+        @media (max-width: 325px) {
+
+            .button-kick,
+            .button-ready {
+                font-size: 11px;
+            }
+
+            .container>div>div.header {
+                display: none;
+            }
+
+            .level {
+                font-size: 11px;
+            }
+
+            .box.small {
+                width: 320px;
+            }
+
+            .box {
+                width: 320px;
+                height: 200px;
+                font-size: 12px;
+            }
+
+            .container {
+                width: 320px;
+                height: 200px;
+            }
+
+            .room {
+                font-size: 16px;
+            }
+
+            .right {
+                font-size: 14px;
+            }
+
+            .header {
+                font-size: 18px;
+                height: 22px;
+            }
+
+            .body {
+                width: 300px;
+            }
         }
     </style>
 </head>
@@ -194,7 +317,13 @@
                 마피아게임 대기실
             </div>
             <div class="list">
-
+                <div class="li-func">
+                    <div class="header-level"></div>
+                    <div class="header-player"></div>
+                    <div class="header-run-count"></div>
+                    <div></div>
+                    <div class="quit" onclick="Quit()">나가기</div>
+                </div>
                 <div class="li-header">
                     <div class="header-level">레벨</div>
                     <div class="header-player">닉네임</div>
@@ -220,122 +349,305 @@
     <div class="container-ready">
         <div class="box small">
             <div class="header">
-                마피아게임에 참가하시겠습니까?
+                마피아게임
             </div>
-            <button class="button-join"><span style="height: 100%;">참 가</span></button>
+            <div class="room-list">
+                <div class="room" data-roomNum="1">
+                    <div class="room-num">
+                        1번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="2">
+                    <div class="room-num">
+                        2번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="3">
+                    <div class="room-num">
+                        3번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="4">
+                    <div class="room-num">
+                        4번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="5">
+                    <div class="room-num">
+                        5번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="6">
+                    <div class="room-num">
+                        6번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="7">
+                    <div class="room-num">
+                        7번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+                <div class="room" data-roomNum="8">
+                    <div class="room-num">
+                        8번방
+                    </div>
+                    <div class="right">
+                        <div class="room-player-count">
+                            <span class="player-count">0</span>
+                            <span>명 참여중</span>
+                        </div>
+                        <div class="button-join" onclick="join(this)">참가</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
-    </div>
-    <script>
-        let myID;
-        window.addEventListener("message", (e) => {
-            switch (e.data.type) {
-                case "setID":
-                    if (myID === undefined) {
-                        myID = e.data?.id;
+        <script>
+            let myID;
+            let roomNum;
+
+            window.addEventListener("message", (e) => {
+                switch (e.data.type) {
+                    case "setID":
+                        if (myID === undefined) {
+                            myID = e.data?.id;
+                        }
+                        if (e.data.isMobile) {
+                            //태블릿
+                            if (window.screen.width >= 768) {
+                                window.parent.postMessage({
+                                    type: 'WidgetRearrange',
+                                    top: '-40px', // 위치조정
+                                    left: '60px',
+                                    anchor: 'topright'
+                                }, "*");
+                            } else {
+
+                                document.querySelector(".room-list").style.height = "120px";
+                                document.querySelector(".box.small").style.padding = "10px";
+
+                                window.parent.postMessage({
+                                    type: 'WidgetRearrange',
+                                    top: '-50px', // 위치조정
+                                    width: '320px',
+                                    anchor: "top",
+                                    left: "30px"
+                                }, "*");
+
+                            }
+                        } else {
+                            window.parent.postMessage({
+                                type: 'WidgetRearrange',
+                                top: '-12px', // 위치조정
+                                left: `-120px`
+                            }, "*");
+                        }
+
+                        break;
+                    case "init":
+                        AppendList(e.data?.data);
+                        break;
+                    case "join":
+                        let data = e.data?.data;
+                        if (data.id == myID) {
+                            document.querySelector(".container-ready").classList.add("hidden");
+                            document.querySelector(".container").classList.remove("hidden");
+                            AppendList(data.roomData.players);
+                        } else {
+                            for (let playerData of data.roomData.players) {
+                                if (playerData.id == data.id) {
+                                    AppendList(playerData);
+                                    break;
+                                }
+                            }
+                        }
+
+                        break;
+                    case "ready":
+                        let button = document.getElementById(e.data.id).querySelector(".button-ready");
+                        button.classList.add("ready");
+                        break;
+                    case "cancle-ready":
+                        document.getElementById(e.data.id).querySelector(".button-ready").classList.remove("ready");
+                        break;
+                    case "leave":
+                        //console.log(e.data);
+                        DeleteList(e.data.id);
+                        DecreaseKickCount(e.data.kickList);
+                        break;
+                    case "kick":
+                        IncreaseKickCount(e.data.id);
+                        break;
+                    case "cancle-kick":
+                        DecreaseKickCount(e.data.id);
+                        break;
+                    case "kicked":
+                        document.querySelector(".container-ready").classList.remove("hidden");
+                        document.querySelector(".container").classList.add("hidden");
+                        //DeleteList(e.data.id);
+                        break;
+                    case "updatePlayerCount":
+                        let gameRooms = e.data.data;
+
+                        document.querySelectorAll(".room").forEach((el) => {
+                            el.querySelector(".player-count").innerHTML = gameRooms[el.dataset.roomnum].players.length;
+                            if (gameRooms[el.dataset.roomnum].start == true) {
+                                el.querySelector(".button-join").classList.add("ing");
+                                el.querySelector(".button-join").innerHTML = "게임중";
+                            } else {
+                                el.querySelector(".button-join").classList.remove("ing");
+                                el.querySelector(".button-join").innerHTML = "참가";
+                            }
+                        })
+                        break;
+                }
+            })
+
+            function join(el) {
+                let parentElement = el.parentElement
+                while (true) {
+                    if (parentElement.classList.contains("room")) {
+                        let roomNum = parentElement.dataset.roomnum;
+                        window.parent.postMessage({ type: "join", roomNum: roomNum }, "*")
+                        break;
                     }
-                    break;
-                case "init":
-
-                    AppendList(e.data?.data);
-                    break;
-                case "join":
-                    if (e.data?.data.id == myID) {
-                        document.querySelector(".container-ready").classList.add("hidden");
-                        document.querySelector(".container").classList.remove("hidden");
-                    }
-
-                    AppendList(e.data?.data);
-
-                    break;
-                case "ready":
-                    let button = document.getElementById(e.data.id).querySelector(".button-ready");
-                    button.classList.add("ready");
-                    break;
-                case "cancle-ready":
-                    document.getElementById(e.data.id).querySelector(".button-ready").classList.remove("ready");
-                    break;
-                case "leave":
-                    console.log(e.data);
-                    DeleteList(e.data.id);
-                    DecreaseKickCount(e.data.kickList);
-                    break;
-                case "kick":
-                    IncreaseKickCount(e.data.id);
-                    break;
-                case "cancle-kick":
-                    DecreaseKickCount(e.data.id);
-                    break;
-                case "kicked":
-                    document.querySelector(".container-ready").classList.remove("hidden");
-                    document.querySelector(".container").classList.add("hidden");
-                    DeleteList(e.data.id);
-                    break;
-            }
-        })
-
-        document.querySelector(".button-join").addEventListener("click", (e) => {
-            window.parent.postMessage({ type: "join" }, "*")
-        })
-
-        function AppendList(data) {
-            let listTemplate = `
-            <div class="li" id=${data.id}>
-                <div class="level">${isNaN(data.level) ? (data.level == "비로그인 유저" ? "비로그인" : data.level) : "Lv." + data.level}</div>
-                <div class="name">${data.name}</div>
-                <div class="run-count">${data.runCount ? data.runCount : 0}</div>
-                <button onClick="Ready(this)" class="button-ready ${data.isReady ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
-                <button onClick="Kick(this)" class="button-kick">
-                    <span style="height: 100%;">강퇴</span>
-                    <span style="height: 100%;" class="kick-count">${data.kickCount ? data.kickCount : 0}</span>
-                </button>
-            </div>`
-
-            document.querySelector(".list").innerHTML += listTemplate;
-        }
-
-        function Kick(el) {
-            window.parent.postMessage({ type: "kick", id: el.parentElement.id }, "*")
-        }
-
-        function Ready(el) {
-            if (el.parentElement.id == myID) {
-                if (el.classList.contains("ready")) {
-                    window.parent.postMessage({ type: "cancle-ready" }, "*")
-                } else {
-                    window.parent.postMessage({ type: "ready" }, "*")
+                    parentElement = parentElement.parentElement
                 }
             }
-        }
 
-        function DeleteList(id) {
-            let targetEl = document.getElementById(id);
-            targetEl.parentNode.removeChild(targetEl);
-        }
 
-        function IncreaseKickCount(id) {
-            let targetEl = document.getElementById(id);
-            targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) + 1;
-        }
 
-        function DecreaseKickCount(arr) {
-            if (Array.isArray(arr)) {
-                for (let id of arr) {
+            function AppendList(data) {
+                if (Array.isArray(data)) {
+                    document.querySelectorAll(".li").forEach((el) => {
+                        el.remove()
+                    })
+                    for (let sd of data) {
+                        let listTemplate = `
+                        <div class="li" id=${sd.id}>
+                            <div class="level">${isNaN(sd.level) ? (sd.level == "비로그인 유저" ? "비로그인" : sd.level) : "Lv." + sd.level}</div>
+                            <div class="name">${sd.name}</div>
+                            <div class="run-count">${sd.runCount ? sd.runCount : 0}</div>
+                            <button onClick="Ready(this)" class="button-ready ${sd.ready ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
+                            <button onClick="Kick(this)" class="button-kick">
+                                <span style="height: 100%;">강퇴</span>
+                                <span style="height: 100%; padding-top: 4px;" class="kick-count">${sd.kickCount ? sd.kickCount : 0}</span>
+                            </button>
+                        </div>`
+                        document.querySelector(".list").innerHTML += listTemplate;
+                    }
+                } else {
+                    let listTemplate = `
+                        <div class="li" id=${data.id}>
+                            <div class="level">${isNaN(data.level) ? (data.level == "비로그인 유저" ? "비로그인" : data.level) : "Lv." + data.level}</div>
+                            <div class="name">${data.name}</div>
+                            <div class="run-count">${data.runCount ? data.runCount : 0}</div>
+                            <button onClick="Ready(this)" class="button-ready ${data.ready ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
+                            <button onClick="Kick(this)" class="button-kick">
+                                <span style="height: 100%;">강퇴</span>
+                                <span style="height: 100%; padding-top: 4px;" class="kick-count">${data.kickCount ? data.kickCount : 0}</span>
+                            </button>
+                        </div>`
+                    document.querySelector(".list").innerHTML += listTemplate;
+                }
+            }
+
+            function Quit() {
+                window.parent.postMessage({ type: "quit" }, "*")
+            }
+
+            function Kick(el) {
+                window.parent.postMessage({ type: "kick", id: el.parentElement.id }, "*")
+            }
+
+            function Ready(el) {
+                if (el.parentElement.id == myID) {
+                    if (el.classList.contains("ready")) {
+                        window.parent.postMessage({ type: "cancle-ready" }, "*")
+                    } else {
+                        window.parent.postMessage({ type: "ready" }, "*")
+                    }
+                }
+            }
+
+            function DeleteList(id) {
+                let targetEl = document.getElementById(id);
+                targetEl.parentNode.removeChild(targetEl);
+            }
+
+            function IncreaseKickCount(id) {
+                let targetEl = document.getElementById(id);
+                targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) + 1;
+            }
+
+            function DecreaseKickCount(arr) {
+                if (Array.isArray(arr)) {
+                    for (let id of arr) {
+                        let targetEl = document.getElementById(id);
+                        if (targetEl) {
+                            targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
+                        }
+                    }
+                } else {
+                    let id = arr;
                     let targetEl = document.getElementById(id);
                     if (targetEl) {
                         targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
                     }
-                }
-            } else {
-                let id = arr;
-                let targetEl = document.getElementById(id);
-                if (targetEl) {
-                    targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
+
                 }
 
             }
-
-        }
-    </script>
+        </script>
 </body>
 
 </html>

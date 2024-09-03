@@ -5,29 +5,12 @@ const STATE_PLAYING_DAY = 3003;
 const STATE_VOTE = 3004;
 const STATE_VOTE_RESULT = 3005;
 const STATE_END = 3006;
-const coordinates = {
-	1: { x: 28, y: 16 },
-	2: { x: 29, y: 21 },
-	3: { x: 28, y: 26 },
-	4: { x: 21, y: 26 },
-	5: { x: 20, y: 21 },
-	6: { x: 21, y: 16 },
-};
 
+const START_WAIT_TIME = 10;
 // 18,31 - 31,40
 
-let monster = App.loadSpritesheet(
-	"monster.png",
-	96,
-	96,
-	{
-		left: [8, 9, 10, 11],
-		up: [12, 13, 14, 15],
-		down: [4, 5, 6, 7],
-		right: [16, 17, 18, 19],
-	},
-	8
-);
+const MAFIA_CHATTING_CHANNEL = 1;
+const GHOST_CHATTING_CHANNEL = 2;
 
 let ghost = App.loadSpritesheet(
 	"ghost.png",
@@ -95,6 +78,26 @@ let policeAttackSprite = App.loadSpritesheet("policeAttackSprite.png", 24, 29, {
 	down: [0],
 });
 
+let spySprite = App.loadSpritesheet("spySprite.png", 64, 70, {
+	left: [6, 7, 8, 9, 10, 11],
+	right: [12, 13, 14, 15, 16, 17],
+	up: [18, 19, 20, 21, 22, 23],
+	down: [0, 1, 2, 3, 4, 5],
+});
+
+let detectiveSprite = App.loadSpritesheet(
+	"detectiveSprite.png",
+	64,
+	64,
+	{
+		left: [4, 5, 6, 7],
+		up: [12, 13, 14, 15],
+		down: [0, 1, 2, 3],
+		right: [8, 9, 10, 11],
+	},
+	8
+);
+
 let mafiaAttackSprite = App.loadSpritesheet(
 	"bulletSprite2.png",
 	24,
@@ -107,13 +110,6 @@ let mafiaAttackSprite = App.loadSpritesheet(
 	},
 	8
 );
-
-let tomb = App.loadSpritesheet("tomb.png", 46, 59, {
-	left: [0],
-	right: [0],
-	up: [0],
-	down: [0],
-});
 
 let silhouette = App.loadSpritesheet("silhouette2.png", 48, 48, {
 	left: [0],
@@ -133,23 +129,145 @@ const ZONE_MAFIA = [26, 38];
 const ZONE_DOCTOR = [28, 38];
 const ZONE_POLICE = [30, 38];
 
-let _playerCount = 0;
-let _players = App.players;
-let _start = false;
-let _timer = 0;
-let _stateTimer = 0;
-let _state = STATE_INIT;
+const coordinates = {
+	1: { x: 7, y: 3 },
+	2: { x: 11, y: 3 },
+	3: { x: 15, y: 3 },
+	4: { x: 6, y: 7 },
+	5: { x: 16, y: 7 },
+	6: { x: 7, y: 11 },
+	7: { x: 11, y: 11 },
+	8: { x: 15, y: 11 },
+};
+
+const GAMEROOM_START_POINT = {
+	1: [19, 18],
+	2: [53, 18],
+	3: [87, 18],
+	4: [19, 39],
+	5: [87, 39],
+	6: [19, 60],
+	7: [53, 60],
+	8: [87, 60],
+};
+
+const GAMEROOM = {
+	1: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[1],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	2: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[2],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	3: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[3],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	4: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[4],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	5: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[5],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	6: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[6],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	7: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[7],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+	8: {
+		start: false,
+		state: STATE_INIT,
+		stateTimer: 0,
+		startPoint: GAMEROOM_START_POINT[8],
+		players: [],
+		readyCount: 0,
+		tickTockSoundOn: false,
+		turnCount: 0,
+		alive: 0,
+		total: 0,
+		startWaitTime: START_WAIT_TIME,
+		SilhouetteTracker: [],
+	},
+};
+
+let _players;
 let _widget = null;
-
-let _turnCount = 0;
-let _readyCount = 0;
-
-let _mafiaCount = 0;
-let _citizenCount = 0;
-let _tickTockSoundOn = false;
-let _widgetHtml = "WatingRoom.html";
-
-const spawnPoint = [25, 40];
 
 App.addOnLocationTouched("m", function (player) {
 	player.sprite = mafiaSprite;
@@ -169,81 +287,67 @@ App.addOnLocationTouched("p", function (player) {
 	player.sendUpdated();
 });
 
+App.addOnLocationTouched("spy", function (player) {
+	player.sprite = spySprite;
+	player.attackSprite = null;
+	player.sendUpdated();
+});
+
+App.addOnLocationTouched("detective", function (player) {
+	player.sprite = detectiveSprite;
+	player.attackSprite = null;
+	player.sendUpdated();
+});
+
+// joined: false,
+// role: "",
+// voted: false,
+// title: 0,
+// votecount: 0,
+// healed: false,
+// mafiaTarget: false,
+// widget: null,
+
+App.onStart.Add(function () {
+	App.enableFreeView = false;
+	App.sendUpdated();
+});
+
 App.onJoinPlayer.Add(function (p) {
-	p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 11 + 37));
+	apiRequestDelay = 3;
+
 	_players = App.players;
-	p.tag = {
-		joined: false,
-		role: "",
-		voted: false,
-		title: 0,
-		votecount: 0,
-		healed: false,
-		mafiaTarget: false,
-		widget: null,
-	};
-	if (p.storage == null) {
+	InitSpawnPlayer(p);
+	if (!p.storage) {
 		p.storage = JSON.stringify({
 			exp: 0,
 		});
 		p.save();
 	}
-	p.tag.widget = p.showWidget(_widgetHtml, "top", 400, 350);
-	p.tag.widget.sendMessage({ type: "setID", id: p.id });
-	p_widget = p.tag.widget;
+	p.tag = {};
+	p.tag.data = {};
+	p.tag = {
+		data: {
+			id: p.id,
+			name: p.name,
+			level: levelCalc(p),
+		},
+	};
 
-	if (p_widget) {
-		switch (_state) {
-			case STATE_INIT:
-				for (let player of _players) {
-					if (player.tag.joined == true) {
-						let tpStorage = JSON.parse(player.storage);
-						let data = {
-							id: player.id,
-							name: player.name,
-							level: levelCalc(player),
-							runCount: tpStorage.runCount,
-							isReady: player.tag.ready,
-							kickCount: player.tag.kickCount,
-						};
-						p_widget.sendMessage({ type: "init", data: data });
-					}
-				}
-
-				p_widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
-
-				break;
-			case STATE_PLAYING_DAY:
-				p_widget.sendMessage({
-					total: 6,
-					alive: _mafiaCount + _citizenCount,
-					timer: _stateTimer,
-					description: "투표 전까지 이야기를 나누세요.",
-				});
-				break;
-			case STATE_VOTE:
-				p_widget.sendMessage({
-					total: 6,
-					alive: _mafiaCount + _citizenCount,
-					timer: _stateTimer,
-					description: "채팅창에 투표할 플레이어의 번호를 적으세요.(자신에게 투표 불가)",
-				});
-
-				break;
-			case STATE_PLAYING_NIGHT:
-				p_widget.sendMessage({
-					total: 6,
-					alive: _mafiaCount + _citizenCount,
-					timer: _stateTimer,
-					description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
-				});
-
-				break;
-		}
-		// }, 2);
-
-		// _widget.id;
+	if (p.isMobile) {
+		p.displayRatio = 0.7;
+		p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
+		App.putMobilePunch();
+	} else {
+		p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
 	}
+
+	p.tag.widget.sendMessage({ type: "setID", id: p.id, isMobile: p.isMobile });
+	p.tag.widget.sendMessage({
+		type: "updatePlayerCount",
+		data: GAMEROOM,
+	});
+	p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
 
 	p.attackType = 2;
 	p.attackSprite = null;
@@ -259,52 +363,37 @@ App.onJoinPlayer.Add(function (p) {
 });
 
 App.onLeavePlayer.Add(function (p) {
-	if (App.playerCount == 0) {
-		App.httpGet("https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" + App.mapHashID + "&playerCount=" + 0, {}, (a) => {});
-	}
-
-	switch (_state) {
-		case STATE_INIT:
-			if (p.tag.joined == true) {
-				_playerCount--;
-				if (p.tag.ready) {
-					_readyCount--;
-				}
-				let kickList = p.tag.kickList;
-				sendMessageToPlayerWidget({
-					type: "leave",
-					id: p.id,
-					kickList: p.tag.kickList,
-				});
-				if (kickList) {
-					for (let id of kickList) {
-						let target = App.getPlayerByID(id);
-						if (target) {
-							target.tag.kickCount--;
-						}
-					}
-				}
-			}
-			break;
-		case STATE_READY:
-			playerLeft(p);
-			break;
-		case STATE_PLAYING_NIGHT:
-			playerLeft(p);
-			break;
-		case STATE_PLAYING_DAY:
-			playerLeft(p);
-
-			break;
-		case STATE_VOTE:
-			playerLeft(p);
-
-			break;
-		case STATE_END:
-			break;
-	}
+	apiRequestDelay = 3;
 
 	_players = App.players;
+	if (App.playerCount == 0) {
+		sendPlayerCountDataToServer2();
+	}
+
+	if (p.tag.data.joined == true) {
+		let room = GAMEROOM[p.tag.data.roomNum];
+		switch (room.state) {
+			case STATE_INIT:
+				quitPlayer(p);
+				break;
+			case STATE_READY:
+				playerLeft(p);
+				break;
+			case STATE_PLAYING_NIGHT:
+				playerLeft(p);
+				break;
+			case STATE_PLAYING_DAY:
+				playerLeft(p);
+
+				break;
+			case STATE_VOTE:
+				playerLeft(p);
+
+				break;
+			case STATE_END:
+				break;
+		}
+	}
 });
 
 App.onDestroy.Add(function () {
@@ -317,183 +406,219 @@ App.onDestroy.Add(function () {
 	}
 });
 
-App.onStart.Add(function () {
-	startState(STATE_INIT);
-});
-
 App.onSay.add(function (player, text) {
-	if (text == "/경험치") {
-		giveExp(player, 10);
-	}
-
-	player.sendUpdated();
-	// if (text == "참가") {
-	// 	if (_start == true) {
-	// 		player.showCustomLabel("이미 게임이 진행중 입니다.");
-	// 	}
-	// }
-
-	// if (_state == STATE_VOTE) {
-	// 	if (player.tag.joined == true && player.tag.voted == false) {
-	// 		for (let i in _players) {
-	// 			p = _players[i];
-	// 			if (p.tag.joined == true && p.title != 0 && p.title != player.title) {
-	// 				if (text * 1 == p.tag.title) {
-	// 					p.tag.votecount++;
-	// 					player.tag.voted = true;
-	// 					// App.sayToAll(`${p.name}: ${p.tag.votecount} 표`);
-	// 					player.sendUpdated();
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// }
-
-	if (_state == STATE_PLAYING_NIGHT) {
-		if (player.tag.joined == true) {
+	if (player.role >= 3000) {
+		if (text == "/경험치") {
+			giveExp(player, 10);
 		}
+
+		player.sendUpdated();
 	}
 });
 
-let apiRequestDelay = 15;
+let apiRequestDelay = 5;
 
 App.onUpdate.Add(function (dt) {
 	// modumeta서버로 플레이어 카운트 보내기
 	if (apiRequestDelay > 0) {
 		apiRequestDelay -= dt;
-		if (apiRequestDelay < 1) {
-			apiRequestDelay = 15;
-
-			App.httpGet("https://api.metabusstation.shop/api/v1/posts/zep/playercount?hashId=" + App.mapHashID + "&playerCount=" + App.playerCount, {}, (a) => {});
+		if (apiRequestDelay < 0) {
+			sendPlayerCountDataToServer2();
 		}
 	}
 
-	if (_stateTimer > 0) {
-		_stateTimer -= dt;
-		if (_state != STATE_READY && _tickTockSoundOn == false) {
-			if (_stateTimer < 9) {
-				_tickTockSoundOn = true;
-				App.playSound("tickTockSound.mp3");
+	for (let roomNum in GAMEROOM) {
+		let gameRoom = GAMEROOM[roomNum];
+		if (!gameRoom.start) {
+			if (gameRoom.readyCount >= 4 && gameRoom.readyCount == gameRoom.players.length) {
+				gameRoom.startWaitTime -= dt;
+				showLabelToRoom(roomNum, `${Math.round(gameRoom.startWaitTime)}초 후 게임이 시작됩니다.`);
+				if (gameRoom.startWaitTime < 0) {
+					startState(roomNum, STATE_READY);
+				}
+			} else {
+				gameRoom.startWaitTime = START_WAIT_TIME;
 			}
-		}
-	}
-
-	if (_stateTimer < 0) {
-		_stateTimer = 0;
-		switch (_state) {
-			case STATE_READY:
-				startState(STATE_PLAYING_DAY);
-				break;
-			case STATE_PLAYING_DAY:
-				startState(STATE_VOTE);
-				break;
-			case STATE_VOTE:
-				startState(STATE_VOTE_RESULT);
-				break;
-			case STATE_VOTE_RESULT:
-				startState(STATE_PLAYING_NIGHT);
-				break;
-			case STATE_PLAYING_NIGHT:
-				startState(STATE_PLAYING_DAY);
-				break;
+		} else {
+			if (gameRoom.stateTimer > 0) {
+				gameRoom.stateTimer -= dt;
+				if (gameRoom.state != STATE_READY && gameRoom.tickTockSoundOn == false) {
+					if (gameRoom.stateTimer < 9) {
+						gameRoom.tickTockSoundOn = true;
+						playSoundToRoom(roomNum, "tickTockSound.mp3");
+					}
+				}
+				if (gameRoom.stateTimer < 0) {
+					gameRoom.stateTimer = 0;
+					switch (gameRoom.state) {
+						case STATE_READY:
+							startState(roomNum, STATE_PLAYING_NIGHT);
+							break;
+						case STATE_PLAYING_DAY:
+							startState(roomNum, STATE_VOTE);
+							break;
+						case STATE_VOTE:
+							startState(roomNum, STATE_VOTE_RESULT);
+							break;
+						case STATE_VOTE_RESULT:
+							startState(roomNum, STATE_PLAYING_NIGHT);
+							break;
+						case STATE_PLAYING_NIGHT:
+							startState(roomNum, STATE_PLAYING_DAY);
+							break;
+					}
+				}
+			}
 		}
 	}
 });
 
 App.onObjectAttacked.Add(function (p, x, y) {
-	// p.showCustomLabel(`오브젝트를 때렸다.`, 0xffffff, 0x000000, 115);
 	let target = null;
 	let targetNum = 0;
-	if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰") {
-		// App.sayToAll(`오브젝트를 때렸다. 좌표 ${x}, ${y}`);
+	let startPoint;
+	// if (p.tag.role == "마피아" || p.tag.role == "의사" || p.tag.role == "경찰" || p.tag.role == "스파이") {
+	// 	let room = GAMEROOM[p.tag.data.roomNum];
+	// 	startPoint = room.startPoint;
+	// 	targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x - startPoint[0], y: y - startPoint[1] }));
+	// 	p.attackType = 2;
+	// 	p.attackSprite = null;
+	// 	p.attackParam1 = 2;
+	// 	p.attackParam2 = 2;
+	// 	p.sendUpdated();
+	// } else return;
 
-		targetNum = Object.keys(coordinates).find((key) => JSON.stringify(coordinates[key]) === JSON.stringify({ x: x, y: y }));
+	if (!targetNum) return;
 
-		p.moveSpeed = 0;
-		p.attackType = 2;
-		p.attackSprite = null;
-		p.attackParam1 = 2;
-		p.attackParam2 = 3;
-		p.sendUpdated();
-		p.spawnAt(coordinates[p.tag.title].x, coordinates[p.tag.title].y);
-	} else return;
-
-	if (targetNum === undefined) return;
-
-	for (let i in _players) {
-		let player = _players[i];
-		if (player.tag.title == targetNum) {
-			target = player;
-		}
-	}
-
+	// for (let i in _players) {
+	// 	let player = _players[i];
+	// 	if (player.tag.data.index == targetNum) {
+	// 		target = player;
+	// 	}
+	// }
+	let targetRole;
 	if (target !== null) {
 		switch (p.tag.role) {
 			case "경찰":
-				p.playSound("policeAttackSound.mp3");
-				let targetRole = target.tag.role;
-				p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
+				// p.playSound("policeAttackSound.mp3");
+				// targetRole = target.tag.role;
+				// if (targetRole == "마피아") {
+				// 	p.showCustomLabel(`${target.title}의 직업은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
+				// } else {
+				// 	p.showCustomLabel(`${target.title}은 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
+				// }
+				// p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+				// p.moveSpeed = 0;
+				// p.sendUpdated();
 				break;
-			case "마피아":
-				App.playSound("gunSound.WAV");
-				p.showCustomLabel(`${target.title}를 죽이기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
-				target.tag.mafiaTarget = true;
-				break;
-			case "의사":
-				p.playSound("healSound.wav");
-				p.showCustomLabel(`${target.title}를 살리기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
-				// p.tag.healed = false;
-				target.tag.healed = true;
+			// case "마피아":
+			// 	playSoundToRoom(p.tag.data.roomNum, "gunSound.WAV");
+			// 	p.showCustomLabel(`${target.title}를 죽이기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
+			// 	target.tag.mafiaTarget = true;
+			// 	p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+			// 	p.moveSpeed = 0;
+			// 	p.sendUpdated();
+			// 	break;
+			// case "의사":
+			// 	p.playSound("healSound.WAV");
+			// 	p.showCustomLabel(`${target.title}를 살리기로 결졍했습니다.`, 0xffffff, 0x000000, 300);
+			// 	// p.tag.healTarget = false;
+			// 	target.tag.healTarget = true;
+			// 	p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+			// 	p.moveSpeed = 0;
+			// 	p.sendUpdated();
+			// 	break;
+			case "스파이":
+				// targetRole = target.tag.role;
+				// if (targetRole == "마피아") {
+				// 	p.showCustomLabel(`🕵️‍♀️ ${target.title}의 직업은 ${targetRole}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
+				// 	// p.sendMessage("[정보] 밤에 마피아와 채팅을 공유할 수 있게 되었습니다.", 0x00ff00);
+				// 	// p.sendMessage("[정보] 능력을 한번 더 사용할 수 있습니다.", 0x00ff00);
+				// 	p.tag.team = "mafia";
+				// 	// p.chatEnabled = true;
+				// 	// p.chatGroupID = MAFIA_CHATTING_CHANNEL;
+				// 	p.sendUpdated();
+				// 	for (let playerData of GAMEROOM[p.tag.data.roomNum].players) {
+				// 		let player = App.getPlayerByID(playerData.id);
+				// 		if (!player) continue;
+				// 		if (!player.tag.team || !player.tag.team == "mafia" || !player.tag.data.joined) continue;
+				// 		player.sendMessage(`─────────────────\n🕵️‍♀️ ${p.name}(스파이)님이 채팅에 합류했습니다.\n밤에 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
+				// 	}
+				// } else {
+				// 	p.showCustomLabel(`${target.title}은 ${targetRole}입니다.`, 0xffffff, 0x000000, 300, 6000);
+				// 	p.spawnAt(startPoint[0] + coordinates[p.tag.data.index].x, startPoint[1] + coordinates[p.tag.data.index].y);
+				// 	p.moveSpeed = 0;
+				// 	p.sendUpdated();
+				// }
 				break;
 		}
 	}
 });
 
 function dead(player) {
-	// 위젯 메시지
-	// 이 사람의 직업 + 죽었습니다
+	let roomNum = player.tag.data.roomNum;
+	// let room = GAMEROOM[roomNum];
+
 	if (player.tag.role != "마피아") {
-		App.showCustomLabel(`${player.name} 님이 처형당했습니다. 그는 마피아가 아니었습니다.`, 0xffffff, 0x000000, 300, 5000);
+		showLabelToRoom(roomNum, `${player.tag.name} 님이 처형당했습니다. 그는 마피아가 아니었습니다.`);
 		giveExp(player, 2);
 	} else {
-		App.showCustomLabel(`${player.name} 님이 처형당했습니다. 그는 마피아였습니다!`, 0xffffff, 0x000000, 300, 5000);
+		showLabelToRoom(roomNum, `${player.tag.name} 님이 처형당했습니다. 그는 마피아였습니다!`);
 	}
 
 	player.moveSpeed = 80;
+	player.attackParam2 = -1;
+	player.attackSprite = blankObject;
 	player.tag.role = "";
 	player.title = "유령";
-	player.tag.healed = false;
+	if (player.tag.name) {
+		player.name = `${player.tag.name}(유령)`;
+	}
+	player.tag.healTarget = false;
 	player.tag.mafiaTarget = false;
-	player.tag.votecount = 0;
-	player.tag.joined = false;
-	_playerCount--;
+	player.tag.data.votecount = 0;
+	player.tag.data.joined = false;
 	player.sprite = ghost;
+	// player.chatGroupID = GHOST_CHATTING_CHANNEL;
+	player.chatEnabled = false;
+	player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
+	player.tag.ghostWidget.sendMessage({
+		type: "init",
+		myNum: player.tag.data.index,
+		role: player.tag.role,
+		isMobile: player.isMobile,
+		chatEnable: true,
+	});
+	player.tag.ghostWidget.onMessage.Add(function (player, data) {
+		switch (data.type) {
+			case "sendMessage":
+				ghostChatNotify(roomNum, data.num, data.message, player.name);
+				break;
+		}
+	});
+	player.sendMessage(`─────────────────\n☠️ 당신은 죽었습니다.\n 유령들끼리 대화를 할 수 있습니다.\n 밤에는 영매와 대화할 수 있습니다.\n─────────────────`, 0x00ff00);
 	player.sendUpdated();
 
-	// gameEndCheck();
+	// gameEndCheck(roomNum);
 }
 
-function startState(state) {
-	_state = state;
-	_stateTimer = 0;
-	_tickTockSoundOn = false;
+function startState(roomNum, state) {
+	let room = GAMEROOM[roomNum];
+	let widgetHtml;
+	room.state = state;
+	room.stateTimer = 0;
+	room.tickTockSoundOn = false;
 
-	switch (_state) {
+	switch (room.state) {
 		case STATE_INIT:
-			Map.clearAllObjects();
-			// destroyAppWidget();
-			_widgetHtml = "WatingRoom.html";
-
-			updatePlayerWidget(_widgetHtml);
-			_turnCount = 0;
-			_readyCount = 0;
-
-			for (let i in _players) {
-				let p = _players[i];
+			clearRoomObjects(roomNum);
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
 				p.attackType = 2;
 				p.attackSprite = null;
 				p.attackParam1 = 2;
-				p.attackParam2 = 3;
+				p.attackParam2 = 2;
 
 				p.moveSpeed = 80;
 				p.sprite = null;
@@ -501,110 +626,132 @@ function startState(state) {
 				p.hidden = false;
 				p.moveSpeed = 80;
 
-				p.tag.joined = false;
+				p.tag.data.joined = false;
 				p.tag.role = "";
-				p.tag.voted = false;
-				p.tag.title = 0;
-				p.tag.votecount = 0;
-				p.tag.healed = false;
+				p.tag.data.voted = false;
+				p.tag.data.index = 0;
+				p.tag.data.votecount = 0;
+				p.tag.healTarget = false;
 				p.tag.mafiaTarget = false;
-				p.tag.kickList = [];
-				p.tag.ready = false;
-				p.tag.kickCount = 0;
+				p.tag.data.kickList = [];
+				p.tag.data.ready = false;
+				p.tag.data.kickCount = 0;
 
-				p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 10 + 37));
+				// p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 10 + 37));
 				p.sendUpdated();
 			}
-
+			widgetHtml = "WatingRoom.html";
+			switchAllPlayersWidget(roomNum, widgetHtml);
+			gameReset(roomNum);
 			break;
 		case STATE_READY:
-			_stateTimer = 5;
-			_start = true;
-
-			const roleArray = createRole(6);
+			room.stateTimer = 0.1;
+			room.start = true;
+			room.total = room.players.length;
+			const roleArray = createRole(room.players.length);
 			let arrIndex = 0;
-			for (i in _players) {
-				p = _players[i];
+			room.players = shuffle(room.players);
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.widget) {
+					p.tag.widget.destroy();
+					p.tag.widget = null;
+				}
 				let pStorage = JSON.parse(p.storage);
 				pStorage["playCount"] ? pStorage["playCount"]++ : (pStorage["playCount"] = 1);
 				p.storage = JSON.stringify(pStorage);
-				if (p.tag.joined == true) {
-					// p.spawnAt(coordinates[arrIndex + 1].x, coordinates[arrIndex + 1].y);
-					p.title = `${arrIndex + 1} 번 참가자`;
-					p.tag.title = arrIndex + 1;
-					setRole(p, arrIndex, roleArray);
-					arrIndex++;
-				}
+				// p.spawnAt(coordinates[arrIndex + 1].x, coordinates[arrIndex + 1].y);
+				p.title = `${arrIndex + 1} 번 참가자`;
+				p.tag.data.index = arrIndex + 1;
+				setRole(p, arrIndex, roleArray);
+				arrIndex++;
 			}
 
-			sendMessageToPlayerWidget();
-
+			sendMessageToPlayerWidget(roomNum);
+			updatePlayerCount();
 			break;
 		case STATE_PLAYING_DAY:
-			nightResult(++_turnCount);
-			if (gameEndCheck() == false) {
-				tagReset();
+			nightResult(roomNum);
+
+			if (gameEndCheck(roomNum) == false) {
+				tagReset(roomNum);
 				// destroyAppWidget();
-				clearHidden();
+				clearHidden(roomNum);
 				Map.clearAllObjects();
-				App.playSound("morningSound.wav");
-				_stateTimer = 10 * _playerCount;
-				_widgetHtml = "morning.html";
-				updatePlayerWidget(_widgetHtml);
+				playSoundToRoom(roomNum, "morningSound.wav");
+				room.stateTimer = 10 * room.alive > 60 ? 60 : 10 * room.alive;
+				// room.stateTimer = 1000 * room.alive > 60 ? 60 : 10 * room.alive;
+
+				widgetHtml = "morning.html";
+				switchAllPlayersWidget(roomNum, widgetHtml);
+				sendMessageToPlayerWidget(roomNum);
 				// sendMessageToPlayerWidget();
 			}
 			break;
 		case STATE_VOTE:
-			if (gameEndCheck() == false) {
+			if (gameEndCheck(roomNum) == false) {
 				// destroyAppWidget();
-				App.playSound("voteSound.wav");
-				_stateTimer = 17;
+				playSoundToRoom(roomNum, "voteSound.wav");
+				room.stateTimer = 17;
 				// 투표가 시작되었습니다.
-				_widgetHtml = "vote.html";
-				updatePlayerWidget(_widgetHtml);
+				widgetHtml = "vote.html";
+				switchAllPlayersWidget(roomNum, widgetHtml);
+				sendMessageToPlayerWidget(roomNum);
 				// sendMessageToPlayerWidget();
 			}
 			break;
 		case STATE_VOTE_RESULT:
-			if (gameEndCheck() == false) {
-				_stateTimer = 7;
-				voteResult();
+			if (gameEndCheck(roomNum) == false) {
+				room.stateTimer = 7;
+				voteResult(roomNum);
 			}
 			break;
 		case STATE_PLAYING_NIGHT:
-			if (gameEndCheck() == false) {
+			if (gameEndCheck(roomNum) == false) {
 				// destroyAppWidget();
-				tagReset();
-				createSilhouette();
-				allHidden();
-				_stateTimer = 17;
-				App.playSound("nightSound.mp3");
-				_widgetHtml = "night.html";
-				updatePlayerWidget(_widgetHtml);
+				tagReset(roomNum);
+				for (let playerData of GAMEROOM[roomNum].players) {
+					let p = App.getPlayerByID(playerData.id);
+					if (!p) continue;
+					if (p.tag.data.joined == true) {
+						let room = GAMEROOM[roomNum];
+						let startPoint = room.startPoint;
+						p.moveSpeed = 0;
+						p.chatEnabled = false;
+						let x = parseInt(startPoint[0]) + parseInt(coordinates[p.tag.data.index].x);
+						let y = parseInt(startPoint[1]) + parseInt(coordinates[p.tag.data.index].y);
+						if (Number.isInteger(x) && Number.isInteger(y)) {
+							p.spawnAt(x, y);
+							p.sendUpdated();
+						}
+					}
+				}
+				createSilhouette(roomNum);
+				allHidden(roomNum);
+				room.stateTimer = 22;
+				playSoundToRoom(roomNum, "nightSound.mp3");
+
 				// sendMessageToPlayerWidget();
 
-				for (let i in _players) {
-					let p = _players[i];
-					if (p.tag.joined) {
-						p.chatEnabled = false;
+				for (let playerData of room.players) {
+					let p = App.getPlayerByID(playerData.id);
+					if (!p) continue;
+					if (p.tag.data.joined) {
 						p.sendUpdated();
-						if (p.tag.joined == true) {
+						if (p.tag.data.joined == true) {
 							let role = p.tag.role;
-							if (role != "시민") {
-								changeCharacterImage(p, role);
-							}
+							nightPlayerEvent(p, role, roomNum);
+						} else {
+							p.sendMessage(`─────────────────\n🌙 밤이 되었습니다.\n영매와 대화 할 수 있습니다.\n─────────────────`, 0x00ff00);
 						}
 					}
 				}
 			}
 			break;
 		case STATE_END:
-			if (_widget) {
-				_widget.destroy();
-				_widget = null; // must to do for using again
-			}
-			_start = false;
-			startState(STATE_INIT);
+			room.start = false;
+			startState(roomNum, STATE_INIT);
 			break;
 	}
 }
@@ -620,13 +767,23 @@ function createRole(playerCount) {
 		if (i === 2) {
 			return "경찰";
 		}
+		if (i === 3) {
+			return "정치인";
+		}
+		if (i === 4) {
+			return "영매";
+		}
+		if (i === 5) {
+			return "스파이";
+		}
+		if (i === 7) return "마피아";
 		return "시민";
 	});
 	return shuffle(roleArray);
 }
 
 function setRole(player, index, roleArray) {
-	if (player.tag.joined == true) {
+	if (player.tag.data.joined == true) {
 		player.tag.role = roleArray[index];
 		// App.sayToAll(`${player.name}은 ${player.tag.role} 역할, ${index}`);
 
@@ -643,6 +800,7 @@ function showRoleWidget(player) {
 			break;
 		case "마피아":
 			widgetName = `mafia.html`;
+			player.tag.team = "mafia";
 			break;
 		case "의사":
 			widgetName = `doctor.html`;
@@ -650,17 +808,30 @@ function showRoleWidget(player) {
 		case "시민":
 			widgetName = `citizen.html`;
 			break;
+		case "정치인":
+			widgetName = `politician.html`;
+			break;
+		case "영매":
+			widgetName = `spiritian.html`;
+			break;
+		case "스파이":
+			widgetName = `spy.html`;
+			break;
 	}
-	let align = "topleft";
-	if (player.isMobile) {
-		align = "middle";
+	let align = player.isMobile ? "middle" : "middleright";
+
+	if (player.tag.roleWidget) {
+		player.tag.roleWidget.destroy();
+		player.tag.roleWidget = null;
 	}
 	player.tag.roleWidget = player.showWidget(`${widgetName}`, `${align}`, 300, 400);
 
 	player.tag.roleWidget.onMessage.Add(function (player, data) {
 		if (data.type == "close") {
-			player.tag.roleWidget.destroy();
-			player.tag.roleWidget = null;
+			if (player.tag.roleWidget) {
+				player.tag.roleWidget.destroy();
+				player.tag.roleWidget = null;
+			}
 		}
 	});
 }
@@ -674,209 +845,285 @@ function shuffle(array) {
 }
 
 function playerLeft(p) {
-	if (p.tag.joined == true) {
+	if (p.tag.data.joined == true) {
+		p.tag.data.joined = false;
 		let pStorage = JSON.parse(p.storage);
+		let roomNum = p.tag.data.roomNum;
 		pStorage.runCount ? pStorage.runCount++ : (pStorage.runCount = 1);
 		p.storage = JSON.stringify(pStorage);
 		p.save();
 		if (p.tag.role == "마피아") {
-			App.showCustomLabel(`${p.name} 님이 나갔습니다.`, 0xffffff, 0x000000, 300, 5000);
+			showLabelToRoom(roomNum, `${p.name} 님이 나갔습니다.`);
 		} else {
-			App.showCustomLabel(`${p.name} 님이 나갔습니다.`, 0xffffff, 0x000000, 300, 5000);
+			showLabelToRoom(roomNum, `${p.name} 님이 나갔습니다.`);
 		}
+		App.runLater(() => {
+			gameEndCheck(roomNum);
+		}, 2);
 	}
-	App.runLater(() => {
-		gameEndCheck();
-	}, 2);
 }
 
-function voteResult() {
+function voteResult(roomNum) {
+	let room = GAMEROOM[roomNum];
 	let max = 0;
-	let index = -1;
+	let targetPlayer = -1;
 	let maxCount = 0;
 	let voteArray = [];
-	for (let i in _players) {
-		p = _players[i];
-		if (p.tag.votecount > max) {
-			max = p.tag.votecount;
-			index = i;
+	for (let playerData of room.players) {
+		p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.votecount > max) {
+			max = p.tag.data.votecount;
+			targetPlayer = p;
 		}
 	}
 
 	if (max != 0) {
-		for (let i in _players) {
-			p = _players[i];
-			if (p.tag.votecount == max) {
+		for (let playerData of room.players) {
+			p = App.getPlayerByID(playerData.id);
+			if (!p) continue;
+			if (p.tag.data.votecount == max) {
 				maxCount++;
 			}
 
-			if (p.tag.joined == true) {
-				voteArray.push([p.tag.title, p.tag.votecount]);
+			if (p.tag.data.joined == true) {
+				voteArray.push([p.tag.data.index, p.tag.data.votecount]);
 			}
 		}
 	}
 
 	voteArray.sort((a, b) => b[1] - a[1]);
 
-	if (index == -1) {
-		App.showCustomLabel(`투표 결과 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
-	} else if (maxCount > 1) {
-		App.showCustomLabel(`투표 결과 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
+	if (targetPlayer == -1 || maxCount > 1) {
+		showLabelToRoom(roomNum, `투표 결과 아무도 죽지 않았습니다.`);
 	} else {
-		dead(_players[index]);
+		if (targetPlayer.tag.role == "정치인") {
+			showLabelToRoom(roomNum, `정치인은 투표로 죽지 않습니다.`);
+		} else {
+			dead(targetPlayer);
+		}
 	}
 
 	// destroyAppWidget();
-	_widgetHtml = "voteResult.html";
-	updatePlayerWidget(_widgetHtml);
-	sendMessageToPlayerWidget(voteArray);
+	widgetHtml = "voteResult.html";
+	switchAllPlayersWidget(roomNum, widgetHtml);
+	sendMessageToPlayerWidget(roomNum, voteArray);
 }
 
-function tagReset() {
-	for (let i in _players) {
-		p = _players[i];
-		p.tag.voted = false;
-		p.tag.healed = false;
-		p.tag.votecount = 0;
+function tagReset(roomNum) {
+	let room = GAMEROOM[roomNum];
+	if (!room) return;
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (room.turnCount == 0) {
+			p.tag.name = p.name;
+		}
+		p.tag.useSkill = false;
+		p.tag.data.voted = false;
+		p.tag.healTarget = false;
+		p.tag.data.votecount = 0;
 		p.tag.mafiaTarget = false;
-		p.tag.kickCount = 0;
+		p.tag.data.kickCount = 0;
 		p.attackSprite = null;
 		p.sendUpdated();
 	}
 }
 
-function allHidden() {
-	for (let i in _players) {
-		p = _players[i];
+function allHidden(roomNum) {
+	let room = GAMEROOM[roomNum];
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		p.hidden = true;
 		p.sendUpdated();
 	}
 }
 
-function clearHidden() {
-	for (let i in _players) {
-		let p = _players[i];
-		if (p.tag.joined == true) {
-			p = _players[i];
-			p.moveSpeed = 0;
-			p.spawnAt(coordinates[p.tag.title]?.x, coordinates[p.tag.title]?.y);
-			p.sprite = null;
-			p.hidden = false;
-			p.chatEnabled = true;
-			p.sendUpdated();
+function clearHidden(roomNum) {
+	let room = GAMEROOM[roomNum];
+	for (let playerData of room.players) {
+		let player = App.getPlayerByID(playerData.id);
+		if (!player) continue;
+		if (player.tag.data.joined == true) {
+			let room = GAMEROOM[player.tag.data.roomNum];
+			let startPoint = room.startPoint;
+			player.moveSpeed = 0;
+			if (player.tag.name) {
+				player.name = `${player.tag.name}`;
+			}
+			let x = startPoint[0] + coordinates[player.tag.data.index].x;
+			let y = startPoint[1] + coordinates[player.tag.data.index].y;
+			if (Number.isInteger(x) && Number.isInteger(y)) {
+				player.spawnAt(x, y);
+			}
+			player.sprite = null;
+			player.hidden = false;
+			player.chatEnabled = true;
+			// p.chatGroupID = 0;
+			player.sendUpdated();
 		}
 	}
 }
 
-function createSilhouette() {
-	for (let i in _players) {
-		p = _players[i];
-		if (p.tag.joined == true) {
-			let x = coordinates[p.tag.title].x;
-			let y = coordinates[p.tag.title].y;
+function createSilhouette(roomNum) {
+	let room = GAMEROOM[roomNum];
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined == true) {
+			let room = GAMEROOM[p.tag.data.roomNum];
+			let startPoint = room.startPoint;
+			let x = startPoint[0] + coordinates[p.tag.data.index].x;
+			let y = startPoint[1] + coordinates[p.tag.data.index].y;
 			Map.putObject(x, y - 1, silhouette);
 			Map.putObject(x, y, blankObject);
+			room.SilhouetteTracker.push([x, y - 1]);
 		}
 	}
 }
 
-function nightResult(turnCount) {
+function nightResult(roomNum) {
 	// App.sayToAll(`턴 : ${turnCount}`);
-
-	if (turnCount * 1 > 1) {
-		for (let i in _players) {
-			p = _players[i];
-			if (p.tag.joined == true) {
-				if (p.tag.mafiaTarget == true) {
-					if (p.tag.healed == true) {
-						App.showCustomLabel(`어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`, 0xffffff, 0x000000, 300, 5000);
-						return;
-					} else {
-						App.showCustomLabel(`이번 밤에 ${p.title}가 죽었습니다.`, 0xffffff, 0x000000, 300, 5000);
-						dead(p);
-						return;
-					}
+	let room = GAMEROOM[roomNum];
+	let text = "";
+	room.turnCount++;
+	// if (room.turnCount * 1 > 1) {
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined == true) {
+			if (p.tag.role == "영매") {
+				if (p.tag.ghostWidget) {
+					p.tag.ghostWidget.destroy();
+					p.tag.ghostWidget = null;
 				}
 			}
 		}
-		App.showCustomLabel(`이번 밤에 아무도 죽지 않았습니다.`, 0xffffff, 0x000000, 300, 5000);
 	}
+
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined == true) {
+			if (p.tag.mafiaTarget == true) {
+				if (p.tag.healTarget == true) {
+					text += `💖 어느 훌륭하신 의사가 기적적으로 시민을 살렸습니다.`;
+				} else {
+					text += `☠️ 이번 밤에 ${p.title}가 죽었습니다.`;
+					dead(p);
+				}
+				text += `\n`;
+			}
+		}
+	}
+	if (text == "") {
+		sendMessageToRoom(roomNum, `✨ 이번 밤에 아무도 죽지 않았습니다.`);
+	} else {
+		sendMessageToRoom(roomNum, `${text}`);
+	}
+
+	// }
 }
 
-function gameEndCheck() {
-	if (_start) {
-		_mafiaCount = 0;
-		_citizenCount = 0;
-		for (let i in _players) {
-			let p = _players[i];
-			if (p.tag.joined == true) {
+function gameEndCheck(roomNum) {
+	let room = GAMEROOM[roomNum];
+	if (room.start) {
+		let mafiaCount = 0;
+		let citizenCount = 0;
+		let mafiaTeamCount = 0;
+		for (let playerData of room.players) {
+			let p = App.getPlayerByID(playerData.id);
+			if (!p) continue;
+			if (p.tag.data.joined == true) {
+				if (p.tag.team == "mafia") {
+					mafiaTeamCount++;
+				} else {
+					citizenCount++;
+				}
 				if (p.tag.role == "마피아") {
 					// App.sayToAll(`마피아 : ${p.title}`);
-					_mafiaCount++;
-				} else _citizenCount++;
+					mafiaCount++;
+				}
 			}
 		}
 
 		// App.sayToAll(`마피아 수: ${_mafiaCount}`);
 
-		if (_mafiaCount == 0) {
+		if (mafiaTeamCount <= 0) {
 			// 시민 승리
-			for (let i in _players) {
-				let p = _players[i];
-				if (p.tag.joined == true) {
-					if (p.tag.role == "마피아") {
-						giveExp(p, 2);
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.ghostWidget) {
+					p.tag.ghostWidget.destroy();
+					p.tag.ghostWidget = null;
+				}
+				if (p.tag.data.joined == true) {
+					if (p.tag.team == "마피아") {
+						giveExp(p, 4);
 					} else {
 						giveExp(p, 5);
 					}
-				}
-			}
-			// destroyAppWidget();
-			gameReset();
-			App.playSound("citizenWinSound.mp3");
-			_widgetHtml = "winCitizen.html";
-			updatePlayerWidget(_widgetHtml);
-
-			App.runLater(() => {
-				startState(STATE_INIT);
-			}, 8);
-			return true;
-		} else if (_mafiaCount == 1) {
-			if (_mafiaCount == _citizenCount) {
-				// 마피아 승리
-				for (let i in _players) {
-					let p = _players[i];
-					if (p.tag.joined == true) {
-						if (p.tag.role == "마피아") {
-							giveExp(p, 10);
-						} else {
-							giveExp(p, 5);
-						}
+				} else {
+					if (p.tag.team == "마피아") {
+						giveExp(p, 3);
+					} else {
+						giveExp(p, 3);
 					}
 				}
-				App.playSound("mafiaWinSound.mp3");
-				// destroyAppWidget();
-				gameReset();
-				_widgetHtml = "winMafia.html";
-				updatePlayerWidget(_widgetHtml);
-
-				App.runLater(() => {
-					startState(STATE_INIT);
-				}, 8);
-
-				return true;
 			}
+
+			playSoundToRoom(roomNum, "citizenWinSound.mp3");
+			widgetHtml = "winCitizen.html";
+			switchAllPlayersWidget(roomNum, widgetHtml);
+			App.runLater(() => {
+				startState(roomNum, STATE_INIT);
+			}, 5);
+
+			return true;
+		} else if (mafiaTeamCount >= citizenCount) {
+			// 마피아 승리
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.ghostWidget) {
+					p.tag.ghostWidget.destroy();
+					p.tag.ghostWidget = null;
+				}
+				if (p.tag.data.joined == true) {
+					if (p.tag.team == "마피아") {
+						giveExp(p, 12, true);
+					} else {
+						giveExp(p, 4, true);
+					}
+				} else {
+					if (p.tag.team == "마피아") {
+						giveExp(p, 8, true);
+					} else {
+						giveExp(p, 2, true);
+					}
+				}
+			}
+			playSoundToRoom(roomNum, "mafiaWinSound.mp3");
+			widgetHtml = "winMafia.html";
+			switchAllPlayersWidget(roomNum, widgetHtml);
+			App.runLater(() => {
+				startState(roomNum, STATE_INIT);
+			}, 5);
+
+			return true;
 		}
 	}
 	return false;
 }
 
-function gameReset() {
-	_start = false;
-	_playerCount = 0;
+function gameReset(roomNum) {
+	let room = GAMEROOM[roomNum];
 
-	for (let i in _players) {
-		let p = _players[i];
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		if (p.tag.roleWidget) {
 			p.tag.roleWidget.destroy();
 			p.tag.roleWidget = null;
@@ -886,67 +1133,389 @@ function gameReset() {
 		p.attackSprite = null;
 		p.attackParam1 = 2;
 		p.attackParam2 = 3;
-
 		p.moveSpeed = 80;
 		p.sprite = null;
+		p.chatEnabled = true;
 		p.title = levelCalc(p);
 		p.hidden = false;
-		p.tag.joined = false;
+		p.tag.data.joined = false;
 		p.tag.role = "";
-		p.tag.voted = false;
-		p.tag.title = 0;
-		p.tag.votecount = 0;
-		p.tag.healed = false;
+		p.tag.data.voted = false;
+		p.tag.data.index = 0;
+		p.tag.data.votecount = 0;
+		p.tag.healTarget = false;
 		p.tag.mafiaTarget = false;
+		// p.chatGroupID = 0;
+		p.tag.team = undefined;
+		if (p.tag.name) {
+			p.name = `${p.tag.name}`;
+		}
 
-		p.spawnAt(parseInt(Math.random() * 14 + 18), parseInt(Math.random() * 11 + 37));
+		InitSpawnPlayer(p);
+		p.sendUpdated();
 	}
-	p.sendUpdated();
+
+	room.start = false;
+	room.state = STATE_INIT;
+	room.stateTimer = 0;
+	room.players = [];
+	room.readyCount = 0;
+	room.tickTockSoundOn = false;
+	room.turnCount = 0;
+	room.alive = 0;
+	room.total = 0;
+	room.startWaitTime = START_WAIT_TIME;
+	room.SilhouetteTracker = [];
+	updatePlayerCount();
 }
 
-function changeCharacterImage(player, text) {
-	if (text == "의사") {
-		player.sprite = doctorSprite;
-		player.moveSpeed = 80;
-		player.attackSprite = doctorAttackSprite;
-		player.attackType = 3;
-		player.attackParam1 = 2;
-		player.attackParam2 = 4;
-	} else if (text == "마피아") {
-		player.sprite = mafiaSprite;
-		player.moveSpeed = 80;
-		player.attackSprite = mafiaAttackSprite;
-		player.attackType = 3;
-		player.attackParam1 = 2;
-		player.attackParam2 = 4;
-	} else if (text == "경찰") {
-		player.sprite = policeSprite;
-		player.moveSpeed = 80;
-		player.attackSprite = policeAttackSprite;
-		player.attackType = 3;
-		player.attackParam1 = 2;
-		player.attackParam2 = 4;
-	} else return;
+function nightPlayerEvent(player, text, roomNum) {
+	let room = GAMEROOM[roomNum];
+	let liveList = [];
+	let mafiaTeamCount = 0;
+	if (player.tag.widget) {
+		player.tag.widget.destroy();
+		player.tag.widget = null;
+	}
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
+		if (p.tag.data.joined) {
+			liveList.push(parseInt(p.tag.data.index));
+		}
+	}
+	switch (text) {
+		case "의사":
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			player.showCenterLabel("살리고 싶은 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.sprite = doctorSprite;
+			player.tag.widget.sendMessage({
+				type: "init",
+				total: room.total,
+				isMobile: player.isMobile,
+				liveList,
+				time: room.stateTimer,
+				role: player.tag.role,
+				myNum: player.tag.data.index,
+			});
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined && p.tag.data.index == targetNum) {
+									p.tag.healTarget = true;
+									player.showCustomLabel(`${targetNum}번 참가자를 치료하기로 결정했습니다.`, 0xffffff, 0x000000, 300);
+									player.tag.useSkill = true;
+									player.tag.widget.sendMessage({
+										type: "selectResponse",
+										num: targetNum,
+									});
+									player.playSound("healSound.WAV");
+									break;
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+						break;
+				}
+			});
+			break;
+
+		case "마피아":
+			player.sprite = mafiaSprite;
+			player.showCenterLabel("처형할 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
+			player.attackSprite = mafiaAttackSprite;
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+
+			const teamIndexArray = [];
+			mafiaTeamCount = 0;
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.data.joined == true && p.tag.team == "mafia") {
+					mafiaTeamCount++;
+					teamIndexArray.push({
+						index: p.tag.data.index,
+						role: p.tag.role,
+					});
+				}
+			}
+			player.tag.widget.sendMessage({
+				type: "init",
+				isMobile: player.isMobile,
+				total: room.total,
+				liveList,
+				time: room.stateTimer,
+				chatEnable: mafiaTeamCount > 1,
+				role: player.tag.role,
+				myNum: player.tag.data.index,
+				teamIndexArray: teamIndexArray,
+			});
+
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "sendMessage":
+						mafiaChatNotify(roomNum, data.num, data.message, player.name);
+						break;
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									if (p.tag.data.index == targetNum && p.tag.mafiaTarget) {
+										player.showCustomLabel(`다른 마피아가 선택한 대상입니다.`, 0xffffff, 0x000000, 300);
+										return;
+									}
+									if (p.tag.data.index == targetNum) {
+										p.tag.mafiaTarget = true;
+										player.showCustomLabel(`${targetNum}번 참가자를 죽이기로 결정했습니다.`, 0xffffff, 0x000000, 300);
+										player.tag.useSkill = true;
+										player.tag.widget.sendMessage({
+											type: "selectResponse",
+											num: targetNum,
+										});
+										playSoundToRoom(player.tag.data.roomNum, "gunSound.WAV");
+										break;
+									}
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+
+						break;
+				}
+			});
+			player.sendMessage(`─────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
+			break;
+
+		case "경찰":
+			player.showCenterLabel("조사하고 싶은 대상을 선택하세요", 0xffffff, 0x000000, 250, 6000);
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			player.sprite = policeSprite;
+
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.tag.widget.sendMessage({
+				type: "init",
+				isMobile: player.isMobile,
+				total: room.total,
+				liveList,
+				time: room.stateTimer,
+				role: player.tag.role,
+				myNum: player.tag.data.index,
+			});
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									if (p.tag.data.index == targetNum) {
+										if (p.tag.role == "마피아") {
+											player.showCustomLabel(`${p.title}는 마피아입니다!`, 0xffffff, 0x000000, 300, 6000);
+										} else {
+											player.showCustomLabel(`${p.title}는 마피아가 아닙니다.`, 0xffffff, 0x000000, 300, 6000);
+										}
+										player.tag.useSkill = true;
+										player.tag.widget.sendMessage({
+											type: "selectResponse",
+											num: targetNum,
+										});
+										player.playSound("policeAttackSound.mp3");
+									}
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+						break;
+				}
+			});
+
+			// player.moveSpeed = 80;
+			// player.attackSprite = policeAttackSprite;
+			// player.attackType = 3;
+			// player.attackParam1 = 2;
+			// player.attackParam2 = 4;
+			break;
+		case "영매":
+			player.sendMessage(`─────────────────\n🌙 죽은 혼령들과 대화할 수 있습니다.\n─────────────────`, 0x00ff00);
+			player.tag.ghostWidget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.tag.ghostWidget.sendMessage({
+				type: "init",
+				myNum: player.tag.data.index,
+				time: room.stateTimer,
+				role: player.tag.role,
+				isMobile: player.isMobile,
+				chatEnable: true,
+			});
+			player.tag.ghostWidget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "sendMessage":
+						ghostChatNotify(roomNum, data.num, data.message, player.name);
+						break;
+				}
+			});
+			break;
+		case "정치인":
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			break;
+		case "스파이":
+			mafiaTeamCount = 0;
+			for (let playerData of room.players) {
+				let p = App.getPlayerByID(playerData.id);
+				if (!p) continue;
+				if (p.tag.data.joined == true && p.tag.team == "mafia") {
+					mafiaTeamCount++;
+				}
+			}
+			player.showCenterLabel("조사하고 싶은 대상을 선택하세요.", 0xffffff, 0x000000, 250, 6000);
+			player.sprite = spySprite;
+			player.tag.widget = player.showWidget("roleAction.html", "top", 400, 500);
+			player.tag.widget.sendMessage({
+				type: "init",
+				myNum: player.tag.data.index,
+				total: room.total,
+				liveList,
+				time: room.stateTimer,
+				isMobile: player.isMobile,
+				chatEnable: mafiaTeamCount > 1 && player.tag.team == "mafia",
+				role: player.tag.role,
+			});
+			player.tag.widget.onMessage.Add(function (player, data) {
+				switch (data.type) {
+					case "sendMessage":
+						if (player.tag.team == "mafia") {
+							mafiaChatNotify(roomNum, data.num, data.message, player.name);
+						}
+						break;
+					case "select":
+						if (!player.tag.useSkill) {
+							let targetNum = data.num;
+							for (let playerData of room.players) {
+								let p = App.getPlayerByID(playerData.id);
+								if (!p) continue;
+								if (p.tag.data.joined) {
+									if (p.tag.data.index == targetNum) {
+										player.playSound("policeAttackSound.mp3");
+										if (p.tag.role == "마피아") {
+											player.tag.widget.sendMessage({ type: "chatEnable" });
+											mafiaChatNotify(roomNum, 0, `🕵️‍♀️ ${player.tag.data.index}번 참가자(스파이)가 채팅에 합류했습니다.`);
+											// player.showCustomLabel(`🕵️‍♀️ ${p.title}의 직업은 ${p.tag.role}입니다.\n마피아 팀에 합류하여 채팅을 할 수 있게되었습니다.\n능력을 한번 더 사용할 수 있습니다.`, 0xffffff, 0x000000, 200, 6000);
+											player.tag.team = "mafia";
+										} else {
+											player.showCustomLabel(`${p.title}의 직업은 ${p.tag.role}입니다.`, 0xffffff, 0x000000, 300, 6000);
+											player.tag.useSkill = true;
+											player.tag.widget.sendMessage({
+												type: "selectResponse",
+												num: targetNum,
+											});
+										}
+									}
+								}
+							}
+						} else {
+							player.showCustomLabel(`이미 대상을 선택했습니다.`, 0xffffff, 0x000000, 300);
+						}
+
+						break;
+				}
+			});
+
+			// player.moveSpeed = 80;
+			// player.attackSprite = spySprite;
+			// player.attackType = 3;
+			// player.attackParam1 = 2;
+			// player.attackParam2 = 4;
+			if (player.tag.team && player.tag.team == "mafia") {
+				// player.chatEnabled = true;
+				// player.chatGroupID = MAFIA_CHATTING_CHANNEL;
+				player.sendMessage(`─────────────────\n🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다.\n─────────────────`, 0x00ff00);
+			} else {
+				player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			}
+			break;
+		default:
+			if (player.isMobile) {
+				player.tag.widget = player.showWidget("night.html", "top", 400, 260);
+			} else {
+				player.tag.widget = player.showWidget("night.html", "topright", 400, 260);
+			}
+			player.tag.widget.sendMessage({
+				total: room.total,
+				alive: room.alive,
+				timer: room.stateTimer,
+				description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
+			});
+			player.sendMessage(`─────────────────\n🌙 밤에는 채팅을 할 수 없습니다.\n─────────────────`, 0x00ff00);
+			break;
+	}
+	// if (player.tag.name) {
+	// 	player.name = `${player.tag.name}(${text})[${player.tag.data.index}번]`;
+	// }
+
 	player.sendUpdated();
 }
 
-function giveExp(p, point) {
-	if (!p.isGuest) {
-		if (p.storage == null) {
-			p.storage = JSON.stringify({
+function giveExp(player, point, mafiaWin = false) {
+	if (!player.isGuest) {
+		if (player.storage == null) {
+			player.storage = JSON.stringify({
 				exp: 0,
 			});
-			p.save();
+			player.save();
 		}
-		let myExp = JSON.parse(p.storage).exp;
 
-		p.storage = JSON.stringify({
-			exp: myExp + point,
-		});
+		const pStorage = JSON.parse(player.storage);
 
-		p.showCustomLabel("경험치: " + JSON.parse(p.storage).exp);
+		if (!pStorage.hasOwnProperty("mafiaWin")) {
+			pStorage.mafiaWin = 0;
+		}
+		if (!pStorage.hasOwnProperty("mafiaLose")) {
+			pStorage.mafiaLose = 0;
+		}
+		if (!pStorage.hasOwnProperty("citizenWin")) {
+			pStorage.citizenWin = 0;
+		}
 
-		p.save();
+		if (!pStorage.hasOwnProperty("citizenLose")) {
+			pStorage.citizenLose = 0;
+		}
+
+		if (mafiaWin) {
+			if (player.tag.role == "스파이") {
+				pStorage.mafiaWin++;
+			} else if (player.tag.team == "mafia") {
+				pStorage.mafiaWin++;
+			} else {
+				pStorage.citizenLose++;
+			}
+		} else {
+			if (player.tag.role == "스파이") {
+				pStorage.mafiaLose++;
+			} else if (player.tag.team == "mafia") {
+				pStorage.mafiaLose++;
+			} else {
+				pStorage.citizenWin++;
+			}
+		}
+
+		player.showCustomLabel(`경험치: ${point} 흭득`);
+		pStorage.exp += point;
+
+		player.storage = JSON.stringify(pStorage);
+		player.save();
 		// App.sayToAll(JSON.parse(p.storage).exp);
 	}
 	// App.sayToAll(App.worldHashID);
@@ -955,44 +1524,91 @@ function giveExp(p, point) {
 function levelCalc(player) {
 	if (player.role >= 3000) {
 		return "운영자";
-	} else if (player.id.indexOf("GUEST") === -1) {
+	} else if (!player.isGuest) {
+		let pStorage = JSON.parse(player.storage);
+		let title = "";
+		if (player.role == 0) {
+			player.titleColor = 0x00ff00;
+		} else {
+			player.titleColor = 0xffffff;
+		}
+		if (!pStorage.exp) {
+			pStorage.exp = 0;
+			player.storage = JSON.stringify(pStorage);
+			player.save();
+		}
 		let i = 0;
-		let myExp = JSON.parse(player.storage).exp;
+		let myExp = pStorage.exp;
 
 		while (myExp > 0) {
 			myExp -= (i + 15) * i;
 			i++;
 		}
-		return "Lv." + i;
+		title += `Lv.${i}`;
+		title += `\n마피아 ${pStorage.mafiaWin || 0}승 ${pStorage.mafiaLose || 0}패`;
+		title += `\n시민 ${pStorage.citizenWin || 0}승 ${pStorage.citizenLose || 0}패`;
+		player.tag.data.level = `Lv.${i}`;
+		return title;
 	} else {
 		return "비로그인 유저";
 	}
 }
 
-function updatePlayerWidget(htmlName) {
-	for (let i in _players) {
-		let p = _players[i];
+function switchAllPlayersWidget(roomNum, htmlName) {
+	let room = GAMEROOM[roomNum];
+	for (let playerData of room.players) {
+		let p = App.getPlayerByID(playerData.id);
+		if (!p) continue;
 		if (p.tag.widget) {
 			p.tag.widget.destroy();
 			p.tag.widget = null;
 		}
-		p.tag.widget = p.showWidget(htmlName, "top", 400, 350);
-		p.tag.widget.sendMessage({ type: "setID", id: p.id });
-		p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
+
+		if (htmlName == "WatingRoom.html") {
+			if (p.isMobile) {
+				p.tag.widget = p.showWidget("WatingRoom.html", "top", 400, 350);
+			} else {
+				p.tag.widget = p.showWidget("WatingRoom.html", "topright", 400, 350);
+			}
+			p.tag.widget.sendMessage({ type: "setID", id: p.id, isMobile: p.isMobile });
+			p.tag.widget.onMessage.Add((player, data) => WatingRoomOnMessage(player, data));
+		} else {
+			if (p.isMobile) {
+				p.tag.widget = p.showWidget(htmlName, "top", 400, 260);
+			} else {
+				p.tag.widget = p.showWidget(htmlName, "topright", 400, 260);
+			}
+		}
 	}
-	if (_state != STATE_VOTE_RESULT) {
-		sendMessageToPlayerWidget();
-	}
+	// if (_state != STATE_VOTE_RESULT) {
+	// 	sendMessageToPlayerWidget();
+	// }
 }
 
-function sendMessageToPlayerWidget(data = null) {
-	for (let i in _players) {
-		let p = _players[i];
+function sendMessageToPlayerWidget(roomNum, data = null) {
+	let room = GAMEROOM[roomNum];
+	if (!room) return;
+	if (room.start) {
+		room.players.forEach((data) => {
+			if (data.joined) room.alive++;
+		});
+	}
+	const toRemove = [];
+
+	for (let i = 0; i < room.players.length; i++) {
+		let roomPlayerData = room.players[i];
+		let id = roomPlayerData.id;
+		let p = App.getPlayerByID(id);
+
+		if (!p) {
+			toRemove.push(i);
+			continue;
+		}
 		let p_widget = p.tag.widget;
 		if (p_widget) {
-			switch (_state) {
+			switch (room.state) {
 				case STATE_INIT:
-					switch (data?.type) {
+					switch (data.type) {
 						case "join":
 							p_widget.sendMessage({
 								type: "join",
@@ -1035,47 +1651,61 @@ function sendMessageToPlayerWidget(data = null) {
 					break;
 				case STATE_READY:
 					p_widget.sendMessage({
-						total: 6,
-						current: 6,
+						total: room.total,
+						current: room.total,
 						description: `마피아 게임이 곧 시작됩니다.`,
 					});
 					break;
 				case STATE_PLAYING_DAY:
 					p_widget.sendMessage({
-						total: 6,
-						alive: _mafiaCount + _citizenCount,
-						timer: _stateTimer,
+						total: room.total,
+						alive: room.alive,
+						timer: room.stateTimer,
+						// timer: 1000,
 						description: "투표 전까지 이야기를 나누세요.",
+						isMobile: p.isMobile,
 					});
+					if (p.tag.data.joined) {
+						p.sendMessage(`🌞 ${room.turnCount}번째 아침`, 0x00ff00);
+					}
 					break;
 				case STATE_VOTE:
 					let liveList = [];
-					for (let i in _players) {
-						let p = _players[i];
-
-						if (p.tag.joined) {
-							liveList.push(parseInt(p.tag.title));
+					for (let playerData of room.players) {
+						let p = App.getPlayerByID(playerData.id);
+						if (!p) continue;
+						if (p.tag.data.joined) {
+							liveList.push(parseInt(p.tag.data.index));
 						}
 					}
 					p_widget.sendMessage({
-						total: 6,
-						alive: _mafiaCount + _citizenCount,
-						timer: _stateTimer,
+						type: "init",
+						total: room.total,
+						alive: room.alive,
+						timer: room.stateTimer,
 						liveList: liveList,
 						description: "",
+						isMobile: p.isMobile,
 					});
 
 					p_widget.onMessage.Add(function (player, data) {
-						if (player.tag.joined) {
+						if (player.tag.data.joined) {
+							let room = GAMEROOM[player.tag.data.roomNum];
 							if (data.vote) {
-								for (let i in _players) {
-									let p = _players[i];
-									if (p.tag.title == data.vote) {
-										p.tag.votecount++;
+								for (let playerData of room.players) {
+									let p = App.getPlayerByID(playerData.id);
+									if (!p) continue;
+									if (p.tag.data.index == data.vote) {
+										if (player.tag.role == "정치인") {
+											p.tag.data.votecount += 2;
+										} else {
+											p.tag.data.votecount++;
+										}
 									}
 								}
 								player.tag.widget.destroy();
 								player.tag.widget = null;
+								player.showCustomLabel(`${data.vote}번 참가자에게 투표했습니다.`);
 							}
 						} else {
 							player.showCustomLabel("투표 권한이 없습니다");
@@ -1085,116 +1715,298 @@ function sendMessageToPlayerWidget(data = null) {
 					break;
 				case STATE_VOTE_RESULT:
 					p_widget.sendMessage({
+						type: "voteResult",
 						result: data,
+						isMobile: p.isMobile,
 					});
 					break;
 				case STATE_PLAYING_NIGHT:
-					p_widget.sendMessage({
-						total: 6,
-						alive: _mafiaCount + _citizenCount,
-						timer: _stateTimer,
-						description: "마피아, 경찰, 의사는 밤에 움직일 수 있습니다.",
-					});
-
 					break;
 			}
 		}
 	}
+
+	for (let i = toRemove.length - 1; i >= 0; i--) {
+		room.players.splice(toRemove[i], 1);
+	}
 }
 
 function WatingRoomOnMessage(player, data) {
+	let roomNum = player.tag.data.roomNum;
+	let room;
+	if (GAMEROOM.hasOwnProperty(roomNum)) {
+		room = GAMEROOM[roomNum];
+	}
 	switch (data.type) {
 		case "join":
-			if (_start) return;
-			if (player.tag.joined) return;
-			if (_playerCount < 6) {
-				if (!player.tag.joined) {
-					_playerCount++;
-					// player.tag.title = _playerCount;
-					// player.title = _playerCount + "번 참가자";
-					player.tag.joined = true;
-					// player.sendUpdated();
-					App.playSound("joinSound.mp3");
-					let pStorage = JSON.parse(player.storage);
-					sendMessageToPlayerWidget({
+			if (player.tag.data.joined) {
+				player.showCenterLabel("이미 참여중입니다.", 0xffffff, 0x000000, 300, 5000);
+				return;
+			}
+			roomNum = parseInt(data.roomNum);
+			room = GAMEROOM[roomNum];
+			if (room.start) {
+				player.showCenterLabel("이미 게임을 시작했습니다.", 0xffffff, 0x000000, 300, 5000);
+				return;
+			}
+			let roomPlayers = room.players;
+			roomPlayers.forEach((data) => {
+				if (data.id == player.id) {
+					player.showCenterLabel("이미 참여중입니다.", 0xffffff, 0x000000, 300, 5000);
+					return;
+				}
+			});
+
+			let playerCount = roomPlayers.length;
+			if (playerCount < 8) {
+				if (player.tag.kickUntil) {
+					if (player.tag.kickUntil > Time.GetUtcTime()) {
+						player.showCenterLabel("강퇴를 당해서 30초간 게임에 참가할 수 없습니다.");
+						return;
+					}
+				}
+				if (!player.tag.data.joined) {
+					player.tag.data.joined = true;
+					player.tag.data.roomNum = roomNum;
+					room.players.push(player.tag.data);
+					playSoundToRoom(roomNum, "joinSound.mp3");
+					sendMessageToPlayerWidget(roomNum, {
 						type: "join",
+						roomData: room,
 						id: player.id,
-						name: player.name,
-						level: levelCalc(player),
-						runCount: pStorage.runCount,
 					});
 				}
+				updatePlayerCount();
 			} else {
-				if (!player.tag.joined) {
+				if (!player.tag.data.joined) {
 					player.showCustomLabel("게임 인원이 다 찼습니다.", 0xffffff, 0x000000, 300);
 				}
 			}
 			break;
 		case "ready":
-			sendMessageToPlayerWidget({
-				type: "ready",
-				id: player.id,
-			});
-			if (!player.tag.ready) {
-				player.tag.ready = true;
-				_readyCount++;
-				if (_readyCount == 6) {
-					App.showCustomLabel("게임이 곧 시작됩니다.", 0xffffff, 0x000000, 300);
-					startState(STATE_READY);
-				}
+			if (!player.tag.data.ready) {
+				player.tag.data.ready = true;
+				room.readyCount++;
+				sendMessageToPlayerWidget(roomNum, {
+					type: "ready",
+					id: player.id,
+				});
 			}
-
 			break;
 		case "cancle-ready":
-			if (player.tag.ready) {
-				_readyCount--;
-				player.tag.ready = false;
+			if (player.tag.data.ready) {
+				room.readyCount--;
+				player.tag.data.ready = false;
+				sendMessageToPlayerWidget(roomNum, {
+					type: "cancle-ready",
+					id: player.id,
+				});
 			}
-			sendMessageToPlayerWidget({
-				type: "cancle-ready",
-				id: player.id,
-			});
 			break;
 		case "kick":
-			let kickList = player.tag.kickList;
+			let kickList = player.tag.data.kickList;
 			if (kickList && kickList.includes(data.id)) {
 				kickList.splice(kickList.indexOf(data.id), 1);
-				player.tag.kickList = kickList;
-				sendMessageToPlayerWidget({
+				player.tag.data.kickList = kickList;
+				sendMessageToPlayerWidget(roomNum, {
 					type: "cancle-kick",
 					id: data.id,
 				});
 				let target = App.getPlayerByID(data.id);
-				target.tag.kickCount--;
+				if (target) {
+					target.tag.data.kickCount--;
+				}
 			} else {
-				player.tag.kickList ? player.tag.kickList.push(data.id) : (player.tag.kickList = [data.id]);
-				sendMessageToPlayerWidget({
+				player.tag.data.kickList ? player.tag.data.kickList.push(data.id) : (player.tag.data.kickList = [data.id]);
+				sendMessageToPlayerWidget(roomNum, {
 					type: "kick",
 					id: data.id,
 				});
 				let target = App.getPlayerByID(data.id);
-				target?.tag.kickCount ? target.tag.kickCount++ : (target.tag.kickCount = 1);
-				if (target.tag.kickCount >= 3) {
-					target.tag.joined = false;
-
-					target.tag.kickCount = 0;
-					_playerCount--;
-					if (target.tag.ready) {
-						_readyCount--;
-						target.tag.ready = false;
+				if (target) {
+					target.tag.data.kickCount ? target.tag.data.kickCount++ : (target.tag.data.kickCount = 1);
+					if (target.tag.data.kickCount >= 3) {
+						quitPlayer(target, true);
 					}
-					target.tag.widget.sendMessage({
-						type: "kicked",
-					});
-
-					sendMessageToPlayerWidget({
-						type: "leave",
-						id: target.id,
-						kickList: target.tag.kickList,
-					});
-					target.tag.kickList = [];
 				}
 			}
 			break;
+		case "quit":
+			quitPlayer(player);
+			break;
 	}
+}
+
+function showLabelToRoom(roomNum, message) {
+	let gameRoom = GAMEROOM[roomNum];
+	for (let playerData of gameRoom.players) {
+		let player = App.getPlayerByID(playerData.id);
+		if (!player) continue;
+		player.showCenterLabel(message, 0xffffff, 0x000000, 300, 4000);
+	}
+}
+
+function sendMessageToRoom(roomNum, message) {
+	let gameRoom = GAMEROOM[roomNum];
+	for (let playerData of gameRoom.players) {
+		let player = App.getPlayerByID(playerData.id);
+		if (!player) continue;
+		player.sendMessage(message, 0x00ff00);
+	}
+}
+
+function playSoundToRoom(roomNum, soundName) {
+	let gameRoom = GAMEROOM[roomNum];
+	for (let playerData of gameRoom.players) {
+		let player = App.getPlayerByID(playerData.id);
+		if (!player) continue;
+		player.playSound(soundName);
+	}
+}
+
+function updatePlayerCount() {
+	for (let p of _players) {
+		if (!p.tag.data.joined && p.tag.widget) {
+			p.tag.widget.sendMessage({
+				type: "updatePlayerCount",
+				data: GAMEROOM,
+			});
+		}
+	}
+}
+
+function quitPlayer(player, kick = false) {
+	let roomNum = player.tag.data.roomNum;
+	let room;
+	for (let p of _players) {
+		let kickList = p.tag.data.kickList;
+		if (kickList && kickList.includes(player.id)) {
+			kickList.splice(kickList.indexOf(player.id), 1);
+		}
+	}
+	if (!GAMEROOM.hasOwnProperty(roomNum)) return;
+	room = GAMEROOM[roomNum];
+	let players = GAMEROOM[roomNum].players;
+	for (let i = 0; i < players.length; i++) {
+		if (players[i].id == player.id) {
+			players.splice(i, 1);
+			break;
+		}
+	}
+	if (player.tag.data.ready) {
+		room.readyCount--;
+		player.tag.data.ready = false;
+	}
+	player.tag.widget.sendMessage({
+		type: "kicked",
+	});
+	sendMessageToPlayerWidget(roomNum, {
+		type: "leave",
+		id: player.id,
+		kickList: player.tag.data.kickList,
+	});
+
+	if (kick) {
+		player.tag.kickUntil = Time.GetUtcTime() + 30000;
+	}
+
+	player.tag.data.roomNum = -1;
+	player.tag.data.joined = false;
+	player.tag.data.kickList = [];
+	player.tag.data.kickCount = 0;
+
+	updatePlayerCount();
+}
+
+function clearRoomObjects(roomNum) {
+	let room = GAMEROOM[roomNum];
+
+	for (let coords of room.SilhouetteTracker) {
+		Map.putObject(coords[0], coords[1], null);
+	}
+	room.SilhouetteTracker = [];
+}
+
+function InitSpawnPlayer(p) {
+	p.spawnAt(parseInt(Math.random() * 13 + 63), parseInt(Math.random() * 4 + 42));
+}
+
+function mafiaChatNotify(roomNum, num, message, name) {
+	let players = GAMEROOM[roomNum].players;
+	for (let i = 0; i < players.length; i++) {
+		let player = App.getPlayerByID(players[i].id);
+		if (!player) return;
+		if (player.tag.team == "mafia") {
+			if (num != player.tag.data.index) {
+				if (player.tag.widget) {
+					player.tag.widget.sendMessage({
+						type: "chatNotify",
+						name: name,
+						num,
+						message,
+					});
+				}
+			}
+		}
+	}
+}
+
+function ghostChatNotify(roomNum, num, message, name) {
+	let players = GAMEROOM[roomNum].players;
+	for (let i = 0; i < players.length; i++) {
+		let player = App.getPlayerByID(players[i].id);
+		if (!player) return;
+		if (!player.tag.data.joined || player.tag.role == "영매") {
+			if (num != player.tag.data.index) {
+				if (player.tag.ghostWidget) {
+					player.tag.ghostWidget.sendMessage({
+						type: "chatNotify",
+						name: name,
+						num,
+						message,
+					});
+				}
+			}
+		}
+	}
+}
+
+const AWS_API = 'https://jstvymmti6.execute-api.ap-northeast-2.amazonaws.com/liveAppDBRequest';
+const mapHashId = App.mapHashID;
+const spaceHashId = App.spaceHashID;
+
+function sendPlayerCountDataToServer() {
+    App.httpPostJson(
+        "https://us-central1-server-for-zep-app.cloudfunctions.net/api/setOnlineUsers",
+        {
+            Authorization: "zep-omok",
+        },
+        {
+            gameId: 'mafia',
+            channelId: App.mapHashID,
+            onlineUsers: App.playerCount,
+        },
+        function (res) {
+        }
+    );
+}
+
+function sendPlayerCountDataToServer2(callback = null) {
+	const category = "mafia";
+	const data = {
+		category: category,
+		channelId: mapHashId,
+		onlineUsers: App.playerCount,
+	};
+	let saveObject = { ...data, collection: "CCU", spaceHashID: spaceHashId, key: `CCU_${category}_${spaceHashId}_${mapHashId}` };
+
+	App.httpPostJson(AWS_API, null, saveObject, (res) => {
+		if (callback) {
+			if (res.startsWith("success", 1)) {
+				callback(true);
+			} else {
+				callback(false);
+			}
+		}
+	});
 }
