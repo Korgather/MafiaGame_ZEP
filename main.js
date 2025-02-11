@@ -269,31 +269,31 @@ const GAMEROOM = {
 let _players;
 let _widget = null;
 
-App.addOnLocationTouched("m", function (player) {
+App.addOnLocationTouched("m", (player) => {
 	player.sprite = mafiaSprite;
 	player.attackSprite = mafiaAttackSprite;
 	player.sendUpdated();
 });
 
-App.addOnLocationTouched("d", function (player) {
+App.addOnLocationTouched("d", (player) => {
 	player.sprite = doctorSprite;
 	player.attackSprite = doctorAttackSprite;
 	player.sendUpdated();
 });
 
-App.addOnLocationTouched("p", function (player) {
+App.addOnLocationTouched("p", (player) => {
 	player.sprite = policeSprite;
 	player.attackSprite = policeAttackSprite;
 	player.sendUpdated();
 });
 
-App.addOnLocationTouched("spy", function (player) {
+App.addOnLocationTouched("spy", (player) => {
 	player.sprite = spySprite;
 	player.attackSprite = null;
 	player.sendUpdated();
 });
 
-App.addOnLocationTouched("detective", function (player) {
+App.addOnLocationTouched("detective", (player) => {
 	player.sprite = detectiveSprite;
 	player.attackSprite = null;
 	player.sendUpdated();
@@ -308,12 +308,12 @@ App.addOnLocationTouched("detective", function (player) {
 // mafiaTarget: false,
 // widget: null,
 
-App.onStart.Add(function () {
+App.onStart.Add(() => {
 	App.enableFreeView = false;
 	App.sendUpdated();
 });
 
-App.onJoinPlayer.Add(function (p) {
+App.onJoinPlayer.Add((p) => {
 	apiRequestDelay = 3;
 
 	_players = App.players;
@@ -362,7 +362,7 @@ App.onJoinPlayer.Add(function (p) {
 	p.sendUpdated();
 });
 
-App.onLeavePlayer.Add(function (p) {
+App.onLeavePlayer.Add((p) => {
 	apiRequestDelay = 3;
 
 	_players = App.players;
@@ -396,7 +396,7 @@ App.onLeavePlayer.Add(function (p) {
 	}
 });
 
-App.onDestroy.Add(function () {
+App.onDestroy.Add(() => {
 	for (let i in _players) {
 		let p = _players[i];
 		p.sprite = null;
@@ -406,7 +406,7 @@ App.onDestroy.Add(function () {
 	}
 });
 
-App.onSay.add(function (player, text) {
+App.onSay.add((player, text) => {
 	if (player.role >= 3000) {
 		if (text == "/경험치") {
 			giveExp(player, 10);
@@ -418,7 +418,7 @@ App.onSay.add(function (player, text) {
 
 let apiRequestDelay = 5;
 
-App.onUpdate.Add(function (dt) {
+App.onUpdate.Add((dt) => {
 	// modumeta서버로 플레이어 카운트 보내기
 	if (apiRequestDelay > 0) {
 		apiRequestDelay -= dt;
@@ -473,7 +473,7 @@ App.onUpdate.Add(function (dt) {
 	}
 });
 
-App.onObjectAttacked.Add(function (p, x, y) {
+App.onObjectAttacked.Add((p, x, y) => {
 	let target = null;
 	let targetNum = 0;
 	let startPoint;
@@ -589,7 +589,7 @@ function dead(player) {
 		isMobile: player.isMobile,
 		chatEnable: true,
 	});
-	player.tag.ghostWidget.onMessage.Add(function (player, data) {
+	player.tag.ghostWidget.onMessage.Add((player, data) => {
 		switch (data.type) {
 			case "sendMessage":
 				ghostChatNotify(roomNum, data.num, data.message, player.name);
@@ -826,7 +826,7 @@ function showRoleWidget(player) {
 	}
 	player.tag.roleWidget = player.showWidget(`${widgetName}`, `${align}`, 300, 400);
 
-	player.tag.roleWidget.onMessage.Add(function (player, data) {
+	player.tag.roleWidget.onMessage.Add((player, data) => {
 		if (data.type == "close") {
 			if (player.tag.roleWidget) {
 				player.tag.roleWidget.destroy();
@@ -1199,7 +1199,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				role: player.tag.role,
 				myNum: player.tag.data.index,
 			});
-			player.tag.widget.onMessage.Add(function (player, data) {
+			player.tag.widget.onMessage.Add((player, data) => {
 				switch (data.type) {
 					case "select":
 						if (!player.tag.useSkill) {
@@ -1258,7 +1258,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				teamIndexArray: teamIndexArray,
 			});
 
-			player.tag.widget.onMessage.Add(function (player, data) {
+			player.tag.widget.onMessage.Add((player, data) => {
 				switch (data.type) {
 					case "sendMessage":
 						mafiaChatNotify(roomNum, data.num, data.message, player.name);
@@ -1312,7 +1312,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				role: player.tag.role,
 				myNum: player.tag.data.index,
 			});
-			player.tag.widget.onMessage.Add(function (player, data) {
+			player.tag.widget.onMessage.Add((player, data) => {
 				switch (data.type) {
 					case "select":
 						if (!player.tag.useSkill) {
@@ -1360,7 +1360,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				isMobile: player.isMobile,
 				chatEnable: true,
 			});
-			player.tag.ghostWidget.onMessage.Add(function (player, data) {
+			player.tag.ghostWidget.onMessage.Add((player, data) => {
 				switch (data.type) {
 					case "sendMessage":
 						ghostChatNotify(roomNum, data.num, data.message, player.name);
@@ -1393,7 +1393,7 @@ function nightPlayerEvent(player, text, roomNum) {
 				chatEnable: mafiaTeamCount > 1 && player.tag.team == "mafia",
 				role: player.tag.role,
 			});
-			player.tag.widget.onMessage.Add(function (player, data) {
+			player.tag.widget.onMessage.Add((player, data) => {
 				switch (data.type) {
 					case "sendMessage":
 						if (player.tag.team == "mafia") {
@@ -1688,7 +1688,7 @@ function sendMessageToPlayerWidget(roomNum, data = null) {
 						isMobile: p.isMobile,
 					});
 
-					p_widget.onMessage.Add(function (player, data) {
+					p_widget.onMessage.Add((player, data) => {
 						if (player.tag.data.joined) {
 							let room = GAMEROOM[player.tag.data.roomNum];
 							if (data.vote) {
@@ -1976,19 +1976,19 @@ const mapHashId = App.mapHashID;
 const spaceHashId = App.spaceHashID;
 
 function sendPlayerCountDataToServer() {
-    App.httpPostJson(
-        "https://us-central1-server-for-zep-app.cloudfunctions.net/api/setOnlineUsers",
-        {
-            Authorization: "zep-omok",
-        },
-        {
-            gameId: 'mafia',
-            channelId: App.mapHashID,
-            onlineUsers: App.playerCount,
-        },
-        function (res) {
-        }
-    );
+	App.httpPostJson(
+		"https://us-central1-server-for-zep-app.cloudfunctions.net/api/setOnlineUsers",
+		{
+			Authorization: "zep-omok",
+		},
+		{
+			gameId: 'mafia',
+			channelId: App.mapHashID,
+			onlineUsers: App.playerCount,
+		},
+		(res) => {
+		}
+	);
 }
 
 function sendPlayerCountDataToServer2(callback = null) {
