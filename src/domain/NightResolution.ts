@@ -12,9 +12,9 @@
  * 여기 있는 순수 함수가 결정한다.
  */
 import type { Seat } from "../types/Game.types.ts";
-import { Role, Team } from "../types/Game.types.ts";
+import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { NightActionKind, roleDef, roleName } from "./Roles.ts";
+import { inMafiaChat, NightActionKind, roleDef, roleName } from "./Roles.ts";
 
 export interface NightSelectResult {
 	/** 능력을 소모했는가. false면 같은 밤에 다시 지목할 수 있다 */
@@ -38,16 +38,16 @@ const REVEAL_MS = 6000;
 
 /**
  * 밤에 대상을 지목했을 때의 결과.
- * actor/target의 healed·marked·team·usedSkill을 직접 갱신한다.
+ * actor/target의 healed·attackedBy·silenced·scooped·team을 직접 갱신한다.
  * (Seat은 순수 데이터라 이 갱신도 Node 테스트에서 그대로 관찰할 수 있다)
  *
  * 능력이 없는 직업이면 null.
  */
 export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult | null {
-	const action = roleDef(actor.role).nightAction;
-	if (action === null) return null;
+	const def = roleDef(actor.role);
+	if (def.nightAction === null) return null;
 
-	switch (action) {
+	switch (def.nightAction) {
 		case NightActionKind.HEAL:
 			target.healed = true;
 			return {
@@ -57,38 +57,36 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 				privateSound: Sound.HEAL,
 			};
 
-		case NightActionKind.KILL:
-			// 다른 마피아가 이미 찍은 대상이면 표를 낭비시키지 않는다
-			if (target.marked) {
-				return {
-					consumed: false,
-					confirmed: false,
-					label: "다른 마피아가 선택한 대상입니다.",
-				};
-			}
-			target.marked = true;
-			return {
+		case NightActionKind.ATTACK: {
+			// 기존에는 이미 지목된 대상이면 "다른 마피아가 선택한 대상입니다"로
+			// 되돌렸다. 공격자가 마피아뿐일 때는 표 낭비를 막는 배려였지만,
+			// 지금은 그 문구가 자경단원에게 "여기 마피아가 다녀갔다"를 알려준다.
+			// 중복 지목은 어차피 무해하므로(정산은 좌석 단위) 규칙을 없앤다.
+			target.attackedBy.push(actor.index);
+			const attack: NightSelectResult = {
 				consumed: true,
 				confirmed: true,
-				label: `${target.index}번 참가자를 죽이기로 결정했습니다.`,
-				// 총성은 방 전체가 듣는다 (밤의 긴장감 연출)
-				roomSound: Sound.GUN,
+				label: `${target.index}번 참가자를 공격 대상으로 정했습니다.`,
 			};
+			if (def.attackSound) attack.roomSound = def.attackSound;
+			return attack;
+		}
 
 		case NightActionKind.INSPECT_TEAM:
 			return {
 				consumed: true,
 				confirmed: true,
-				label:
-					target.role === Role.MAFIA
-						? `${target.index}번 참가자는 마피아입니다!`
-						: `${target.index}번 참가자는 마피아가 아닙니다.`,
+				label: roleDef(target.role).appearsAsMafia
+					? `${target.index}번 참가자는 마피아입니다!`
+					: `${target.index}번 참가자는 마피아가 아닙니다.`,
 				labelDurationMs: REVEAL_MS,
 				privateSound: Sound.INVESTIGATE,
 			};
 
 		case NightActionKind.INSPECT_ROLE:
-			if (target.role === Role.MAFIA) {
+			// 합류 조건은 "마피아 직업"이 아니라 "마피아 채팅에 있는 사람"이다.
+			// 대화 상대가 없는 건달·짐승인간을 찾아낸 것으로 채팅이 열릴 수는 없다.
+			if (inMafiaChat(target)) {
 				// 마피아를 찾아내면 진영을 옮기고, 능력은 소모하지 않는다.
 				// (기존 코드도 useSkill을 세우지 않았다 — 의도된 보상이다)
 				actor.team = Team.MAFIA;
@@ -108,13 +106,56 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 				labelDurationMs: REVEAL_MS,
 				privateSound: Sound.INVESTIGATE,
 			};
+
+		case NightActionKind.SILENCE:
+			target.silenced = true;
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자는 내일 투표할 수 없습니다.`,
+			};
+
+		case NightActionKind.SCOOP:
+			target.scooped = true;
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자를 취재했습니다.\n내일 아침 모두가 그의 직업을 알게 됩니다.`,
+				labelDurationMs: REVEAL_MS,
+			};
 	}
 }
 
+/**
+ * 공격받은 좌석이 아침을 어떻게 맞았는가.
+ *
+ * 기존에는 `saved: boolean` 하나였다 — 살아남는 길이 의사뿐이었으니 맞았다.
+ * 이제 군인의 방탄과 자경단원의 자책이 생겼는데, boolean 두 개를 나란히 두면
+ * `saved && shielded` 같은 있을 수 없는 상태를 타입이 허용한다.
+ * 배타적인 결말은 열거형으로 두는 쪽이 화면 문구를 고를 때도 그대로 쓰인다.
+ */
+export const NightOutcome = {
+	/** 죽었다 */
+	KILLED: "KILLED",
+	/** 의사가 살렸다 */
+	SAVED: "SAVED",
+	/** 군인이 버텼다 (방탄 소모) */
+	SHIELDED: "SHIELDED",
+	/** 자경단원이 같은 편을 쏴 자신도 죽었다 */
+	BACKFIRED: "BACKFIRED",
+} as const;
+export type NightOutcome = (typeof NightOutcome)[keyof typeof NightOutcome];
+
 export interface NightCasualty {
 	seat: Seat;
-	/** 의사가 살렸는가 */
-	saved: boolean;
+	outcome: NightOutcome;
+}
+
+function seatByIndex(seats: readonly Seat[], index: number): Seat | null {
+	for (const seat of seats) {
+		if (seat.index === index) return seat;
+	}
+	return null;
 }
 
 /**
@@ -123,9 +164,43 @@ export interface NightCasualty {
  */
 export function resolveNightCasualties(seats: readonly Seat[]): NightCasualty[] {
 	const casualties: NightCasualty[] = [];
+	const killed: Seat[] = [];
+
 	for (const seat of seats) {
-		if (!seat.alive || !seat.marked) continue;
-		casualties.push({ seat, saved: seat.healed });
+		if (!seat.alive || seat.attackedBy.length === 0) continue;
+		if (seat.healed) {
+			casualties.push({ seat, outcome: NightOutcome.SAVED });
+			continue;
+		}
+		if (seat.armored) {
+			// 방탄은 게임당 한 번뿐이다. 여기서만 소모된다
+			seat.armored = false;
+			casualties.push({ seat, outcome: NightOutcome.SHIELDED });
+			continue;
+		}
+		casualties.push({ seat, outcome: NightOutcome.KILLED });
+		killed.push(seat);
+	}
+
+	// 자경단원의 자책은 "쐈다"가 아니라 "죽였다"에 걸린다. 의사가 살렸거나
+	// 군인이 버텼다면 시민은 멀쩡하므로 책임질 일도 없다.
+	for (const victim of killed) {
+		if (victim.team === Team.MAFIA) continue;
+		for (const shooterIndex of victim.attackedBy) {
+			const shooter = seatByIndex(seats, shooterIndex);
+			if (!shooter || !shooter.alive) continue;
+			if (!roleDef(shooter.role).backfiresOnAlly) continue;
+			if (shooter.team !== victim.team) continue;
+			if (hasCasualty(casualties, shooter)) continue;
+			casualties.push({ seat: shooter, outcome: NightOutcome.BACKFIRED });
+		}
 	}
 	return casualties;
+}
+
+function hasCasualty(casualties: readonly NightCasualty[], seat: Seat): boolean {
+	for (const casualty of casualties) {
+		if (casualty.seat === seat) return true;
+	}
+	return false;
 }

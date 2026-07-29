@@ -18,7 +18,12 @@ import * as Ccu from "./services/Ccu.ts";
 import * as GameFlow from "./services/GameFlow.ts";
 import { enterLobby, handleDisconnect } from "./services/Lobby.ts";
 import { awardExp, refreshTitle } from "./services/Rewards.ts";
-import { displayName, resetPlayerAppearance, seatPlayer, spawnInLobby } from "./services/Stage.ts";
+import {
+	resetPlayerAppearance,
+	restoreAppearance,
+	seatPlayer,
+	spawnInLobby,
+} from "./services/Stage.ts";
 
 ScriptApp.onStart.Add(() => {
 	ScriptApp.enableFreeView = false;
@@ -48,8 +53,9 @@ ScriptApp.onJoinPlayer.Add(player => {
 	if (found) {
 		found.seat.connected = true;
 		found.seat.name = player.name;
-		player.name = displayName(player, found.seat);
 		seatPlayer(found.room, player, found.seat);
+		restoreAppearance(found.room, player, found.seat);
+		GameFlow.showPhaseView(found.room, player, found.seat);
 		label(player, "진행 중이던 게임에 다시 참가했습니다.");
 		return;
 	}

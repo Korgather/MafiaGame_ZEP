@@ -62,12 +62,12 @@ function pushSeatList(player: ScriptPlayer): void {
 	const widget = tagOf(player).widget;
 	if (!widget) return;
 	const found = locate(player.id);
-	widget.sendMessage({ type: "init", data: found ? seatViews(found.room) : [] });
+	widget.sendMessage({ type: "init", data: found ? lobbySeatViews(found.room) : [] });
 }
 
 /** 방 안 전원의 목록을 갱신한다 (한 명이라도 바뀌면 전원에게) */
 function refreshRoom(room: Room): void {
-	const views = seatViews(room);
+	const views = lobbySeatViews(room);
 	for (const seat of room.seats.slice()) {
 		const player = ScriptApp.getPlayerByID(seat.playerId);
 		if (!player) continue;
@@ -76,7 +76,12 @@ function refreshRoom(room: Room): void {
 	}
 }
 
-function seatViews(room: Room): LobbySeatView[] {
+/**
+ * 대기실 목록 한 줄. 게임 중 화면이 쓰는 entities/Room.ts의 seatViews와는
+ * 다른 것이다 — 저쪽은 참가 번호와 생존 여부를, 이쪽은 레벨·준비·강퇴표를 담는다.
+ * 이름이 같으면 잘못 가져다 쓰기 딱 좋아서 여기만 lobby를 붙여 둔다.
+ */
+function lobbySeatViews(room: Room): LobbySeatView[] {
 	return room.seats.map(seat => {
 		const storage = readRunCount(seat.playerId);
 		return {

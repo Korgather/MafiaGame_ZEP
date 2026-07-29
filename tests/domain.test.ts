@@ -13,7 +13,11 @@ import { describe, it } from "node:test";
 import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
 import { buildRoleDeck } from "../src/domain/RoleAssignment.ts";
-import { resolveNightCasualties, resolveNightSelect } from "../src/domain/NightResolution.ts";
+import {
+	NightOutcome,
+	resolveNightCasualties,
+	resolveNightSelect,
+} from "../src/domain/NightResolution.ts";
 import { expReward, levelFromExp, recordKey } from "../src/domain/Progression.ts";
 import { tallyVotes, VoteOutcome } from "../src/domain/Vote.ts";
 import { evaluateWinner } from "../src/domain/WinCondition.ts";
@@ -29,15 +33,24 @@ function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
 		team: ROLE_DEFS[role].team,
 		alive: true,
 		ready: false,
-		voted: false,
+		votedFor: 0,
 		voteCount: 0,
 		healed: false,
-		marked: false,
+		attackedBy: [],
+		armored: ROLE_DEFS[role].survivesFirstAttack === true,
+		silenced: false,
+		scooped: false,
 		usedSkill: false,
+		skillSpent: false,
 		kickedBy: [],
 		connected: true,
 		...overrides,
 	};
+}
+
+/** 그 진영의 좌석이 몇 개인가. 직업이 아니라 진영으로 세야 하는 곳이 많다 */
+function teamCount(deck: Role[], team: Team): number {
+	return deck.filter(role => ROLE_DEFS[role].team === team).length;
 }
 
 describe("RoleAssignment", () => {
@@ -47,17 +60,41 @@ describe("RoleAssignment", () => {
 		}
 	});
 
-	it("4명은 마피아 1, 8명은 마피아 2", () => {
+	it("4명은 마피아 진영 1, 8명은 2", () => {
 		const rng = () => 0; // 결정적으로: shuffle이 순서만 바꾸고 구성은 유지한다
-		const mafiaIn = (count: number) =>
-			buildRoleDeck(count, rng).filter(role => role === Role.MAFIA).length;
-		assert.equal(mafiaIn(4), 1);
-		assert.equal(mafiaIn(8), 2);
+		// 직업이 아니라 진영으로 센다. 두 번째 마피아 자리는 건달이나 짐승인간이
+		// 뽑힐 수 있고, 그래도 마피아 진영이 둘이라는 사실은 달라지지 않는다.
+		assert.equal(teamCount(buildRoleDeck(4, rng), Team.MAFIA), 1);
+		assert.equal(teamCount(buildRoleDeck(8, rng), Team.MAFIA), 2);
 	});
 
-	it("표보다 인원이 많으면 나머지는 시민", () => {
+	it("마피아 리더는 항상 한 명 들어간다", () => {
+		// 마피아 채팅을 여는 직업이 하나도 없는 판이 나오면 안 된다
+		for (let count = 4; count <= 8; count++) {
+			const deck = buildRoleDeck(count, () => 0);
+			assert.equal(deck.filter(role => role === Role.MAFIA).length, 1, `${count}명`);
+		}
+	});
+
+	it("능력자를 다 채우고 남은 자리는 시민", () => {
 		const deck = buildRoleDeck(10, () => 0);
 		assert.equal(deck.filter(role => role === Role.CITIZEN).length, 3);
+	});
+
+	it("직업은 중복되지 않는다", () => {
+		// 풀에서 뽑기 때문에 같은 특수 직업이 두 번 나오면 안 된다.
+		// 평범한 시민만 여럿일 수 있다.
+		const deck = buildRoleDeck(8, () => 0).filter(role => role !== Role.CITIZEN);
+		assert.equal(new Set(deck).size, deck.length);
+	});
+
+	it("의사와 경찰은 항상 들어간다", () => {
+		// 정보도 방어도 없는 판은 시민이 이길 방법이 없다
+		for (let count = 4; count <= 8; count++) {
+			const deck = buildRoleDeck(count, () => 0);
+			assert.ok(deck.includes(Role.DOCTOR), `${count}명에 의사가 없다`);
+			assert.ok(deck.includes(Role.POLICE), `${count}명에 경찰이 없다`);
+		}
 	});
 });
 
@@ -151,19 +188,50 @@ describe("NightResolution", () => {
 		assert.equal(target.healed, true);
 	});
 
-	it("마피아가 지목하면 marked가 서고 능력이 소모된다", () => {
+	it("공격은 공격자의 번호를 대상에 남긴다", () => {
 		const mafia = seat(1, Role.MAFIA);
 		const target = seat(2, Role.CITIZEN);
 		const result = resolveNightSelect(mafia, target);
 		assert.equal(result?.consumed, true);
-		assert.equal(target.marked, true);
+		assert.deepEqual(target.attackedBy, [1]);
 	});
 
-	it("이미 지목된 대상을 또 찍으면 능력을 소모하지 않는다", () => {
-		const mafia = seat(1, Role.MAFIA);
-		const target = seat(2, Role.CITIZEN, { marked: true });
-		const result = resolveNightSelect(mafia, target);
-		assert.equal(result?.consumed, false);
+	it("여러 공격자가 같은 사람을 노려도 각자 기록된다", () => {
+		// 예전에는 이미 지목된 대상이면 "다른 마피아가 골랐다"며 되돌렸다.
+		// 그 문구가 자경단원에게 마피아의 동선을 알려주기 때문에 규칙을 없앴다.
+		const target = seat(3, Role.CITIZEN);
+		resolveNightSelect(seat(1, Role.MAFIA), target);
+		resolveNightSelect(seat(2, Role.BEAST), target);
+		assert.deepEqual(target.attackedBy, [1, 2]);
+	});
+
+	it("마피아만 총성을 낸다", () => {
+		// 공격자마다 소리가 나면 밤마다 소리 횟수로 공격자 수가 샌다
+		assert.ok(resolveNightSelect(seat(1, Role.MAFIA), seat(2, Role.CITIZEN))?.roomSound);
+		assert.equal(resolveNightSelect(seat(1, Role.VIGILANTE), seat(2, Role.CITIZEN))?.roomSound, undefined);
+		assert.equal(resolveNightSelect(seat(1, Role.BEAST), seat(2, Role.CITIZEN))?.roomSound, undefined);
+	});
+
+	it("경찰은 짐승인간을 잡지 못하고 건달은 잡는다", () => {
+		// 판정 기준은 진영도 직업도 아니라 appearsAsMafia다
+		const police = seat(1, Role.POLICE);
+		assert.match(resolveNightSelect(police, seat(2, Role.THUG))!.label, /마피아입니다/);
+		assert.match(resolveNightSelect(police, seat(3, Role.BEAST))!.label, /마피아가 아닙니다/);
+		assert.match(resolveNightSelect(police, seat(4, Role.MAFIA))!.label, /마피아입니다/);
+	});
+
+	it("건달이 협박하면 대상의 투표가 막힌다", () => {
+		const target = seat(2, Role.CITIZEN);
+		const result = resolveNightSelect(seat(1, Role.THUG), target);
+		assert.equal(result?.consumed, true);
+		assert.equal(target.silenced, true);
+	});
+
+	it("기자가 취재하면 대상에 표식이 남는다", () => {
+		const target = seat(2, Role.MAFIA);
+		const result = resolveNightSelect(seat(1, Role.REPORTER), target);
+		assert.equal(result?.consumed, true);
+		assert.equal(target.scooped, true);
 	});
 
 	it("스파이가 마피아를 찾으면 진영이 바뀌고 능력이 남는다", () => {
@@ -186,16 +254,107 @@ describe("NightResolution", () => {
 		assert.equal(resolveNightSelect(seat(1, Role.SHAMAN), seat(2, Role.MAFIA)), null);
 	});
 
-	it("치료받은 대상은 죽지 않는다", () => {
+	it("스파이가 건달을 찾아도 합류하지 않는다", () => {
+		// 건달은 마피아 팀이지만 채팅에 없다. 합류시키면 대화 상대가 없는
+		// 빈 채팅창이 열리고, 스파이는 능력만 아낀 채 아무것도 얻지 못한다.
+		const spy = seat(1, Role.SPY);
+		const result = resolveNightSelect(spy, seat(2, Role.THUG));
+		assert.equal(spy.team, Team.CITIZEN);
+		assert.equal(result?.consumed, true);
+	});
+});
+
+describe("NightResolution - 정산", () => {
+	it("치료받으면 살고 아니면 죽는다", () => {
 		const casualties = resolveNightCasualties([
-			seat(1, Role.CITIZEN, { marked: true, healed: true }),
-			seat(2, Role.POLICE, { marked: true }),
+			seat(1, Role.CITIZEN, { attackedBy: [9], healed: true }),
+			seat(2, Role.POLICE, { attackedBy: [9] }),
 			seat(3, Role.DOCTOR),
 		]);
 		assert.equal(casualties.length, 2);
-		assert.equal(casualties[0].saved, true);
-		assert.equal(casualties[1].saved, false);
+		assert.equal(casualties[0].outcome, NightOutcome.SAVED);
+		assert.equal(casualties[1].outcome, NightOutcome.KILLED);
 		assert.equal(casualties[1].seat.index, 2);
+	});
+
+	it("군인은 첫 공격을 버티고 방탄을 잃는다", () => {
+		const soldier = seat(1, Role.SOLDIER, { attackedBy: [9] });
+		assert.equal(soldier.armored, true, "군인은 방탄을 갖고 시작한다");
+
+		const first = resolveNightCasualties([soldier]);
+		assert.equal(first[0].outcome, NightOutcome.SHIELDED);
+		assert.equal(soldier.armored, false, "방탄이 소모되지 않았다");
+
+		// 다음 밤: 같은 좌석이 또 맞으면 이번엔 죽는다
+		soldier.attackedBy = [9];
+		assert.equal(resolveNightCasualties([soldier])[0].outcome, NightOutcome.KILLED);
+	});
+
+	it("치료가 방탄보다 먼저 쓰인다", () => {
+		// 순서가 반대면 의사가 지킨 군인이 방탄을 헛되이 잃는다
+		const soldier = seat(1, Role.SOLDIER, { attackedBy: [9], healed: true });
+		assert.equal(resolveNightCasualties([soldier])[0].outcome, NightOutcome.SAVED);
+		assert.equal(soldier.armored, true, "방탄이 헛되이 소모됐다");
+	});
+
+	it("자경단원이 시민을 죽이면 자신도 죽는다", () => {
+		const vigilante = seat(1, Role.VIGILANTE);
+		const casualties = resolveNightCasualties([
+			vigilante,
+			seat(2, Role.CITIZEN, { attackedBy: [1] }),
+		]);
+		assert.equal(casualties.length, 2);
+		assert.equal(casualties[0].outcome, NightOutcome.KILLED);
+		assert.equal(casualties[1].seat, vigilante);
+		assert.equal(casualties[1].outcome, NightOutcome.BACKFIRED);
+	});
+
+	it("자경단원이 마피아를 죽이면 멀쩡하다", () => {
+		const casualties = resolveNightCasualties([
+			seat(1, Role.VIGILANTE),
+			seat(2, Role.MAFIA, { attackedBy: [1] }),
+		]);
+		assert.equal(casualties.length, 1);
+		assert.equal(casualties[0].outcome, NightOutcome.KILLED);
+	});
+
+	it("쏜 시민이 살아나면 자책하지 않는다", () => {
+		// 자책은 "쐈다"가 아니라 "죽였다"에 걸린다
+		for (const rescued of [{ healed: true }, { armored: true }]) {
+			const casualties = resolveNightCasualties([
+				seat(1, Role.VIGILANTE),
+				seat(2, Role.CITIZEN, { attackedBy: [1], ...rescued }),
+			]);
+			assert.equal(casualties.length, 1, JSON.stringify(rescued));
+			assert.notEqual(casualties[0].outcome, NightOutcome.KILLED);
+		}
+	});
+
+	it("마피아와 자경단원이 같은 시민을 노리면 자경단원도 죽는다", () => {
+		// 누가 결정타였는지 가릴 방법이 없다. 방아쇠를 당긴 이상 책임진다.
+		const vigilante = seat(1, Role.VIGILANTE);
+		const casualties = resolveNightCasualties([
+			vigilante,
+			seat(2, Role.MAFIA),
+			seat(3, Role.CITIZEN, { attackedBy: [2, 1] }),
+		]);
+		assert.equal(casualties.length, 2);
+		assert.equal(casualties[1].seat, vigilante);
+		assert.equal(casualties[1].outcome, NightOutcome.BACKFIRED);
+	});
+
+	it("이미 죽은 자경단원은 자책하지 않는다", () => {
+		// 같은 밤에 마피아에게 당했다면 사망 처리가 두 번 나가면 안 된다
+		const casualties = resolveNightCasualties([
+			seat(1, Role.VIGILANTE, { attackedBy: [9] }),
+			seat(2, Role.CITIZEN, { attackedBy: [1] }),
+		]);
+		assert.equal(casualties.length, 2);
+		assert.equal(casualties.filter(c => c.seat.index === 1).length, 1);
+	});
+
+	it("공격받지 않은 사람은 목록에 없다", () => {
+		assert.equal(resolveNightCasualties([seat(1, Role.CITIZEN), seat(2, Role.MAFIA)]).length, 0);
 	});
 });
 
@@ -236,13 +395,56 @@ describe("Progression", () => {
 	});
 });
 
+/**
+ * 직업 테이블 자체의 불변식.
+ *
+ * 직업 추가는 ROLE_DEFS에 항목 하나를 넣는 일이고, 타입은 필드가 다 찼는지까지만
+ * 본다. "지목은 있는데 안내 문구가 없다" 같은 조합은 컴파일을 통과하고 밤에 빈
+ * 화면으로 나타난다. 여기서 잡으면 항목을 쓰는 순간 잡힌다.
+ */
 describe("ROLE_DEFS", () => {
+	const roles = Object.keys(ROLE_DEFS) as Role[];
+
 	it("밤에 지목이 있는 직업은 안내 문구가 있다", () => {
-		for (const role of Object.keys(ROLE_DEFS) as Role[]) {
+		for (const role of roles) {
 			const def = ROLE_DEFS[role];
 			if (def.nightAction !== null) {
 				assert.ok(def.nightPrompt, `${role}에 nightPrompt가 없다`);
 			}
+		}
+	});
+
+	it("지목이 없는 직업에는 안내 문구도 없다", () => {
+		for (const role of roles) {
+			const def = ROLE_DEFS[role];
+			if (def.nightAction === null) {
+				assert.equal(def.nightPrompt, null, `${role}은 지목이 없는데 nightPrompt가 있다`);
+			}
+		}
+	});
+
+	it("모든 직업에 카드에 쓸 이름·기호·설명이 있다", () => {
+		for (const role of roles) {
+			const def = ROLE_DEFS[role];
+			assert.ok(def.displayName, `${role}에 displayName이 없다`);
+			assert.ok(def.glyph, `${role}에 glyph가 없다`);
+			assert.ok(def.ability, `${role}에 ability가 없다`);
+			assert.ok(def.tip, `${role}에 tip이 없다`);
+		}
+	});
+
+	it("한글 이름은 겹치지 않는다", () => {
+		// 위젯은 이름만 보여준다. 겹치면 플레이어가 구분할 방법이 없다
+		const names = roles.map(role => ROLE_DEFS[role].displayName);
+		assert.equal(new Set(names).size, names.length);
+	});
+
+	it("마피아 팀인데 채팅이 없는 직업은 혼자라는 안내를 받는다", () => {
+		// 안내가 없으면 "왜 나만 채팅창이 없지"로 끝난다
+		for (const role of roles) {
+			const def = ROLE_DEFS[role];
+			if (def.team !== Team.MAFIA || def.nightChat !== null) continue;
+			assert.match(def.nightNotice, /마피아 팀/, `${role}에 진영 안내가 없다`);
 		}
 	});
 });

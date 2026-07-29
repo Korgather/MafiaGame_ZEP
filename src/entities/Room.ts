@@ -9,9 +9,15 @@
  * 두 곳이 리셋하는 필드 집합이 서로 달랐다(kickList/ready/kickCount는 한쪽에만).
  * 이제 리셋은 여기 한 곳뿐이다.
  */
-import type { Room, Seat } from "../types/Game.types.ts";
+import type { RevealView, Room, Seat, SeatView, VoteRecord } from "../types/Game.types.ts";
 import { GamePhase, Role, Team } from "../types/Game.types.ts";
 import { roomOrigin } from "../constants/RoomLayout.ts";
+import { roleDef, roleName } from "../domain/Roles.ts";
+
+/** 아직 개표가 없었을 때의 값 */
+function emptyVoteRecord(): VoteRecord {
+	return { board: [], executed: 0, message: "" };
+}
 
 export function createRoom(num: number): Room {
 	const room: Room = {
@@ -25,8 +31,12 @@ export function createRoom(num: number): Room {
 		tickTockPlayed: false,
 		turnCount: 0,
 		total: 0,
+		winner: null,
+		voteRecord: emptyVoteRecord(),
+		nightReport: [],
 		seats: [],
 		silhouettes: [],
+		chatLog: [],
 	};
 	return room;
 }
@@ -41,14 +51,45 @@ export function createSeat(playerId: string, name: string, level: string): Seat 
 		team: Team.CITIZEN,
 		alive: false,
 		ready: false,
-		voted: false,
+		votedFor: 0,
 		voteCount: 0,
 		healed: false,
-		marked: false,
+		attackedBy: [],
+		armored: false,
+		silenced: false,
+		scooped: false,
 		usedSkill: false,
+		skillSpent: false,
 		kickedBy: [],
 		connected: true,
 	};
+}
+
+/**
+ * 게임이 시작될 때 좌석에 번호와 직업을 앉힌다.
+ *
+ * 기존에는 GameFlow.beginGame이 seat의 필드를 하나씩 직접 세웠다. 좌석에
+ * 필드가 늘 때마다 그 목록을 createSeat과 beginGame 두 곳에서 맞춰야 했는데,
+ * 한쪽만 고치면 "지난 판의 값이 남은 좌석"이 조용히 만들어진다. 게임 내내
+ * 유지되는 값(군인의 방탄, 1회성 능력의 소진 여부)이 생기면서 실제 위험이 됐다 —
+ * 예전 필드는 전부 매 밤 초기화돼서 한 판을 넘어 새지 않았다.
+ */
+export function assignRole(seat: Seat, index: number, role: Role): void {
+	const def = roleDef(role);
+	seat.index = index;
+	seat.role = role;
+	seat.team = def.team;
+	seat.alive = true;
+	seat.ready = false;
+	seat.armored = def.survivesFirstAttack === true;
+	seat.skillSpent = false;
+	seat.usedSkill = false;
+	seat.votedFor = 0;
+	seat.voteCount = 0;
+	seat.healed = false;
+	seat.attackedBy = [];
+	seat.silenced = false;
+	seat.scooped = false;
 }
 
 export function findSeat(room: Room, playerId: string): Seat | undefined {
@@ -67,6 +108,44 @@ export function seatAt(room: Room, index: number): Seat | undefined {
 
 export function aliveSeats(room: Room): Seat[] {
 	return room.seats.filter(seat => seat.alive);
+}
+
+/**
+ * 게임 중 화면이 그리는 참가자 목록.
+ *
+ * 기존에는 Night.ts와 Voting.ts가 각각 aliveIndices()라는 같은 함수를 갖고
+ * 생존자의 번호 배열만 위젯에 보냈다. 함수가 두 벌이면 두 벌 다 고쳐야
+ * 하는데, 실제로 밤 화면과 투표 화면은 대상 목록이 달라야 할 이유가 없다.
+ *
+ * 죽은 사람도 포함한다. 목록에서 사라지면 남은 사람들의 자리가 매 라운드
+ * 밀려서, 어제 3번을 눌렀던 자리에 오늘은 다른 사람이 앉는다. 자리를
+ * 고정하고 죽은 칸을 비활성으로 남기는 편이 오조작이 적다.
+ */
+export function seatViews(room: Room, allyTeam?: Team): SeatView[] {
+	return room.seats
+		.slice()
+		.sort((a, b) => a.index - b.index)
+		.map(seat => ({
+			num: seat.index,
+			name: seat.name,
+			alive: seat.alive,
+			ally: allyTeam !== undefined && seat.alive && seat.team === allyTeam,
+			votes: seat.voteCount,
+		}));
+}
+
+/** 종료 화면의 전원 직업 공개 */
+export function revealViews(room: Room): RevealView[] {
+	return room.seats
+		.slice()
+		.sort((a, b) => a.index - b.index)
+		.map(seat => ({
+			num: seat.index,
+			name: seat.name,
+			role: roleName(seat.role),
+			team: seat.team,
+			alive: seat.alive,
+		}));
 }
 
 /**
@@ -121,14 +200,24 @@ export function withdrawKicks(room: Room, voterId: string): void {
 	}
 }
 
-/** 밤/투표 한 턴이 시작될 때 초기화되는 값 (기존 tagReset) */
+/**
+ * 밤/투표 한 턴이 시작될 때 초기화되는 값 (기존 tagReset).
+ *
+ * armored(군인의 방탄)와 skillSpent(자경단원·기자의 1회성 능력)는 **일부러
+ * 남긴다.** 게임당 한 번뿐인 자원이라 밤이 바뀔 때마다 되돌아오면 능력이
+ * 무제한이 된다. 소모는 각각 resolveNightCasualties와 밤 위젯 핸들러에서만
+ * 일어나고, 되돌리는 곳은 assignRole(게임 시작) 하나뿐이다.
+ */
 export function resetRound(room: Room): void {
+	room.voteRecord = emptyVoteRecord();
 	for (const seat of room.seats) {
 		seat.usedSkill = false;
-		seat.voted = false;
+		seat.votedFor = 0;
 		seat.voteCount = 0;
 		seat.healed = false;
-		seat.marked = false;
+		seat.attackedBy = [];
+		seat.silenced = false;
+		seat.scooped = false;
 	}
 }
 
@@ -142,6 +231,12 @@ export function resetRoom(room: Room): void {
 	room.tickTockPlayed = false;
 	room.turnCount = 0;
 	room.total = 0;
+	room.winner = null;
+	room.voteRecord = emptyVoteRecord();
+	room.nightReport = [];
 	room.seats = [];
 	room.silhouettes = [];
+	// 지난 판의 대화는 다음 판에 남기지 않는다. 죽은 사람의 유령 채팅이
+	// 다음 판 대기실에 되살아나면 그 자체로 정보 유출이다.
+	room.chatLog = [];
 }

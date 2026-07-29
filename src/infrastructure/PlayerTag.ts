@@ -10,6 +10,7 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { PlayerTag } from "../types/Game.types.ts";
+import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 
 export function tagOf(player: ScriptPlayer): PlayerTag {
 	const existing = player.tag as PlayerTag | undefined | null;
@@ -19,7 +20,12 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 	const created: PlayerTag = {
 		widget: null,
 		roleWidget: null,
-		ghostWidget: null,
+		chatWidget: null,
+		// 처음 들어오면 펼친 채로 시작한다. 채팅이 있다는 사실 자체를
+		// 모르고 지나가는 것이 접혀 있어서 얻는 시야보다 손해가 크다.
+		chatOpen: true,
+		chatChannel: ChatChannel.GLOBAL,
+		chatSeen: {},
 		originalName: player.name,
 	};
 	player.tag = created;
@@ -37,8 +43,8 @@ export function destroyWidgets(player: ScriptPlayer): void {
 		tag.roleWidget.destroy();
 		tag.roleWidget = null;
 	}
-	if (tag.ghostWidget) {
-		tag.ghostWidget.destroy();
-		tag.ghostWidget = null;
+	if (tag.chatWidget) {
+		tag.chatWidget.destroy();
+		tag.chatWidget = null;
 	}
 }

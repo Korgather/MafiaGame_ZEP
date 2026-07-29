@@ -13,6 +13,7 @@
  */
 import type { ScriptDynamicResource, ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
+import { GamePhase } from "../types/Game.types.ts";
 import { LOBBY_SPAWN_AREA, seatPosition } from "../constants/RoomLayout.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 import type { SpriteKey } from "../constants/Assets.ts";
@@ -92,6 +93,21 @@ export function applyNightSprite(player: ScriptPlayer, key: SpriteKey | null): v
 export function displayName(player: ScriptPlayer, seat: Seat): string {
 	const original = tagOf(player).originalName;
 	return seat.alive ? original : `${original}(유령)`;
+}
+
+/**
+ * 재접속한 사람의 외형을 현재 단계에 맞춘다.
+ *
+ * 이름·스프라이트·숨김은 지금까지 단계 전이(beginNightStage/beginDayStage)나
+ * 사망 시점에만 정해졌다. 그 사이에 들어온 사람은 산 사람 모습으로 남거나,
+ * 모두가 숨은 밤에 혼자 맵 위에 서서 실루엣 연출을 깨뜨렸다.
+ */
+export function restoreAppearance(room: Room, player: ScriptPlayer, seat: Seat): void {
+	player.name = displayName(player, seat);
+	player.title = seat.alive ? `${seat.index} 번 참가자` : "유령";
+	player.sprite = seat.alive ? DEFAULT_SPRITE : sprite("ghost");
+	player.hidden = room.phase === GamePhase.NIGHT;
+	player.sendUpdated();
 }
 
 /** 게임이 끝나 대기실로 돌아갈 때의 원상복구 */

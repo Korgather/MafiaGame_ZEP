@@ -9,16 +9,18 @@
  * 판정은 domain/WinCondition.ts, 보상 계산은 domain/Progression.ts로 옮겼고
  * 여기에는 "그래서 화면에 무엇을 하는가"만 남는다.
  */
-import type { Room, Team as TeamType } from "../types/Game.types.ts";
+import type { ScriptPlayer } from "zep-script";
+import type { Room, Seat, Team as TeamType } from "../types/Game.types.ts";
 import { GamePhase, Team } from "../types/Game.types.ts";
-import { Sound, WidgetFile } from "../constants/Assets.ts";
+import { Sound } from "../constants/Assets.ts";
 import { TIMING } from "../constants/GameConfig.ts";
 import { roleName } from "../domain/Roles.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
+import { revealViews } from "../entities/Room.ts";
 import { forEachPlayer, playSound, say } from "./Broadcast.ts";
 import { settleMatch } from "./Rewards.ts";
 import { clearSilhouettes } from "./Stage.ts";
-import { closeGhost, closeRoleCard, openPhase } from "./Widgets.ts";
+import { closeGhost, closeRoleCard, openGameOver } from "./Widgets.ts";
 
 /**
  * 승패가 갈렸으면 종료 처리를 하고 true를 돌려준다.
@@ -35,19 +37,48 @@ export function finish(room: Room, winner: TeamType): void {
 	room.phase = GamePhase.GAME_OVER;
 	room.phaseTimer = TIMING.GAME_OVER;
 	room.tickTockPlayed = true;
+	room.winner = winner;
 
 	clearSilhouettes(room);
 	playSound(room, winner === Team.MAFIA ? Sound.MAFIA_WIN : Sound.CITIZEN_WIN);
 	say(room, roster(room));
 
 	forEachPlayer(room, (player, seat) => {
-		closeRoleCard(player);
-		closeGhost(player);
-		player.hidden = false;
-		player.moveSpeed = 80;
-		player.sendUpdated();
-		openPhase(player, winner === Team.MAFIA ? WidgetFile.WIN_MAFIA : WidgetFile.WIN_CITIZEN, {});
+		openWinView(room, player, seat);
+		// 보상은 판당 한 번이다. 재접속으로 화면만 다시 열릴 때는 지급하지 않는다.
 		settleMatch(player, seat, winner);
+	});
+}
+
+/** 왜 끝났는가. 승리 조건을 화면에 한 줄로 설명한다 */
+function winReason(winner: TeamType): string {
+	return winner === Team.MAFIA
+		? "마피아 수가 시민 수와 같아졌습니다."
+		: "마피아가 모두 사라졌습니다.";
+}
+
+/**
+ * 한 사람의 종료 화면. 승패 연출 도중 재접속한 사람에게도 같은 화면을 준다.
+ *
+ * 보상 지급은 여기 넣지 않는다 — 화면은 몇 번을 다시 열어도 되지만
+ * 경험치는 한 번만 줘야 하기 때문이다. 둘을 한 함수에 두면 그 구분이 사라진다.
+ */
+export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void {
+	closeRoleCard(player);
+	closeGhost(player);
+	player.hidden = false;
+	player.moveSpeed = 80;
+	player.sendUpdated();
+
+	// winner는 GAME_OVER에 들어간 순간 정해진다. 도중 재접속 경로도 여기를 지난다.
+	const winner = room.winner === null ? Team.CITIZEN : room.winner;
+	openGameOver(player, {
+		type: "init",
+		winner,
+		team: seat.team,
+		reason: winReason(winner),
+		players: revealViews(room),
+		timer: room.phaseTimer,
 	});
 }
 
