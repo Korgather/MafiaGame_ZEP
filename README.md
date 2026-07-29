@@ -1,3 +1,89 @@
+# 마피아 게임 (ZEP)
+
+ZEP 맵 하나에서 8개 방이 동시에 돌아가는 마피아 게임. TypeScript로 작성하고 webpack으로 단일 번들을 만든다.
+
+## 개발
+
+```bash
+npm install
+```
+
+| 명령                | 하는 일                                            |
+| ------------------- | -------------------------------------------------- |
+| `npm run build`     | `main.ts` → `res/main.js` 번들 생성                 |
+| `npm run type-check`| 타입 검사 (`tsc --noEmit`)                          |
+| `npm test`          | 도메인 로직 단위 테스트 (`node --test`, 빌드 불필요)|
+| `npm run lint`      | ESLint                                              |
+| `npm run archive`   | 빌드 후 zip 패키징                                  |
+| `npm run deploy`    | 패키징 후 ZEP에 배포                                |
+
+### 빌드가 왜 webpack인가
+
+`zep-script build`는 babel 단일 파일 컴파일이라 모듈 분리가 되지 않는다. 대신 webpack이
+`main.ts`를 번들해 `res/main.js`를 만든다. `zep-script archive`는 `res/` 안의 내용을 zip 루트에
+넣으므로 `res/main.js`가 곧 ZEP 런타임의 엔트리포인트가 된다.
+
+`@zep.us/babel-plugin-zep-script`가 번들 과정에서 `ScriptApp.*` → `App.*`,
+`ScriptMap.*` → `Map.*`로 치환하고 `import "zep-script"`를 제거한다. 소스에서는 항상
+`ScriptApp` / `ScriptMap`을 쓴다.
+
+### 런타임 제약 (Jint)
+
+ZEP 스크립트는 Jint 위에서 돈다. `@babel/preset-env`를 쓰지 않으므로 소스 문법이 그대로 나간다.
+
+- `console`, `window`, `document`, `fetch` 없음 — HTTP는 `ScriptApp.httpPostJson`
+- 전역 `Map`은 babel이 `ScriptMap`으로 치환한다. 네이티브 `Map`/`Set` 금지, 일반 객체와 배열을 쓴다
+- ES2021+ 문법 자제
+
+이 규칙들은 ESLint의 `no-restricted-globals`로 강제된다.
+
+## 구조
+
+```
+main.ts                  엔트리 (src/index를 부른다)
+src/
+  index.ts               ZEP 이벤트 배선만. 게임 규칙 없음
+  types/                 타입, 위젯 메시지 파서
+  constants/             설정값, 좌표, 에셋 이름
+  domain/                순수 함수. ZEP API를 부르지 않는다 → 테스트 대상
+  entities/              방 상태 모델과 레지스트리
+  infrastructure/        player.storage / player.tag / 스프라이트 캐시 래퍼
+  services/              ZEP API를 실제로 부르는 계층
+tests/                   domain 단위 테스트
+res/                     위젯 HTML, 이미지, 사운드 (+ 빌드 산출물 main.js)
+```
+
+의존 방향은 한 방향이다. `services` → `domain`/`entities`/`infrastructure`,
+`domain` → `types`/`constants`만. 순환 참조가 없다.
+
+핵심은 **`domain`이 ZEP과 무관하다**는 점이다. 승패 판정, 투표 집계, 밤 능력 처리,
+직업 배분, 레벨 계산이 전부 순수 함수라서 `npm test`가 ZEP 없이 이들을 검증한다.
+
+### 상태 머신
+
+`services/GameFlow.ts`의 `advancePhase` switch 하나가 게임 규칙의 전부다.
+
+```
+LOBBY → ROLE_REVEAL → NIGHT → DAY → VOTE → VOTE_RESULT → NIGHT ...
+                                                       ↘ GAME_OVER → LOBBY
+```
+
+승패 판정은 사망이 발생할 수 있었던 단계 직후(NIGHT 정산 후, VOTE_RESULT 종료 후)에만 한다.
+
+## 직업 추가하기
+
+1. `types/Game.types.ts`의 `Role`에 항목 추가
+2. `domain/Roles.ts`의 `ROLE_DEFS`에 정의 추가 — `Record<Role, RoleDef>`라서 빠뜨리면 컴파일이 실패한다
+3. `domain/RoleAssignment.ts`의 인원수별 배분표에 넣기
+4. `res/`에 직업 카드 위젯 HTML 추가
+
+밤 능력이 기존 4종(`HEAL` / `KILL` / `INSPECT_TEAM` / `INSPECT_ROLE`)에 없으면
+`NightActionKind`에 추가하고 `domain/NightResolution.ts`에서 처리한다.
+
+---
+
+# 기획 메모
+
 ## 밤부터 시작하게 만들자
 
 ## 모드별 직업군
@@ -22,6 +108,8 @@
 - 특수직업(마피아)
   - 스파이, 밤마다 플레이어 한 명을 골라 그 사람의 직업을 알아낼 수 있다. 마피아일 경우 접선
   - 짐승인간, 자신이 마피아에게 처형 당하는 경우 또는 자신이 선택한 사람이 마피아에게 처형당할 경우 마피아와 접선, 접선 이후 죽일 수 있음
+
+> 정치인·영매·스파이는 구현 완료. 나머지는 미구현.
 
 ## 고민되는 부분
 
