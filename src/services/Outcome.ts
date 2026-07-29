@@ -46,7 +46,7 @@ export function finish(room: Room, winner: TeamType): void {
 		player.hidden = false;
 		player.moveSpeed = 80;
 		player.sendUpdated();
-		openPhase(player, winner === Team.MAFIA ? WidgetFile.WIN_MAFIA : WidgetFile.WIN_CITIZEN);
+		openPhase(player, winner === Team.MAFIA ? WidgetFile.WIN_MAFIA : WidgetFile.WIN_CITIZEN, {});
 		settleMatch(player, seat, winner);
 	});
 }

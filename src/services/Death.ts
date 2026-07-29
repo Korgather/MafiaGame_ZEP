@@ -15,7 +15,6 @@ import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { Role } from "../types/Game.types.ts";
 import { CONSOLATION_EXP } from "../domain/Progression.ts";
-import { WidgetFile, WidgetSize } from "../constants/Assets.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { locate } from "../entities/RoomRegistry.ts";
@@ -23,7 +22,7 @@ import { asText, field, messageType, MAX_CHAT_LENGTH } from "../types/Widget.typ
 import { say, tell } from "./Broadcast.ts";
 import { relayGhost } from "./Chat.ts";
 import { awardExp } from "./Rewards.ts";
-import { closeMain, closeGhost } from "./Widgets.ts";
+import { closeMain, openGhostChat } from "./Widgets.ts";
 
 export const DeathCause = {
 	/** 낮 투표 처형 */
@@ -81,22 +80,13 @@ function becomeGhost(player: ScriptPlayer, seat: Seat): void {
 	player.hidden = false;
 	player.sendUpdated();
 
-	// 죽으면 밤 능력 위젯은 의미가 없다
+	// 죽으면 밤 능력 위젯은 의미가 없다 (유령 위젯은 openGhostChat이 정리한다)
 	closeMain(player);
-	closeGhost(player);
 
-	const widget = player.showWidget(
-		WidgetFile.ROLE_ACTION,
-		"top",
-		WidgetSize.ROLE_ACTION.width,
-		WidgetSize.ROLE_ACTION.height
-	);
-	tag.ghostWidget = widget;
-	widget.sendMessage({
+	const widget = openGhostChat(player, {
 		type: "init",
 		myNum: seat.index,
 		role: "",
-		isMobile: player.isMobile,
 		chatEnable: true,
 	});
 	widget.onMessage.Add((sender, data) => {

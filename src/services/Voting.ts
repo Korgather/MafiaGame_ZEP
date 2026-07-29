@@ -44,13 +44,11 @@ export function beginDay(room: Room): void {
 
 	forEachPlayer(room, (player, seat) => {
 		if (seat.alive) closeGhost(player);
-		const widget = openPhase(player, WidgetFile.MORNING);
-		widget.sendMessage({
+		openPhase(player, WidgetFile.MORNING, {
 			total: room.total,
 			alive,
 			timer: room.phaseTimer,
 			description: "투표 전까지 이야기를 나누세요.",
-			isMobile: player.isMobile,
 		});
 		tell(player, `🌞 ${room.turnCount}번째 아침`);
 	});
@@ -73,15 +71,12 @@ export function beginVote(room: Room): void {
 	centerLabel(room, "투표가 시작되었습니다.");
 
 	forEachPlayer(room, (player, seat) => {
-		const widget = openPhase(player, WidgetFile.VOTE);
-		widget.sendMessage({
+		const widget = openPhase(player, WidgetFile.VOTE, {
 			type: "init",
 			total: room.total,
 			alive: live.length,
 			timer: room.phaseTimer,
 			liveList: live,
-			description: "",
-			isMobile: player.isMobile,
 		});
 		if (seat.alive) bindVoteWidget(widget);
 	});
@@ -124,11 +119,9 @@ export function beginVoteResult(room: Room): void {
 	const result = tallyVotes(room.seats);
 
 	forEachPlayer(room, player => {
-		const widget = openPhase(player, WidgetFile.VOTE_RESULT);
-		widget.sendMessage({
+		openPhase(player, WidgetFile.VOTE_RESULT, {
 			type: "voteResult",
 			result: result.board,
-			isMobile: player.isMobile,
 		});
 	});
 

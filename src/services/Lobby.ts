@@ -52,7 +52,6 @@ function isKickBanned(playerId: string): boolean {
 /** 대기실 위젯을 열고 현재 상태를 그린다 */
 export function enterLobby(player: ScriptPlayer): void {
 	const widget = openLobby(player);
-	widget.sendMessage({ type: "setID", id: player.id });
 	widget.onMessage.Add(handleMessage);
 	pushSeatList(player);
 	pushRoomCounts(player);

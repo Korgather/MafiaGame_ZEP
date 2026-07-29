@@ -41,6 +41,22 @@ function aliveIndices(room: Room): number[] {
 	return list;
 }
 
+/**
+ * 지목할 것이 없는 사람들이 보는 밤 화면의 상태.
+ *
+ * 원본 문구는 "마피아, 경찰, 의사는 밤에 움직일 수 있습니다"로 직업을 나열했다.
+ * 그 뒤 영매·스파이·정치인이 추가되면서 문구만 낡았는데 아무도 몰랐다.
+ * 직업 목록을 문구에서 빼면 직업을 추가해도 여기가 낡지 않는다.
+ */
+function nightStatus(room: Room, live: number[]) {
+	return {
+		total: room.total,
+		alive: live.length,
+		timer: room.phaseTimer,
+		description: "밤입니다. 능력이 있는 직업은 대상을 지목하세요.",
+	};
+}
+
 export function beginNight(room: Room): void {
 	room.phase = GamePhase.NIGHT;
 	room.phaseTimer = TIMING.NIGHT;
@@ -61,7 +77,7 @@ export function beginNight(room: Room): void {
 function openNightView(room: Room, player: ScriptPlayer, seat: Seat, live: number[]): void {
 	if (!seat.alive) {
 		// 죽은 사람은 유령 채팅창(사망 시 이미 열림)만 유지하고 밤 화면을 본다
-		openPhase(player, WidgetFile.NIGHT);
+		openPhase(player, WidgetFile.NIGHT, nightStatus(room, live));
 		return;
 	}
 
@@ -75,22 +91,20 @@ function openNightView(room: Room, player: ScriptPlayer, seat: Seat, live: numbe
 
 	// 영매는 지목할 대상이 없고 유령들과 대화만 한다
 	if (def.nightAction === null && def.nightChat === ChatChannel.GHOST) {
-		const ghost = openGhostChat(player);
-		ghost.sendMessage({
+		const ghost = openGhostChat(player, {
 			type: "init",
 			myNum: seat.index,
 			role: roleName(seat.role),
-			isMobile: player.isMobile,
 			chatEnable: true,
 		});
 		bindChat(ghost, ChatChannel.GHOST);
-		openPhase(player, WidgetFile.NIGHT);
+		openPhase(player, WidgetFile.NIGHT, nightStatus(room, live));
 		return;
 	}
 
 	// 능력도 채팅도 없는 직업은 밤 안내 화면만 본다
 	if (def.nightAction === null && def.nightChat === null) {
-		openPhase(player, WidgetFile.NIGHT);
+		openPhase(player, WidgetFile.NIGHT, nightStatus(room, live));
 		return;
 	}
 
@@ -98,15 +112,13 @@ function openNightView(room: Room, player: ScriptPlayer, seat: Seat, live: numbe
 		label(player, def.nightPrompt, NIGHT_PROMPT_MS);
 	}
 
-	const widget = openRoleAction(player);
-	widget.sendMessage({
+	const widget = openRoleAction(player, {
 		type: "init",
 		myNum: seat.index,
 		role: roleName(seat.role),
 		total: room.total,
 		liveList: live,
 		time: room.phaseTimer,
-		isMobile: player.isMobile,
 		chatEnable: inMafiaChat && mafiaTeamSize(room) > 1,
 		teamIndexArray: inMafiaChat ? mafiaTeamView(room) : [],
 	});
