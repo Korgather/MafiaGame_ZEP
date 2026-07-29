@@ -174,8 +174,14 @@ export interface ChatPayload {
 	quick: string[];
 	/** 펼친 상태인가. 위젯 크기가 이 값으로 갈린다 */
 	open: boolean;
-	/** 내 참가 번호. 0이면 좌석 없음 */
-	myNum: number;
+	/**
+	 * 내 playerId.
+	 *
+	 * 위젯이 "내가 쓴 말"을 오른쪽에 그리려면 기준이 필요하다. 참가 번호로는
+	 * 안 된다 — 좌석이 없는 전체 채팅에서는 모두가 0번이라 모든 발언이
+	 * 내 것처럼 보인다. id는 어디서든 나 하나만 가리킨다.
+	 */
+	myId: string;
 	/** 권한에 맞게 걸러낸 지난 기록 (오래된 것부터) */
 	lines: ChatMessage[];
 }
@@ -186,7 +192,6 @@ export interface ChatChannelsPayload {
 	channels: ChatChannelView[];
 	active: string;
 	quick: string[];
-	myNum: number;
 }
 
 /** 새 메시지 한 줄 + 갱신된 미확인 개수 */
@@ -233,7 +238,10 @@ export function closeChat(player: ScriptPlayer): void {
 }
 
 /** 이미 열려 있는 채팅창에 메시지를 보낸다. 닫혀 있으면 조용히 넘어간다 */
-export function updateChat(player: ScriptPlayer, payload: object): void {
+export function updateChat(
+	player: ScriptPlayer,
+	payload: ChatChannelsPayload | ChatLinePayload
+): void {
 	const widget = tagOf(player).chatWidget;
 	if (widget) widget.sendMessage(payload);
 }

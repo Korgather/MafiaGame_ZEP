@@ -79,23 +79,8 @@ export function centerLabel(room: Room, message: string, durationMs = ROOM_LABEL
 	forEachPlayer(room, player => label(player, message, durationMs));
 }
 
-/** 한 사람의 채팅창에 뜨는 시스템 안내 */
-export function tell(player: ScriptPlayer, message: string): void {
-	player.sendMessage(divider(message), LabelColor.SYSTEM);
-}
-
-/** 방 전원의 채팅창에 뜨는 시스템 안내 */
-export function say(room: Room, message: string): void {
-	forEachPlayer(room, player => tell(player, message));
-}
-
 export function playSound(room: Room, fileName: string): void {
 	forEachPlayer(room, player => {
 		player.playSound(fileName);
 	});
-}
-
-/** 시스템 안내를 채팅창에 눈에 띄게 감싼다 */
-function divider(message: string): string {
-	return `─────────────────\n${message}\n─────────────────`;
 }

@@ -43,5 +43,11 @@ export function field(data: unknown, key: string): unknown {
 	return (data as Record<string, unknown>)[key];
 }
 
-/** 마피아·유령 채팅 한 줄의 최대 길이 */
+/**
+ * 채팅 한 줄의 최대 길이.
+ *
+ * 위젯의 maxlength는 사용자 편의일 뿐 방어가 아니다 — 위젯을 조작하면
+ * 얼마든지 긴 문자열을 보낼 수 있고, 그 줄은 방 기록(chatLog)에 남아
+ * 모두의 화면을 밀어낸다. 서버에서 자르는 이 상수가 실제 한계다.
+ */
 export const MAX_CHAT_LENGTH = 200;

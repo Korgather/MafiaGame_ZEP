@@ -20,10 +20,11 @@ import { roleDef, roleName } from "../domain/Roles.ts";
 import { aliveSeats, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
-import { centerLabel, forEachPlayer, label, playSound, say, tell } from "./Broadcast.ts";
+import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
+import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { beginDayStage } from "./Stage.ts";
-import { closeGhost, openPhase, openVote, updateMain } from "./Widgets.ts";
+import { openPhase, openVote, updateMain } from "./Widgets.ts";
 
 /** 생존자 수에 비례하는 토론 시간 */
 function dayDuration(aliveCount: number): number {
@@ -39,15 +40,19 @@ export function beginDay(room: Room): void {
 	beginDayStage(room);
 	playSound(room, Sound.MORNING);
 
-	forEachPlayer(room, (player, seat) => {
-		openDayView(room, player, seat);
-		tell(player, `🌞 ${room.turnCount}번째 아침`);
-	});
+	// 아침이 왔다는 사실은 방 전체가 같이 겪는 일이다. 전에는 사람 수만큼
+	// 개인 안내를 보냈고, 그래서 재접속한 사람의 기록에는 아침이 없었다.
+	//
+	// say(진행 안내)지 announce(사건)가 아니다. 단계 전환은 게임이 알려주는
+	// 것이고, 사건은 게임 안에서 벌어진 일이다. 나중에 "이벤트만 보기"를
+	// 켰을 때 아침·밤이 사망과 섞여 나오면 걸러낸 의미가 없다.
+	Chat.say(room, `🌞 ${room.turnCount}번째 아침이 밝았습니다.`);
+
+	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 }
 
 /** 한 사람의 아침 화면 */
 export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	if (seat.alive) closeGhost(player);
 	openPhase(player, {
 		type: "init",
 		phase: "day",
@@ -77,6 +82,9 @@ export function beginVote(room: Room): void {
 
 	playSound(room, Sound.VOTE);
 	centerLabel(room, "투표가 시작되었습니다.");
+	// 중앙 라벨은 몇 초 뒤 사라진다. 늦게 화면을 본 사람과 재접속한 사람에게는
+	// 채팅 기록만 남으므로, 사라지는 안내는 항상 남는 안내와 짝을 이룬다
+	Chat.say(room, "🗳️ 투표가 시작되었습니다. 처형할 사람을 고르세요.");
 
 	forEachPlayer(room, (player, seat) => openVoteView(room, player, seat));
 }
@@ -186,7 +194,13 @@ function voteProgress(room: Room): { type: "progress"; voted: number; alive: num
 	for (const seat of room.seats) {
 		// 협박당한 사람은 분모에서도 빠진다. 남겨두면 그 한 칸이 절대 채워지지
 		// 않아 "아직 안 낸 사람이 있다"가 투표 시간 내내 떠 있는다.
-		if (!canVote(seat)) continue;
+		//
+		// 접속이 끊긴 좌석도 같은 이유로 뺀다. canVote에 넣지 않는 것은
+		// 의도적이다 — 그쪽은 "표를 낼 자격이 있는가"이고 끊긴 사람의 자격은
+		// 그대로다(돌아오면 낸다). 여기서 묻는 것은 "지금 이 칸이 채워질 수
+		// 있는가"라 질문이 다르다. 한 문장으로 합치면 재접속한 사람의 표를
+		// 거절하게 된다.
+		if (!canVote(seat) || !seat.connected) continue;
 		alive++;
 		if (seat.votedFor > 0) voted++;
 	}
@@ -221,7 +235,7 @@ export function beginVoteResult(room: Room): void {
 	if (result.outcome === VoteOutcome.EXECUTE) {
 		if (result.target) kill(room, result.target, DeathCause.EXECUTION);
 	} else {
-		say(room, room.voteRecord.message);
+		Chat.announce(room, room.voteRecord.message);
 	}
 }
 

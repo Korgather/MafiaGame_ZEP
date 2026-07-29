@@ -224,7 +224,7 @@
 				// 나오는 자리라, 줄을 나누면 들여쓰기가 이름 뒤에 붙는다
 				return html`<div class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}" role="listitem">
 					<span class="idx">${i + 1}</span>
-					<span class="grow ellip"><span class="nm">${seat.name}${mine ? " (나)" : ""}</span> <span class="meta">Lv.${seat.level} · ${seat.runCount}판</span></span>
+					<span class="grow ellip"><span class="nm">${seat.name}${mine ? " (나)" : ""}</span> <span class="meta">${seat.rank} · ${seat.runCount}판</span></span>
 					<span class="state">${seat.ready ? "준비" : "대기"}</span>
 					${kick}
 				</div>`;

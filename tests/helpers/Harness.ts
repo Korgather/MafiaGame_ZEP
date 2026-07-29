@@ -17,8 +17,11 @@ import "../../src/index.ts";
 import { MAX_PLAYERS } from "../../src/constants/GameConfig.ts";
 import { assignRole, resetRoom } from "../../src/entities/Room.ts";
 import { allRooms, getRoom, locate } from "../../src/entities/RoomRegistry.ts";
-import type { PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
-import type { Role } from "../../src/types/Game.types.ts";
+import type { ChatChannel } from "../../src/domain/chat/ChatChannel.ts";
+import type { ChatMessage } from "../../src/domain/chat/ChatMessage.ts";
+import { resetGlobalLog } from "../../src/services/ChatService.ts";
+import type { ChatChannelView, PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
+import { Role } from "../../src/types/Game.types.ts";
 
 let nextPlayerId = 1;
 
@@ -42,6 +45,9 @@ export function resetWorld(seed = 1): void {
 	// (직업 배분이 Math.random에 의존하므로 이게 없으면 좌석 배치가 매번 달라진다)
 	seedRandom(seed);
 	for (const room of allRooms()) resetRoom(room as Room);
+	// 전체 채팅 기록은 방이 아니라 월드에 붙어 있다. 방을 비우는 것만으로는
+	// 지워지지 않아서, 앞 테스트의 로비 잡담이 다음 테스트 화면에 남는다.
+	resetGlobalLog();
 	world.players.length = 0;
 	world.httpPosts.length = 0;
 	for (const key of Object.keys(world.mapObjects)) delete world.mapObjects[key];
@@ -164,11 +170,42 @@ export function mainWidget(player: FakePlayer): FakeWidget {
 	return widget as unknown as FakeWidget;
 }
 
-/** 유령·영매 채팅 위젯 */
-export function ghostWidget(player: FakePlayer): FakeWidget {
-	const widget = tagOf(player).ghostWidget;
-	if (!widget) throw new Error(`${player.name}에게 열린 유령 위젯이 없습니다.`);
+/** 메인 위젯이 열려 있으면 그것, 아니면 undefined */
+export function findMainWidget(player: FakePlayer): FakeWidget | undefined {
+	const widget = tagOf(player).widget;
+	return widget ? (widget as unknown as FakeWidget) : undefined;
+}
+
+/** 통합 채팅 위젯. 접속과 동시에 열리므로 항상 있다 */
+export function chatWidget(player: FakePlayer): FakeWidget {
+	const widget = tagOf(player).chatWidget;
+	if (!widget) throw new Error(`${player.name}에게 열린 채팅 위젯이 없습니다.`);
 	return widget as unknown as FakeWidget;
+}
+
+/**
+ * 이 사람의 채팅 위젯에 실제로 도착한 줄들.
+ *
+ * 서버가 무엇을 보냈는지가 아니라 이 사람이 무엇을 봤는지를 본다.
+ * 채널 권한 테스트가 노려야 하는 지점이 정확히 이것이다 —
+ * "마피아 밀담이 시민 화면에 도착하지 않는다"는 여기서만 확인된다.
+ */
+export function chatLines(player: FakePlayer, channel?: ChatChannel): ChatMessage[] {
+	const lines: ChatMessage[] = [];
+	for (const message of chatWidget(player).messages) {
+		const payload = message as { type?: string; line?: ChatMessage; lines?: ChatMessage[] };
+		if (payload.type === "line" && payload.line) lines.push(payload.line);
+		// init은 그때까지의 기록을 통째로 싣는다. 재접속 뒤 화면을 볼 때 필요하다.
+		if (payload.type === "init" && payload.lines) {
+			for (const line of payload.lines) lines.push(line);
+		}
+	}
+	return channel === undefined ? lines : lines.filter(line => line.channel === channel);
+}
+
+/** 채팅에 이런 내용의 줄이 왔는가 */
+export function chatSaw(player: FakePlayer, fragment: string): boolean {
+	return chatLines(player).some(line => line.text.indexOf(fragment) >= 0);
 }
 
 /** 직업 공개 카드 */
@@ -183,9 +220,40 @@ export function send(player: FakePlayer, data: object): void {
 	mainWidget(player).emit(player, data);
 }
 
-/** 유령 위젯이 서버로 메시지를 보낸다 */
-export function sendGhost(player: FakePlayer, data: object): void {
-	ghostWidget(player).emit(player, data);
+/** 채팅 위젯이 서버로 메시지를 보낸다 */
+export function sendChat(player: FakePlayer, data: object): void {
+	chatWidget(player).emit(player, data);
+}
+
+/** 지금 보고 있는 탭에 한 줄 친다 */
+export function chat(player: FakePlayer, text: string, channel?: ChatChannel): void {
+	const target = channel === undefined ? activeChannel(player) : channel;
+	sendChat(player, { type: "send", channel: target, text });
+}
+
+/** 채팅 탭을 옮긴다 */
+export function switchChannel(player: FakePlayer, channel: ChatChannel): void {
+	sendChat(player, { type: "channel", channel });
+}
+
+/** 서버가 지금 활성 탭이라고 알려준 채널 */
+export function activeChannel(player: FakePlayer): ChatChannel {
+	const messages = chatWidget(player).messages;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const payload = messages[i] as { active?: ChatChannel };
+		if (payload.active !== undefined) return payload.active;
+	}
+	throw new Error(`${player.name}의 채팅 위젯이 활성 채널을 받은 적이 없습니다.`);
+}
+
+/** 서버가 마지막으로 보낸 채널 목록(미확인 수 포함) */
+export function chatChannels(player: FakePlayer): ChatChannelView[] {
+	const messages = chatWidget(player).messages;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const payload = messages[i] as { channels?: ChatChannelView[] };
+		if (payload.channels !== undefined) return payload.channels;
+	}
+	throw new Error(`${player.name}의 채팅 위젯이 채널 목록을 받은 적이 없습니다.`);
 }
 
 /** 대기실에서 방에 참가한다 */
@@ -245,6 +313,33 @@ export function startGame(playerCount: number, roomNum = 1, roles?: readonly Rol
 	finishCountdown(room(roomNum));
 	if (roles) castRoles(room(roomNum), roles);
 	return players;
+}
+
+/**
+ * 예외 규칙이 없는 직업만으로 채운 판. 배선 테스트의 기준선이다.
+ *
+ * 배선 테스트가 검증하는 문장은 "지목한 사람이 아침에 죽는다", "표는 한 번만
+ * 들어간다" 같은 것인데, 무작위 덱은 바로 그 문장의 예외인 좌석을 앉힌다.
+ * 군인은 첫 공격을 버티고, 정치인은 표가 2에 처형 면역이다. 그래서 밸런스
+ * 상수를 한 번 만질 때마다 밸런스와 무관한 테스트가 깨졌다 — 능력자 비율의
+ * 반올림을 고치자 4명 판에 군인이 들어올 수 있게 되면서 세 개가 그렇게 깨졌다.
+ *
+ * 예외인 직업을 걸러내는 필터(plainSeats)로 막아둔 자리도 있었지만, 그 필터는
+ * 예외를 가진 직업이 늘 때마다 한 줄씩 길어지고 빠뜨리면 조용히 통과한다.
+ * 여기서는 반대로 "쓸 직업만" 적는다. 13번째 직업이 생겨도 이 배열은 그대로다.
+ *
+ * 무작위 덱으로 도는 경로도 검증이 필요하지만 그건 "직업이 배분된다" 테스트
+ * 하나가 맡는다. 나머지는 덱을 입력으로 고정한다.
+ */
+export function plainDeck(playerCount: number): Role[] {
+	const deck: Role[] = [Role.MAFIA, Role.DOCTOR, Role.POLICE];
+	while (deck.length < playerCount) deck.push(Role.CITIZEN);
+	return deck.slice(0, playerCount);
+}
+
+/** plainDeck으로 시작하는 startGame */
+export function startPlainGame(playerCount: number, roomNum = 1): FakePlayer[] {
+	return startGame(playerCount, roomNum, plainDeck(playerCount));
 }
 
 /**

@@ -15,15 +15,11 @@ import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { CONSOLATION_EXP } from "../domain/Progression.ts";
-import { roleName } from "../domain/Roles.ts";
+import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
-import { locate } from "../entities/RoomRegistry.ts";
-import { asText, field, messageType, MAX_CHAT_LENGTH } from "../types/Widget.types.ts";
-import { say, tell } from "./Broadcast.ts";
-import { relayGhost } from "./Chat.ts";
+import * as Chat from "./ChatService.ts";
 import { awardExp } from "./Rewards.ts";
-import { closeMain, openGhostChat } from "./Widgets.ts";
 
 export const DeathCause = {
 	/** 낮 투표 처형 */
@@ -55,7 +51,7 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 		awardExp(player, CONSOLATION_EXP);
 	}
 
-	becomeGhost(player, seat);
+	becomeGhost(room, player, seat);
 }
 
 function announce(room: Room, seat: Seat, cause: DeathCause): void {
@@ -63,12 +59,12 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 		// 아침 화면이 그대로 읽는다. 채팅으로만 흘리면 토론에 밀려 사라진다
 		const line = `☠️ ${seat.name} 님이 죽었습니다.`;
 		room.nightReport.push(line);
-		say(room, `☠️ 이번 밤에 ${seat.name} 님이 죽었습니다.`);
+		Chat.announce(room, `☠️ 이번 밤에 ${seat.name} 님이 죽었습니다.`);
 		return;
 	}
 	// 시민이 알아야 하는 것은 직업이 아니라 "마피아를 줄였는가"다.
 	// 건달·짐승인간을 처형하고도 "마피아가 아니었다"고 하면 시민이 오판한다.
-	say(
+	Chat.announce(
 		room,
 		seat.team === Team.MAFIA
 			? `☠️ ${seat.name} 님이 처형당했습니다. 그는 마피아 팀이었습니다!`
@@ -76,8 +72,22 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 	);
 }
 
-/** 유령 외형으로 바꾸고 유령 채팅 위젯을 연다 */
-function becomeGhost(player: ScriptPlayer, seat: Seat): void {
+/**
+ * 유령 외형으로 바꾸고 유령 채널을 열어 준다.
+ *
+ * 전에는 여기서 유령 전용 위젯을 새로 띄웠고, 죽은 채로 재접속하는 경로가
+ * 같은 위젯을 다시 여는 두 번째 입구를 따로 갖고 있었다. 지금은 채팅창이
+ * 접속 내내 하나뿐이므로 "권한이 바뀌었다"고 알리기만 하면 된다 —
+ * 재접속 경로는 openFor 한 곳으로 합쳐졌다.
+ *
+ * 메인 위젯은 건드리지 않는다. 전에는 여기서 closeMain을 불렀는데("죽으면
+ * 밤 능력 위젯은 의미가 없다"), 사망은 자기가 언제 불리는지를 모른다.
+ * 밤 정산 뒤라면 곧 아침 화면이 덮어써서 무해했지만, 처형은 개표 화면을
+ * 전원에게 연 **뒤에** 일어나므로 정작 처형당한 본인의 화면만 지워졌다.
+ * 화면의 주인은 단계다 — beginX/showPhaseView가 열고 다음 open*이 닫는다.
+ * 사망은 좌석 상태만 바꾸고 화면 판단은 하지 않는다.
+ */
+function becomeGhost(room: Room, player: ScriptPlayer, seat: Seat): void {
 	const tag = tagOf(player);
 
 	player.title = "유령";
@@ -87,39 +97,8 @@ function becomeGhost(player: ScriptPlayer, seat: Seat): void {
 	player.hidden = false;
 	player.sendUpdated();
 
-	// 죽으면 밤 능력 위젯은 의미가 없다 (유령 위젯은 openGhostChat이 정리한다)
-	closeMain(player);
-	openGhostView(player, seat);
-
-	tell(player, "☠️ 당신은 죽었습니다.\n유령들끼리 대화할 수 있습니다.\n밤에는 영매와 대화할 수 있습니다.");
-}
-
-/**
- * 유령 채팅창을 연다. 죽는 순간과, 죽은 채로 재접속했을 때 모두 이 경로다.
- *
- * 핸들러를 위젯마다 새로 무는 것이 핵심이다. 위젯은 클라이언트 안의 iframe이라
- * 접속이 끊기면 핸들러와 함께 사라진다. 참조를 재활용하려 하면 이미 죽은
- * 위젯에 말을 거는 것이 된다.
- */
-export function openGhostView(player: ScriptPlayer, seat: Seat): void {
-	const widget = openGhostChat(player, {
-		type: "init",
-		myNum: seat.index,
-		role: roleName(seat.role),
-		team: seat.team,
-		alive: false,
-		prompt: "",
-		seats: [],
-		timer: 0,
-		chatEnable: true,
-		note: "죽은 사람들끼리 대화할 수 있습니다.",
-	});
-	widget.onMessage.Add((sender, data) => {
-		if (messageType(data) !== "sendMessage") return;
-		const text = asText(field(data, "message"), MAX_CHAT_LENGTH);
-		if (!text) return;
-		const found = locate(sender.id);
-		if (!found) return;
-		relayGhost(found.room, { num: found.seat.index, name: sender.name, message: text });
-	});
+	Chat.tell(player, "☠️ 당신은 죽었습니다. 유령 탭에서 죽은 사람들과 대화하세요.");
+	// 유령 채널로 탭을 옮겨 준다. 자동 전환은 ChatPermission이 정한다
+	Chat.refresh(player);
+	Chat.channelSay(room, ChatChannel.GHOST, `👻 ${seat.name} 님이 유령이 되었습니다.`);
 }

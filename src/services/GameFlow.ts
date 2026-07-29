@@ -26,9 +26,9 @@ import { roleDef } from "../domain/Roles.ts";
 import { assignRole, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
 import { messageType } from "../types/Widget.types.ts";
-import { centerLabel, forEachPlayer, playSound, say } from "./Broadcast.ts";
+import { centerLabel, forEachPlayer, playSound } from "./Broadcast.ts";
+import * as Chat from "./ChatService.ts";
 import { broadcastRoomCounts, enterLobby } from "./Lobby.ts";
-import { openGhostView } from "./Death.ts";
 import { beginNight, openNightView, resolveNight } from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay, refreshTitle } from "./Rewards.ts";
@@ -41,7 +41,7 @@ import {
 	openVoteResultView,
 	openVoteView,
 } from "./Voting.ts";
-import { closeGhost, closeRoleCard, openRoleCard } from "./Widgets.ts";
+import { closeMain, closeRoleCard, openRoleCard } from "./Widgets.ts";
 
 /**
  * 게임을 계속하려면 최소한 이만큼은 접속해 있어야 한다.
@@ -85,7 +85,7 @@ function advanceLobby(room: Room, dt: number): void {
 
 function advanceGame(room: Room, dt: number): void {
 	if (connectedCount(room) < MIN_CONNECTED) {
-		say(room, "👥 남은 인원이 부족해 게임이 중단되었습니다.");
+		Chat.say(room, "👥 남은 인원이 부족해 게임이 중단되었습니다.");
 		returnToLobby(room);
 		return;
 	}
@@ -134,6 +134,10 @@ function advancePhase(room: Room): void {
 		case GamePhase.LOBBY:
 			break;
 	}
+	// 단계가 바뀌면 채팅 권한도 바뀐다 (밤 → 마피아 탭, 낮 → 방 탭).
+	// 전이 switch 바로 옆에 두는 이유는, 단계를 추가하는 사람이 채팅 권한
+	// 갱신을 따로 기억하지 않아도 되게 하기 위해서다.
+	Chat.refreshRoom(room);
 }
 
 /**
@@ -151,10 +155,6 @@ function advancePhase(room: Room): void {
  * 단계를 추가하면 두 곳이 동시에 눈에 띄게 했다.
  */
 export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	// 유령 채팅은 단계와 무관하게 죽은 사람에게 계속 떠 있어야 한다.
-	// (게임이 끝나면 openWinView가 전원의 유령창을 정리한다)
-	if (!seat.alive && room.phase !== GamePhase.GAME_OVER) openGhostView(player, seat);
-
 	switch (room.phase) {
 		case GamePhase.ROLE_REVEAL:
 			openRoleCardView(player, seat);
@@ -209,9 +209,19 @@ function beginGame(room: Room): void {
 		countPlay(player);
 		player.title = `${seat.index} 번 참가자`;
 		player.sendUpdated();
+		// 대기실 위젯을 먼저 치운다. 직업 카드는 별도 슬롯이라 이걸 빼면
+		// 준비 버튼이 달린 대기실 화면이 직업 공개 5초 내내 뒤에 남는다.
+		// 게다가 이 순간 재접속한 사람은(showPhaseView가 카드만 연다)
+		// 대기실 화면이 없어서, 머문 사람과 돌아온 사람의 화면이 갈렸다.
+		closeMain(player);
 		openRoleCardView(player, seat);
 	});
 
+	// 대기실 채팅에서 방 채팅으로. 마피아에게는 이 시점에 마피아 탭이 생긴다
+	Chat.refreshRoom(room);
+	// 권한을 바꾼 뒤에 보낸다. 먼저 보내면 마피아 탭이 아직 없는 상태에서
+	// 방 탭 미확인만 올라가고, 곧바로 온 탭 목록이 그 수를 덮어쓴다
+	Chat.say(room, `🎭 ${room.total}명으로 게임을 시작합니다. 직업을 확인하세요.`);
 	broadcastRoomCounts();
 }
 
@@ -258,10 +268,11 @@ export function returnToLobby(room: Room): void {
 		const player = ScriptApp.getPlayerByID(playerId);
 		if (!player) continue;
 		closeRoleCard(player);
-		closeGhost(player);
 		resetPlayerAppearance(player);
 		refreshTitle(player);
 		enterLobby(player);
+		// 좌석이 사라졌으므로 마피아·유령 탭도 함께 사라진다
+		Chat.refresh(player);
 	}
 
 	broadcastRoomCounts();

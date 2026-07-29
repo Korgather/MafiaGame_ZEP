@@ -10,14 +10,19 @@ import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { WidgetFile } from "../src/constants/Assets.ts";
 import { MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
+import type { ScriptPlayer } from "zep-script";
+import { leave } from "../src/services/Lobby.ts";
 import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer, FakeWidget } from "./helpers/FakeZep.ts";
 import {
+	chatChannels,
+	chatLines,
 	connect,
 	disconnect,
+	findMainWidget,
 	findSeatOf,
 	finishPhase,
-	ghostWidget,
 	joinRoom,
 	leaveWhileStillListed,
 	mainWidget,
@@ -28,7 +33,7 @@ import {
 	seatOf,
 	seatsWithRole,
 	send,
-	startGame,
+	startPlainGame,
 	tick,
 	vote,
 } from "./helpers/Harness.ts";
@@ -37,7 +42,7 @@ beforeEach(() => resetWorld());
 
 describe("게임 중 이탈", () => {
 	it("좌석과 직업이 남아 재접속을 기다린다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const leaver = players[0];
 		const seat = seatOf(leaver);
 		const role = seat.role;
@@ -52,7 +57,7 @@ describe("게임 중 이탈", () => {
 	});
 
 	it("ZEP이 목록에서 늦게 빼도 접속 끊김이 유지된다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const leaver = players[0];
 		const seat = seatOf(leaver);
 
@@ -68,7 +73,7 @@ describe("게임 중 이탈", () => {
 	});
 
 	it("한 명이 끊겨도 나머지의 게임은 그대로 진행된다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		disconnect(players[0]);
 
@@ -79,7 +84,7 @@ describe("게임 중 이탈", () => {
 	});
 
 	it("끊긴 마피아가 지목하지 않아도 밤이 정상적으로 끝난다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 
@@ -95,7 +100,7 @@ describe("게임 중 이탈", () => {
 	});
 
 	it("접속 인원이 2명 미만이 되면 게임이 중단되고 대기실로 돌아간다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 
 		disconnect(players[0]);
@@ -109,11 +114,26 @@ describe("게임 중 이탈", () => {
 		assert.equal(target.seats.length, 0, "방이 비워지지 않아 아무도 못 들어옵니다");
 	});
 
+	/**
+	 * 게임이 시작되면 나가기 요청은 두 겹으로 막힌다.
+	 *
+	 * 전에는 이 테스트가 대기실 위젯으로 quit을 보냈다. 지금은 게임이
+	 * 시작될 때 대기실 화면을 닫으므로 그 경로 자체가 사라졌다 — 진행 중인
+	 * 방에서 대기실 핸들러(참가·준비·강퇴·나가기)에 닿는 위젯은 하나도 없다.
+	 * 화면이 사라진 것에 기대지는 않는다. 위젯은 클라이언트에서 도는 코드라
+	 * 조작될 수 있으므로, 서버가 직접 거절하는지를 서비스에 대고 확인한다.
+	 */
 	it("게임 중에는 스스로 나갈 수 없다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const seat = seatOf(players[0]);
 
-		send(players[0], { type: "quit" });
+		assert.equal(
+			findMainWidget(players[0]),
+			undefined,
+			"게임 중인데 대기실 화면이 남아 나가기 요청이 도달합니다"
+		);
+
+		leave(players[0] as unknown as ScriptPlayer);
 
 		assert.equal(findSeatOf(players[0]), seat, "게임 중에 좌석이 비워졌습니다");
 	});
@@ -134,7 +154,7 @@ describe("재접속", () => {
 	}
 
 	it("같은 좌석·직업으로 돌아온다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const leaver = players[0];
 		const seat = seatOf(leaver);
 		const role = seat.role;
@@ -148,7 +168,7 @@ describe("재접속", () => {
 	});
 
 	it("밤에 돌아오면 자기 직업의 밤 화면을 다시 받는다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 
@@ -165,7 +185,7 @@ describe("재접속", () => {
 	});
 
 	it("낮에 돌아오면 아침 화면을 다시 받는다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 		finishPhase(target); // → DAY
@@ -182,7 +202,7 @@ describe("재접속", () => {
 	});
 
 	it("투표 중에 돌아오면 투표 화면을 다시 받고 투표할 수 있다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 		finishPhase(target); // → DAY
@@ -201,7 +221,7 @@ describe("재접속", () => {
 	});
 
 	it("직업 공개 중에 돌아오면 직업 카드를 다시 받는다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		assert.equal(target.phase, GamePhase.ROLE_REVEAL);
 
@@ -215,15 +235,13 @@ describe("재접속", () => {
 	});
 
 	it("죽은 채로 돌아오면 유령 이름과 밤 화면을 받는다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 
-		// 마피아가 아무나 지목해 아침에 죽인다
+		// 마피아가 평범한 시민을 지목해 아침에 죽인다
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
-		const victim = target.seats.filter(
-			seat => seat.index !== mafia.index && seat.role !== Role.DOCTOR
-		)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 		send(playerOf(mafia), { type: "select", num: victim.index });
 
 		finishPhase(target); // → DAY (사망 정산)
@@ -245,22 +263,27 @@ describe("재접속", () => {
 			(payload.deaths as string[]).length > 0,
 			"아침 화면에 밤 결과가 없습니다 — 돌아온 사람은 무슨 일이 있었는지 알 수 없습니다"
 		);
-		assert.equal(
-			ghostWidget(ghost).destroyed,
-			false,
-			"유령 채팅창이 다시 열리지 않아 죽은 사람이 아무와도 대화할 수 없습니다"
+		assert.ok(
+			chatChannels(ghost).some(view => view.id === ChatChannel.GHOST),
+			"돌아온 사망자에게 유령 탭이 없습니다 — 죽은 사람이 아무와도 대화할 수 없습니다"
+		);
+		// 채팅 기록은 위젯이 아니라 서버에 있으므로 끊긴 동안의 대화도 따라온다.
+		// 기존 구조에서는 위젯이 죽는 순간 그때까지의 대화가 함께 사라졌다.
+		assert.ok(
+			chatLines(ghost, ChatChannel.ROOM).length > 0,
+			"돌아온 사람의 채팅이 비어 있습니다 — 끊긴 동안의 진행을 따라잡을 수 없습니다"
 		);
 	});
 
 	it("투표 결과 발표 중에 돌아오면 처형 직전의 개표판을 그대로 받는다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 		finishPhase(target); // → DAY
 		finishPhase(target); // → VOTE
 
-		// 정치인은 처형 면역이라 최다 득표해도 죽지 않는다
-		const victim = target.seats.filter(seat => seat.role !== Role.POLITICIAN)[0];
+		// 마피아를 처형하면 개표 화면 대신 승패 화면으로 넘어간다
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 		const aliveBefore = target.seats.filter(seat => seat.alive).length;
 		for (const seat of target.seats) {
 			if (seat.index !== victim.index) vote(playerOf(seat), victim.index);
@@ -289,7 +312,7 @@ describe("재접속", () => {
 	});
 
 	it("승패 연출 중에 돌아오면 결과 화면을 받는다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finish(target, Team.MAFIA);
 

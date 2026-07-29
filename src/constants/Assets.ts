@@ -93,7 +93,7 @@ export type SpriteKey =
 	| "police"
 	| "spy"
 	| "ghost"
-	| "mafiaAttack"
+	| "bullet"
 	| "silhouette"
 	| "blank";
 
@@ -134,7 +134,17 @@ export const SPRITE_DEFS: Record<SpriteKey, SpriteDef> = {
 			down: [0, 1, 2, 3, 4, 5],
 		},
 	},
-	mafiaAttack: {
+	/**
+	 * 총알. 마피아와 자경단원이 함께 쓴다.
+	 *
+	 * 전에는 이름이 mafiaAttack이었다. 쓰는 직업이 마피아뿐일 때는 맞았지만
+	 * 자경단원이 생기면서 "시민 편이 마피아 리소스를 빌려 쓴다"로 읽혔다.
+	 * 파일은 총알 그림이지 마피아 그림이 아니므로 이름을 그림에 맞춘다.
+	 *
+	 * 짐승인간은 물어 죽이는데 여기에 맞는 그림이 없어 이펙트가 없다(에셋 공백).
+	 * 총알을 빌려주면 밤마다 총성 대신 총알이 두 번 날아 정체가 새어 나간다.
+	 */
+	bullet: {
 		file: "bulletSprite2.png",
 		width: 24,
 		height: 24,
@@ -149,6 +159,4 @@ export const SPRITE_DEFS: Record<SpriteKey, SpriteDef> = {
 export const LabelColor = {
 	TEXT: 0xffffff,
 	BACKGROUND: 0x000000,
-	/** sendMessage용 시스템 메시지 색 */
-	SYSTEM: 0x00ff00,
 } as const;

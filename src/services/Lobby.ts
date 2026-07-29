@@ -34,6 +34,7 @@ import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, label } from "./Broadcast.ts";
+import * as Chat from "./ChatService.ts";
 import { countAbandon, refreshTitle } from "./Rewards.ts";
 import { openLobby } from "./Widgets.ts";
 
@@ -87,7 +88,7 @@ function lobbySeatViews(room: Room): LobbySeatView[] {
 		return {
 			id: seat.playerId,
 			name: seat.name,
-			level: seat.level,
+			rank: seat.rank,
 			runCount: storage,
 			ready: seat.ready,
 			kickCount: kickCount(seat),
@@ -166,9 +167,16 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 		return;
 	}
 
-	const level = refreshTitle(player);
-	room.seats.push(createSeat(player.id, tagOf(player).originalName, level));
+	const rank = refreshTitle(player);
+	const name = tagOf(player).originalName;
+	room.seats.push(createSeat(player.id, name, rank));
 	player.playSound(Sound.JOIN);
+
+	// 방 탭이 생겼다는 것을 먼저 알린 뒤 입장 알림을 흘린다.
+	// 순서를 뒤집으면 본인만 자기 입장 알림을 못 본다 — 알림이 도착하는
+	// 시점에 아직 방 탭이 없기 때문이다.
+	Chat.refresh(player);
+	Chat.notice(room, `🚪 ${name} 님이 입장했습니다.`);
 
 	refreshRoom(room);
 	broadcastRoomCounts();
@@ -225,12 +233,18 @@ export function handleDisconnect(player: ScriptPlayer): void {
 		found.seat.connected = false;
 		countAbandon(player);
 		centerLabel(found.room, `${found.seat.name} 님의 접속이 끊겼습니다.`);
+		// 라벨은 3초 뒤 사라진다. 판이 끝난 뒤 "저 사람 언제 나갔지"를
+		// 되짚을 수 있으려면 기록으로도 남아야 한다.
+		Chat.notice(found.room, `📴 ${found.seat.name} 님의 접속이 끊겼습니다.`);
 		return;
 	}
 	removeFromRoom(found.room, player.id, false);
 }
 
 function removeFromRoom(room: Room, playerId: string, kicked: boolean): void {
+	// 좌석을 비우기 전에 이름을 확보한다 — 비운 뒤에는 누가 나갔는지 알 수 없다
+	const leaving = findSeat(room, playerId);
+	const name = leaving ? leaving.name : "";
 	removeSeat(room, playerId);
 	// 떠난 사람이 남긴 강퇴표를 회수한다. 기존에는 회수하지 않아
 	// 방을 드나드는 것만으로 강퇴표를 쌓을 수 있었다.
@@ -242,7 +256,12 @@ function removeFromRoom(room: Room, playerId: string, kicked: boolean): void {
 		const widget = tagOf(player).widget;
 		if (widget) widget.sendMessage({ type: "init", data: [] });
 		if (kicked) label(player, "강퇴당했습니다.");
+		// 좌석이 사라졌으니 방 탭도 사라진다
+		Chat.refresh(player);
 	}
+
+	// 좌석을 이미 비웠으므로 이 알림은 남은 사람들에게만 간다
+	if (name) Chat.notice(room, kicked ? `🚫 ${name} 님이 강퇴되었습니다.` : `🚪 ${name} 님이 퇴장했습니다.`);
 
 	refreshRoom(room);
 	broadcastRoomCounts();

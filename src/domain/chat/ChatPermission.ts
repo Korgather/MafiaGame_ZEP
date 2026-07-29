@@ -74,6 +74,9 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 
 	if (channel === ChatChannel.ROOM) {
 		if (!ctx.seated) return NONE;
+		// 판이 끝나면 산 사람과 죽은 사람의 구분이 사라진다. 감출 것이 없으니
+		// 전원이 한자리에 모여 복기한다 — 이긴 쪽만 떠드는 종료 화면은 재미없다.
+		if (ctx.phase === GamePhase.GAME_OVER) return BOTH;
 		// 죽은 사람이 방 채팅으로 말하면 산 사람에게 정보가 샌다. 읽기는 남긴다 —
 		// 관전의 재미가 낮 토론을 지켜보는 데 있기 때문이다.
 		const write = ctx.alive && roomTalkAllowed(ctx.phase);
@@ -88,8 +91,12 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 
 	// GHOST — 사망자는 언제나, 영매는 밤에만.
 	if (!ctx.seated) return NONE;
+	// 죽었거나(관전) 유령을 듣는 직업(영매)이거나 — 둘 다 아니면 채널 자체가 없다
+	if (ctx.alive && !ctx.ghostChat) return NONE;
+	// 판이 끝나면 대화는 방 채팅으로 모은다. 기록은 남긴다 —
+	// 여기를 열어두면 preferredChannel이 죽은 사람을 유령 탭에 붙잡아 둔다.
+	if (ctx.phase === GamePhase.GAME_OVER) return READ_ONLY;
 	if (!ctx.alive) return BOTH;
-	if (!ctx.ghostChat) return NONE;
 	return ctx.phase === GamePhase.NIGHT ? BOTH : NONE;
 }
 

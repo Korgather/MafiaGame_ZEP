@@ -10,14 +10,14 @@
  *
  * 이 파일이 얇게 유지되는 한, 게임 로직은 ZEP 없이도 읽고 테스트할 수 있다.
  */
-import { ADMIN_EXP_GRANT, ADMIN_ROLE_LEVEL } from "./constants/GameConfig.ts";
 import { locate } from "./entities/RoomRegistry.ts";
 import { destroyWidgets, tagOf } from "./infrastructure/PlayerTag.ts";
 import { label } from "./services/Broadcast.ts";
 import * as Ccu from "./services/Ccu.ts";
+import * as Chat from "./services/ChatService.ts";
 import * as GameFlow from "./services/GameFlow.ts";
 import { enterLobby, handleDisconnect } from "./services/Lobby.ts";
-import { awardExp, refreshTitle } from "./services/Rewards.ts";
+import { refreshTitle } from "./services/Rewards.ts";
 import {
 	resetPlayerAppearance,
 	restoreAppearance,
@@ -48,6 +48,10 @@ ScriptApp.onJoinPlayer.Add(player => {
 	}
 	player.sendUpdated();
 
+	// 채팅은 로비든 게임 중이든 항상 있다. 아래 두 갈래보다 먼저 여는 이유는
+	// 재접속 경로에서 showPhaseView가 채팅으로 안내를 보낼 수 있기 때문이다.
+	Chat.openFor(player);
+
 	// 게임 도중 끊겼다 돌아온 경우. 기존에는 좌석이 사라져 관전조차 못 했다.
 	const found = locate(player.id);
 	if (found) {
@@ -77,14 +81,12 @@ ScriptApp.onDestroy.Add(() => {
 		destroyWidgets(player);
 		resetPlayerAppearance(player);
 	}
+	Chat.resetGlobalLog();
 });
 
-// 기존 코드는 `App.onSay.add(...)`였다. ZEP API의 이름은 `Add`라서
-// 이 핸들러는 한 번도 등록되지 않았고 운영자 명령이 통하지 않았다.
-ScriptApp.onSay.Add((player, text) => {
-	if (player.role < ADMIN_ROLE_LEVEL) return;
-	if (text === "/경험치") awardExp(player, ADMIN_EXP_GRANT);
-});
+// ScriptApp.onSay는 더 이상 쓰지 않는다. ZEP 기본 채팅창에 무엇을 치든
+// 이 게임은 반응하지 않는다 — 운영자 명령을 포함한 모든 입력은 채팅 위젯의
+// COMMANDS 표를 지난다. 기본 채팅창 자체를 숨기는 API는 0.16.5에 없다.
 
 ScriptApp.onUpdate.Add(dt => {
 	Ccu.tick(dt);

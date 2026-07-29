@@ -21,35 +21,41 @@ const ADMIN_TITLE = "운영자";
 export interface PlayerTitle {
 	/** 머리 위에 표시되는 여러 줄 칭호 */
 	title: string;
-	/** 대기실 목록에 쓰는 짧은 레벨 문자열 */
-	level: string;
+	/**
+	 * 대기실 목록에서 이름 옆에 붙는 한 줄. 이미 완성된 표시 문자열이다.
+	 *
+	 * 숫자가 아니라는 점이 중요하다 — 운영자와 비로그인 유저는 레벨 대신
+	 * 칭호가 그대로 들어온다. 전에 이 필드가 level이었을 때 대기실 위젯이
+	 * 숫자로 알아듣고 "Lv."를 한 번 더 붙여 Lv.Lv.12, Lv.운영자로 나왔다.
+	 */
+	rank: string;
 }
 
 export function buildTitle(player: ScriptPlayer): PlayerTitle {
 	if (player.role >= ADMIN_ROLE_LEVEL) {
-		return { title: ADMIN_TITLE, level: ADMIN_TITLE };
+		return { title: ADMIN_TITLE, rank: ADMIN_TITLE };
 	}
 	if (player.isGuest) {
-		return { title: GUEST_TITLE, level: GUEST_TITLE };
+		return { title: GUEST_TITLE, rank: GUEST_TITLE };
 	}
 
 	const storage = Storage.read(player);
-	const level = `Lv.${levelFromExp(storage.exp)}`;
+	const rank = `Lv.${levelFromExp(storage.exp)}`;
 	const title =
-		`${level}` +
+		`${rank}` +
 		`\n마피아 ${storage.mafiaWin || 0}승 ${storage.mafiaLose || 0}패` +
 		`\n시민 ${storage.citizenWin || 0}승 ${storage.citizenLose || 0}패`;
-	return { title, level };
+	return { title, rank };
 }
 
-/** 칭호를 다시 계산해 플레이어에게 반영하고, 짧은 레벨 문자열을 돌려준다 */
+/** 칭호를 다시 계산해 플레이어에게 반영하고, 이름 옆에 붙일 등급 표시를 돌려준다 */
 export function refreshTitle(player: ScriptPlayer): string {
 	const built = buildTitle(player);
 	player.title = built.title;
 	// 로그인 유저(role 0)와 구분되도록 색을 달리한다
 	player.titleColor = player.role === 0 ? 0x00ff00 : 0xffffff;
 	player.sendUpdated();
-	return built.level;
+	return built.rank;
 }
 
 export function awardExp(player: ScriptPlayer, amount: number): void {

@@ -17,10 +17,11 @@ import { TIMING } from "../constants/GameConfig.ts";
 import { roleName } from "../domain/Roles.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
 import { revealViews } from "../entities/Room.ts";
-import { forEachPlayer, playSound, say } from "./Broadcast.ts";
+import { forEachPlayer, playSound } from "./Broadcast.ts";
+import * as Chat from "./ChatService.ts";
 import { settleMatch } from "./Rewards.ts";
 import { clearSilhouettes } from "./Stage.ts";
-import { closeGhost, closeRoleCard, openGameOver } from "./Widgets.ts";
+import { closeRoleCard, openGameOver } from "./Widgets.ts";
 
 /**
  * 승패가 갈렸으면 종료 처리를 하고 true를 돌려준다.
@@ -41,13 +42,19 @@ export function finish(room: Room, winner: TeamType): void {
 
 	clearSilhouettes(room);
 	playSound(room, winner === Team.MAFIA ? Sound.MAFIA_WIN : Sound.CITIZEN_WIN);
-	say(room, roster(room));
+	Chat.announce(room, roster(room));
+	// 방 밖에도 한 줄 흘린다. 로비에 선 사람이 어느 방이 곧 비는지 알 수 있는
+	// 유일한 단서이고, 전체 채팅 탭이 잡담만으로 채워지지 않게 하는 것도 겸한다.
+	Chat.worldNotice(`🏁 ${room.num}번 방 — ${winner === Team.MAFIA ? "마피아" : "시민"} 승리`);
 
 	forEachPlayer(room, (player, seat) => {
 		openWinView(room, player, seat);
 		// 보상은 판당 한 번이다. 재접속으로 화면만 다시 열릴 때는 지급하지 않는다.
 		settleMatch(player, seat, winner);
 	});
+
+	// 판이 끝나면 마피아·유령 채널의 비밀이 풀린다 — 전원이 방 채팅으로 모인다
+	Chat.refreshRoom(room);
 }
 
 /** 왜 끝났는가. 승리 조건을 화면에 한 줄로 설명한다 */
@@ -65,7 +72,6 @@ function winReason(winner: TeamType): string {
  */
 export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	closeRoleCard(player);
-	closeGhost(player);
 	player.hidden = false;
 	player.moveSpeed = 80;
 	player.sendUpdated();

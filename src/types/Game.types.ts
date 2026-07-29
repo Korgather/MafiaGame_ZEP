@@ -87,8 +87,8 @@ export interface Seat {
 	index: number;
 	/** 접속이 끊겨도 유지되는 표시 이름 */
 	name: string;
-	/** 대기실 목록에 보여줄 레벨 문자열 */
-	level: string;
+	/** 이름 옆에 붙는 등급 표시. "Lv.12"이거나 "운영자"·"비로그인 유저"다 */
+	rank: string;
 	role: Role;
 	team: Team;
 	/** 접속 여부와 무관한 생존 여부 */
@@ -262,7 +262,8 @@ export interface PlayerTag {
 export interface LobbySeatView {
 	id: string;
 	name: string;
-	level: string;
+	/** 이미 완성된 표시 문자열. 위젯은 그대로 찍기만 한다 */
+	rank: string;
 	runCount: number;
 	ready: boolean;
 	kickCount: number;

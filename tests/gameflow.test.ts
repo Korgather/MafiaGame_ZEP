@@ -9,22 +9,26 @@
 import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
-import type { Seat } from "../src/types/Game.types.ts";
 import { WidgetFile } from "../src/constants/Assets.ts";
 import { MIN_PLAYERS, TIMING } from "../src/constants/GameConfig.ts";
 import {
+	chatSaw,
 	connect,
+	disconnect,
+	findMainWidget,
 	finishPhase,
 	joinRoom,
 	mainWidget,
 	playerOf,
 	resetWorld,
 	room,
+	roleCardWidget,
 	seatOf,
 	seatsWithRole,
 	send,
 	setReady,
 	startGame,
+	startPlainGame,
 	tick,
 	vote,
 } from "./helpers/Harness.ts";
@@ -62,6 +66,8 @@ describe("대기실 → 게임 시작", () => {
 	});
 
 	it("전원 준비되면 카운트다운 뒤 직업이 배분된다", () => {
+		// 이 파일에서 진짜 덱(buildRoleDeck)으로 도는 유일한 테스트다. 나머지는
+		// 덱을 입력으로 고정하므로, 추첨 경로가 배선되어 있는지는 여기가 지킨다.
 		const players = startGame(MIN_PLAYERS);
 		const target = room(1);
 
@@ -81,6 +87,26 @@ describe("대기실 → 게임 시작", () => {
 		for (const player of players) {
 			assert.equal(seatOf(player).alive, true);
 			assert.match(player.title, /번 참가자$/);
+		}
+	});
+
+	/**
+	 * 직업 공개 중에는 직업 카드만 남는다.
+	 *
+	 * 카드는 메인 위젯과 다른 슬롯이라, 대기실 화면을 닫지 않으면 준비 버튼이
+	 * 달린 대기실이 카드 뒤에 그대로 남는다. 같은 순간에 재접속한 사람은
+	 * (showPhaseView가 카드만 연다) 그 화면이 없으므로 둘이 갈렸다.
+	 */
+	it("직업 공개 중에는 대기실 화면이 남지 않는다", () => {
+		const players = startGame(MIN_PLAYERS);
+
+		for (const player of players) {
+			assert.ok(roleCardWidget(player), "직업 카드가 열리지 않았습니다");
+			assert.equal(
+				findMainWidget(player),
+				undefined,
+				"직업 공개 중에 대기실 화면이 뒤에 남아 있습니다"
+			);
 		}
 	});
 });
@@ -112,7 +138,7 @@ describe("밤 단계", () => {
 	});
 
 	it("마피아에게는 지목 위젯이, 생존자 목록과 함께 열린다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target);
 
@@ -136,12 +162,12 @@ describe("밤 단계", () => {
 	});
 
 	it("마피아가 지목한 대상이 아침에 죽는다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target);
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
-		const victim = target.seats.filter(seat => seat.role !== Role.MAFIA)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 
 		send(playerOf(mafia), { type: "select", num: victim.index });
 		assert.deepEqual(victim.attackedBy, [mafia.index], "지목이 좌석에 반영되지 않았습니다");
@@ -153,15 +179,13 @@ describe("밤 단계", () => {
 	});
 
 	it("의사가 치료한 대상은 죽지 않는다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target);
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const doctor = seatsWithRole(target, Role.DOCTOR)[0];
-		const victim = target.seats.filter(
-			seat => seat.role !== Role.MAFIA && seat.role !== Role.DOCTOR
-		)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 
 		send(playerOf(mafia), { type: "select", num: victim.index });
 		send(playerOf(doctor), { type: "select", num: victim.index });
@@ -173,7 +197,7 @@ describe("밤 단계", () => {
 	});
 
 	it("같은 밤에 두 번 지목할 수 없다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target);
 
@@ -187,8 +211,51 @@ describe("밤 단계", () => {
 		assert.deepEqual(others[1].attackedBy, [], "능력을 두 번 썼습니다");
 	});
 
+	/**
+	 * 자경단원의 총은 낮을 한 번 보낸 뒤에 나온다.
+	 *
+	 * 첫 밤은 아무도 아무것도 모르는 상태다. 그때 쏘는 총은 추리가 아니라
+	 * 주사위이고, 빗나가면 대상과 본인이 함께 죽어 시민이 둘 사라진다.
+	 * 4~7명 판이 첫 아침을 보기도 전에 끝나던 원인이 그것이었다.
+	 * 왜 그 판이 끝나는지는 RoleAssignment 테스트가 지키고, 여기서는
+	 * 배선만 본다 — 첫 밤엔 격자가 없고, 낮을 한 번 보내면 총이 나간다.
+	 */
+	it("자경단원은 첫 밤에 쏠 수 없고 둘째 밤부터 쏜다", () => {
+		// 마피아 1 < 시민 4라 밤을 하나 그냥 흘려보내도 판이 끝나지 않는다
+		startGame(5, 1, [Role.VIGILANTE, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const vigilante = seatsWithRole(target, Role.VIGILANTE)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+
+		const firstNight = mainWidget(playerOf(vigilante)).lastOfType("init");
+		assert.ok(firstNight, "첫 밤 화면이 payload 없이 열렸습니다");
+		assert.equal(firstNight.seats, undefined, "첫 밤에 지목 격자가 열렸습니다");
+		assert.ok(
+			String(firstNight.note).indexOf("첫 밤") >= 0,
+			`격자를 감추면서 이유를 알리지 않았습니다: ${firstNight.note}`
+		);
+
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+		finishPhase(target); // → NIGHT
+
+		const secondNight = mainWidget(playerOf(vigilante)).lastOfType("init");
+		assert.ok(secondNight, "둘째 밤 화면이 payload 없이 열렸습니다");
+		assert.ok(secondNight.seats, "낮을 보냈는데도 지목 격자가 열리지 않았습니다");
+
+		send(playerOf(vigilante), { type: "select", num: victim.index });
+		assert.deepEqual(
+			victim.attackedBy,
+			[vigilante.index],
+			"둘째 밤의 사살이 좌석에 반영되지 않았습니다"
+		);
+	});
+
 	it("밤이 아닌 때 온 지목은 무시한다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // NIGHT
 
@@ -214,22 +281,12 @@ describe("투표", () => {
 		return target;
 	}
 
-	/**
-	 * 정치인을 뺀 좌석들.
-	 *
-	 * 정치인은 표가 2로 계산되고 처형 면역이라 "1인 1표"·"최다 득표자 처형"의
-	 * 예외다. 좌석 순서는 셔플 결과이므로 seats[0]을 그냥 쓰면 정치인이 걸렸을
-	 * 때만 깨지는 테스트가 된다. 예외를 명시적으로 걷어내고 시작한다.
-	 */
-	function plainSeats(target: ReturnType<typeof room>): Seat[] {
-		return target.seats.filter(seat => seat.role !== Role.POLITICIAN);
-	}
-
 	it("최다 득표자가 처형된다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
 
-		const victim = plainSeats(target)[0];
+		// 마피아를 처형하면 그 자리에서 판이 끝나 처형 자체를 보기 어렵다
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 		for (const seat of target.seats) {
 			if (seat.index === victim.index) continue;
 			vote(playerOf(seat), victim.index);
@@ -241,12 +298,38 @@ describe("투표", () => {
 		assert.equal(victim.alive, false);
 	});
 
-	it("같은 사람이 두 번 투표해도 한 표만 들어간다", () => {
-		startGame(MIN_PLAYERS);
+	/**
+	 * 처형당한 본인이 개표 화면을 본다.
+	 *
+	 * 이 판에서 가장 중요한 화면을 정작 당사자만 못 보던 자리다. 개표 화면을
+	 * 전원에게 연 직후 kill()이 그 사람의 메인 위젯을 닫아버려서, 처형당한
+	 * 사람은 7초 내내 빈 화면을 봤다. 같은 순간에 재접속한 사람은 제대로
+	 * 받았다 — "머물러 있으면 못 보고 끊었다 들어오면 보인다"는 어긋남이
+	 * 이게 의도가 아니라는 증거다.
+	 */
+	it("처형당한 사람도 개표 화면을 그대로 본다", () => {
+		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
 
-		const voter = plainSeats(target)[0];
-		const victim = plainSeats(target)[1];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		for (const seat of target.seats) {
+			if (seat.index === victim.index) continue;
+			vote(playerOf(seat), victim.index);
+		}
+
+		finishPhase(target); // VOTE → VOTE_RESULT
+
+		const result = mainWidget(playerOf(victim)).lastOfType("result");
+		assert.ok(result, "처형당한 사람의 개표 화면이 payload 없이 열렸습니다");
+		assert.equal(result.executed, victim.index, "본인이 처형됐다는 사실이 화면에 없습니다");
+	});
+
+	it("같은 사람이 두 번 투표해도 한 표만 들어간다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+
+		const voter = target.seats[0];
+		const victim = target.seats[1];
 
 		vote(playerOf(voter), victim.index);
 		vote(playerOf(voter), victim.index);
@@ -255,17 +338,17 @@ describe("투표", () => {
 	});
 
 	it("동률이면 아무도 처형되지 않는다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
 
-		const plain = plainSeats(target);
-		vote(playerOf(plain[0]), plain[1].index);
-		vote(playerOf(plain[1]), plain[0].index);
+		const [first, second] = target.seats;
+		vote(playerOf(first), second.index);
+		vote(playerOf(second), first.index);
 
 		finishPhase(target);
 
-		assert.equal(plain[0].alive, true);
-		assert.equal(plain[1].alive, true);
+		assert.equal(first.alive, true);
+		assert.equal(second.alive, true);
 	});
 
 	it("정치인은 표를 두 배로 행사하고 처형되지 않는다", () => {
@@ -273,7 +356,7 @@ describe("투표", () => {
 		const target = reachVote();
 
 		const politician = seatsWithRole(target, Role.POLITICIAN)[0];
-		const other = plainSeats(target)[0];
+		const other = seatsWithRole(target, Role.DOCTOR)[0];
 
 		// 정치인 1명이 몰표를 받아도 면역
 		for (const seat of target.seats) {
@@ -294,12 +377,12 @@ describe("투표", () => {
 	});
 
 	it("죽은 사람은 투표할 수 없다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // NIGHT
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
-		const victim = target.seats.filter(seat => seat.role !== Role.MAFIA)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 		send(playerOf(mafia), { type: "select", num: victim.index });
 
 		finishPhase(target); // → DAY (victim 사망)
@@ -347,11 +430,40 @@ describe("투표", () => {
 		assert.equal(progress.voted, 1);
 		assert.equal(progress.alive, 4, "협박당한 사람이 분모에 남아 있습니다");
 	});
+
+	/**
+	 * 접속이 끊긴 사람은 진행률 분모에서도 빠진다.
+	 *
+	 * 협박당한 사람을 분모에서 뺀 이유와 같다 — 채워질 수 없는 칸을 남겨두면
+	 * "아직 안 낸 사람이 있다"가 투표 시간 내내 떠서, 남은 사람들이 이미 다
+	 * 냈는데도 서로를 기다린다. 자격(canVote)이 아니라 지금 낼 수 있는가를
+	 * 묻는 자리라 조건이 하나 더 붙는다.
+	 */
+	it("접속이 끊긴 사람은 투표 진행률 분모에서 빠진다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+
+		const gone = target.seats[0];
+		const voter = target.seats[1];
+		disconnect(playerOf(gone));
+		assert.equal(gone.connected, false, "이탈이 좌석에 반영되지 않았습니다");
+
+		vote(playerOf(voter), target.seats[2].index);
+
+		const progress = mainWidget(playerOf(voter)).lastOfType("progress");
+		assert.ok(progress, "투표 진행률이 전달되지 않았습니다");
+		assert.equal(progress.voted, 1);
+		assert.equal(
+			progress.alive,
+			MIN_PLAYERS - 1,
+			"끊긴 사람이 분모에 남아 진행률이 100%에 닿을 수 없습니다"
+		);
+	});
 });
 
 describe("승패와 대기실 복귀", () => {
 	it("마피아를 처형하면 시민이 이기고 방이 비워진다", () => {
-		const players = startGame(MIN_PLAYERS);
+		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // NIGHT
 		finishPhase(target); // DAY
@@ -381,8 +493,15 @@ describe("승패와 대기실 복귀", () => {
 		// 전원 직업 공개는 채팅이 아니라 화면에 남는다
 		assert.equal((result.players as unknown[]).length, MIN_PLAYERS);
 		assert.ok(
-			survivor.chat.some(line => line.includes("전원의 직업")),
+			chatSaw(survivor, "전원의 직업"),
 			"종료 시 직업 공개가 없습니다"
+		);
+		// ZEP 기본 채팅으로는 한 글자도 나가지 않는다. 이 게임의 모든 문장은
+		// 채팅 위젯을 지난다 — 여기가 무너지면 밤 채팅 격리도 함께 무너진다.
+		assert.equal(
+			survivor.chat.length,
+			0,
+			"ZEP 기본 채팅(player.sendMessage)이 아직 쓰이고 있습니다"
 		);
 
 		finishPhase(target); // GAME_OVER → 대기실
@@ -399,7 +518,7 @@ describe("승패와 대기실 복귀", () => {
 	});
 
 	it("마피아가 시민 수 이상이 되면 마피아가 이긴다", () => {
-		startGame(MIN_PLAYERS);
+		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 
 		// 밤마다 시민을 하나씩 줄인다. 1:1이 되는 순간 끝난다.

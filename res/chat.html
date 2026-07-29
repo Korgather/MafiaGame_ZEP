@@ -1,0 +1,1497 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>채팅</title>
+		<style>
+/*
+ * 위젯 공통 디자인 시스템.
+ *
+ * 기존에는 위젯 11개가 각자 CSS를 처음부터 다시 썼다. 같은 의미의 색이
+ * 파일마다 다른 값이었고(#484848 / #333333 / #3c3030 / #563d3d …
+ * 총 26종), 타이머 글꼴 크기는 화면마다 20px·35px·18px로 제각각이었다.
+ * 한 화면의 톤을 바꾸면 나머지 열 개가 어긋났다.
+ *
+ * 이 파일이 유일한 출처다. tools/build-widgets.js가 각 위젯 HTML의
+ * <!--@theme--> 자리에 인라인한다. ZEP 위젯은 iframe이라 외부 CSS 링크의
+ * 해석 기준을 신뢰할 수 없어서, 소스는 나누되 산출물은 자기완결로 만든다.
+ */
+
+/* ---------- 토큰 ---------- */
+:root {
+	/* 표면: 뒤로 갈수록 어두워진다 */
+	--bg: #14100f;
+	--surface: #201a19;
+	--surface-2: #2d2523;
+	--surface-3: #3b312e;
+	--line: #4a3d39;
+
+	/* 글자 */
+	--ink: #f5efe9;
+	--ink-2: #b9aaa2;
+	--ink-3: #7d6e68;
+
+	/* 진영 */
+	--mafia: #e04b4b;
+	--mafia-dim: #6d2424;
+	--citizen: #57a8e0;
+	--citizen-dim: #24475f;
+
+	/* 상태 */
+	--accent: #e0b355; /* 상호작용 가능·강조 */
+	--ok: #5fbf7f;
+	--warn: #e0b355;
+	--danger: #e04b4b;
+	--dead: #5a4a45;
+
+	/* 간격: 4px 배수 */
+	--s1: 4px;
+	--s2: 8px;
+	--s3: 12px;
+	--s4: 16px;
+	--s5: 24px;
+
+	/* 타이포: 위젯 폭에 따라 늘어난다 */
+	--t-xs: clamp(10px, 2.6vw, 12px);
+	--t-sm: clamp(11px, 3vw, 13px);
+	--t-md: clamp(13px, 3.5vw, 15px);
+	--t-lg: clamp(15px, 4.2vw, 18px);
+	--t-xl: clamp(19px, 5.5vw, 24px);
+	--t-2xl: clamp(24px, 7vw, 34px);
+
+	--r1: 6px;
+	--r2: 10px;
+	--r3: 14px;
+
+	--shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+	--dur: 160ms;
+	--ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* 애니메이션을 끈 사용자에게는 전환을 즉시 끝낸다 */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--dur: 1ms;
+	}
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+	}
+}
+
+/* ---------- 리셋 ---------- */
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html,
+body {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	/*
+	 * 웹폰트를 쓰지 않는다. 기존 대기실은 jsdelivr에서 폰트 2종을 받았는데,
+	 * 폰트가 도착하기 전까지 목록이 다른 글꼴로 그려졌다가 튀었고(FOUT)
+	 * CDN이 막힌 환경에서는 영영 오지 않았다. 시스템 한글 글꼴로 충분하다.
+	 */
+	font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+		"Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;
+	font-size: var(--t-md);
+	line-height: 1.45;
+	color: var(--ink);
+	background: transparent;
+	-webkit-font-smoothing: antialiased;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- 판 ---------- */
+/*
+ * 모든 위젯은 panel 하나로 시작한다. 기존에는 화면마다 배경 처리가 달라서
+ * (이미지 / 반투명 검정 / 없음) 같은 게임인데 화면이 바뀔 때마다
+ * 다른 앱처럼 보였다.
+ */
+.panel {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	padding: var(--s3);
+	gap: var(--s2);
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	border: 1px solid var(--line);
+	border-radius: var(--r3);
+	box-shadow: var(--shadow);
+	overflow: hidden;
+}
+
+/* 단계별 분위기. 배경만 갈아끼우고 구조는 같다 */
+.panel.night {
+	background: linear-gradient(160deg, #1b2340 0%, #0d1020 100%);
+}
+.panel.day {
+	background: linear-gradient(160deg, #40331b 0%, #1a1410 100%);
+}
+.panel.vote {
+	background: linear-gradient(160deg, #2b2036 0%, #140f1a 100%);
+}
+
+/* ---------- 머리말 ---------- */
+.hd {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s2);
+	flex: 0 0 auto;
+}
+
+.hd-title {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	min-width: 0;
+	font-size: var(--t-lg);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+}
+
+.hd-sub {
+	font-size: var(--t-xs);
+	color: var(--ink-3);
+	white-space: nowrap;
+}
+
+/* ---------- 타이머 ---------- */
+/*
+ * 기존에는 4개 파일이 toHHMMSS를 각자 갖고 있었고 90초를 "00:01:30"으로
+ * 표시했다. 시(時) 자리는 이 게임에서 영원히 00이다.
+ * 여기서는 남은 초만 크게 보여주고, 링으로 진행률을 함께 그린다.
+ */
+.timer {
+	position: relative;
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	font-variant-numeric: tabular-nums;
+	font-size: var(--t-lg);
+	font-weight: 700;
+	color: var(--ink);
+}
+
+.timer svg {
+	position: absolute;
+	inset: 0;
+	transform: rotate(-90deg);
+}
+
+.timer circle {
+	fill: none;
+	stroke-width: 3;
+	stroke-linecap: round;
+}
+
+.timer .track {
+	stroke: var(--surface-3);
+}
+
+.timer .bar {
+	stroke: var(--accent);
+	transition: stroke-dashoffset 1s linear, stroke var(--dur) var(--ease);
+}
+
+/* 마지막 10초 */
+.timer.urgent .bar {
+	stroke: var(--danger);
+}
+.timer.urgent {
+	color: var(--danger);
+	animation: pulse 1s var(--ease) infinite;
+}
+
+@keyframes pulse {
+	0%,
+	100% {
+		transform: scale(1);
+	}
+	50% {
+		transform: scale(1.08);
+	}
+}
+
+/* ---------- 본문 ---------- */
+.body {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--s2);
+}
+
+.scroll {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: var(--surface-3) transparent;
+}
+
+.scroll::-webkit-scrollbar {
+	width: 6px;
+}
+.scroll::-webkit-scrollbar-thumb {
+	background: var(--surface-3);
+	border-radius: 99px;
+}
+.scroll::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* ---------- 버튼 ---------- */
+/*
+ * 기존 조작 요소는 전부 <div onclick>이었다. 키보드로 도달할 수 없고
+ * 포커스 링도 없어서 마우스가 없으면 게임 자체가 불가능했다.
+ * 위젯 HTML은 전부 <button>을 쓰고, 모양은 이 클래스가 준다.
+ */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s1);
+	min-height: 34px;
+	padding: var(--s2) var(--s3);
+	font: inherit;
+	font-size: var(--t-sm);
+	font-weight: 600;
+	color: var(--ink);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	cursor: pointer;
+	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+	background: var(--surface-3);
+}
+
+.btn:active:not(:disabled) {
+	transform: scale(0.97);
+}
+
+.btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.btn:disabled {
+	cursor: default;
+	opacity: 0.45;
+}
+
+.btn.primary {
+	color: #14100f;
+	background: var(--accent);
+	border-color: var(--accent);
+}
+.btn.primary:hover:not(:disabled) {
+	filter: brightness(1.1);
+}
+
+.btn.ok {
+	color: #0e1a12;
+	background: var(--ok);
+	border-color: var(--ok);
+}
+
+.btn.danger {
+	color: var(--ink);
+	background: var(--mafia-dim);
+	border-color: var(--mafia);
+}
+
+.btn.ghost {
+	background: transparent;
+}
+
+/* ---------- 참가자 타일 ---------- */
+/*
+ * 밤 지목·투표가 같은 격자를 쓴다. 예전에는 밤은 4열 정사각 타일,
+ * 투표는 3열 30px 막대로 서로 다른 화면이었다. 같은 동작(사람 하나를
+ * 고른다)이면 같은 모양이어야 무엇을 누르는지 배우는 비용이 한 번이다.
+ */
+.grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--s2);
+	align-content: start;
+}
+
+@media (max-width: 340px) {
+	.grid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+.tile {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	aspect-ratio: 1;
+	padding: var(--s1);
+	font: inherit;
+	font-size: var(--t-sm);
+	font-weight: 700;
+	color: var(--ink);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: var(--r2);
+	cursor: pointer;
+	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+
+.tile:hover:not(:disabled) {
+	background: var(--surface-3);
+	border-color: var(--ink-3);
+}
+
+.tile:active:not(:disabled) {
+	transform: scale(0.95);
+}
+
+.tile:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.tile .num {
+	font-size: var(--t-lg);
+	line-height: 1.1;
+}
+
+.tile .cap {
+	font-size: var(--t-xs);
+	font-weight: 500;
+	color: var(--ink-3);
+}
+
+/* 나 */
+.tile.me {
+	border-color: var(--ok);
+}
+.tile.me .cap {
+	color: var(--ok);
+}
+
+/* 죽은 사람 */
+.tile:disabled,
+.tile.dead {
+	cursor: default;
+	color: var(--dead);
+	background: var(--surface);
+	border-color: var(--surface-2);
+}
+.tile.dead .cap {
+	color: var(--dead);
+}
+
+/* 지목·투표 완료 */
+.tile.picked {
+	background: var(--mafia-dim);
+	border-color: var(--mafia);
+	box-shadow: 0 0 0 2px var(--mafia) inset;
+}
+
+/* 같은 팀(마피아 채팅) */
+.tile.ally {
+	border-color: var(--mafia);
+	background: color-mix(in srgb, var(--mafia-dim) 60%, var(--surface-2));
+}
+
+/* 타일 위 배지: 상태를 글자로도 남긴다 (색만으로 구분하지 않기 위해) */
+.tile .badge {
+	position: absolute;
+	top: 2px;
+	right: 3px;
+	font-size: var(--t-xs);
+	line-height: 1;
+}
+
+/* 득표수 */
+.tile .tally {
+	position: absolute;
+	bottom: 2px;
+	left: 0;
+	right: 0;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--accent);
+}
+
+/* ---------- 칩 ---------- */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
+	padding: 2px var(--s2);
+	font-size: var(--t-xs);
+	font-weight: 700;
+	white-space: nowrap;
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	background: var(--surface-2);
+}
+
+.chip.mafia {
+	color: var(--mafia);
+	border-color: var(--mafia);
+	background: var(--mafia-dim);
+}
+.chip.citizen {
+	color: var(--citizen);
+	border-color: var(--citizen);
+	background: var(--citizen-dim);
+}
+.chip.dead {
+	color: var(--ink-3);
+}
+
+/* ---------- 안내 문구 ---------- */
+.note {
+	flex: 0 0 auto;
+	font-size: var(--t-sm);
+	color: var(--ink-2);
+	text-align: center;
+	word-break: keep-all;
+}
+
+.note strong {
+	color: var(--ink);
+}
+
+/* 상태가 바뀔 때 문구가 갈아끼워지는 것을 눈이 따라가도록 */
+.note.flash {
+	animation: flash var(--dur) var(--ease);
+}
+
+@keyframes flash {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+}
+
+/* ---------- 채팅 ---------- */
+/*
+ * 채팅은 접속해 있는 내내 떠 있는 유일한 위젯이라 다른 화면과 규칙이 다르다.
+ *
+ * 1. 두 가지 모습으로 산다 — 펼친 창(.chat)과 접힌 막대(.chat-mini).
+ *    위젯은 iframe이라 투명해도 그 자리의 클릭을 먹는다. 그래서 접기는
+ *    CSS로 내용을 숨기는 것이 아니라 더 작은 위젯으로 다시 여는 것이고
+ *    (WidgetSize.CHAT_BAR), 두 모습이 한 파일 안에 함께 있어야 한다.
+ *
+ * 2. .panel을 쓰지 않는다. panel은 여닫히는 화면의 문법(머리말·본문·안내)인데
+ *    채팅은 늘 떠 있는 도구다. 여백을 panel만큼 주면 세로 320px 중 실제로
+ *    글이 보이는 자리가 절반으로 줄어든다.
+ */
+.chat {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	border: 1px solid var(--line);
+	border-radius: var(--r2);
+	box-shadow: var(--shadow);
+	overflow: hidden;
+}
+
+/* 탭 줄 */
+.chat-head {
+	display: flex;
+	align-items: stretch;
+	flex: 0 0 auto;
+	border-bottom: 1px solid var(--line);
+}
+
+.chat-tabs {
+	display: flex;
+	gap: 2px;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 2px 2px 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.chat-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.tab {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	border-radius: var(--r1) var(--r1) 0 0;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.tab:hover {
+	color: var(--ink-2);
+	background: var(--surface-2);
+}
+
+.tab:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.tab[aria-selected="true"] {
+	color: var(--ink);
+	background: var(--surface-2);
+	border-bottom-color: var(--accent);
+}
+
+/* 읽기만 되는 탭. 색이 아니라 글리프로 알린다 */
+.tab.ro::after {
+	content: "🔒";
+	font-size: 9px;
+}
+
+/* 미확인 개수 */
+.badge-n {
+	min-width: 15px;
+	padding: 0 4px;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 15px;
+	text-align: center;
+	color: #14100f;
+	background: var(--accent);
+	border-radius: 99px;
+}
+
+.chat-fold {
+	flex: 0 0 auto;
+	padding: 0 var(--s2);
+	font: inherit;
+	font-size: var(--t-sm);
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.chat-fold:hover {
+	color: var(--ink);
+}
+.chat-fold:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 기록 */
+.chat-body {
+	position: relative;
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.chat-log {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s1);
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: var(--s2);
+}
+
+.msg {
+	display: flex;
+	flex-direction: column;
+	max-width: 88%;
+	font-size: var(--t-sm);
+}
+
+.msg .who {
+	display: flex;
+	align-items: center;
+	gap: var(--s1);
+	font-size: var(--t-xs);
+	color: var(--ink-3);
+}
+
+/* 직업 배지는 마피아·유령 탭에서만 온다 (ChannelDef.revealsRole) */
+.msg .chip {
+	padding: 0 var(--s1);
+	font-size: 9px;
+}
+
+.msg .txt {
+	padding: var(--s1) var(--s2);
+	border-radius: var(--r1);
+	background: var(--surface-2);
+	/* 서버 안내는 여러 줄일 수 있다 (/도움말) */
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.msg.mine {
+	align-self: flex-end;
+	align-items: flex-end;
+}
+.msg.mine .txt {
+	color: #14100f;
+	background: var(--accent);
+}
+
+.when {
+	flex: 0 0 auto;
+	font-size: 9px;
+	color: var(--ink-3);
+	font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 누구의 말도 아닌 줄은 가운데에 눕는다. 사람의 발언과 같은 말풍선을 주면
+ * "시스템이 알려준 사실"과 "누가 주장한 말"이 눈으로 구분되지 않는다 —
+ * 마피아 게임에서 그 둘을 헷갈리면 판이 뒤집힌다.
+ */
+.msg.sys,
+.msg.evt,
+.msg.ntc {
+	align-self: center;
+	align-items: center;
+	max-width: 100%;
+	text-align: center;
+}
+
+.msg.sys .txt,
+.msg.ntc .txt {
+	font-size: var(--t-xs);
+	color: var(--ink-2);
+	background: transparent;
+}
+
+.msg.ntc .txt {
+	color: var(--ink-3);
+}
+
+/* 사건 기록(사망·처형·특종)은 나중에 판을 되짚을 때 눈으로 찾게 된다 */
+.msg.evt .txt {
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	border-radius: 99px;
+}
+
+/* 위로 올라가 읽는 중에 새 줄이 오면. 스크롤을 뺏지 않고 알리기만 한다 */
+.chat-jump {
+	position: absolute;
+	left: 50%;
+	bottom: var(--s2);
+	z-index: 2;
+	transform: translateX(-50%);
+	padding: 2px var(--s3);
+	font: inherit;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: #14100f;
+	background: var(--accent);
+	border: none;
+	border-radius: 99px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+}
+
+/* 이모지 판. 기록 위에 겹쳐서 연다 — 세로 320px에 상시 자리를 내줄 수 없다 */
+.emoji-pad {
+	position: absolute;
+	inset: auto 0 0 0;
+	z-index: 3;
+	display: grid;
+	grid-template-columns: repeat(8, 1fr);
+	gap: 2px;
+	padding: var(--s2);
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+}
+
+.emoji-pad button {
+	padding: 2px 0;
+	font-size: 17px;
+	line-height: 1.3;
+	background: transparent;
+	border: none;
+	border-radius: var(--r1);
+	cursor: pointer;
+}
+.emoji-pad button:hover {
+	background: var(--surface-3);
+}
+.emoji-pad button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 빠른 메시지 */
+.quick {
+	display: flex;
+	gap: var(--s1);
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	overflow-x: auto;
+	scrollbar-width: none;
+	border-top: 1px solid var(--line);
+}
+.quick::-webkit-scrollbar {
+	display: none;
+}
+
+.quick button {
+	flex: 0 0 auto;
+	padding: 2px var(--s2);
+	font: inherit;
+	font-size: var(--t-xs);
+	color: var(--ink-2);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.quick button:hover {
+	color: var(--ink);
+	background: var(--surface-3);
+}
+.quick button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+/* 입력 */
+.chat-entry {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+}
+
+.chat-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: var(--s2) var(--s1);
+	font: inherit;
+	font-size: var(--t-sm);
+	color: var(--ink);
+	background: transparent;
+	border: none;
+	outline: none;
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+.chat-input::placeholder {
+	color: var(--ink-3);
+}
+
+.chat-input:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.icon-btn {
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-md);
+	color: var(--ink-2);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.icon-btn:hover {
+	color: var(--ink);
+}
+.icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 접힌 막대: 위젯 전체가 버튼 하나다 */
+.chat-mini {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	width: 100%;
+	height: 100%;
+	padding: 0 var(--s3);
+	font: inherit;
+	font-size: var(--t-sm);
+	font-weight: 700;
+	color: var(--ink-2);
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.chat-mini:hover {
+	color: var(--ink);
+	border-color: var(--ink-3);
+}
+.chat-mini:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 접혀 있어도 못 본 말이 있다는 것은 보여야 한다 */
+.chat-mini.alert {
+	color: var(--ink);
+	border-color: var(--accent);
+}
+
+/* ---------- 유틸 ---------- */
+.hidden {
+	display: none !important;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+}
+
+.grow {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.ellip {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* 스크린리더 전용 */
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+</style>
+		<style>
+			/*
+			 * 통합 채팅 위젯. 다섯 층 중 그리는 층(ChatUI)이다.
+			 *
+			 * 이 파일이 모르는 것 —
+			 *   직업이 무엇인지, 지금이 밤인지, 마피아가 누구인지.
+			 * 아는 것 —
+			 *   서버가 준 탭 목록(channels), 그중 쓸 수 있는 탭(write),
+			 *   지금 내밀 빠른 메시지(quick), 받은 줄들(lines).
+			 *
+			 * 그래서 직업이 12종에서 20종이 되어도, 단계가 하나 늘어도
+			 * 이 파일은 그대로다. 규칙은 전부 ChatPermission의 표에 있다.
+			 *
+			 * 줄을 채널별로 나눠 갖지 않고 통째로 들고 필요할 때 거르는 이유:
+			 * 서버는 "이 사람이 읽어도 되는 모든 줄"을 보내므로, 탭을 누를 때
+			 * 필요한 것은 이미 전부 여기 있다. 왕복을 기다리지 않으니 탭 전환이
+			 * 즉시 그려진다. 서버에는 미확인 계산을 위해 알리기만 한다.
+			 */
+
+			/* 접힌 막대와 펼친 창은 한 번에 하나만 산다 (.hidden으로 갈린다) */
+		</style>
+	</head>
+	<body>
+		<button type="button" class="chat-mini hidden" id="mini" aria-label="채팅 열기">
+			<span id="miniGlyph">💬</span>
+			<span class="grow ellip" id="miniText">채팅</span>
+			<span class="badge-n hidden" id="miniBadge">0</span>
+		</button>
+
+		<div class="chat hidden" id="full">
+			<div class="chat-head">
+				<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
+				<button type="button" class="chat-fold" id="fold" aria-label="채팅 접기">▾</button>
+			</div>
+
+			<div class="chat-body">
+				<div class="chat-log scroll" id="log" role="log" aria-live="polite"></div>
+				<button type="button" class="chat-jump hidden" id="jump">새 메시지 ↓</button>
+				<div class="emoji-pad hidden" id="pad" role="group" aria-label="이모지"></div>
+			</div>
+
+			<div class="quick hidden" id="quick"></div>
+
+			<div class="chat-entry">
+				<button type="button" class="icon-btn" id="emoji" aria-label="이모지">☺</button>
+				<!--
+					maxlength는 편의일 뿐 한계가 아니다. 진짜 한계는 서버의
+					MAX_CHAT_LENGTH다 (Widget.types.ts). 두 값은 같아야 한다.
+				-->
+				<input
+					type="text"
+					class="chat-input"
+					id="input"
+					maxlength="200"
+					autocomplete="off"
+					aria-label="메시지 입력"
+				/>
+				<button type="button" class="icon-btn" id="submit" aria-label="보내기">➤</button>
+			</div>
+		</div>
+
+		<script>
+/*
+ * 위젯 공통 스크립트.
+ *
+ * 기존에는 toHHMMSS가 4개 파일에, esc가 2개 파일에 복사돼 있었다.
+ * 복사본은 갈라진다 — night.html의 타이머는 다 되면 글자를 흰색으로,
+ * morning.html은 #484848로 되돌렸다. 같은 타이머인데 화면마다 달랐다.
+ *
+ * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 인라인한다.
+ * 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다. Jint에서 도는 서버 쪽
+ * src/*.ts 와 달리 최신 문법 제약이 없다.
+ */
+
+/** 서버가 보낸 문자열은 다른 플레이어가 정한 값이다. 태그로 해석되면 안 된다 */
+function esc(value) {
+	return String(value == null ? "" : value)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+/**
+ * 이미 escape를 마친 HTML 조각. html`` 이 만들고 html`` 이 알아본다.
+ *
+ * 이 표시가 없으면 조각을 조각에 끼울 때마다 두 번 escape되어
+ * &amp;lt; 같은 글자가 화면에 뜬다. 표시가 있으니 중첩이 그냥 된다.
+ */
+function Html(text) {
+	this.text = text;
+}
+
+Html.prototype.toString = function () {
+	return this.text;
+};
+
+function frag(value) {
+	if (value instanceof Html) return value.text;
+	// 배열은 이어 붙인다. 호출부가 .join("")을 하면 그 순간 표시가 벗겨져서
+	// 바깥 템플릿이 조각 전체를 다시 escape해 버린다 — 그 함정을 없앤다.
+	if (Array.isArray(value)) return value.map(frag).join("");
+	return esc(value);
+}
+
+/**
+ * HTML 조립. 끼워 넣는 값은 전부 자동으로 escape된다.
+ *
+ *   el.innerHTML = html`<span class="nm">${seat.name}</span>`;
+ *
+ * 기존에는 위젯마다 문자열 concat으로 태그를 쌓았다. tabHtml() 하나가
+ * 22줄이었고, 따옴표와 + 사이에서 esc()를 한 군데 빠뜨려도(chat.html의
+ * view.glyph가 그랬다) 눈에 띄지 않았다. 여기서는 빠뜨릴 자리가 없다 —
+ * escape가 기본이고, escape를 건너뛰려면 Html 조각이어야 한다.
+ */
+function html(strings) {
+	let out = strings[0];
+	for (let i = 1; i < arguments.length; i++) out += frag(arguments[i]) + strings[i];
+	return new Html(out);
+}
+
+/**
+ * boolean 속성. 참이면 속성 이름을, 거짓이면 빈 조각을 낸다.
+ *
+ *   html`<button class="tile" ${flag(!seat.alive, "disabled")}>`
+ *
+ * 값을 끼우는 방식으로는 끌 수 없다 — HTML의 boolean 속성은 값이 아니라
+ * 존재로 판정되므로 disabled="false"도 disabled다.
+ */
+function flag(on, name) {
+	return new Html(on ? name : "");
+}
+
+/*
+ * querySelector 두 종.
+ *
+ * $ / $$ 라는 이름이었는데 두 가지 이유로 바꿨다. 하나는 $가 jQuery로
+ * 읽힌다는 것이고(이 프로젝트는 라이브러리를 하나도 쓰지 않는다),
+ * 다른 하나는 $가 String.replace의 치환 지시자라는 것이다 —
+ * 빌드가 shared.js를 인라인하면서 `function $$`를 `function $`로 바꿔
+ * 모든 위젯의 $()가 배열을 돌려준 적이 있다. 이름에 $가 없으면
+ * 그 사고 자체가 성립하지 않는다.
+ */
+function qs(selector, root) {
+	return (root || document).querySelector(selector);
+}
+
+function qsa(selector, root) {
+	return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+}
+
+/** 부모(ZEP 클라이언트)에게 보낸다 */
+function send(message) {
+	window.parent.postMessage(message, "*");
+}
+
+/**
+ * 서버 메시지 구독. type별 핸들러 표를 받는다.
+ *
+ * 기존 위젯은 전부 addEventListener("message") + switch였고, morning/night는
+ * type을 아예 보지 않아 어떤 메시지가 와도 타이머를 다시 시작했다.
+ */
+function onServer(handlers) {
+	window.addEventListener("message", function (event) {
+		const data = event && event.data;
+		if (!data) return;
+		const handler = handlers[data.type];
+		if (handler) handler(data);
+	});
+}
+
+/**
+ * 남은 시간 표시.
+ *
+ * 기존 toHHMMSS는 90초를 "00:01:30"으로 그렸다. 이 게임의 최장 단계는
+ * 60초라 시(時) 자리는 영원히 00이고, 분 자리도 대부분 00이다.
+ * 화면에서 실제로 변하는 것은 초뿐인데 6글자를 읽게 했다.
+ *
+ * el은 .timer이며 내부에 진행률 링(svg)을 갖는다. 남은 비율을 함께
+ * 그려서 숫자를 읽지 않아도 얼마나 남았는지 보이게 한다.
+ */
+function startTimer(el, seconds) {
+	if (!el) return;
+	// 같은 위젯이 payload를 두 번 받으면 타이머도 두 개가 된다. 둘 다 살아서
+	// 서로 다른 숫자를 번갈아 쓰기 때문에 남은 시간이 튀어 보인다.
+	// 이전 것을 먼저 끄면 몇 번을 다시 받든 항상 하나만 돈다.
+	if (el.dataset.timerId) clearInterval(Number(el.dataset.timerId));
+	const total = Math.max(1, Math.round(seconds));
+	let left = total;
+	const label = document.createElement("span");
+	const RADIUS = 19;
+	const CIRC = 2 * Math.PI * RADIUS;
+
+	el.innerHTML = html`<svg viewBox="0 0 44 44" aria-hidden="true">
+		<circle class="track" cx="22" cy="22" r="${RADIUS}"></circle>
+		<circle
+			class="bar"
+			cx="22"
+			cy="22"
+			r="${RADIUS}"
+			stroke-dasharray="${CIRC}"
+			stroke-dashoffset="0"
+		></circle>
+	</svg>`;
+	el.appendChild(label);
+	el.setAttribute("role", "timer");
+
+	const bar = qs(".bar", el);
+
+	function paint() {
+		label.textContent = String(Math.max(0, left));
+		el.setAttribute("aria-label", "남은 시간 " + Math.max(0, left) + "초");
+		bar.style.strokeDashoffset = String(CIRC * (1 - Math.max(0, left) / total));
+		// 마지막 10초는 색과 맥동으로도 알린다. 소리를 못 듣는 환경이 있다
+		el.classList.toggle("urgent", left <= 10);
+	}
+
+	paint();
+	const id = setInterval(function () {
+		left--;
+		paint();
+		if (left <= 0) clearInterval(id);
+	}, 1000);
+	el.dataset.timerId = String(id);
+	return id;
+}
+
+/**
+ * 위젯 위치 보정.
+ *
+ * 기존에는 이 계산이 3개 파일에 서로 다르게 복사돼 있었다. 대기실은
+ * 태블릿을 768px로, 밤 위젯은 같은 768px을 다른 의미로 썼고, 투표·개표
+ * 화면은 보정 자체가 없어 모바일에서 화면 밖으로 나갔다.
+ */
+function rearrange(isMobile) {
+	if (!isMobile) {
+		send({ type: "WidgetRearrange", top: "-12px", anchor: "topright" });
+		return;
+	}
+	const tablet = window.screen.width >= 768;
+	send({
+		type: "WidgetRearrange",
+		anchor: "top",
+		top: tablet ? "-40px" : "-24px",
+		width: tablet ? "60%" : "96%",
+	});
+}
+
+/** 로그 맨 아래로. 붙인 뒤에 호출해야 한다 */
+function scrollToEnd(el) {
+	if (el) el.scrollTop = el.scrollHeight;
+}
+
+</script>
+		<script>
+			/** 위젯이 들고 있는 줄 수 상한. 서버 기록(120줄)보다 넉넉하다 */
+			const MAX_LINES = 200;
+			const MAX_TEXT = 200;
+			/* 스크롤이 이만큼 안쪽이면 "바닥을 보고 있다"로 친다 */
+			const BOTTOM_SLACK = 24;
+
+			/*
+			 * 이모지는 고정 목록이다. 스티커·커스텀 이모지를 붙일 자리이기도
+			 * 하다 — 서버가 목록을 보내주도록 바꾸면 payload 한 필드로 끝난다.
+			 */
+			const EMOJI = [
+				"👍",
+				"👏",
+				"🙏",
+				"❤️",
+				"😀",
+				"😂",
+				"😅",
+				"😭",
+				"😱",
+				"😡",
+				"🤔",
+				"😎",
+				"🔪",
+				"👻",
+				"🕵️",
+				"🚨",
+			];
+
+			let lines = [];
+			let channels = [];
+			let quick = [];
+			let active = "";
+			let myId = "";
+
+			// ────────────────────────────────────────────────── 그리기
+
+			/** epoch ms를 HH:MM으로. 서버는 UTC ms만 보내고 형식은 여기서 정한다 */
+			function clock(at) {
+				const d = new Date(Number(at) || 0);
+				return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+			}
+
+			function viewOf(id) {
+				for (const view of channels) {
+					if (view.id === id) return view;
+				}
+				return null;
+			}
+
+			function bubble(line) {
+				const when = html`<span class="when">${clock(line.at)}</span>`;
+
+				// 사람이 친 말이 아니면 가운데 한 줄로 눕힌다
+				if (line.kind !== "USER") {
+					const cls = line.kind === "EVENT" ? "evt" : line.kind === "NOTICE" ? "ntc" : "sys";
+					return html`<div class="msg ${cls}">
+						<div class="txt">${when} ${line.text}</div>
+					</div>`;
+				}
+
+				// 내 말은 이름을 다시 읽을 필요가 없다. 시각만 남긴다
+				const mine = line.senderId !== "" && line.senderId === myId;
+				let who = when;
+				if (!mine) {
+					const chip = line.role
+						? html`<span class="chip ${line.team === "mafia" ? "mafia" : "citizen"}"
+								>${line.role}</span
+							>`
+						: "";
+					const name = line.num > 0 ? line.num + "번 " + line.name : line.name;
+					who = html`${chip}<span class="ellip">${name}</span>${when}`;
+				}
+
+				return html`<div class="msg${mine ? " mine" : ""}">
+					<div class="who">${who}</div>
+					<div class="txt">${line.text}</div>
+				</div>`;
+			}
+
+			function nearBottom(el) {
+				return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_SLACK;
+			}
+
+			function jump(show) {
+				qs("#jump").classList.toggle("hidden", !show);
+			}
+
+			/** 활성 탭의 줄만 다시 그린다. 탭 전환·재접속이 지나는 길 */
+			function render() {
+				const el = qs("#log");
+				el.innerHTML = html`${lines.filter(line => line.channel === active).map(bubble)}`;
+				scrollToEnd(el);
+				jump(false);
+			}
+
+			function append(line) {
+				lines.push(line);
+				if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+				if (line.channel !== active) return;
+
+				const el = qs("#log");
+				// 붙이기 *전에* 재야 한다. 붙인 뒤에 재면 방금 늘어난 높이 때문에
+				// 늘 "위로 올라가 있음"이 되어 자동 스크롤이 영영 멈춘다.
+				// 기존 roleAction.html의 밤 채팅이 정확히 이 순서로 어긋나 있었다.
+				const follow = nearBottom(el);
+				el.insertAdjacentHTML("beforeend", bubble(line));
+				while (el.childElementCount > MAX_LINES) el.removeChild(el.firstElementChild);
+
+				if (follow) scrollToEnd(el);
+				// 읽던 자리를 뺏지 않는다. 새 줄이 왔다는 것만 알린다
+				jump(!follow);
+			}
+
+			function badgeText(unread) {
+				return unread > 99 ? "99+" : String(unread);
+			}
+
+			function tabHtml(view) {
+				const badge = view.unread > 0 ? html`<span class="badge-n">${badgeText(view.unread)}</span>` : "";
+				return html`<button
+					type="button"
+					role="tab"
+					class="tab${view.write ? "" : " ro"}"
+					aria-selected="${view.id === active}"
+					data-id="${view.id}"
+					aria-label="${view.label + (view.write ? "" : ", 읽기 전용")}"
+				>
+					<span aria-hidden="true">${view.glyph}</span><span>${view.label}</span>${badge}
+				</button>`;
+			}
+
+			function drawTabs() {
+				qs("#tabs").innerHTML = html`${channels.map(tabHtml)}`;
+
+				const view = viewOf(active);
+				/*
+				 * 입력창은 잠그지 않는다. 명령어(/도움말)는 채널 권한과 무관하게
+				 * 서버가 받아주고, 밤의 시민처럼 쓸 수 있는 탭이 하나도 없는
+				 * 상황이 정상이기 때문이다. 잠그면 그 사람은 명령어를 영영 쓸 수
+				 * 없다. 대신 안내 문구와 탭의 자물쇠로 지금 상태를 알린다.
+				 */
+				qs("#input").placeholder = view
+					? view.write
+						? view.placeholder
+						: "지금은 읽기만 됩니다 (/도움말)"
+					: "";
+			}
+
+			/**
+			 * 미확인 수만 갈아끼운다.
+			 *
+			 * 줄이 하나 올 때마다 drawTabs()를 부르면 탭 막대의 innerHTML이
+			 * 통째로 새로 만들어진다. 탭에 포커스를 두고 키보드로 넘기던 중이면
+			 * 포커스가 날아가고, 탭이 많아 가로 스크롤 중이면 스크롤도 처음으로
+			 * 돌아간다. 실제로 바뀌는 것은 숫자 하나뿐이다.
+			 */
+			function drawBadges() {
+				for (const tab of qsa(".tab", qs("#tabs"))) {
+					const view = viewOf(tab.dataset.id);
+					if (!view) continue;
+					let badge = qs(".badge-n", tab);
+					if (view.unread <= 0) {
+						if (badge) badge.remove();
+						continue;
+					}
+					if (!badge) {
+						tab.insertAdjacentHTML("beforeend", '<span class="badge-n"></span>');
+						badge = qs(".badge-n", tab);
+					}
+					badge.textContent = badgeText(view.unread);
+				}
+			}
+
+			function drawQuick() {
+				const view = viewOf(active);
+				const usable = view !== null && view.write && quick.length > 0;
+				qs("#quick").classList.toggle("hidden", !usable);
+				if (!usable) return;
+				qs("#quick").innerHTML = html`${quick.map(
+					text => html`<button type="button">${text}</button>`
+				)}`;
+			}
+
+			function drawMini() {
+				let total = 0;
+				for (const view of channels) total += view.unread;
+				const active_ = viewOf(active);
+
+				qs("#miniGlyph").textContent = active_ ? active_.glyph : "💬";
+				qs("#miniText").textContent = total > 0 ? "새 메시지" : "채팅";
+				qs("#miniBadge").textContent = badgeText(total);
+				qs("#miniBadge").classList.toggle("hidden", total === 0);
+				qs("#mini").classList.toggle("alert", total > 0);
+			}
+
+			function draw() {
+				drawTabs();
+				drawQuick();
+				drawMini();
+			}
+
+			// ────────────────────────────────────────────────── 보내기
+
+			function submit(text) {
+				const trimmed = String(text == null ? "" : text).trim();
+				if (trimmed === "") return;
+				const view = viewOf(active);
+				// 명령어는 어느 탭에서든 통한다. 서버가 권한 검사보다 먼저 본다
+				if (trimmed.charAt(0) !== "/" && (view === null || !view.write)) return;
+				send({ type: "send", channel: active, text: trimmed });
+			}
+
+			function submitInput() {
+				submit(qs("#input").value);
+				qs("#input").value = "";
+				qs("#pad").classList.add("hidden");
+			}
+
+			// ────────────────────────────────────────────────── 조작
+
+			qs("#tabs").addEventListener("click", event => {
+				const el = event.target.closest(".tab");
+				if (!el || el.dataset.id === active) return;
+
+				// 줄은 이미 전부 여기 있으므로 서버를 기다릴 이유가 없다.
+				// 기다리면 탭을 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
+				active = el.dataset.id;
+				const view = viewOf(active);
+				if (view) view.unread = 0;
+				draw();
+				render();
+				send({ type: "channel", channel: active });
+			});
+
+			qs("#fold").addEventListener("click", () => {
+				// 접기는 더 작은 위젯으로 다시 여는 것이다. 서버가 다시 열어준다
+				send({ type: "toggle", open: false });
+			});
+
+			qs("#mini").addEventListener("click", () => {
+				send({ type: "toggle", open: true });
+			});
+
+			qs("#jump").addEventListener("click", () => {
+				scrollToEnd(qs("#log"));
+				jump(false);
+			});
+
+			qs("#log").addEventListener("scroll", () => {
+				if (nearBottom(qs("#log"))) jump(false);
+			});
+
+			qs("#emoji").addEventListener("click", () => {
+				qs("#pad").classList.toggle("hidden");
+			});
+
+			qs("#pad").addEventListener("click", event => {
+				if (event.target.tagName !== "BUTTON") return;
+				const input = qs("#input");
+				input.value = (input.value + event.target.textContent).slice(0, MAX_TEXT);
+				qs("#pad").classList.add("hidden");
+				input.focus();
+			});
+
+			qs("#quick").addEventListener("click", event => {
+				if (event.target.tagName !== "BUTTON") return;
+				submit(event.target.textContent);
+			});
+
+			qs("#submit").addEventListener("click", submitInput);
+
+			qs("#input").addEventListener("keydown", event => {
+				if (event.key === "Enter") submitInput();
+			});
+
+			qs("#pad").innerHTML = html`${EMOJI.map(
+				glyph => html`<button type="button" aria-label="${glyph}">${glyph}</button>`
+			)}`;
+
+			// ────────────────────────────────────────────────── 서버
+
+			onServer({
+				init(data) {
+					myId = data.myId || "";
+					channels = data.channels || [];
+					quick = data.quick || [];
+					active = data.active || "";
+					lines = data.lines || [];
+
+					const open = data.open === true;
+					qs("#full").classList.toggle("hidden", !open);
+					qs("#mini").classList.toggle("hidden", open);
+
+					draw();
+					render();
+				},
+
+				/*
+				 * 권한만 바뀐 것이다 (단계 전환·사망·입퇴장). 다시 그리지 않는
+				 * 이유는 읽던 자리와 입력하던 글자를 지키기 위해서다 —
+				 * 활성 탭이 실제로 바뀌었을 때만 기록을 갈아끼운다.
+				 */
+				channels(data) {
+					const next = data.active || active;
+					const moved = next !== active;
+					channels = data.channels || [];
+					quick = data.quick || [];
+					active = next;
+					draw();
+					if (moved) render();
+				},
+
+				line(data) {
+					if (data.channels) channels = data.channels;
+					if (data.line) append(data.line);
+					drawBadges();
+					drawMini();
+				},
+			});
+		</script>
+	</body>
+</html>

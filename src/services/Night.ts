@@ -17,25 +17,27 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { TIMING } from "../constants/GameConfig.ts";
-import { ChatChannel, inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
+import { inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
+import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import {
+	nightActionBlockedReason,
 	NightOutcome,
 	resolveNightCasualties,
 	resolveNightSelect,
 } from "../domain/NightResolution.ts";
 import { aliveSeats, resetRound, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
-import { asInt, asText, field, messageType, MAX_CHAT_LENGTH } from "../types/Widget.types.ts";
-import { forEachPlayer, label, playSound, say, tell } from "./Broadcast.ts";
-
-/** 밤 능력 안내 라벨 표시 시간(ms). 지목할 시간을 충분히 준다 */
-const NIGHT_PROMPT_MS = 6000;
-import { mafiaChatSize, relayGhost, relayMafia } from "./Chat.ts";
+import { asInt, field, messageType } from "../types/Widget.types.ts";
+import { forEachPlayer, label, playSound } from "./Broadcast.ts";
+import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { PhasePayload } from "./Widgets.ts";
-import { closeGhost, closeRoleCard, openGhostChat, openPhase, openRoleAction } from "./Widgets.ts";
+import { closeRoleCard, openPhase, openRoleAction } from "./Widgets.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
+
+/** 밤 능력 안내 라벨 표시 시간(ms). 지목할 시간을 충분히 준다 */
+const NIGHT_PROMPT_MS = 6000;
 
 /**
  * 지목할 것이 없는 사람들이 보는 밤 화면.
@@ -55,7 +57,7 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 		role: roleName(seat.role),
 		team: seat.team,
 		alive: seat.alive,
-		note: nightNote(seat),
+		note: nightNote(room, seat),
 		deaths: [],
 	};
 }
@@ -65,16 +67,14 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
  *
  * 안내가 하나뿐이었을 때는 능력을 다 쓴 자경단원도 "능력이 있는 직업은
  * 대상을 지목하세요"를 받았다. 지목할 격자는 없는데 지목하라고 하니
- * 화면이 깨진 것처럼 보인다. 이유는 좌석 상태가 정하므로 판정을 여기
- * 한 곳에 두고, 격자를 숨기는 조건(canAct)과 같은 근거를 쓴다.
+ * 화면이 깨진 것처럼 보인다. 격자를 숨기는 판정과 같은 함수를 쓰므로
+ * "격자가 없다"와 "이유를 설명한다"가 어긋날 수 없다.
  */
-function nightNote(seat: Seat): string {
+function nightNote(room: Room, seat: Seat): string {
 	if (!seat.alive) return "당신은 죽었습니다. 관전 중입니다.";
-	const def = roleDef(seat.role);
-	if (def.oncePerGame && seat.skillSpent) {
-		return "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.";
-	}
-	return "밤입니다. 능력이 있는 직업은 대상을 지목하세요.";
+	const blocked = nightActionBlockedReason(seat, room.turnCount);
+	if (blocked) return blocked;
+	return "밤입니다. 대상을 지목하세요.";
 }
 
 export function beginNight(room: Room): void {
@@ -85,6 +85,9 @@ export function beginNight(room: Room): void {
 
 	beginNightStage(room);
 	playSound(room, Sound.NIGHT);
+	// 밤에는 방 채팅이 잠기지만 읽기는 열려 있다. 이 한 줄이 없으면 채팅
+	// 기록만 봤을 때 아침과 아침 사이가 비어 무슨 일이 있었는지 알 수 없다
+	Chat.say(room, `🌙 ${room.turnCount + 1}번째 밤이 되었습니다.`);
 
 	forEachPlayer(room, (player, seat) => {
 		closeRoleCard(player);
@@ -95,7 +98,7 @@ export function beginNight(room: Room): void {
 /** 한 사람의 밤 화면을 연다. 직업별 차이는 전부 ROLE_DEFS에서 읽는다 */
 export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	if (!seat.alive) {
-		// 죽은 사람은 유령 채팅창(사망 시 이미 열림)만 유지하고 밤 화면을 본다
+		// 죽은 사람은 통합 채팅의 유령 채널로 대화한다. 밤 화면만 열어준다
 		openPhase(player, nightPhaseView(room, seat));
 		return;
 	}
@@ -105,41 +108,25 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	player.attackSprite = def.nightAttackSprite ? sprite(def.nightAttackSprite) : player.attackSprite;
 	player.sendUpdated();
 
-	const mafiaChat = inMafiaChat(seat);
-	tell(player, mafiaChat ? mafiaNotice(room, seat) : def.nightNotice);
+	Chat.tell(player, nightNotice(room, seat));
 
-	// 게임당 한 번뿐인 능력을 이미 썼다면 지목할 것이 남아 있지 않다.
-	// 이걸 보지 않으면 자경단원이 매일 밤 눌러도 아무 일 없는 격자를 받는다.
-	const canAct = def.nightAction !== null && !(def.oncePerGame && seat.skillSpent);
+	// 지목할 것이 남아 있지 않은 이유는 여러 가지고(능력이 없다, 다 썼다,
+	// 첫 밤이다, 이미 골랐다) 전부 한 함수가 안다. 이걸 보지 않으면
+	// 자경단원이 매일 밤 눌러도 아무 일 없는 격자를 받는다.
+	const canAct = nightActionBlockedReason(seat, room.turnCount) === null;
 
-	// 영매는 지목할 대상이 없고 유령들과 대화만 한다
-	if (!canAct && def.nightChat === ChatChannel.GHOST) {
-		const ghost = openGhostChat(player, {
-			type: "init",
-			myNum: seat.index,
-			role: roleName(seat.role),
-			team: seat.team,
-			alive: true,
-			prompt: "",
-			seats: [],
-			timer: room.phaseTimer,
-			chatEnable: true,
-			note: def.nightNotice,
-		});
-		bindChat(ghost, ChatChannel.GHOST);
+	// 지목할 것이 없으면 밤 안내 화면만 본다.
+	//
+	// 전에는 여기에 분기가 셋 있었다. 영매용, 채팅 없는 직업용, 그리고 격자가
+	// 빈 채로 열리는 마피아팀용. 셋이 갈렸던 이유는 밤 채팅이 이 위젯에
+	// 얹혀 있었기 때문이다. 채팅이 자기 위젯으로 나가면서 남은 질문은
+	// "지목할 것이 있는가" 하나뿐이 됐다.
+	if (!canAct) {
 		openPhase(player, nightPhaseView(room, seat));
 		return;
 	}
 
-	// 능력도 채팅도 없는 직업은 밤 안내 화면만 본다
-	if (!canAct && def.nightChat === null) {
-		openPhase(player, nightPhaseView(room, seat));
-		return;
-	}
-
-	if (canAct && def.nightPrompt) {
-		label(player, def.nightPrompt, NIGHT_PROMPT_MS);
-	}
+	if (def.nightPrompt) label(player, def.nightPrompt, NIGHT_PROMPT_MS);
 
 	const widget = openRoleAction(player, {
 		type: "init",
@@ -147,20 +134,34 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		role: roleName(seat.role),
 		team: seat.team,
 		alive: true,
-		prompt: canAct && def.nightPrompt ? def.nightPrompt : "",
-		// 지목할 것이 없는 마피아팀(채팅만)이면 격자를 보내지 않는다
-		seats: canAct ? seatViews(room, mafiaChat ? seat.team : undefined) : [],
+		prompt: def.nightPrompt || "",
+		seats: seatViews(room, inMafiaChat(seat) ? seat.team : undefined),
 		timer: room.phaseTimer,
-		chatEnable: mafiaChat && mafiaChatSize(room) > 1,
-		note: mafiaChat ? mafiaNotice(room, seat) : def.nightNotice,
+		note: def.nightNotice,
 	});
 	bindNightWidget(widget);
 }
 
-function mafiaNotice(room: Room, seat: Seat): string {
-	return mafiaChatSize(room) > 1
-		? "🌙 밤에는 마피아팀끼리 채팅을 공유할 수 있습니다."
-		: roleDef(seat.role).nightNotice;
+function nightNotice(room: Room, seat: Seat): string {
+	if (inMafiaChat(seat) && mafiaChatSize(room) > 1) {
+		return "🌙 마피아 탭에서 팀원과 대화할 수 있습니다.";
+	}
+	return roleDef(seat.role).nightNotice;
+}
+
+/**
+ * 살아 있는 마피아 채팅 참가자 수. 2명 이상일 때만 "대화할 수 있다"고 알린다.
+ *
+ * 기존 이름은 mafiaTeamSize였고 실제로 진영 인원을 셌다. 건달·짐승인간은
+ * 마피아 팀이지만 채팅에 없으므로, 이름대로 진영을 세면 혼자인 마피아에게
+ * 대화 상대가 있다고 알리고 아무도 답하지 않게 된다.
+ */
+function mafiaChatSize(room: Room): number {
+	let count = 0;
+	for (const seat of room.seats) {
+		if (seat.alive && inMafiaChat(seat)) count++;
+	}
+	return count;
 }
 
 /**
@@ -172,12 +173,7 @@ function mafiaNotice(room: Room, seat: Seat): string {
  */
 function bindNightWidget(widget: ScriptWidget): void {
 	widget.onMessage.Add((sender, data) => {
-		const type = messageType(data);
-		if (type === "sendMessage") {
-			relay(sender, data, ChatChannel.MAFIA);
-			return;
-		}
-		if (type !== "select") return;
+		if (messageType(data) !== "select") return;
 
 		const found = locate(sender.id);
 		if (!found) return;
@@ -185,15 +181,15 @@ function bindNightWidget(widget: ScriptWidget): void {
 		const seat = found.seat;
 		if (room.phase !== GamePhase.NIGHT || !seat.alive) return;
 
-		if (seat.usedSkill) {
-			label(sender, "이미 대상을 선택했습니다.");
+		// 위젯을 잠그는 판정과 같은 함수다. 조작된 select가 와도 서버가
+		// 같은 근거로 거절하므로, 화면에서 격자가 사라진 상태와 서버가
+		// 허용하는 상태가 갈라질 수 없다.
+		const blocked = nightActionBlockedReason(seat, room.turnCount);
+		if (blocked) {
+			label(sender, blocked);
 			return;
 		}
 		const def = roleDef(seat.role);
-		if (def.oncePerGame && seat.skillSpent) {
-			label(sender, "이 판에 쓸 수 있는 능력을 이미 사용했습니다.");
-			return;
-		}
 
 		const targetIndex = asInt(field(data, "num"));
 		if (targetIndex === null) return;
@@ -211,41 +207,25 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (result.confirmed) widget.sendMessage({ type: "selectResponse", num: targetIndex });
 		if (result.privateSound) sender.playSound(result.privateSound);
 		if (result.roomSound) playSound(room, result.roomSound);
-		if (result.joinedMafia) announceSpyJoin(room, sender, seat, widget);
+		if (result.joinedMafia) announceSpyJoin(room, sender);
 	});
 }
 
-/** 유령 채팅 전용 위젯 (영매) */
-function bindChat(widget: ScriptWidget, channel: ChatChannel): void {
-	widget.onMessage.Add((sender, data) => {
-		if (messageType(data) !== "sendMessage") return;
-		relay(sender, data, channel);
-	});
-}
-
-function relay(sender: ScriptPlayer, data: unknown, channel: ChatChannel): void {
-	const text = asText(field(data, "message"), MAX_CHAT_LENGTH);
-	if (!text) return;
-	const found = locate(sender.id);
-	if (!found) return;
-	const line = { num: found.seat.index, name: sender.name, message: text };
-	if (channel === ChatChannel.MAFIA) relayMafia(found.room, line);
-	else relayGhost(found.room, line);
-}
-
-/** 스파이가 마피아를 찾아내 합류했을 때 */
-function announceSpyJoin(
-	room: Room,
-	player: ScriptPlayer,
-	seat: Seat,
-	widget: ScriptWidget
-): void {
-	widget.sendMessage({ type: "chatEnable" });
-	forEachPlayer(room, (other, otherSeat) => {
-		if (!otherSeat.alive || otherSeat.playerId === seat.playerId) return;
-		if (otherSeat.team !== seat.team) return;
-		tell(other, `🕵️ ${player.name}(스파이)님이 마피아 채팅에 합류했습니다.`);
-	});
+/**
+ * 스파이가 마피아를 찾아내 합류했을 때.
+ *
+ * 전에는 팀원 각각에게 개인 안내를 보내고 스파이 위젯에는 chatEnable을
+ * 따로 쏘았다 — 같은 사실을 두 경로로 알리는 구조라 한쪽만 고치기 쉬웠다.
+ * 지금은 마피아 채널에 한 줄 남기고 본인의 탭 목록만 새로 고친다.
+ * 채널에 쓴 한 줄은 기록에도 남아서 나중에 합류한 사람도 볼 수 있다.
+ */
+function announceSpyJoin(room: Room, player: ScriptPlayer): void {
+	Chat.channelSay(
+		room,
+		ChatChannel.MAFIA,
+		`🕵️ ${player.name}(스파이)님이 마피아 채팅에 합류했습니다.`
+	);
+	Chat.refresh(player);
 }
 
 /**
@@ -259,11 +239,6 @@ export function resolveNight(room: Room): void {
 	// 아침 화면이 읽을 밤 기록. kill()이 사망 한 줄씩 채워 넣는다
 	room.nightReport = [];
 
-	// 영매의 유령 채팅은 밤에만 열린다
-	forEachPlayer(room, (player, seat) => {
-		if (seat.alive) closeGhost(player);
-	});
-
 	const casualties = resolveNightCasualties(room.seats);
 	if (casualties.length === 0) report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
 
@@ -273,7 +248,12 @@ export function resolveNight(room: Room): void {
 				report(room, "💖 의사가 누군가를 살려냈습니다.");
 				break;
 			case NightOutcome.SHIELDED:
+				// 방에는 누구인지 알리지 않는다 — 알리면 군인이 첫 밤에 공개된다.
+				// 대신 본인에게는 반드시 말해준다. 방탄은 판당 한 번뿐이라
+				// 이 안내가 없으면 군인은 아직 남아 있다고 믿은 채 다음 밤에 죽고,
+				// 자기 능력이 언제 소모됐는지 끝까지 알 수 없다.
 				report(room, "🛡️ 누군가가 공격을 받았지만 버텨냈습니다.");
+				tellSeat(casualty.seat, "🛡️ 밤새 공격을 받았지만 버텨냈습니다. 방탄은 이제 남아 있지 않습니다.");
 				break;
 			case NightOutcome.BACKFIRED:
 				// 자책의 이유는 방에 알리지 않는다 — 알리면 자경단원의 정체가
@@ -290,15 +270,15 @@ export function resolveNight(room: Room): void {
 	publishScoops(room);
 }
 
-/** 아침 화면과 채팅에 같은 한 줄을 남긴다 */
+/** 아침 화면과 채팅 기록에 같은 한 줄을 남긴다 */
 function report(room: Room, line: string): void {
 	room.nightReport.push(line);
-	say(room, line);
+	Chat.announce(room, line);
 }
 
 function tellSeat(seat: Seat, message: string): void {
 	const player = ScriptApp.getPlayerByID(seat.playerId);
-	if (player) tell(player, message);
+	if (player) Chat.tell(player, message);
 }
 
 /**

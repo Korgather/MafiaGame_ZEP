@@ -41,12 +41,12 @@ export function createRoom(num: number): Room {
 	return room;
 }
 
-export function createSeat(playerId: string, name: string, level: string): Seat {
+export function createSeat(playerId: string, name: string, rank: string): Seat {
 	return {
 		playerId,
 		index: 0,
 		name,
-		level,
+		rank,
 		role: Role.CITIZEN,
 		team: Team.CITIZEN,
 		alive: false,

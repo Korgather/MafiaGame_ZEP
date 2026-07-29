@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>채팅</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 통합 채팅 위젯. 다섯 층 중 그리는 층(ChatUI)이다.
+			 *
+			 * 이 파일이 모르는 것 —
+			 *   직업이 무엇인지, 지금이 밤인지, 마피아가 누구인지.
+			 * 아는 것 —
+			 *   서버가 준 탭 목록(channels), 그중 쓸 수 있는 탭(write),
+			 *   지금 내밀 빠른 메시지(quick), 받은 줄들(lines).
+			 *
+			 * 그래서 직업이 12종에서 20종이 되어도, 단계가 하나 늘어도
+			 * 이 파일은 그대로다. 규칙은 전부 ChatPermission의 표에 있다.
+			 *
+			 * 줄을 채널별로 나눠 갖지 않고 통째로 들고 필요할 때 거르는 이유:
+			 * 서버는 "이 사람이 읽어도 되는 모든 줄"을 보내므로, 탭을 누를 때
+			 * 필요한 것은 이미 전부 여기 있다. 왕복을 기다리지 않으니 탭 전환이
+			 * 즉시 그려진다. 서버에는 미확인 계산을 위해 알리기만 한다.
+			 */
+
+			/* 접힌 막대와 펼친 창은 한 번에 하나만 산다 (.hidden으로 갈린다) */
+		</style>
+	</head>
+	<body>
+		<button type="button" class="chat-mini hidden" id="mini" aria-label="채팅 열기">
+			<span id="miniGlyph">💬</span>
+			<span class="grow ellip" id="miniText">채팅</span>
+			<span class="badge-n hidden" id="miniBadge">0</span>
+		</button>
+
+		<div class="chat hidden" id="full">
+			<div class="chat-head">
+				<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
+				<button type="button" class="chat-fold" id="fold" aria-label="채팅 접기">▾</button>
+			</div>
+
+			<div class="chat-body">
+				<div class="chat-log scroll" id="log" role="log" aria-live="polite"></div>
+				<button type="button" class="chat-jump hidden" id="jump">새 메시지 ↓</button>
+				<div class="emoji-pad hidden" id="pad" role="group" aria-label="이모지"></div>
+			</div>
+
+			<div class="quick hidden" id="quick"></div>
+
+			<div class="chat-entry">
+				<button type="button" class="icon-btn" id="emoji" aria-label="이모지">☺</button>
+				<!--
+					maxlength는 편의일 뿐 한계가 아니다. 진짜 한계는 서버의
+					MAX_CHAT_LENGTH다 (Widget.types.ts). 두 값은 같아야 한다.
+				-->
+				<input
+					type="text"
+					class="chat-input"
+					id="input"
+					maxlength="200"
+					autocomplete="off"
+					aria-label="메시지 입력"
+				/>
+				<button type="button" class="icon-btn" id="submit" aria-label="보내기">➤</button>
+			</div>
+		</div>
+
+		<!--@shared-->
+		<script>
+			/** 위젯이 들고 있는 줄 수 상한. 서버 기록(120줄)보다 넉넉하다 */
+			const MAX_LINES = 200;
+			const MAX_TEXT = 200;
+			/* 스크롤이 이만큼 안쪽이면 "바닥을 보고 있다"로 친다 */
+			const BOTTOM_SLACK = 24;
+
+			/*
+			 * 이모지는 고정 목록이다. 스티커·커스텀 이모지를 붙일 자리이기도
+			 * 하다 — 서버가 목록을 보내주도록 바꾸면 payload 한 필드로 끝난다.
+			 */
+			const EMOJI = [
+				"👍",
+				"👏",
+				"🙏",
+				"❤️",
+				"😀",
+				"😂",
+				"😅",
+				"😭",
+				"😱",
+				"😡",
+				"🤔",
+				"😎",
+				"🔪",
+				"👻",
+				"🕵️",
+				"🚨",
+			];
+
+			let lines = [];
+			let channels = [];
+			let quick = [];
+			let active = "";
+			let myId = "";
+
+			// ────────────────────────────────────────────────── 그리기
+
+			/** epoch ms를 HH:MM으로. 서버는 UTC ms만 보내고 형식은 여기서 정한다 */
+			function clock(at) {
+				const d = new Date(Number(at) || 0);
+				return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+			}
+
+			function viewOf(id) {
+				for (const view of channels) {
+					if (view.id === id) return view;
+				}
+				return null;
+			}
+
+			function bubble(line) {
+				const when = html`<span class="when">${clock(line.at)}</span>`;
+
+				// 사람이 친 말이 아니면 가운데 한 줄로 눕힌다
+				if (line.kind !== "USER") {
+					const cls = line.kind === "EVENT" ? "evt" : line.kind === "NOTICE" ? "ntc" : "sys";
+					return html`<div class="msg ${cls}">
+						<div class="txt">${when} ${line.text}</div>
+					</div>`;
+				}
+
+				// 내 말은 이름을 다시 읽을 필요가 없다. 시각만 남긴다
+				const mine = line.senderId !== "" && line.senderId === myId;
+				let who = when;
+				if (!mine) {
+					const chip = line.role
+						? html`<span class="chip ${line.team === "mafia" ? "mafia" : "citizen"}"
+								>${line.role}</span
+							>`
+						: "";
+					const name = line.num > 0 ? line.num + "번 " + line.name : line.name;
+					who = html`${chip}<span class="ellip">${name}</span>${when}`;
+				}
+
+				return html`<div class="msg${mine ? " mine" : ""}">
+					<div class="who">${who}</div>
+					<div class="txt">${line.text}</div>
+				</div>`;
+			}
+
+			function nearBottom(el) {
+				return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_SLACK;
+			}
+
+			function jump(show) {
+				qs("#jump").classList.toggle("hidden", !show);
+			}
+
+			/** 활성 탭의 줄만 다시 그린다. 탭 전환·재접속이 지나는 길 */
+			function render() {
+				const el = qs("#log");
+				el.innerHTML = html`${lines.filter(line => line.channel === active).map(bubble)}`;
+				scrollToEnd(el);
+				jump(false);
+			}
+
+			function append(line) {
+				lines.push(line);
+				if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+				if (line.channel !== active) return;
+
+				const el = qs("#log");
+				// 붙이기 *전에* 재야 한다. 붙인 뒤에 재면 방금 늘어난 높이 때문에
+				// 늘 "위로 올라가 있음"이 되어 자동 스크롤이 영영 멈춘다.
+				// 기존 roleAction.html의 밤 채팅이 정확히 이 순서로 어긋나 있었다.
+				const follow = nearBottom(el);
+				el.insertAdjacentHTML("beforeend", bubble(line));
+				while (el.childElementCount > MAX_LINES) el.removeChild(el.firstElementChild);
+
+				if (follow) scrollToEnd(el);
+				// 읽던 자리를 뺏지 않는다. 새 줄이 왔다는 것만 알린다
+				jump(!follow);
+			}
+
+			function badgeText(unread) {
+				return unread > 99 ? "99+" : String(unread);
+			}
+
+			function tabHtml(view) {
+				const badge = view.unread > 0 ? html`<span class="badge-n">${badgeText(view.unread)}</span>` : "";
+				return html`<button
+					type="button"
+					role="tab"
+					class="tab${view.write ? "" : " ro"}"
+					aria-selected="${view.id === active}"
+					data-id="${view.id}"
+					aria-label="${view.label + (view.write ? "" : ", 읽기 전용")}"
+				>
+					<span aria-hidden="true">${view.glyph}</span><span>${view.label}</span>${badge}
+				</button>`;
+			}
+
+			function drawTabs() {
+				qs("#tabs").innerHTML = html`${channels.map(tabHtml)}`;
+
+				const view = viewOf(active);
+				/*
+				 * 입력창은 잠그지 않는다. 명령어(/도움말)는 채널 권한과 무관하게
+				 * 서버가 받아주고, 밤의 시민처럼 쓸 수 있는 탭이 하나도 없는
+				 * 상황이 정상이기 때문이다. 잠그면 그 사람은 명령어를 영영 쓸 수
+				 * 없다. 대신 안내 문구와 탭의 자물쇠로 지금 상태를 알린다.
+				 */
+				qs("#input").placeholder = view
+					? view.write
+						? view.placeholder
+						: "지금은 읽기만 됩니다 (/도움말)"
+					: "";
+			}
+
+			/**
+			 * 미확인 수만 갈아끼운다.
+			 *
+			 * 줄이 하나 올 때마다 drawTabs()를 부르면 탭 막대의 innerHTML이
+			 * 통째로 새로 만들어진다. 탭에 포커스를 두고 키보드로 넘기던 중이면
+			 * 포커스가 날아가고, 탭이 많아 가로 스크롤 중이면 스크롤도 처음으로
+			 * 돌아간다. 실제로 바뀌는 것은 숫자 하나뿐이다.
+			 */
+			function drawBadges() {
+				for (const tab of qsa(".tab", qs("#tabs"))) {
+					const view = viewOf(tab.dataset.id);
+					if (!view) continue;
+					let badge = qs(".badge-n", tab);
+					if (view.unread <= 0) {
+						if (badge) badge.remove();
+						continue;
+					}
+					if (!badge) {
+						tab.insertAdjacentHTML("beforeend", '<span class="badge-n"></span>');
+						badge = qs(".badge-n", tab);
+					}
+					badge.textContent = badgeText(view.unread);
+				}
+			}
+
+			function drawQuick() {
+				const view = viewOf(active);
+				const usable = view !== null && view.write && quick.length > 0;
+				qs("#quick").classList.toggle("hidden", !usable);
+				if (!usable) return;
+				qs("#quick").innerHTML = html`${quick.map(
+					text => html`<button type="button">${text}</button>`
+				)}`;
+			}
+
+			function drawMini() {
+				let total = 0;
+				for (const view of channels) total += view.unread;
+				const active_ = viewOf(active);
+
+				qs("#miniGlyph").textContent = active_ ? active_.glyph : "💬";
+				qs("#miniText").textContent = total > 0 ? "새 메시지" : "채팅";
+				qs("#miniBadge").textContent = badgeText(total);
+				qs("#miniBadge").classList.toggle("hidden", total === 0);
+				qs("#mini").classList.toggle("alert", total > 0);
+			}
+
+			function draw() {
+				drawTabs();
+				drawQuick();
+				drawMini();
+			}
+
+			// ────────────────────────────────────────────────── 보내기
+
+			function submit(text) {
+				const trimmed = String(text == null ? "" : text).trim();
+				if (trimmed === "") return;
+				const view = viewOf(active);
+				// 명령어는 어느 탭에서든 통한다. 서버가 권한 검사보다 먼저 본다
+				if (trimmed.charAt(0) !== "/" && (view === null || !view.write)) return;
+				send({ type: "send", channel: active, text: trimmed });
+			}
+
+			function submitInput() {
+				submit(qs("#input").value);
+				qs("#input").value = "";
+				qs("#pad").classList.add("hidden");
+			}
+
+			// ────────────────────────────────────────────────── 조작
+
+			qs("#tabs").addEventListener("click", event => {
+				const el = event.target.closest(".tab");
+				if (!el || el.dataset.id === active) return;
+
+				// 줄은 이미 전부 여기 있으므로 서버를 기다릴 이유가 없다.
+				// 기다리면 탭을 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
+				active = el.dataset.id;
+				const view = viewOf(active);
+				if (view) view.unread = 0;
+				draw();
+				render();
+				send({ type: "channel", channel: active });
+			});
+
+			qs("#fold").addEventListener("click", () => {
+				// 접기는 더 작은 위젯으로 다시 여는 것이다. 서버가 다시 열어준다
+				send({ type: "toggle", open: false });
+			});
+
+			qs("#mini").addEventListener("click", () => {
+				send({ type: "toggle", open: true });
+			});
+
+			qs("#jump").addEventListener("click", () => {
+				scrollToEnd(qs("#log"));
+				jump(false);
+			});
+
+			qs("#log").addEventListener("scroll", () => {
+				if (nearBottom(qs("#log"))) jump(false);
+			});
+
+			qs("#emoji").addEventListener("click", () => {
+				qs("#pad").classList.toggle("hidden");
+			});
+
+			qs("#pad").addEventListener("click", event => {
+				if (event.target.tagName !== "BUTTON") return;
+				const input = qs("#input");
+				input.value = (input.value + event.target.textContent).slice(0, MAX_TEXT);
+				qs("#pad").classList.add("hidden");
+				input.focus();
+			});
+
+			qs("#quick").addEventListener("click", event => {
+				if (event.target.tagName !== "BUTTON") return;
+				submit(event.target.textContent);
+			});
+
+			qs("#submit").addEventListener("click", submitInput);
+
+			qs("#input").addEventListener("keydown", event => {
+				if (event.key === "Enter") submitInput();
+			});
+
+			qs("#pad").innerHTML = html`${EMOJI.map(
+				glyph => html`<button type="button" aria-label="${glyph}">${glyph}</button>`
+			)}`;
+
+			// ────────────────────────────────────────────────── 서버
+
+			onServer({
+				init(data) {
+					myId = data.myId || "";
+					channels = data.channels || [];
+					quick = data.quick || [];
+					active = data.active || "";
+					lines = data.lines || [];
+
+					const open = data.open === true;
+					qs("#full").classList.toggle("hidden", !open);
+					qs("#mini").classList.toggle("hidden", open);
+
+					draw();
+					render();
+				},
+
+				/*
+				 * 권한만 바뀐 것이다 (단계 전환·사망·입퇴장). 다시 그리지 않는
+				 * 이유는 읽던 자리와 입력하던 글자를 지키기 위해서다 —
+				 * 활성 탭이 실제로 바뀌었을 때만 기록을 갈아끼운다.
+				 */
+				channels(data) {
+					const next = data.active || active;
+					const moved = next !== active;
+					channels = data.channels || [];
+					quick = data.quick || [];
+					active = next;
+					draw();
+					if (moved) render();
+				},
+
+				line(data) {
+					if (data.channels) channels = data.channels;
+					if (data.line) append(data.line);
+					drawBadges();
+					drawMini();
+				},
+			});
+		</script>
+	</body>
+</html>
