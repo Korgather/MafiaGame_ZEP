@@ -34,8 +34,23 @@ ZEP 스크립트는 Jint 위에서 돈다. `@babel/preset-env`를 쓰지 않으�
 - `console`, `window`, `document`, `fetch` 없음 — HTTP는 `ScriptApp.httpPostJson`
 - 전역 `Map`은 babel이 `ScriptMap`으로 치환한다. 네이티브 `Map`/`Set` 금지, 일반 객체와 배열을 쓴다
 - ES2021+ 문법 자제
+- **ZEP API에 `undefined`를 인자로 넘기지 않는다**
 
-이 규칙들은 ESLint의 `no-restricted-globals`로 강제된다.
+마지막 항목이 특히 함정이다. `ScriptApp`/`ScriptPlayer`/`ScriptMap`은 C# 메서드이고,
+Jint는 인자 **개수와 타입**으로 오버로드를 고른다. `.d.ts`의 `frameRate?: number`는
+"생략 가능"이라는 뜻이지 "undefined를 받는다"는 뜻이 아니다. 자리를 채우려고 `undefined`를
+넣으면 맞는 오버로드가 없어 스크립트가 죽는다.
+
+```ts
+loadSpritesheet(file, w, h, frames, undefined); // ✗ No public methods with the specified arguments
+loadSpritesheet(file, w, h, frames);            // ✓ 인자를 아예 뺀다
+```
+
+`tsc`는 이걸 잡지 못하므로 호출을 분기하거나, 뒤쪽 선택 인자를 쓰지 않는 API를 고른다.
+(`showCustomLabel`의 표시 시간은 7번째 인자라 앞의 `width`/`opacity`를 건널 수 없다.
+그래서 라벨은 시간이 5번째인 `showCenterLabel`만 쓴다 — `services/Broadcast.ts`)
+
+이 규칙들은 ESLint의 `no-restricted-globals` / `no-restricted-syntax`로 강제된다.
 
 ## 구조
 

@@ -25,6 +25,19 @@ export default [
 			// (선택적 catch 바인딩은 Jint 지원 여부가 불확실해 쓰지 않는다)
 			"@typescript-eslint/no-unused-vars": ["error", { caughtErrors: "none" }],
 
+			// ZEP API는 C# 메서드다. Jint는 인자 "개수"로 오버로드를 고르므로
+			// 자리를 채우려 넣은 undefined는 생략이 아니라 잘못된 인자가 되고,
+			// "No public methods with the specified arguments were found"로 죽는다.
+			// .d.ts의 `param?: T`는 "생략 가능"이지 "undefined 허용"이 아니다.
+			"no-restricted-syntax": [
+				"error",
+				{
+					selector: "CallExpression > Identifier[name='undefined']",
+					message:
+						"ZEP(Jint) API에 undefined를 인자로 넘기면 오버로드를 찾지 못합니다. 인자를 아예 생략하도록 호출을 분기하세요.",
+				},
+			],
+
 			// ZEP(Jint) 런타임에 존재하지 않는 전역. 원본 코드가 실제로
 			// player.chatEnabled 같은 없는 API를 호출하고 있었기 때문에 방어한다.
 			"no-restricted-globals": [
