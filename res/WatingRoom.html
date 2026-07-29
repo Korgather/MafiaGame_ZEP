@@ -493,54 +493,29 @@
                         }
 
                         break;
+                    // 서버가 좌석 목록 전체를 보낸다. 빈 배열이면 방 밖(= 방 선택 화면).
+                    // 예전에는 join/ready/cancle-ready/leave/kick/cancle-kick 6종의
+                    // 델타 메시지로 이 목록을 조금씩 고쳤는데, 한 건이라도 유실되면
+                    // 위젯의 화면이 서버 상태와 영구히 어긋났다.
                     case "init":
-                        AppendList(e.data?.data);
-                        break;
-                    case "join":
-                        let data = e.data?.data;
-                        if (data.id == myID) {
+                        let seats = e.data?.data;
+                        if (Array.isArray(seats) && seats.length > 0) {
                             document.querySelector(".container-ready").classList.add("hidden");
                             document.querySelector(".container").classList.remove("hidden");
-                            AppendList(data.roomData.players);
                         } else {
-                            for (let playerData of data.roomData.players) {
-                                if (playerData.id == data.id) {
-                                    AppendList(playerData);
-                                    break;
-                                }
-                            }
+                            document.querySelector(".container-ready").classList.remove("hidden");
+                            document.querySelector(".container").classList.add("hidden");
                         }
-
-                        break;
-                    case "ready":
-                        let button = document.getElementById(e.data.id).querySelector(".button-ready");
-                        button.classList.add("ready");
-                        break;
-                    case "cancle-ready":
-                        document.getElementById(e.data.id).querySelector(".button-ready").classList.remove("ready");
-                        break;
-                    case "leave":
-                        //console.log(e.data);
-                        DeleteList(e.data.id);
-                        DecreaseKickCount(e.data.kickList);
-                        break;
-                    case "kick":
-                        IncreaseKickCount(e.data.id);
-                        break;
-                    case "cancle-kick":
-                        DecreaseKickCount(e.data.id);
-                        break;
-                    case "kicked":
-                        document.querySelector(".container-ready").classList.remove("hidden");
-                        document.querySelector(".container").classList.add("hidden");
-                        //DeleteList(e.data.id);
+                        AppendList(Array.isArray(seats) ? seats : []);
                         break;
                     case "updatePlayerCount":
                         let gameRooms = e.data.data;
 
                         document.querySelectorAll(".room").forEach((el) => {
-                            el.querySelector(".player-count").innerHTML = gameRooms[el.dataset.roomnum].players.length;
-                            if (gameRooms[el.dataset.roomnum].start == true) {
+                            let room = gameRooms[el.dataset.roomnum];
+                            if (!room) return;
+                            el.querySelector(".player-count").innerHTML = room.count;
+                            if (room.started == true) {
                                 el.querySelector(".button-join").classList.add("ing");
                                 el.querySelector(".button-join").innerHTML = "게임중";
                             } else {
@@ -566,39 +541,37 @@
 
 
 
+            // 닉네임은 사용자가 정하는 값이라 그대로 innerHTML에 넣으면
+            // <img onerror=...> 같은 태그가 실행된다. 반드시 이스케이프한다.
+            function esc(value) {
+                return String(value == null ? "" : value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+            }
+
             function AppendList(data) {
-                if (Array.isArray(data)) {
-                    document.querySelectorAll(".li").forEach((el) => {
-                        el.remove()
-                    })
-                    for (let sd of data) {
-                        let listTemplate = `
-                        <div class="li" id=${sd.id}>
-                            <div class="level">${isNaN(sd.level) ? (sd.level == "비로그인 유저" ? "비로그인" : sd.level) : "Lv." + sd.level}</div>
-                            <div class="name">${sd.name}</div>
-                            <div class="run-count">${sd.runCount ? sd.runCount : 0}</div>
+                let seats = Array.isArray(data) ? data : [data];
+                document.querySelectorAll(".li").forEach((el) => {
+                    el.remove()
+                })
+                let html = "";
+                for (let sd of seats) {
+                    html += `
+                        <div class="li" id="${esc(sd.id)}">
+                            <div class="level">${esc(isNaN(sd.level) ? (sd.level == "비로그인 유저" ? "비로그인" : sd.level) : "Lv." + sd.level)}</div>
+                            <div class="name">${esc(sd.name)}</div>
+                            <div class="run-count">${esc(sd.runCount ? sd.runCount : 0)}</div>
                             <button onClick="Ready(this)" class="button-ready ${sd.ready ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
                             <button onClick="Kick(this)" class="button-kick">
                                 <span style="height: 100%;">강퇴</span>
-                                <span style="height: 100%; padding-top: 4px;" class="kick-count">${sd.kickCount ? sd.kickCount : 0}</span>
+                                <span style="height: 100%; padding-top: 4px;" class="kick-count">${esc(sd.kickCount ? sd.kickCount : 0)}</span>
                             </button>
                         </div>`
-                        document.querySelector(".list").innerHTML += listTemplate;
-                    }
-                } else {
-                    let listTemplate = `
-                        <div class="li" id=${data.id}>
-                            <div class="level">${isNaN(data.level) ? (data.level == "비로그인 유저" ? "비로그인" : data.level) : "Lv." + data.level}</div>
-                            <div class="name">${data.name}</div>
-                            <div class="run-count">${data.runCount ? data.runCount : 0}</div>
-                            <button onClick="Ready(this)" class="button-ready ${data.ready ? "ready" : ""}"><span style="height: 100%;">준비</span></button>
-                            <button onClick="Kick(this)" class="button-kick">
-                                <span style="height: 100%;">강퇴</span>
-                                <span style="height: 100%; padding-top: 4px;" class="kick-count">${data.kickCount ? data.kickCount : 0}</span>
-                            </button>
-                        </div>`
-                    document.querySelector(".list").innerHTML += listTemplate;
                 }
+                document.querySelector(".list").innerHTML += html;
             }
 
             function Quit() {
@@ -619,34 +592,8 @@
                 }
             }
 
-            function DeleteList(id) {
-                let targetEl = document.getElementById(id);
-                targetEl.parentNode.removeChild(targetEl);
-            }
-
-            function IncreaseKickCount(id) {
-                let targetEl = document.getElementById(id);
-                targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) + 1;
-            }
-
-            function DecreaseKickCount(arr) {
-                if (Array.isArray(arr)) {
-                    for (let id of arr) {
-                        let targetEl = document.getElementById(id);
-                        if (targetEl) {
-                            targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
-                        }
-                    }
-                } else {
-                    let id = arr;
-                    let targetEl = document.getElementById(id);
-                    if (targetEl) {
-                        targetEl.querySelector(".kick-count").innerText = parseInt(targetEl.querySelector(".kick-count").innerText) - 1;
-                    }
-
-                }
-
-            }
+            // DeleteList / IncreaseKickCount / DecreaseKickCount 는 델타 프로토콜
+            // 전용 함수였다. 서버가 매번 좌석 목록 전체를 보내면서 필요 없어졌다.
         </script>
 </body>
 

@@ -236,6 +236,17 @@
     let _myRole;
     let _isMobile = false;
 
+    // 채팅 내용과 닉네임은 다른 플레이어가 정하는 값이다.
+    // 그대로 innerHTML에 넣으면 <img onerror=...> 같은 태그가 실행된다.
+    function esc(value) {
+        return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     /*
     window.parent.postMessage({
         type: 'WidgetRearrange',
@@ -253,7 +264,7 @@
                     num: _myNum,
                     message, // 위치조정
                 }, "*");
-                el_chatbox.innerHTML += `<div class="my-chat message"><div class="text">${message}</div></div>`
+                el_chatbox.innerHTML += `<div class="my-chat message"><div class="text">${esc(message)}</div></div>`
                 document.querySelector("input").value = "";
 
                 let maxScrollTop = el_chatbox.scrollHeight - el_chatbox.offsetHeight;
@@ -331,10 +342,10 @@
                 if (num == 0) {
                     let message = e.data.message;
                     document.querySelector(".chat-wrapper").classList.remove("hidden");
-                    document.querySelector(".chat-box").innerHTML += `<div class="system message"><div class="text">${message}</diva></div>`
+                    document.querySelector(".chat-box").innerHTML += `<div class="system message"><div class="text">${esc(message)}</div></div>`
                 } else {
                     let message = e.data.message;
-                    document.querySelector(".chat-box").innerHTML += `<div class="other-chat message"><span class="name">${name}[${num}번]</span><span class="text">${message}</span></div>`
+                    document.querySelector(".chat-box").innerHTML += `<div class="other-chat message"><span class="name">${esc(name)}[${esc(num)}번]</span><span class="text">${esc(message)}</span></div>`
                 }
                 document.querySelector(".chat-box").scrollTo({top: maxScrollTop, behavior: "smooth"})
                 break;
