@@ -30,19 +30,21 @@ function read(file) {
 }
 
 /**
- * 인라인 대상 안에 있으면 안 되는 것: </script> 는 <script> 블록을
- * 조기 종료시킨다. shared.js에 그런 문자열이 생기면 조용히 깨지므로 막는다.
+ * 인라인 대상 안에 있으면 안 되는 것: 감싸는 태그를 조기 종료시키는 문자열.
+ * shared.js 안의 "</script", theme.css 안의 "</style"이 그렇다.
+ * 들어가면 조용히 깨지므로 빌드에서 막는다.
  */
-function assertInlineSafe(name, code) {
-	if (/<\/script/i.test(code)) {
-		throw new Error(`${name}: "</script" 문자열은 인라인할 수 없습니다`);
+function assertInlineSafe(name, code, closer) {
+	if (new RegExp(closer, "i").test(code)) {
+		throw new Error(`${name}: "${closer}" 문자열은 인라인할 수 없습니다`);
 	}
 }
 
 function build() {
 	const theme = read(path.join(SRC, "theme.css"));
 	const shared = read(path.join(SRC, "shared.js"));
-	assertInlineSafe("shared.js", shared);
+	assertInlineSafe("shared.js", shared, "</script");
+	assertInlineSafe("theme.css", theme, "</style");
 
 	const sources = fs
 		.readdirSync(SRC)
@@ -68,9 +70,24 @@ function build() {
 			problems.push(`${name}: 치환되지 않은 자리표시자가 남았습니다`);
 		}
 
+		// 치환값은 반드시 함수로 준다.
+		//
+		// String.replace(문자열, 문자열)은 두 번째 인자 안의 $$ · $& · $` · $' ·
+		// $1 을 치환 지시자로 해석한다. shared.js의 `function $$(selector, root)`가
+		// 그래서 `function $(selector, root)`로 바뀌어 나갔다. 산출물에는 $가
+		// 두 번 정의됐고 나중 것($$의 몸통)이 이겨서, 모든 위젯에서 $()가
+		// 엘리먼트 대신 배열을 돌려줬다. $(...).addEventListener is not a function.
+		//
+		// 치환값을 함수로 주면 반환값이 글자 그대로 쓰인다.
 		const output = source
-			.replace("<!--@theme-->", `<style>\n${theme}\n</style>`)
-			.replace("<!--@shared-->", `<script>\n${shared}\n</script>`);
+			.replace("<!--@theme-->", () => `<style>\n${theme}\n</style>`)
+			.replace("<!--@shared-->", () => `<script>\n${shared}\n</script>`);
+
+		// 인라인한 것이 글자 하나까지 그대로 나갔는가.
+		// 위 실수는 빌드도 테스트도 통과하고 ZEP에 올린 뒤에야 드러났다.
+		// 이 검사가 있으면 같은 종류의 변형은 무엇이든 빌드에서 멈춘다.
+		if (!output.includes(theme)) problems.push(`${name}: theme.css가 변형되어 들어갔습니다`);
+		if (!output.includes(shared)) problems.push(`${name}: shared.js가 변형되어 들어갔습니다`);
 
 		const external = output.match(EXTERNAL);
 		if (external) {
