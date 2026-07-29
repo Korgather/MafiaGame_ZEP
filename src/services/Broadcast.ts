@@ -42,16 +42,44 @@ export function forEachAlive(room: Room, fn: (player: ScriptPlayer, seat: Seat) 
 	});
 }
 
-export function centerLabel(room: Room, message: string, durationMs = 4000): void {
-	forEachPlayer(room, player => {
-		player.showCenterLabel(message, LabelColor.TEXT, LabelColor.BACKGROUND, 300, durationMs);
-	});
+const LABEL_OFFSET = 300;
+/** ZEP 라벨의 기본 표시 시간과 같다 */
+const LABEL_MS = 3000;
+/** 방 전체 공지는 놓치기 쉬워 조금 더 길게 */
+const ROOM_LABEL_MS = 4000;
+
+/**
+ * 한 사람에게만 뜨는 라벨.
+ *
+ * showCustomLabel이 아니라 showCenterLabel을 쓴다. 전자는 표시 시간이
+ * 7번째 인자라 width/opacity를 건너뛸 수 없는데, Jint는 인자 개수로
+ * C# 오버로드를 고르므로 자리를 채우려 undefined를 넣으면 호출이 실패한다.
+ * showCenterLabel은 시간이 5번째라 그 구멍이 없고, 게임 안의 모든 라벨이
+ * 한 가지 모양으로 통일된다.
+ */
+export function label(player: ScriptPlayer, message: string, durationMs = LABEL_MS): void {
+	player.showCenterLabel(
+		message,
+		LabelColor.TEXT,
+		LabelColor.BACKGROUND,
+		LABEL_OFFSET,
+		durationMs
+	);
 }
 
+/** 방 전원에게 같은 라벨 */
+export function centerLabel(room: Room, message: string, durationMs = ROOM_LABEL_MS): void {
+	forEachPlayer(room, player => label(player, message, durationMs));
+}
+
+/** 한 사람의 채팅창에 뜨는 시스템 안내 */
+export function tell(player: ScriptPlayer, message: string): void {
+	player.sendMessage(divider(message), LabelColor.SYSTEM);
+}
+
+/** 방 전원의 채팅창에 뜨는 시스템 안내 */
 export function say(room: Room, message: string): void {
-	forEachPlayer(room, player => {
-		player.sendMessage(divider(message), LabelColor.SYSTEM);
-	});
+	forEachPlayer(room, player => tell(player, message));
 }
 
 export function playSound(room: Room, fileName: string): void {
@@ -61,19 +89,6 @@ export function playSound(room: Room, fileName: string): void {
 }
 
 /** 시스템 안내를 채팅창에 눈에 띄게 감싼다 */
-export function divider(message: string): string {
+function divider(message: string): string {
 	return `─────────────────\n${message}\n─────────────────`;
-}
-
-/** 한 사람에게만 뜨는 라벨 */
-export function label(player: ScriptPlayer, message: string, durationMs?: number): void {
-	player.showCustomLabel(
-		message,
-		LabelColor.TEXT,
-		LabelColor.BACKGROUND,
-		300,
-		undefined,
-		undefined,
-		durationMs
-	);
 }

@@ -22,7 +22,10 @@ import { resolveNightCasualties, resolveNightSelect } from "../domain/NightResol
 import { resetRound, seatAt } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, asText, field, messageType, MAX_CHAT_LENGTH } from "../types/Widget.types.ts";
-import { divider, forEachPlayer, label, playSound, say } from "./Broadcast.ts";
+import { forEachPlayer, label, playSound, say, tell } from "./Broadcast.ts";
+
+/** 밤 능력 안내 라벨 표시 시간(ms). 지목할 시간을 충분히 준다 */
+const NIGHT_PROMPT_MS = 6000;
 import { mafiaTeamSize, mafiaTeamView, relayGhost, relayMafia } from "./Chat.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
@@ -68,7 +71,7 @@ function openNightView(room: Room, player: ScriptPlayer, seat: Seat, live: numbe
 	player.sendUpdated();
 
 	const inMafiaChat = def.nightChat === ChatChannel.MAFIA;
-	player.sendMessage(divider(inMafiaChat ? mafiaNotice(room, seat) : def.nightNotice), 0x00ff00);
+	tell(player, inMafiaChat ? mafiaNotice(room, seat) : def.nightNotice);
 
 	// 영매는 지목할 대상이 없고 유령들과 대화만 한다
 	if (def.nightAction === null && def.nightChat === ChatChannel.GHOST) {
@@ -92,7 +95,7 @@ function openNightView(room: Room, player: ScriptPlayer, seat: Seat, live: numbe
 	}
 
 	if (def.nightPrompt) {
-		player.showCenterLabel(def.nightPrompt, 0xffffff, 0x000000, 250, 6000);
+		label(player, def.nightPrompt, NIGHT_PROMPT_MS);
 	}
 
 	const widget = openRoleAction(player);
@@ -189,10 +192,7 @@ function announceSpyJoin(
 	forEachPlayer(room, (other, otherSeat) => {
 		if (!otherSeat.alive || otherSeat.playerId === seat.playerId) return;
 		if (otherSeat.team !== seat.team) return;
-		other.sendMessage(
-			divider(`🕵️ ${player.name}(스파이)님이 마피아 채팅에 합류했습니다.`),
-			0x00ff00
-		);
+		tell(other, `🕵️ ${player.name}(스파이)님이 마피아 채팅에 합류했습니다.`);
 	});
 }
 

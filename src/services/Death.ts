@@ -20,7 +20,7 @@ import { sprite } from "../infrastructure/Sprites.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asText, field, messageType, MAX_CHAT_LENGTH } from "../types/Widget.types.ts";
-import { divider, say } from "./Broadcast.ts";
+import { say, tell } from "./Broadcast.ts";
 import { relayGhost } from "./Chat.ts";
 import { awardExp } from "./Rewards.ts";
 import { closeMain, closeGhost } from "./Widgets.ts";
@@ -108,10 +108,5 @@ function becomeGhost(player: ScriptPlayer, seat: Seat): void {
 		relayGhost(found.room, { num: found.seat.index, name: sender.name, message: text });
 	});
 
-	player.sendMessage(
-		divider(
-			"☠️ 당신은 죽었습니다.\n유령들끼리 대화할 수 있습니다.\n밤에는 영매와 대화할 수 있습니다."
-		),
-		0x00ff00
-	);
+	tell(player, "☠️ 당신은 죽었습니다.\n유령들끼리 대화할 수 있습니다.\n밤에는 영매와 대화할 수 있습니다.");
 }

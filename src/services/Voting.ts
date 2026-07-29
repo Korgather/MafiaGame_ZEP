@@ -18,7 +18,7 @@ import { tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { seatAt } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field } from "../types/Widget.types.ts";
-import { centerLabel, forEachPlayer, label, playSound, say } from "./Broadcast.ts";
+import { centerLabel, forEachPlayer, label, playSound, say, tell } from "./Broadcast.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { beginDayStage } from "./Stage.ts";
 import { closeGhost, openPhase } from "./Widgets.ts";
@@ -52,7 +52,7 @@ export function beginDay(room: Room): void {
 			description: "투표 전까지 이야기를 나누세요.",
 			isMobile: player.isMobile,
 		});
-		player.sendMessage(`🌞 ${room.turnCount}번째 아침`, 0x00ff00);
+		tell(player, `🌞 ${room.turnCount}번째 아침`);
 	});
 }
 
