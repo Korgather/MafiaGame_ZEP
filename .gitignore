@@ -4,3 +4,9 @@
 /map
 /testVersion
 node_modules
+
+# webpack 빌드 산출물 (npm run build 로 생성)
+res/*.js
+
+# 에이전트 작업 상태
+.omc/

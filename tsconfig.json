@@ -1,0 +1,24 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"module": "CommonJS",
+		"lib": ["ES2020"],
+		"noEmit": true,
+		"isolatedModules": true,
+		"esModuleInterop": true,
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"noUnusedLocals": true,
+		"noImplicitReturns": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"moduleResolution": "node",
+		// import 경로에 .ts 확장자를 그대로 쓴다. 그래야 node --test가
+		// 빌드 없이 src를 직접 실행할 수 있다 (webpack/babel도 문제없이 해석한다).
+		"allowImportingTsExtensions": true,
+		"typeRoots": ["./node_modules/@types"]
+	},
+	"include": ["main.ts", "src/**/*"],
+	"exclude": ["node_modules", "res", "tests", "tools"]
+}
