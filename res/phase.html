@@ -497,15 +497,130 @@ body {
 }
 
 /* ---------- 채팅 ---------- */
+/*
+ * 채팅은 접속해 있는 내내 떠 있는 유일한 위젯이라 다른 화면과 규칙이 다르다.
+ *
+ * 1. 두 가지 모습으로 산다 — 펼친 창(.chat)과 접힌 막대(.chat-mini).
+ *    위젯은 iframe이라 투명해도 그 자리의 클릭을 먹는다. 그래서 접기는
+ *    CSS로 내용을 숨기는 것이 아니라 더 작은 위젯으로 다시 여는 것이고
+ *    (WidgetSize.CHAT_BAR), 두 모습이 한 파일 안에 함께 있어야 한다.
+ *
+ * 2. .panel을 쓰지 않는다. panel은 여닫히는 화면의 문법(머리말·본문·안내)인데
+ *    채팅은 늘 떠 있는 도구다. 여백을 panel만큼 주면 세로 320px 중 실제로
+ *    글이 보이는 자리가 절반으로 줄어든다.
+ */
 .chat {
 	display: flex;
 	flex-direction: column;
-	flex: 1 1 auto;
+	width: 100%;
+	height: 100%;
 	min-height: 0;
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
 	border: 1px solid var(--line);
 	border-radius: var(--r2);
+	box-shadow: var(--shadow);
 	overflow: hidden;
-	background: var(--bg);
+}
+
+/* 탭 줄 */
+.chat-head {
+	display: flex;
+	align-items: stretch;
+	flex: 0 0 auto;
+	border-bottom: 1px solid var(--line);
+}
+
+.chat-tabs {
+	display: flex;
+	gap: 2px;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 2px 2px 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.chat-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.tab {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	border-radius: var(--r1) var(--r1) 0 0;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.tab:hover {
+	color: var(--ink-2);
+	background: var(--surface-2);
+}
+
+.tab:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.tab[aria-selected="true"] {
+	color: var(--ink);
+	background: var(--surface-2);
+	border-bottom-color: var(--accent);
+}
+
+/* 읽기만 되는 탭. 색이 아니라 글리프로 알린다 */
+.tab.ro::after {
+	content: "🔒";
+	font-size: 9px;
+}
+
+/* 미확인 개수 */
+.badge-n {
+	min-width: 15px;
+	padding: 0 4px;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 15px;
+	text-align: center;
+	color: #14100f;
+	background: var(--accent);
+	border-radius: 99px;
+}
+
+.chat-fold {
+	flex: 0 0 auto;
+	padding: 0 var(--s2);
+	font: inherit;
+	font-size: var(--t-sm);
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.chat-fold:hover {
+	color: var(--ink);
+}
+.chat-fold:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 기록 */
+.chat-body {
+	position: relative;
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
 }
 
 .chat-log {
@@ -513,38 +628,37 @@ body {
 	flex-direction: column;
 	gap: var(--s1);
 	flex: 1 1 auto;
-	min-height: 60px;
+	min-height: 0;
 	padding: var(--s2);
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	scrollbar-width: thin;
-	scrollbar-color: var(--surface-3) transparent;
-}
-
-.chat-log::-webkit-scrollbar {
-	width: 6px;
-}
-.chat-log::-webkit-scrollbar-thumb {
-	background: var(--surface-3);
-	border-radius: 99px;
 }
 
 .msg {
 	display: flex;
 	flex-direction: column;
-	max-width: 85%;
+	max-width: 88%;
 	font-size: var(--t-sm);
 }
 
 .msg .who {
+	display: flex;
+	align-items: center;
+	gap: var(--s1);
 	font-size: var(--t-xs);
 	color: var(--ink-3);
+}
+
+/* 직업 배지는 마피아·유령 탭에서만 온다 (ChannelDef.revealsRole) */
+.msg .chip {
+	padding: 0 var(--s1);
+	font-size: 9px;
 }
 
 .msg .txt {
 	padding: var(--s1) var(--s2);
 	border-radius: var(--r1);
 	background: var(--surface-2);
+	/* 서버 안내는 여러 줄일 수 있다 (/도움말) */
+	white-space: pre-wrap;
 	word-break: break-word;
 }
 
@@ -557,28 +671,152 @@ body {
 	background: var(--accent);
 }
 
-.msg.sys {
+.when {
+	flex: 0 0 auto;
+	font-size: 9px;
+	color: var(--ink-3);
+	font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 누구의 말도 아닌 줄은 가운데에 눕는다. 사람의 발언과 같은 말풍선을 주면
+ * "시스템이 알려준 사실"과 "누가 주장한 말"이 눈으로 구분되지 않는다 —
+ * 마피아 게임에서 그 둘을 헷갈리면 판이 뒤집힌다.
+ */
+.msg.sys,
+.msg.evt,
+.msg.ntc {
 	align-self: center;
+	align-items: center;
 	max-width: 100%;
 	text-align: center;
 }
-.msg.sys .txt {
+
+.msg.sys .txt,
+.msg.ntc .txt {
+	font-size: var(--t-xs);
 	color: var(--ink-2);
 	background: transparent;
+}
+
+.msg.ntc .txt {
+	color: var(--ink-3);
+}
+
+/* 사건 기록(사망·처형·특종)은 나중에 판을 되짚을 때 눈으로 찾게 된다 */
+.msg.evt .txt {
 	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	border-radius: 99px;
+}
+
+/* 위로 올라가 읽는 중에 새 줄이 오면. 스크롤을 뺏지 않고 알리기만 한다 */
+.chat-jump {
+	position: absolute;
+	left: 50%;
+	bottom: var(--s2);
+	z-index: 2;
+	transform: translateX(-50%);
+	padding: 2px var(--s3);
+	font: inherit;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: #14100f;
+	background: var(--accent);
+	border: none;
+	border-radius: 99px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+}
+
+/* 이모지 판. 기록 위에 겹쳐서 연다 — 세로 320px에 상시 자리를 내줄 수 없다 */
+.emoji-pad {
+	position: absolute;
+	inset: auto 0 0 0;
+	z-index: 3;
+	display: grid;
+	grid-template-columns: repeat(8, 1fr);
+	gap: 2px;
+	padding: var(--s2);
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+}
+
+.emoji-pad button {
+	padding: 2px 0;
+	font-size: 17px;
+	line-height: 1.3;
+	background: transparent;
+	border: none;
+	border-radius: var(--r1);
+	cursor: pointer;
+}
+.emoji-pad button:hover {
+	background: var(--surface-3);
+}
+.emoji-pad button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 빠른 메시지 */
+.quick {
+	display: flex;
+	gap: var(--s1);
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	overflow-x: auto;
+	scrollbar-width: none;
+	border-top: 1px solid var(--line);
+}
+.quick::-webkit-scrollbar {
+	display: none;
+}
+
+.quick button {
+	flex: 0 0 auto;
+	padding: 2px var(--s2);
+	font: inherit;
+	font-size: var(--t-xs);
+	color: var(--ink-2);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.quick button:hover {
+	color: var(--ink);
+	background: var(--surface-3);
+}
+.quick button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+/* 입력 */
+.chat-entry {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	background: var(--surface);
+	border-top: 1px solid var(--line);
 }
 
 .chat-input {
-	flex: 0 0 auto;
-	width: 100%;
-	padding: var(--s2);
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: var(--s2) var(--s1);
 	font: inherit;
 	font-size: var(--t-sm);
 	color: var(--ink);
-	background: var(--surface);
+	background: transparent;
 	border: none;
-	border-top: 1px solid var(--line);
 	outline: none;
+	-webkit-user-select: text;
+	user-select: text;
 }
 
 .chat-input::placeholder {
@@ -588,6 +826,58 @@ body {
 .chat-input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
+}
+
+.icon-btn {
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-md);
+	color: var(--ink-2);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.icon-btn:hover {
+	color: var(--ink);
+}
+.icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 접힌 막대: 위젯 전체가 버튼 하나다 */
+.chat-mini {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	width: 100%;
+	height: 100%;
+	padding: 0 var(--s3);
+	font: inherit;
+	font-size: var(--t-sm);
+	font-weight: 700;
+	color: var(--ink-2);
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.chat-mini:hover {
+	color: var(--ink);
+	border-color: var(--ink-3);
+}
+.chat-mini:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 접혀 있어도 못 본 말이 있다는 것은 보여야 한다 */
+.chat-mini.alert {
+	color: var(--ink);
+	border-color: var(--accent);
 }
 
 /* ---------- 유틸 ---------- */
@@ -723,6 +1013,8 @@ body {
  * morning.html은 #484848로 되돌렸다. 같은 타이머인데 화면마다 달랐다.
  *
  * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 인라인한다.
+ * 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다. Jint에서 도는 서버 쪽
+ * src/*.ts 와 달리 최신 문법 제약이 없다.
  */
 
 /** 서버가 보낸 문자열은 다른 플레이어가 정한 값이다. 태그로 해석되면 안 된다 */
@@ -735,11 +1027,71 @@ function esc(value) {
 		.replace(/'/g, "&#39;");
 }
 
-function $(selector, root) {
+/**
+ * 이미 escape를 마친 HTML 조각. html`` 이 만들고 html`` 이 알아본다.
+ *
+ * 이 표시가 없으면 조각을 조각에 끼울 때마다 두 번 escape되어
+ * &amp;lt; 같은 글자가 화면에 뜬다. 표시가 있으니 중첩이 그냥 된다.
+ */
+function Html(text) {
+	this.text = text;
+}
+
+Html.prototype.toString = function () {
+	return this.text;
+};
+
+function frag(value) {
+	if (value instanceof Html) return value.text;
+	// 배열은 이어 붙인다. 호출부가 .join("")을 하면 그 순간 표시가 벗겨져서
+	// 바깥 템플릿이 조각 전체를 다시 escape해 버린다 — 그 함정을 없앤다.
+	if (Array.isArray(value)) return value.map(frag).join("");
+	return esc(value);
+}
+
+/**
+ * HTML 조립. 끼워 넣는 값은 전부 자동으로 escape된다.
+ *
+ *   el.innerHTML = html`<span class="nm">${seat.name}</span>`;
+ *
+ * 기존에는 위젯마다 문자열 concat으로 태그를 쌓았다. tabHtml() 하나가
+ * 22줄이었고, 따옴표와 + 사이에서 esc()를 한 군데 빠뜨려도(chat.html의
+ * view.glyph가 그랬다) 눈에 띄지 않았다. 여기서는 빠뜨릴 자리가 없다 —
+ * escape가 기본이고, escape를 건너뛰려면 Html 조각이어야 한다.
+ */
+function html(strings) {
+	let out = strings[0];
+	for (let i = 1; i < arguments.length; i++) out += frag(arguments[i]) + strings[i];
+	return new Html(out);
+}
+
+/**
+ * boolean 속성. 참이면 속성 이름을, 거짓이면 빈 조각을 낸다.
+ *
+ *   html`<button class="tile" ${flag(!seat.alive, "disabled")}>`
+ *
+ * 값을 끼우는 방식으로는 끌 수 없다 — HTML의 boolean 속성은 값이 아니라
+ * 존재로 판정되므로 disabled="false"도 disabled다.
+ */
+function flag(on, name) {
+	return new Html(on ? name : "");
+}
+
+/*
+ * querySelector 두 종.
+ *
+ * $ / $$ 라는 이름이었는데 두 가지 이유로 바꿨다. 하나는 $가 jQuery로
+ * 읽힌다는 것이고(이 프로젝트는 라이브러리를 하나도 쓰지 않는다),
+ * 다른 하나는 $가 String.replace의 치환 지시자라는 것이다 —
+ * 빌드가 shared.js를 인라인하면서 `function $$`를 `function $`로 바꿔
+ * 모든 위젯의 $()가 배열을 돌려준 적이 있다. 이름에 $가 없으면
+ * 그 사고 자체가 성립하지 않는다.
+ */
+function qs(selector, root) {
 	return (root || document).querySelector(selector);
 }
 
-function $(selector, root) {
+function qsa(selector, root) {
 	return Array.prototype.slice.call((root || document).querySelectorAll(selector));
 }
 
@@ -756,9 +1108,9 @@ function send(message) {
  */
 function onServer(handlers) {
 	window.addEventListener("message", function (event) {
-		var data = event && event.data;
+		const data = event && event.data;
 		if (!data) return;
-		var handler = handlers[data.type];
+		const handler = handlers[data.type];
 		if (handler) handler(data);
 	});
 }
@@ -779,39 +1131,38 @@ function startTimer(el, seconds) {
 	// 서로 다른 숫자를 번갈아 쓰기 때문에 남은 시간이 튀어 보인다.
 	// 이전 것을 먼저 끄면 몇 번을 다시 받든 항상 하나만 돈다.
 	if (el.dataset.timerId) clearInterval(Number(el.dataset.timerId));
-	var total = Math.max(1, Math.round(seconds));
-	var left = total;
-	var label = document.createElement("span");
-	var RADIUS = 19;
-	var CIRC = 2 * Math.PI * RADIUS;
+	const total = Math.max(1, Math.round(seconds));
+	let left = total;
+	const label = document.createElement("span");
+	const RADIUS = 19;
+	const CIRC = 2 * Math.PI * RADIUS;
 
-	el.innerHTML =
-		'<svg viewBox="0 0 44 44" aria-hidden="true">' +
-		'<circle class="track" cx="22" cy="22" r="' +
-		RADIUS +
-		'"></circle>' +
-		'<circle class="bar" cx="22" cy="22" r="' +
-		RADIUS +
-		'" stroke-dasharray="' +
-		CIRC +
-		'" stroke-dashoffset="0"></circle>' +
-		"</svg>";
+	el.innerHTML = html`<svg viewBox="0 0 44 44" aria-hidden="true">
+		<circle class="track" cx="22" cy="22" r="${RADIUS}"></circle>
+		<circle
+			class="bar"
+			cx="22"
+			cy="22"
+			r="${RADIUS}"
+			stroke-dasharray="${CIRC}"
+			stroke-dashoffset="0"
+		></circle>
+	</svg>`;
 	el.appendChild(label);
 	el.setAttribute("role", "timer");
 
-	var bar = $(".bar", el);
+	const bar = qs(".bar", el);
 
 	function paint() {
 		label.textContent = String(Math.max(0, left));
 		el.setAttribute("aria-label", "남은 시간 " + Math.max(0, left) + "초");
 		bar.style.strokeDashoffset = String(CIRC * (1 - Math.max(0, left) / total));
 		// 마지막 10초는 색과 맥동으로도 알린다. 소리를 못 듣는 환경이 있다
-		if (left <= 10) el.classList.add("urgent");
-		else el.classList.remove("urgent");
+		el.classList.toggle("urgent", left <= 10);
 	}
 
 	paint();
-	var id = setInterval(function () {
+	const id = setInterval(function () {
 		left--;
 		paint();
 		if (left <= 0) clearInterval(id);
@@ -832,7 +1183,7 @@ function rearrange(isMobile) {
 		send({ type: "WidgetRearrange", top: "-12px", anchor: "topright" });
 		return;
 	}
-	var tablet = window.screen.width >= 768;
+	const tablet = window.screen.width >= 768;
 	send({
 		type: "WidgetRearrange",
 		anchor: "top",
@@ -850,43 +1201,39 @@ function scrollToEnd(el) {
 		<script>
 			/** 생존자를 채운 막대, 사망자를 비운 막대로 그린다 */
 			function paintAlive(alive, total) {
-				var html = "";
-				for (var i = 0; i < total; i++) {
-					html += '<i class="' + (i < alive ? "" : "gone") + '"></i>';
+				const pips = [];
+				for (let i = 0; i < total; i++) {
+					pips.push(html`<i class="${i < alive ? "" : "gone"}"></i>`);
 				}
-				$("#bar").innerHTML = html;
-				$("#alive").textContent = "생존 " + alive + "/" + total;
+				qs("#bar").innerHTML = html`${pips}`;
+				qs("#alive").textContent = `생존 ${alive}/${total}`;
 			}
 
 			onServer({
-				init: function (data) {
-					var night = data.phase === "night";
-					$("#panel").classList.add(night ? "night" : "day");
-					$("#sky").textContent = night ? "🌙" : "🌅";
-					$("#turn").textContent = data.turn
+				init(data) {
+					const night = data.phase === "night";
+					qs("#panel").classList.add(night ? "night" : "day");
+					qs("#sky").textContent = night ? "🌙" : "🌅";
+					qs("#turn").textContent = data.turn
 						? data.turn + (night ? "번째 밤" : "번째 아침")
 						: night
 							? "밤"
 							: "아침";
 
-					var role = $("#myrole");
+					const role = qs("#myrole");
 					role.textContent = data.alive === false ? "유령" : data.role || "";
 					role.classList.add(
 						data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen"
 					);
 
 					paintAlive(data.aliveCount, data.total);
-					$("#note").textContent = data.note || "";
+					qs("#note").textContent = data.note || "";
 
 					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다
-					var deaths = Array.isArray(data.deaths) ? data.deaths : [];
-					$("#deaths").innerHTML = deaths
-						.map(function (line) {
-							return "<span>" + esc(line) + "</span>";
-						})
-						.join("");
+					const deaths = Array.isArray(data.deaths) ? data.deaths : [];
+					qs("#deaths").innerHTML = html`${deaths.map(line => html`<span>${line}</span>`)}`;
 
-					startTimer($("#timer"), data.timer);
+					startTimer(qs("#timer"), data.timer);
 					rearrange(data.isMobile);
 				},
 			});

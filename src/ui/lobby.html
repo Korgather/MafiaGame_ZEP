@@ -170,155 +170,116 @@
 
 		<!--@shared-->
 		<script>
-			var myId = null;
-			var iAmReady = false;
-			var config = { min: 4, max: 8, kickVotes: 3 };
-			var counts = {};
+			let myId = null;
+			let iAmReady = false;
+			const config = { min: 4, max: 8, kickVotes: 3 };
+			let counts = {};
 
 			/* ---------- 방 목록 ---------- */
-			function paintRooms() {
-				var nums = Object.keys(counts).sort(function (a, b) {
-					return Number(a) - Number(b);
-				});
+			function roomHtml(num) {
+				const info = counts[num] || { count: 0, started: false };
+				const full = info.count >= config.max;
+				const state = info.started ? "진행 중" : full ? "가득 참" : `${info.count}/${config.max}`;
 
-				$("#rooms").innerHTML = nums
-					.map(function (num) {
-						var info = counts[num] || { count: 0, started: false };
-						var full = info.count >= config.max;
-						var blocked = info.started || full;
-						var state = info.started ? "진행 중" : full ? "가득 참" : info.count + "/" + config.max;
-
-						return (
-							'<button type="button" class="room' +
-							(info.started ? " playing" : full ? " full" : "") +
-							'" data-num="' +
-							num +
-							'"' +
-							(blocked ? " disabled" : "") +
-							' aria-label="' +
-							num +
-							"번 방, " +
-							state +
-							'">' +
-							"<span>" +
-							num +
-							"번 방</span>" +
-							'<span class="cnt">' +
-							state +
-							"</span>" +
-							"</button>"
-						);
-					})
-					.join("");
+				return html`<button
+					type="button"
+					class="room${info.started ? " playing" : full ? " full" : ""}"
+					data-num="${num}"
+					${flag(info.started || full, "disabled")}
+					aria-label="${num}번 방, ${state}"
+				>
+					<span>${num}번 방</span><span class="cnt">${state}</span>
+				</button>`;
 			}
 
-			$("#rooms").addEventListener("click", function (event) {
-				var el = event.target.closest(".room");
+			function paintRooms() {
+				const nums = Object.keys(counts).sort((a, b) => Number(a) - Number(b));
+				qs("#rooms").innerHTML = html`${nums.map(roomHtml)}`;
+			}
+
+			qs("#rooms").addEventListener("click", event => {
+				const el = event.target.closest(".room");
 				if (!el || el.disabled) return;
 				send({ type: "join", roomNum: Number(el.dataset.num) });
 			});
 
 			/* ---------- 좌석 목록 ---------- */
+			function seatHtml(seat, i) {
+				const mine = seat.id === myId;
+
+				// 강퇴는 필요 표수를 함께 보여준다. 몇 표가 남았는지 모르면
+				// 누를지 말지 판단할 수 없다
+				const kick = mine
+					? ""
+					: html`<button
+							type="button"
+							class="btn ghost kick${seat.kickCount > 0 ? " voted" : ""}"
+							data-id="${seat.id}"
+							aria-label="${seat.name} 강퇴 투표"
+						>
+							강퇴 ${seat.kickCount}/${config.kickVotes}
+						</button>`;
+
+				// .grow 안의 두 span은 한 줄로 둔다. 사이의 공백이 화면에 그대로
+				// 나오는 자리라, 줄을 나누면 들여쓰기가 이름 뒤에 붙는다
+				return html`<div class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}" role="listitem">
+					<span class="idx">${i + 1}</span>
+					<span class="grow ellip"><span class="nm">${seat.name}${mine ? " (나)" : ""}</span> <span class="meta">Lv.${seat.level} · ${seat.runCount}판</span></span>
+					<span class="state">${seat.ready ? "준비" : "대기"}</span>
+					${kick}
+				</div>`;
+			}
+
 			function paintSeats(list) {
-				var readyCount = 0;
-				var me = null;
+				qs("#seats").innerHTML = html`${list.map(seatHtml)}`;
 
-				$("#seats").innerHTML = list
-					.map(function (seat, i) {
-						if (seat.ready) readyCount++;
-						var mine = seat.id === myId;
-						if (mine) me = seat;
+				const readyCount = list.filter(seat => seat.ready).length;
+				iAmReady = list.some(seat => seat.id === myId && seat.ready);
 
-						// 강퇴는 필요 표수를 함께 보여준다. 몇 표가 남았는지 모르면
-						// 누를지 말지 판단할 수 없다
-						var kick = mine
-							? ""
-							: '<button type="button" class="btn ghost kick' +
-								(seat.kickCount > 0 ? " voted" : "") +
-								'" data-id="' +
-								esc(seat.id) +
-								'" aria-label="' +
-								esc(seat.name) +
-								' 강퇴 투표">강퇴 ' +
-								seat.kickCount +
-								"/" +
-								config.kickVotes +
-								"</button>";
-
-						return (
-							'<div class="seat' +
-							(seat.ready ? " ready" : "") +
-							(mine ? " me" : "") +
-							'" role="listitem">' +
-							'<span class="idx">' +
-							(i + 1) +
-							"</span>" +
-							'<span class="grow ellip">' +
-							'<span class="nm">' +
-							esc(seat.name) +
-							(mine ? " (나)" : "") +
-							"</span> " +
-							'<span class="meta">Lv.' +
-							esc(seat.level) +
-							" · " +
-							esc(seat.runCount) +
-							"판</span>" +
-							"</span>" +
-							'<span class="state">' +
-							(seat.ready ? "준비" : "대기") +
-							"</span>" +
-							kick +
-							"</div>"
-						);
-					})
-					.join("");
-
-				iAmReady = !!(me && me.ready);
-				var ready = $("#ready");
+				const ready = qs("#ready");
 				ready.textContent = iAmReady ? "준비 취소" : "준비";
 				ready.classList.toggle("primary", !iAmReady);
 				ready.classList.toggle("ok", iAmReady);
 
-				$("#sub").textContent = list.length + "명 · 준비 " + readyCount + "명";
+				qs("#sub").textContent = `${list.length}명 · 준비 ${readyCount}명`;
 
 				// 왜 시작하지 않는지 항상 한 줄로 말해준다
-				if (list.length < config.min) {
-					$("#note").textContent = config.min - list.length + "명 더 모이면 시작할 수 있습니다.";
-				} else if (readyCount < list.length) {
-					$("#note").textContent = list.length - readyCount + "명이 아직 준비하지 않았습니다.";
-				} else {
-					$("#note").textContent = "곧 시작합니다.";
-				}
+				qs("#note").textContent =
+					list.length < config.min
+						? `${config.min - list.length}명 더 모이면 시작할 수 있습니다.`
+						: readyCount < list.length
+							? `${list.length - readyCount}명이 아직 준비하지 않았습니다.`
+							: "곧 시작합니다.";
 			}
 
-			$("#seats").addEventListener("click", function (event) {
-				var el = event.target.closest(".kick");
+			qs("#seats").addEventListener("click", event => {
+				const el = event.target.closest(".kick");
 				if (!el) return;
 				send({ type: "kick", id: el.dataset.id });
 			});
 
-			$("#ready").addEventListener("click", function () {
+			qs("#ready").addEventListener("click", () => {
 				send({ type: iAmReady ? "cancle-ready" : "ready" });
 			});
 
-			$("#quit").addEventListener("click", function () {
+			qs("#quit").addEventListener("click", () => {
 				send({ type: "quit" });
 			});
 
 			/* ---------- 화면 전환 ---------- */
 			function showRooms(inRoom) {
-				$("#rooms").classList.toggle("hidden", inRoom);
-				$("#seats").classList.toggle("hidden", !inRoom);
-				$("#foot").classList.toggle("hidden", !inRoom);
-				$("#heading").textContent = inRoom ? "대기실" : "방 선택";
+				qs("#rooms").classList.toggle("hidden", inRoom);
+				qs("#seats").classList.toggle("hidden", !inRoom);
+				qs("#foot").classList.toggle("hidden", !inRoom);
+				qs("#heading").textContent = inRoom ? "대기실" : "방 선택";
 				if (!inRoom) {
-					$("#sub").textContent = "";
-					$("#note").textContent = "참가할 방을 고르세요.";
+					qs("#sub").textContent = "";
+					qs("#note").textContent = "참가할 방을 고르세요.";
 				}
 			}
 
 			onServer({
-				setID: function (data) {
+				setID(data) {
 					myId = data.id;
 					if (data.minPlayers) config.min = data.minPlayers;
 					if (data.maxPlayers) config.max = data.maxPlayers;
@@ -326,16 +287,16 @@
 					rearrange(data.isMobile);
 				},
 
-				init: function (data) {
-					var list = Array.isArray(data.data) ? data.data : [];
+				init(data) {
+					const list = Array.isArray(data.data) ? data.data : [];
 					showRooms(list.length > 0);
 					if (list.length > 0) paintSeats(list);
 					else paintRooms();
 				},
 
-				updatePlayerCount: function (data) {
+				updatePlayerCount(data) {
 					counts = data.data || {};
-					if (!$("#rooms").classList.contains("hidden")) paintRooms();
+					if (!qs("#rooms").classList.contains("hidden")) paintRooms();
 				},
 			});
 		</script>

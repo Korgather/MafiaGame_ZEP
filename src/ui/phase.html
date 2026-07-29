@@ -97,43 +97,39 @@
 		<script>
 			/** 생존자를 채운 막대, 사망자를 비운 막대로 그린다 */
 			function paintAlive(alive, total) {
-				var html = "";
-				for (var i = 0; i < total; i++) {
-					html += '<i class="' + (i < alive ? "" : "gone") + '"></i>';
+				const pips = [];
+				for (let i = 0; i < total; i++) {
+					pips.push(html`<i class="${i < alive ? "" : "gone"}"></i>`);
 				}
-				$("#bar").innerHTML = html;
-				$("#alive").textContent = "생존 " + alive + "/" + total;
+				qs("#bar").innerHTML = html`${pips}`;
+				qs("#alive").textContent = `생존 ${alive}/${total}`;
 			}
 
 			onServer({
-				init: function (data) {
-					var night = data.phase === "night";
-					$("#panel").classList.add(night ? "night" : "day");
-					$("#sky").textContent = night ? "🌙" : "🌅";
-					$("#turn").textContent = data.turn
+				init(data) {
+					const night = data.phase === "night";
+					qs("#panel").classList.add(night ? "night" : "day");
+					qs("#sky").textContent = night ? "🌙" : "🌅";
+					qs("#turn").textContent = data.turn
 						? data.turn + (night ? "번째 밤" : "번째 아침")
 						: night
 							? "밤"
 							: "아침";
 
-					var role = $("#myrole");
+					const role = qs("#myrole");
 					role.textContent = data.alive === false ? "유령" : data.role || "";
 					role.classList.add(
 						data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen"
 					);
 
 					paintAlive(data.aliveCount, data.total);
-					$("#note").textContent = data.note || "";
+					qs("#note").textContent = data.note || "";
 
 					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다
-					var deaths = Array.isArray(data.deaths) ? data.deaths : [];
-					$("#deaths").innerHTML = deaths
-						.map(function (line) {
-							return "<span>" + esc(line) + "</span>";
-						})
-						.join("");
+					const deaths = Array.isArray(data.deaths) ? data.deaths : [];
+					qs("#deaths").innerHTML = html`${deaths.map(line => html`<span>${line}</span>`)}`;
 
-					startTimer($("#timer"), data.timer);
+					startTimer(qs("#timer"), data.timer);
 					rearrange(data.isMobile);
 				},
 			});

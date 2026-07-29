@@ -114,30 +114,30 @@
 
 		<!--@shared-->
 		<script>
-			$("#close").addEventListener("click", function () {
+			qs("#close").addEventListener("click", () => {
 				send({ type: "close" });
 			});
 
 			onServer({
-				init: function (data) {
-					var card = $("#card");
-					card.classList.add(data.team === "mafia" ? "mafia" : "citizen");
+				init(data) {
+					const mafia = data.team === "mafia";
+					qs("#card").classList.add(mafia ? "mafia" : "citizen");
 
-					$("#glyph").textContent = data.glyph || "🎭";
-					$("#role").textContent = data.role || "";
-					$("#ability").textContent = data.ability || "";
-					$("#tip").textContent = data.tip || "";
+					qs("#glyph").textContent = data.glyph || "🎭";
+					qs("#role").textContent = data.role || "";
+					qs("#ability").textContent = data.ability || "";
+					qs("#tip").textContent = data.tip || "";
 
-					var team = $("#team");
-					team.textContent = data.team === "mafia" ? "마피아 팀" : "시민 팀";
-					team.classList.add(data.team === "mafia" ? "mafia" : "citizen");
+					const team = qs("#team");
+					team.textContent = mafia ? "마피아 팀" : "시민 팀";
+					team.classList.add(mafia ? "mafia" : "citizen");
 
 					// 카드가 열려 있는 시간만큼 막대가 줄어든다
-					var seconds = Number(data.timer) || 0;
+					const seconds = Number(data.timer) || 0;
 					if (seconds > 0) {
-						var fuse = $("#fuse");
-						fuse.style.transition = "transform " + seconds + "s linear";
-						requestAnimationFrame(function () {
+						const fuse = qs("#fuse");
+						fuse.style.transition = `transform ${seconds}s linear`;
+						requestAnimationFrame(() => {
 							fuse.style.transform = "scaleX(0)";
 						});
 					}

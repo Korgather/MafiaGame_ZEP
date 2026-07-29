@@ -134,52 +134,40 @@
 
 		<!--@shared-->
 		<script>
+			/** 정체 한 줄. 순서대로 조금씩 늦게 나타나 한 명씩 밝혀지는 것처럼 보인다 */
+			function revealHtml(p, i) {
+				const team = p.team === "mafia" ? "mafia" : "citizen";
+				return html`<div
+					class="rev ${team}${p.alive ? "" : " gone"}"
+					style="animation-delay:${i * 60}ms"
+				>
+					<span class="seat">${p.num}</span>
+					<span class="grow ellip">${p.name || ""}</span>
+					<span class="job">${p.role || ""}</span>
+					<span class="hd-sub">${p.alive ? "생존" : "사망"}</span>
+				</div>`;
+			}
+
 			onServer({
-				init: function (data) {
-					var mafiaWon = data.winner === "mafia";
-					var verdict = $("#verdict");
-					verdict.classList.add(mafiaWon ? "mafia" : "citizen");
-					$("#crown").textContent = mafiaWon ? "🔪" : "🎉";
-					$("#who").textContent = mafiaWon ? "마피아 승리" : "시민 승리";
-					$("#reason").textContent = data.reason || "";
+				init(data) {
+					const mafiaWon = data.winner === "mafia";
+					qs("#verdict").classList.add(mafiaWon ? "mafia" : "citizen");
+					qs("#crown").textContent = mafiaWon ? "🔪" : "🎉";
+					qs("#who").textContent = mafiaWon ? "마피아 승리" : "시민 승리";
+					qs("#reason").textContent = data.reason || "";
 
 					// 내가 이겼는지부터 알려준다. 진영 이름만으로는 방금 처음
 					// 해본 사람이 자기 결과를 바로 읽지 못한다
 					if (data.team) {
-						var iWon = data.team === data.winner;
-						$("#note").textContent = iWon ? "당신의 팀이 이겼습니다." : "당신의 팀이 졌습니다.";
+						qs("#note").textContent =
+							data.team === data.winner ? "당신의 팀이 이겼습니다." : "당신의 팀이 졌습니다.";
 					}
 
-					$("#heading").textContent = "정체 공개";
-					startTimer($("#timer"), data.timer);
+					qs("#heading").textContent = "정체 공개";
+					startTimer(qs("#timer"), data.timer);
 
-					var players = Array.isArray(data.players) ? data.players : [];
-					$("#reveal").innerHTML = players
-						.map(function (p, i) {
-							var team = p.team === "mafia" ? "mafia" : "citizen";
-							return (
-								'<div class="rev ' +
-								team +
-								(p.alive ? "" : " gone") +
-								'" style="animation-delay:' +
-								i * 60 +
-								'ms">' +
-								'<span class="seat">' +
-								p.num +
-								"</span>" +
-								'<span class="grow ellip">' +
-								esc(p.name || "") +
-								"</span>" +
-								'<span class="job">' +
-								esc(p.role || "") +
-								"</span>" +
-								'<span class="hd-sub">' +
-								(p.alive ? "생존" : "사망") +
-								"</span>" +
-								"</div>"
-							);
-						})
-						.join("");
+					const players = Array.isArray(data.players) ? data.players : [];
+					qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
 
 					rearrange(data.isMobile);
 				},

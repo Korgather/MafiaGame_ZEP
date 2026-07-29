@@ -490,15 +490,130 @@ body {
 }
 
 /* ---------- 채팅 ---------- */
+/*
+ * 채팅은 접속해 있는 내내 떠 있는 유일한 위젯이라 다른 화면과 규칙이 다르다.
+ *
+ * 1. 두 가지 모습으로 산다 — 펼친 창(.chat)과 접힌 막대(.chat-mini).
+ *    위젯은 iframe이라 투명해도 그 자리의 클릭을 먹는다. 그래서 접기는
+ *    CSS로 내용을 숨기는 것이 아니라 더 작은 위젯으로 다시 여는 것이고
+ *    (WidgetSize.CHAT_BAR), 두 모습이 한 파일 안에 함께 있어야 한다.
+ *
+ * 2. .panel을 쓰지 않는다. panel은 여닫히는 화면의 문법(머리말·본문·안내)인데
+ *    채팅은 늘 떠 있는 도구다. 여백을 panel만큼 주면 세로 320px 중 실제로
+ *    글이 보이는 자리가 절반으로 줄어든다.
+ */
 .chat {
 	display: flex;
 	flex-direction: column;
-	flex: 1 1 auto;
+	width: 100%;
+	height: 100%;
 	min-height: 0;
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
 	border: 1px solid var(--line);
 	border-radius: var(--r2);
+	box-shadow: var(--shadow);
 	overflow: hidden;
-	background: var(--bg);
+}
+
+/* 탭 줄 */
+.chat-head {
+	display: flex;
+	align-items: stretch;
+	flex: 0 0 auto;
+	border-bottom: 1px solid var(--line);
+}
+
+.chat-tabs {
+	display: flex;
+	gap: 2px;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 2px 2px 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.chat-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.tab {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	border-radius: var(--r1) var(--r1) 0 0;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.tab:hover {
+	color: var(--ink-2);
+	background: var(--surface-2);
+}
+
+.tab:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.tab[aria-selected="true"] {
+	color: var(--ink);
+	background: var(--surface-2);
+	border-bottom-color: var(--accent);
+}
+
+/* 읽기만 되는 탭. 색이 아니라 글리프로 알린다 */
+.tab.ro::after {
+	content: "🔒";
+	font-size: 9px;
+}
+
+/* 미확인 개수 */
+.badge-n {
+	min-width: 15px;
+	padding: 0 4px;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 15px;
+	text-align: center;
+	color: #14100f;
+	background: var(--accent);
+	border-radius: 99px;
+}
+
+.chat-fold {
+	flex: 0 0 auto;
+	padding: 0 var(--s2);
+	font: inherit;
+	font-size: var(--t-sm);
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.chat-fold:hover {
+	color: var(--ink);
+}
+.chat-fold:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 기록 */
+.chat-body {
+	position: relative;
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
 }
 
 .chat-log {
@@ -506,38 +621,37 @@ body {
 	flex-direction: column;
 	gap: var(--s1);
 	flex: 1 1 auto;
-	min-height: 60px;
+	min-height: 0;
 	padding: var(--s2);
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	scrollbar-width: thin;
-	scrollbar-color: var(--surface-3) transparent;
-}
-
-.chat-log::-webkit-scrollbar {
-	width: 6px;
-}
-.chat-log::-webkit-scrollbar-thumb {
-	background: var(--surface-3);
-	border-radius: 99px;
 }
 
 .msg {
 	display: flex;
 	flex-direction: column;
-	max-width: 85%;
+	max-width: 88%;
 	font-size: var(--t-sm);
 }
 
 .msg .who {
+	display: flex;
+	align-items: center;
+	gap: var(--s1);
 	font-size: var(--t-xs);
 	color: var(--ink-3);
+}
+
+/* 직업 배지는 마피아·유령 탭에서만 온다 (ChannelDef.revealsRole) */
+.msg .chip {
+	padding: 0 var(--s1);
+	font-size: 9px;
 }
 
 .msg .txt {
 	padding: var(--s1) var(--s2);
 	border-radius: var(--r1);
 	background: var(--surface-2);
+	/* 서버 안내는 여러 줄일 수 있다 (/도움말) */
+	white-space: pre-wrap;
 	word-break: break-word;
 }
 
@@ -550,28 +664,152 @@ body {
 	background: var(--accent);
 }
 
-.msg.sys {
+.when {
+	flex: 0 0 auto;
+	font-size: 9px;
+	color: var(--ink-3);
+	font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 누구의 말도 아닌 줄은 가운데에 눕는다. 사람의 발언과 같은 말풍선을 주면
+ * "시스템이 알려준 사실"과 "누가 주장한 말"이 눈으로 구분되지 않는다 —
+ * 마피아 게임에서 그 둘을 헷갈리면 판이 뒤집힌다.
+ */
+.msg.sys,
+.msg.evt,
+.msg.ntc {
 	align-self: center;
+	align-items: center;
 	max-width: 100%;
 	text-align: center;
 }
-.msg.sys .txt {
+
+.msg.sys .txt,
+.msg.ntc .txt {
+	font-size: var(--t-xs);
 	color: var(--ink-2);
 	background: transparent;
+}
+
+.msg.ntc .txt {
+	color: var(--ink-3);
+}
+
+/* 사건 기록(사망·처형·특종)은 나중에 판을 되짚을 때 눈으로 찾게 된다 */
+.msg.evt .txt {
 	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	border-radius: 99px;
+}
+
+/* 위로 올라가 읽는 중에 새 줄이 오면. 스크롤을 뺏지 않고 알리기만 한다 */
+.chat-jump {
+	position: absolute;
+	left: 50%;
+	bottom: var(--s2);
+	z-index: 2;
+	transform: translateX(-50%);
+	padding: 2px var(--s3);
+	font: inherit;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: #14100f;
+	background: var(--accent);
+	border: none;
+	border-radius: 99px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+}
+
+/* 이모지 판. 기록 위에 겹쳐서 연다 — 세로 320px에 상시 자리를 내줄 수 없다 */
+.emoji-pad {
+	position: absolute;
+	inset: auto 0 0 0;
+	z-index: 3;
+	display: grid;
+	grid-template-columns: repeat(8, 1fr);
+	gap: 2px;
+	padding: var(--s2);
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+}
+
+.emoji-pad button {
+	padding: 2px 0;
+	font-size: 17px;
+	line-height: 1.3;
+	background: transparent;
+	border: none;
+	border-radius: var(--r1);
+	cursor: pointer;
+}
+.emoji-pad button:hover {
+	background: var(--surface-3);
+}
+.emoji-pad button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 빠른 메시지 */
+.quick {
+	display: flex;
+	gap: var(--s1);
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	overflow-x: auto;
+	scrollbar-width: none;
+	border-top: 1px solid var(--line);
+}
+.quick::-webkit-scrollbar {
+	display: none;
+}
+
+.quick button {
+	flex: 0 0 auto;
+	padding: 2px var(--s2);
+	font: inherit;
+	font-size: var(--t-xs);
+	color: var(--ink-2);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.quick button:hover {
+	color: var(--ink);
+	background: var(--surface-3);
+}
+.quick button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+/* 입력 */
+.chat-entry {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	background: var(--surface);
+	border-top: 1px solid var(--line);
 }
 
 .chat-input {
-	flex: 0 0 auto;
-	width: 100%;
-	padding: var(--s2);
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: var(--s2) var(--s1);
 	font: inherit;
 	font-size: var(--t-sm);
 	color: var(--ink);
-	background: var(--surface);
+	background: transparent;
 	border: none;
-	border-top: 1px solid var(--line);
 	outline: none;
+	-webkit-user-select: text;
+	user-select: text;
 }
 
 .chat-input::placeholder {
@@ -581,6 +819,58 @@ body {
 .chat-input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
+}
+
+.icon-btn {
+	flex: 0 0 auto;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-md);
+	color: var(--ink-2);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.icon-btn:hover {
+	color: var(--ink);
+}
+.icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 접힌 막대: 위젯 전체가 버튼 하나다 */
+.chat-mini {
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	width: 100%;
+	height: 100%;
+	padding: 0 var(--s3);
+	font: inherit;
+	font-size: var(--t-sm);
+	font-weight: 700;
+	color: var(--ink-2);
+	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	border: 1px solid var(--line);
+	border-radius: 99px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.chat-mini:hover {
+	color: var(--ink);
+	border-color: var(--ink-3);
+}
+.chat-mini:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 접혀 있어도 못 본 말이 있다는 것은 보여야 한다 */
+.chat-mini.alert {
+	color: var(--ink);
+	border-color: var(--accent);
 }
 
 /* ---------- 유틸 ---------- */
