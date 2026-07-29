@@ -597,18 +597,47 @@ body {
 	border-radius: 99px;
 }
 
+/*
+ * 접기 버튼.
+ *
+ * 전에는 글리프 ▾ 하나가 투명한 배경 위에 --ink-3(흐린 회색)으로 떠 있었다.
+ * 데스크톱에서는 겨우 읽혔지만 모바일에서는 "여기를 누를 수 있다"는 신호가
+ * 전혀 아니었다 — 탭 줄 오른쪽 끝의 장식으로 보였다.
+ *
+ * 그래서 셋을 바꾼다.
+ *   1. 글자를 붙인다("접기"). 글리프만으로는 무엇이 일어날지 알 수 없다.
+ *   2. 테두리와 배경을 준다. 눌리는 것과 아닌 것이 색으로 갈린다.
+ *   3. 손가락이 닿을 크기를 준다(min-height 40px, min-width 44px).
+ *
+ * 이 높이가 머리말 전체의 높이가 된다(.chat-head가 stretch다) — 위아래
+ * 여백까지 더해 45px. 세로 320px 중 17px쯤을 더 쓰는 셈인데, 진짜 과녁은
+ * 이 버튼이 아니라 머리말 한 줄 전체이고(chat.html의 .chat-head 리스너)
+ * 그 줄이 45px면 손가락 기준(44px)을 넘긴다. 누를 수 없는 버튼은 없는 것과
+ * 같으므로 이쪽이 남는 장사다.
+ */
 .chat-fold {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
 	flex: 0 0 auto;
+	min-width: 44px;
+	min-height: 40px;
+	margin: 2px var(--s1) 2px 0;
 	padding: 0 var(--s2);
 	font: inherit;
-	font-size: var(--t-sm);
-	color: var(--ink-3);
-	background: transparent;
-	border: none;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-2);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	white-space: nowrap;
 	cursor: pointer;
+	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .chat-fold:hover {
 	color: var(--ink);
+	border-color: var(--ink-3);
 }
 .chat-fold:focus-visible {
 	outline: 2px solid var(--accent);
@@ -946,9 +975,16 @@ body {
 		</button>
 
 		<div class="chat hidden" id="full">
-			<div class="chat-head">
+			<div class="chat-head" id="chatHead">
 				<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
-				<button type="button" class="chat-fold" id="fold" aria-label="채팅 접기">▾</button>
+				<!--
+				글리프만 있던 자리에 글자를 붙였다. ▾ 하나로는 "접힌다"는 뜻이
+				전해지지 않는다. aria-label은 남긴다 — 낭독기에 ▾가 그대로
+				읽히면 오히려 방해가 된다.
+			-->
+			<button type="button" class="chat-fold" id="fold" aria-label="채팅 접기">
+				<span aria-hidden="true">▾</span>접기
+			</button>
 			</div>
 
 			<div class="chat-body">
@@ -979,15 +1015,19 @@ body {
 
 		<script>
 /*
- * 위젯 공통 스크립트.
+ * 위젯 공통 스크립트 — 화면을 만드는 쪽.
  *
  * 기존에는 toHHMMSS가 4개 파일에, esc가 2개 파일에 복사돼 있었다.
  * 복사본은 갈라진다 — night.html의 타이머는 다 되면 글자를 흰색으로,
  * morning.html은 #484848로 되돌렸다. 같은 타이머인데 화면마다 달랐다.
  *
- * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 인라인한다.
- * 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다. Jint에서 도는 서버 쪽
- * src/*.ts 와 달리 최신 문법 제약이 없다.
+ * 부모(ZEP 클라이언트)와 주고받는 일은 여기 없다. 전부 bridge.js에 있다 —
+ * "글자를 escape한다"와 "부모 창에 키 리스너를 단다"는 같은 파일에 있을
+ * 이유가 없고, 섞여 있으면 부모와의 계약이 어디까지인지 보이지 않는다.
+ *
+ * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 bridge.js와
+ * 함께 인라인한다. 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다.
+ * Jint에서 도는 서버 쪽 src/*.ts 와 달리 최신 문법 제약이 없다.
  */
 
 /** 서버가 보낸 문자열은 다른 플레이어가 정한 값이다. 태그로 해석되면 안 된다 */
@@ -1068,26 +1108,6 @@ function qsa(selector, root) {
 	return Array.prototype.slice.call((root || document).querySelectorAll(selector));
 }
 
-/** 부모(ZEP 클라이언트)에게 보낸다 */
-function send(message) {
-	window.parent.postMessage(message, "*");
-}
-
-/**
- * 서버 메시지 구독. type별 핸들러 표를 받는다.
- *
- * 기존 위젯은 전부 addEventListener("message") + switch였고, morning/night는
- * type을 아예 보지 않아 어떤 메시지가 와도 타이머를 다시 시작했다.
- */
-function onServer(handlers) {
-	window.addEventListener("message", function (event) {
-		const data = event && event.data;
-		if (!data) return;
-		const handler = handlers[data.type];
-		if (handler) handler(data);
-	});
-}
-
 /**
  * 남은 시간 표시.
  *
@@ -1144,31 +1164,198 @@ function startTimer(el, seconds) {
 	return id;
 }
 
-/**
- * 위젯 위치 보정.
- *
- * 기존에는 이 계산이 3개 파일에 서로 다르게 복사돼 있었다. 대기실은
- * 태블릿을 768px로, 밤 위젯은 같은 768px을 다른 의미로 썼고, 투표·개표
- * 화면은 보정 자체가 없어 모바일에서 화면 밖으로 나갔다.
- */
-function rearrange(isMobile) {
-	if (!isMobile) {
-		send({ type: "WidgetRearrange", top: "-12px", anchor: "topright" });
-		return;
-	}
-	const tablet = window.screen.width >= 768;
-	send({
-		type: "WidgetRearrange",
-		anchor: "top",
-		top: tablet ? "-40px" : "-24px",
-		width: tablet ? "60%" : "96%",
-	});
-}
-
 /** 로그 맨 아래로. 붙인 뒤에 호출해야 한다 */
 function scrollToEnd(el) {
 	if (el) el.scrollTop = el.scrollHeight;
 }
+
+/*
+ * ParentBridge — ZEP 클라이언트(부모 창)와 주고받는 유일한 통로.
+ *
+ * 왜 따로 있는가
+ * --------------
+ * 위젯은 ZEP 클라이언트 안의 iframe이다. 그래서 부모와의 대화가 세 종류인데,
+ * 지금까지는 셋 다 그냥 window.parent를 직접 만지는 코드였다.
+ *
+ *   1. 게임 서버(Jint)에게 보내기 — ZEP이 widget.onMessage로 넘겨준다
+ *   2. ZEP 클라이언트 자체에게 시키기 — WidgetRearrange 같은 것
+ *   3. 부모 문서의 키 입력 가로채기 — 게임 화면에 포커스가 있을 때
+ *
+ * 셋이 섞여 있으면 "이 postMessage는 서버가 받나 ZEP이 받나"를 볼 때마다
+ * 다시 알아내야 한다. 여기 모아두면 부모와의 계약이 이 파일 하나에 다 있다.
+ * 빌드(tools/build-widgets.js)가 위젯 HTML에서 window.parent를 직접 쓰면
+ * 실패시키므로, 이 파일을 우회하는 길은 막혀 있다.
+ *
+ * 이벤트를 늘리는 법: 아래 세 묶음 중 맞는 곳에 함수를 하나 더한다.
+ * 위젯은 Parent.무엇 만 부르므로 부모 쪽 사정이 바뀌어도 고칠 곳은 여기뿐이다.
+ */
+const Parent = (function () {
+	/*
+	 * 부모 문서에 직접 닿을 수 있는가.
+	 *
+	 * 같은 출처면 부모의 window를 그대로 만질 수 있고, 그러면 게임 화면에
+	 * 포커스가 있는 동안 눌린 키까지 받을 수 있다. 교차 출처면 만지는 순간
+	 * SecurityError가 나므로 postMessage 말고는 길이 없다.
+	 *
+	 * 판정은 로드 때 한 번만 하고, 안 되면 조용히 기능을 접는다 — 여기서
+	 * 예외가 새어 나가면 위젯 스크립트 전체가 로드에 실패한다.
+	 */
+	const win = (function () {
+		try {
+			// 존재 확인만으로는 부족하다. 실제로 읽어야 교차 출처가 드러난다
+			void window.parent.document.readyState;
+			return window.parent;
+		} catch (error) {
+			return null;
+		}
+	})();
+
+	/*
+	 * 프레임보다 오래 살아야 하는 것을 두는 자리.
+	 *
+	 * 채팅창 접기/펴기는 CSS가 아니라 크기가 다른 위젯으로 다시 여는
+	 * 것이라(Widgets.ts의 openChat) 그때마다 문서가 통째로 새로 만들어진다.
+	 * 입력 기록 같은 것을 위젯 안에만 두면 접을 때마다 지워진다.
+	 *
+	 * 교차 출처면 그냥 빈 객체다 — 기능이 사라지는 게 아니라 수명만 짧아진다.
+	 */
+	const store = (function () {
+		if (!win) return {};
+		if (!win.__mafiaWidget) win.__mafiaWidget = {};
+		return win.__mafiaWidget;
+	})();
+
+	// ────────────────────────────────────────────── 1. 게임 서버에게
+
+	/** 게임 서버(widget.onMessage)로 보낸다 */
+	function send(message) {
+		window.parent.postMessage(message, "*");
+	}
+
+	/**
+	 * 서버 메시지 구독. type별 핸들러 표를 받는다.
+	 *
+	 * 기존 위젯은 전부 addEventListener("message") + switch였고, morning/night는
+	 * type을 아예 보지 않아 어떤 메시지가 와도 타이머를 다시 시작했다.
+	 */
+	function on(handlers) {
+		window.addEventListener("message", function (event) {
+			const data = event && event.data;
+			if (!data) return;
+			// 크기는 메시지 종류와 상관없이 실려 온다. 위젯이 "부르는 것을 잊는"
+			// 자리를 없애기 위해 핸들러보다 먼저, 표에 없는 종류에도 적용한다.
+			if (data.layout) applyLayout(data.layout);
+			const handler = handlers[data.type];
+			if (handler) handler(data);
+		});
+	}
+
+	// ────────────────────────────────────────────── 2. ZEP 클라이언트에게
+
+	/**
+	 * 위젯이 차지할 상자를 ZEP 클라이언트에게 알린다.
+	 * 서버가 아니라 클라이언트가 읽고 처리하는 메시지다.
+	 *
+	 * 기존 구조의 문제
+	 * ----------------
+	 * 여기서 기기를 보고 크기를 스스로 정했다(rearrange). 그런데 세로는
+	 * 아무도 정하지 않아 모바일에서도 데스크톱 픽셀이 그대로 남았고,
+	 * 이 함수를 부를지 말지는 위젯 각자의 자유라 채팅과 직업 카드는
+	 * 아예 부르지 않았다 — 모바일 보정이 통째로 빠진 화면이 둘 있었다.
+	 *
+	 * 지금은 서버(Widgets.ts의 layoutOf)가 한 곳에서 정해 payload에 실어
+	 * 보내고, 여기서는 받은 대로 넘기기만 한다. 기기 판정도 서버가 한다
+	 * (player.isMobile / isTablet) — window.screen.width로 태블릿을
+	 * 넘겨짚을 이유가 없어졌다.
+	 */
+	function applyLayout(layout) {
+		const message = {
+			type: "WidgetRearrange",
+			anchor: layout.anchor,
+			width: layout.width,
+			height: layout.height,
+		};
+		// 상단바 보정은 위쪽에 붙는 위젯에만 실려 온다
+		if (layout.top) message.top = layout.top;
+		send(message);
+	}
+
+	// ────────────────────────────────────────────── 3. 부모 문서의 키 입력
+
+	/** 남이 글을 쓰고 있는 칸인가. ZEP 기본 채팅 입력창이 여기 걸린다 */
+	function editable(el) {
+		if (!el || !el.tagName) return false;
+		const tag = String(el.tagName).toUpperCase();
+		if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+		return el.isContentEditable === true;
+	}
+
+	/**
+	 * 게임 화면(캔버스)에 포커스가 있는 동안 눌린 키를 받는다.
+	 *
+	 * 위젯 안에 포커스가 있을 때는 여기로 오지 않는다 — 키 이벤트는 프레임
+	 * 경계를 넘지 않기 때문이다. 그래서 "게임 중일 때"와 "채팅 치는 중일 때"를
+	 * 따로 판정할 필요가 없다. 브라우저가 이미 나눠준다.
+	 *
+	 * 같은 이유로 "채팅 입력 중 이동·단축키 비활성화"도 따로 할 일이 없다.
+	 * 입력창에 포커스가 있으면 WASD는 애초에 ZEP 캔버스에 도달하지 않는다.
+	 *
+	 * 돌려주는 함수를 부르면 구독이 끊긴다. 프레임이 사라질 때도 자동으로 끊는다.
+	 */
+	function onKey(handler) {
+		if (!win) return function () {};
+
+		function off() {
+			win.removeEventListener("keydown", listener, true);
+			window.removeEventListener("pagehide", off);
+		}
+
+		function listener(event) {
+			// 접었다 펴는 순간 옛 프레임과 새 프레임이 잠깐 함께 산다.
+			// 죽은 쪽이 반응하면 이미 사라진 입력창에 포커스를 주게 된다.
+			const frame = window.frameElement;
+			if (frame && frame.isConnected === false) {
+				off();
+				return;
+			}
+			// 부모에는 ZEP 기본 채팅 입력창이 그대로 남아 있다(0.16.5에는 숨기는
+			// API가 없다). 남이 글을 쓰고 있는 칸은 건드리지 않는다.
+			if (editable(event.target)) return;
+			// 조합키는 브라우저와 ZEP의 몫이다
+			if (event.altKey || event.ctrlKey || event.metaKey) return;
+			handler(event);
+		}
+
+		// 부모 window의 캡처 단계. 이 프레임에서 닿을 수 있는 가장 이른 지점이다.
+		// 그래도 ZEP이 먼저 등록한 리스너보다 앞설 수는 없다 — 같은 대상·같은
+		// 단계에서는 등록 순서가 곧 실행 순서고, 부모 문서가 우리보다 먼저 뜬다.
+		win.addEventListener("keydown", listener, true);
+		// 위젯이 파괴되면 부모에는 리스너만 남는다. 반드시 같이 떼야 한다
+		window.addEventListener("pagehide", off);
+		return off;
+	}
+
+	/**
+	 * 이 프레임으로 포커스를 가져온다.
+	 *
+	 * 부모 문서에서 키를 받아 들어오는 길에서는 포커스가 아직 캔버스에 있다.
+	 * 안쪽 엘리먼트에 focus()만 하면 되는 경우가 대부분이지만, 프레임 자체를
+	 * 먼저 깨워두는 편이 확실하다.
+	 */
+	function grabFocus() {
+		window.focus();
+	}
+
+	return {
+		send,
+		on,
+		onKey,
+		grabFocus,
+		store,
+		/** 게임 화면의 키 입력을 받을 수 있는가 (부모와 같은 출처인가) */
+		canReadKeys: win !== null,
+	};
+})();
 
 </script>
 		<script>
@@ -1177,6 +1364,8 @@ function scrollToEnd(el) {
 			const MAX_TEXT = 200;
 			/* 스크롤이 이만큼 안쪽이면 "바닥을 보고 있다"로 친다 */
 			const BOTTOM_SLACK = 24;
+			/** ↑로 되짚을 수 있는 이전 입력 수 */
+			const MAX_SENT = 30;
 
 			/*
 			 * 이모지는 고정 목록이다. 스티커·커스텀 이모지를 붙일 자리이기도
@@ -1206,6 +1395,17 @@ function scrollToEnd(el) {
 			let quick = [];
 			let active = "";
 			let myId = "";
+
+			/*
+			 * 보낸 글 기록(↑/↓). 이 문서보다 오래 살아야 한다.
+			 *
+			 * 채팅 접기/펴기는 CSS가 아니라 크기가 다른 위젯으로 다시 여는
+			 * 것이라(Widgets.ts의 openChat) 그때마다 문서가 통째로 새로 만들어진다.
+			 * 여기 두면 한 번 접을 때마다 기록이 비어서, 방금 친 말도 못 되짚는다.
+			 * 부모 창에 두면 프레임이 몇 번 갈리든 남는다.
+			 */
+			const sent = Parent.store.chatSent || (Parent.store.chatSent = []);
+			let sentAt = sent.length;
 
 			// ────────────────────────────────────────────────── 그리기
 
@@ -1356,13 +1556,22 @@ function scrollToEnd(el) {
 				)}`;
 			}
 
+			/*
+			 * 접힌 바에 뭐라고 쓸지.
+			 *
+			 * Enter로 열린다는 것은 아무 데도 안 적혀 있으면 아무도 모른다.
+			 * 그렇다고 항상 적을 수는 없다 — 부모와 출처가 다르면 Enter는
+			 * 정말로 안 먹고, 안 되는 조작을 적어두는 것이 안 적는 것보다 나쁘다.
+			 */
+			const MINI_LABEL = Parent.canReadKeys ? "채팅 (Enter)" : "채팅";
+
 			function drawMini() {
 				let total = 0;
 				for (const view of channels) total += view.unread;
 				const active_ = viewOf(active);
 
 				qs("#miniGlyph").textContent = active_ ? active_.glyph : "💬";
-				qs("#miniText").textContent = total > 0 ? "새 메시지" : "채팅";
+				qs("#miniText").textContent = total > 0 ? "새 메시지" : MINI_LABEL;
 				qs("#miniBadge").textContent = badgeText(total);
 				qs("#miniBadge").classList.toggle("hidden", total === 0);
 				qs("#mini").classList.toggle("alert", total > 0);
@@ -1374,46 +1583,100 @@ function scrollToEnd(el) {
 				drawMini();
 			}
 
+			// ────────────────────────────────────────────────── 보낸 글 기록
+
+			function remember(text) {
+				// 같은 말을 두 번 이어 보냈다고 기록이 두 칸이 될 이유는 없다
+				if (sent[sent.length - 1] !== text) sent.push(text);
+				if (sent.length > MAX_SENT) sent.shift();
+				resetRecall();
+			}
+
+			function resetRecall() {
+				sentAt = sent.length;
+			}
+
+			/** step은 -1이 과거, +1이 최근. 끝까지 내려오면 빈 칸으로 돌아온다 */
+			function recall(step) {
+				const at = Math.max(0, Math.min(sent.length, sentAt + step));
+				if (at === sentAt) return;
+				sentAt = at;
+				const input = qs("#input");
+				input.value = at === sent.length ? "" : sent[at];
+				// 커서를 끝으로. 안 하면 맨 앞에 놓여서 이어 쓰기가 어색하다
+				input.setSelectionRange(input.value.length, input.value.length);
+			}
+
 			// ────────────────────────────────────────────────── 보내기
 
 			function submit(text) {
 				const trimmed = String(text == null ? "" : text).trim();
-				if (trimmed === "") return;
+				if (trimmed === "") return false;
 				const view = viewOf(active);
 				// 명령어는 어느 탭에서든 통한다. 서버가 권한 검사보다 먼저 본다
-				if (trimmed.charAt(0) !== "/" && (view === null || !view.write)) return;
-				send({ type: "send", channel: active, text: trimmed });
+				if (trimmed.charAt(0) !== "/" && (view === null || !view.write)) return false;
+				Parent.send({ type: "send", channel: active, text: trimmed });
+				remember(trimmed);
+				return true;
 			}
 
+			/**
+			 * 보내지 못한 글은 지우지 않는다.
+			 *
+			 * 읽기 전용 탭에서 Enter를 눌렀을 때 쓰던 문장이 조용히 사라지면
+			 * 다시 칠 방법이 없다. 남겨두면 탭을 옮겨 그대로 보낼 수 있다.
+			 */
 			function submitInput() {
-				submit(qs("#input").value);
+				if (!submit(qs("#input").value)) return;
 				qs("#input").value = "";
 				qs("#pad").classList.add("hidden");
+			}
+
+			// ────────────────────────────────────────────────── 채널 고르기
+
+			function selectChannel(id) {
+				if (id === active) return;
+
+				// 줄은 이미 전부 여기 있으므로 서버를 기다릴 이유가 없다.
+				// 기다리면 탭을 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
+				active = id;
+				const view = viewOf(active);
+				if (view) view.unread = 0;
+				draw();
+				render();
+				Parent.send({ type: "channel", channel: active });
+			}
+
+			/** Tab으로 넘기기. channels는 서버가 정한 순서 그대로다 */
+			function cycleChannel(step) {
+				if (channels.length < 2) return;
+				let at = 0;
+				for (let i = 0; i < channels.length; i++) {
+					if (channels[i].id === active) at = i;
+				}
+				selectChannel(channels[(at + step + channels.length) % channels.length].id);
 			}
 
 			// ────────────────────────────────────────────────── 조작
 
 			qs("#tabs").addEventListener("click", event => {
 				const el = event.target.closest(".tab");
-				if (!el || el.dataset.id === active) return;
-
-				// 줄은 이미 전부 여기 있으므로 서버를 기다릴 이유가 없다.
-				// 기다리면 탭을 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
-				active = el.dataset.id;
-				const view = viewOf(active);
-				if (view) view.unread = 0;
-				draw();
-				render();
-				send({ type: "channel", channel: active });
+				if (el) selectChannel(el.dataset.id);
 			});
 
-			qs("#fold").addEventListener("click", () => {
-				// 접기는 더 작은 위젯으로 다시 여는 것이다. 서버가 다시 열어준다
-				send({ type: "toggle", open: false });
+			// 접기는 더 작은 위젯으로 다시 여는 것이다. 서버가 다시 열어준다.
+			//
+			// #fold가 아니라 머리말 전체에 건다. 채널을 고르는 탭만 빼면 이 줄에서
+			// 할 일은 접는 것뿐이고, 탭 사이의 빈 자리는 원래 아무 일도 하지 않던
+			// 곳이라 잃는 것이 없다. 손가락에게는 40px짜리 버튼 하나보다
+			// 머리말 한 줄 전체가 훨씬 큰 과녁이다.
+			qs("#chatHead").addEventListener("click", event => {
+				if (event.target.closest(".tab")) return;
+				Parent.send({ type: "toggle", open: false });
 			});
 
 			qs("#mini").addEventListener("click", () => {
-				send({ type: "toggle", open: true });
+				Parent.send({ type: "toggle", open: true });
 			});
 
 			qs("#jump").addEventListener("click", () => {
@@ -1444,8 +1707,87 @@ function scrollToEnd(el) {
 
 			qs("#submit").addEventListener("click", submitInput);
 
+			// ────────────────────────────────────────────────── 키보드
+
+			/**
+			 * 입력창으로 포커스를 옮긴다. 접혀 있으면 먼저 펴야 한다.
+			 *
+			 * 펴기는 위젯을 다시 여는 것이라 이 문서가 그 자리에서 사라진다.
+			 * 그래서 "펴고 나서 포커스"를 여기서 이어 할 수 없다 — 무엇에
+			 * 포커스를 줄지 서버에 함께 알려주고, 새로 뜬 문서가 init에서 받는다.
+			 */
+			function focusInput(slash) {
+				if (qs("#full").classList.contains("hidden")) {
+					Parent.send({ type: "toggle", open: true, focus: slash ? "command" : "input" });
+					return;
+				}
+				takeFocus(slash);
+			}
+
+			function takeFocus(slash) {
+				// 게임 화면에서 들어온 길에서는 포커스가 아직 캔버스에 있다
+				Parent.grabFocus();
+				const input = qs("#input");
+				// /는 명령어의 첫 글자다. 넣어두면 바로 이어 칠 수 있다
+				if (slash && input.value === "") input.value = "/";
+				input.focus();
+				input.setSelectionRange(input.value.length, input.value.length);
+			}
+
 			qs("#input").addEventListener("keydown", event => {
-				if (event.key === "Enter") submitInput();
+				const input = qs("#input");
+
+				if (event.key === "Enter") {
+					submitInput();
+					return;
+				}
+
+				if (event.key === "Escape") {
+					// 두 걸음이다. 쓰던 글을 먼저 비우고, 빈 칸에서 한 번 더 누르면
+					// 게임으로 돌아간다. 한 걸음이면 오타를 지우려다 창을 닫는다
+					if (input.value !== "") {
+						input.value = "";
+						resetRecall();
+						return;
+					}
+					qs("#pad").classList.add("hidden");
+					input.blur();
+					return;
+				}
+
+				if (event.key === "Tab") {
+					// 위젯 안에는 Tab으로 갈 만한 곳이 몇 개 없다. 채널 전환이
+					// 훨씬 쓸모 있다. 밖으로 나가는 길은 Escape가 맡는다
+					event.preventDefault();
+					cycleChannel(event.shiftKey ? -1 : 1);
+					return;
+				}
+
+				if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+					// 기본 동작은 커서를 글 끝으로 보내는 것이다. 되짚기와 겹친다
+					event.preventDefault();
+					recall(event.key === "ArrowUp" ? -1 : 1);
+				}
+			});
+
+			/*
+			 * 게임 화면(캔버스)에 포커스가 있는 동안 눌린 키.
+			 *
+			 * 위젯 안에서 누른 키는 여기로 오지 않는다 — 키 이벤트는 프레임
+			 * 경계를 넘지 않기 때문이다. 그래서 "지금 채팅을 치는 중인가"를 따로
+			 * 들고 있을 필요가 없고, 치는 동안 이동·단축키를 꺼줄 일도 없다.
+			 * 입력창에 친 WASD는 애초에 ZEP 캔버스에 닿지 않는다.
+			 *
+			 * 부모와 출처가 다르면 이 구독은 조용히 없던 일이 된다(bridge.js).
+			 * 그때는 채팅창을 눌러서 여는 지금까지의 길이 그대로 남는다.
+			 */
+			Parent.onKey(event => {
+				if (event.key !== "Enter" && event.key !== "/") return;
+				// ZEP 기본 채팅도 Enter로 열린다. 둘 다 열리면 지금 어느 쪽에
+				// 쓰고 있는지 알 수 없다. 여기서 끊어 하나만 열리게 한다
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				focusInput(event.key === "/");
 			});
 
 			qs("#pad").innerHTML = html`${EMOJI.map(
@@ -1454,7 +1796,7 @@ function scrollToEnd(el) {
 
 			// ────────────────────────────────────────────────── 서버
 
-			onServer({
+			Parent.on({
 				init(data) {
 					myId = data.myId || "";
 					channels = data.channels || [];
@@ -1468,6 +1810,10 @@ function scrollToEnd(el) {
 
 					draw();
 					render();
+
+					// 게임 화면에서 Enter로 펴고 들어온 경우. 앞 문서가 남긴
+					// 의도를 이어받는 곳은 여기 하나뿐이다
+					if (data.focus) takeFocus(data.focus === "command");
 				},
 
 				/*

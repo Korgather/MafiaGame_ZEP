@@ -36,7 +36,7 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, label } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { countAbandon, refreshTitle } from "./Rewards.ts";
-import { openLobby } from "./Widgets.ts";
+import { openLobby, pushLobby } from "./Widgets.ts";
 
 /**
  * 강퇴 쿨다운. player.tag가 아니라 여기에 둔다.
@@ -58,12 +58,17 @@ export function enterLobby(player: ScriptPlayer): void {
 	pushRoomCounts(player);
 }
 
-/** 이 플레이어가 보는 좌석 목록을 다시 그린다 */
+/**
+ * 이 플레이어가 보는 좌석 목록을 다시 그린다.
+ *
+ * 목록이 비어 있으면 lobby.html은 방 선택 화면을 그린다. 그 화면은 좌석
+ * 목록보다 낮아도 되므로 크기도 함께 바뀌어야 하는데, 그 판단은 Widgets의
+ * pushLobby가 한 곳에서 한다 — 여기서 sendMessage를 직접 부르면 크기를
+ * 바꾸는 것을 잊는 자리가 다시 생긴다.
+ */
 function pushSeatList(player: ScriptPlayer): void {
-	const widget = tagOf(player).widget;
-	if (!widget) return;
 	const found = locate(player.id);
-	widget.sendMessage({ type: "init", data: found ? lobbySeatViews(found.room) : [] });
+	pushLobby(player, found ? lobbySeatViews(found.room) : []);
 }
 
 /** 방 안 전원의 목록을 갱신한다 (한 명이라도 바뀌면 전원에게) */
@@ -72,8 +77,7 @@ function refreshRoom(room: Room): void {
 	for (const seat of room.seats.slice()) {
 		const player = ScriptApp.getPlayerByID(seat.playerId);
 		if (!player) continue;
-		const widget = tagOf(player).widget;
-		if (widget) widget.sendMessage({ type: "init", data: views });
+		pushLobby(player, views);
 	}
 }
 
@@ -253,8 +257,7 @@ function removeFromRoom(room: Room, playerId: string, kicked: boolean): void {
 	const player = ScriptApp.getPlayerByID(playerId);
 	if (player) {
 		// 빈 목록이 곧 "방 밖" 상태다. 별도의 kicked 메시지는 필요 없다.
-		const widget = tagOf(player).widget;
-		if (widget) widget.sendMessage({ type: "init", data: [] });
+		pushLobby(player, []);
 		if (kicked) label(player, "강퇴당했습니다.");
 		// 좌석이 사라졌으니 방 탭도 사라진다
 		Chat.refresh(player);

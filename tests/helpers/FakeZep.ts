@@ -139,6 +139,8 @@ export class FakeWidget {
 export class FakePlayer {
 	// ZEP이 주는 필드
 	isMobile = false;
+	/** ZEP은 태블릿도 isMobile로 본다. isTablet은 그 안에서 다시 갈리는 값이다 */
+	isTablet = false;
 	isGuest = false;
 	role = 0;
 	storage: string | null = null;

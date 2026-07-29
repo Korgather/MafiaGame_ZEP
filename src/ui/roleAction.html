@@ -78,10 +78,10 @@
 			qs("#grid").addEventListener("click", event => {
 				const el = event.target.closest(".tile");
 				if (!el || el.disabled || !canPick) return;
-				send({ type: "select", num: Number(el.dataset.num) });
+				Parent.send({ type: "select", num: Number(el.dataset.num) });
 			});
 
-			onServer({
+			Parent.on({
 				init(data) {
 					myNum = Number(data.myNum) || 0;
 					picked = null;
@@ -98,7 +98,6 @@
 
 					qs("#note").textContent = data.note || "";
 					if (data.timer) startTimer(qs("#timer"), data.timer);
-					rearrange(data.isMobile);
 				},
 
 				// 서버가 지목을 받아들였을 때만 표시가 바뀐다. 기존에는 누른 즉시

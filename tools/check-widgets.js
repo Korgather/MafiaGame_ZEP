@@ -194,7 +194,11 @@ function element(node, doc) {
 		get childElementCount() {
 			return node.children.length;
 		},
-		addEventListener() {},
+		// 클릭은 흉내내지 않지만 키는 흉내낸다. 채팅 입력창의 Enter·Escape·
+		// Tab·↑↓은 마우스만큼 자주 쓰는 조작이라 눌러보지 않으면 검사가 반쪽이다
+		addEventListener(type, handler) {
+			if (type === "keydown") doc.keys.push({ el, handler });
+		},
 		setAttribute(name, value) {
 			attrs[name.toLowerCase()] = String(value);
 		},
@@ -203,6 +207,8 @@ function element(node, doc) {
 			return key in attrs ? attrs[key] : null;
 		},
 		focus() {},
+		blur() {},
+		setSelectionRange() {},
 		// 클릭을 흉내내지는 않으므로 위임 핸들러 안쪽까지는 가지 않는다
 		closest() {
 			return null;
@@ -225,6 +231,8 @@ function makeDocument(source, report) {
 	const roots = parseNodes(stripped, null);
 
 	const doc = {
+		/** 엘리먼트에 걸린 keydown 핸들러들. 장면을 다 넣은 뒤 실제로 눌러본다 */
+		keys: [],
 		sawHtml(text) {
 			// 조각이 조각을 만나는 자리에서 표시가 벗겨지면 여기에 찍힌다.
 			// html`` 대신 객체를 그냥 끼워 넣어도 마찬가지다.
@@ -270,14 +278,35 @@ function checkWidget(name) {
 	const document = makeDocument(source, report);
 
 	const listeners = [];
+	/** 부모 문서(게임 화면)에 걸린 keydown 핸들러들 */
+	const parentKeys = [];
 	let timerSeq = 0;
 
+	/*
+	 * 부모는 같은 출처인 것으로 둔다.
+	 *
+	 * bridge.js는 window.parent.document를 실제로 읽어 교차 출처를 판정한다.
+	 * document가 없으면 거기서 예외가 나 canReadKeys가 false가 되고, 그러면
+	 * 게임 화면에서 Enter를 받는 길이 통째로 검사되지 않는다 — 이번 변경의
+	 * 핵심이 바로 그 길이라 검사기는 되는 쪽을 흉내내야 한다.
+	 */
 	const window = {
-		parent: { postMessage() {} },
+		parent: {
+			postMessage() {},
+			document: { readyState: "complete" },
+			addEventListener(type, handler) {
+				if (type === "keydown") parentKeys.push(handler);
+			},
+			removeEventListener() {},
+		},
 		screen: { width: 1280 },
+		// iframe이 살아 있는 상태. bridge.js가 죽은 프레임을 걸러내는 데 쓴다
+		frameElement: null,
+		focus() {},
 		addEventListener(type, handler) {
 			if (type === "message") listeners.push(handler);
 		},
+		removeEventListener() {},
 	};
 
 	const sandbox = {
@@ -319,6 +348,13 @@ function checkWidget(name) {
 
 	if (listeners.length === 0) report("서버 메시지를 구독하지 않았습니다");
 
+	// Parent.onKey를 부르고도 부모에 아무것도 안 걸렸다면 같은 출처 판정이
+	// 깨진 것이다. 그러면 아래 pressKeys는 돌 것이 없어 조용히 통과한다 —
+	// 검사가 없어졌다는 사실 자체를 놓치게 된다.
+	if (source.includes("Parent.onKey(") && parentKeys.length === 0) {
+		report("Parent.onKey를 불렀는데 부모 문서에 keydown이 걸리지 않았습니다");
+	}
+
 	for (const scene of SCENES) {
 		if (scene.file !== name) continue;
 		for (const message of scene.messages) {
@@ -332,7 +368,67 @@ function checkWidget(name) {
 		}
 	}
 
+	// 장면을 다 넣은 뒤에 눌러본다. 빈 화면에서 누르는 것과 탭·줄이 다
+	// 들어찬 화면에서 누르는 것은 지나가는 코드가 다르다.
+	pressKeys(document.keys, parentKeys, report);
+
 	return problems.map(p => `${name}: ${p}`);
+}
+
+/** 실제로 눌러보는 키. 채팅 위젯이 다루는 것 전부다 */
+const KEYS = ["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "/", "a"];
+
+function keyEvent(key, shiftKey, target) {
+	return {
+		key,
+		shiftKey,
+		altKey: false,
+		ctrlKey: false,
+		metaKey: false,
+		target,
+		preventDefault() {},
+		stopPropagation() {},
+		stopImmediatePropagation() {},
+	};
+}
+
+/**
+ * 키를 눌러본다. 확인하는 것은 "예외 없이 지나가는가" 하나다.
+ *
+ * 무엇이 포커스를 받았는지까지 보려면 진짜 DOM이 필요하고, 그러면 이 검사기가
+ * 브라우저가 된다. 실제로 깨졌던 것들 — 없는 함수 호출(setSelectionRange),
+ * 빈 배열에서의 인덱스 계산, 아직 안 그려진 엘리먼트 참조 — 은 전부 예외로
+ * 드러나므로 여기까지가 값이 있는 만큼이다.
+ */
+function pressKeys(elementKeys, parentKeys, report) {
+	// 게임 화면에서 누른 것처럼. ZEP 기본 채팅 입력창에 대고 누른 경우도 함께 —
+	// 그때는 bridge.js가 걸러내야 한다
+	const outside = [
+		{ tagName: "CANVAS", isContentEditable: false },
+		{ tagName: "INPUT", isContentEditable: false },
+	];
+
+	for (const key of KEYS) {
+		for (const target of outside) {
+			for (const handler of parentKeys) {
+				try {
+					handler(keyEvent(key, false, target));
+				} catch (error) {
+					report(`게임 화면에서 ${key} 처리 중 예외: ${error.message}`);
+				}
+			}
+		}
+
+		for (const shiftKey of [false, true]) {
+			for (const entry of elementKeys) {
+				try {
+					entry.handler(keyEvent(key, shiftKey, entry.el));
+				} catch (error) {
+					report(`위젯에서 ${shiftKey ? "Shift+" : ""}${key} 처리 중 예외: ${error.message}`);
+				}
+			}
+		}
+	}
 }
 
 function check() {

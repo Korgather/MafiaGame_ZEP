@@ -1,13 +1,17 @@
 /*
- * 위젯 공통 스크립트.
+ * 위젯 공통 스크립트 — 화면을 만드는 쪽.
  *
  * 기존에는 toHHMMSS가 4개 파일에, esc가 2개 파일에 복사돼 있었다.
  * 복사본은 갈라진다 — night.html의 타이머는 다 되면 글자를 흰색으로,
  * morning.html은 #484848로 되돌렸다. 같은 타이머인데 화면마다 달랐다.
  *
- * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 인라인한다.
- * 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다. Jint에서 도는 서버 쪽
- * src/*.ts 와 달리 최신 문법 제약이 없다.
+ * 부모(ZEP 클라이언트)와 주고받는 일은 여기 없다. 전부 bridge.js에 있다 —
+ * "글자를 escape한다"와 "부모 창에 키 리스너를 단다"는 같은 파일에 있을
+ * 이유가 없고, 섞여 있으면 부모와의 계약이 어디까지인지 보이지 않는다.
+ *
+ * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 bridge.js와
+ * 함께 인라인한다. 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다.
+ * Jint에서 도는 서버 쪽 src/*.ts 와 달리 최신 문법 제약이 없다.
  */
 
 /** 서버가 보낸 문자열은 다른 플레이어가 정한 값이다. 태그로 해석되면 안 된다 */
@@ -88,26 +92,6 @@ function qsa(selector, root) {
 	return Array.prototype.slice.call((root || document).querySelectorAll(selector));
 }
 
-/** 부모(ZEP 클라이언트)에게 보낸다 */
-function send(message) {
-	window.parent.postMessage(message, "*");
-}
-
-/**
- * 서버 메시지 구독. type별 핸들러 표를 받는다.
- *
- * 기존 위젯은 전부 addEventListener("message") + switch였고, morning/night는
- * type을 아예 보지 않아 어떤 메시지가 와도 타이머를 다시 시작했다.
- */
-function onServer(handlers) {
-	window.addEventListener("message", function (event) {
-		const data = event && event.data;
-		if (!data) return;
-		const handler = handlers[data.type];
-		if (handler) handler(data);
-	});
-}
-
 /**
  * 남은 시간 표시.
  *
@@ -162,27 +146,6 @@ function startTimer(el, seconds) {
 	}, 1000);
 	el.dataset.timerId = String(id);
 	return id;
-}
-
-/**
- * 위젯 위치 보정.
- *
- * 기존에는 이 계산이 3개 파일에 서로 다르게 복사돼 있었다. 대기실은
- * 태블릿을 768px로, 밤 위젯은 같은 768px을 다른 의미로 썼고, 투표·개표
- * 화면은 보정 자체가 없어 모바일에서 화면 밖으로 나갔다.
- */
-function rearrange(isMobile) {
-	if (!isMobile) {
-		send({ type: "WidgetRearrange", top: "-12px", anchor: "topright" });
-		return;
-	}
-	const tablet = window.screen.width >= 768;
-	send({
-		type: "WidgetRearrange",
-		anchor: "top",
-		top: tablet ? "-40px" : "-24px",
-		width: tablet ? "60%" : "96%",
-	});
 }
 
 /** 로그 맨 아래로. 붙인 뒤에 호출해야 한다 */

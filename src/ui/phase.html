@@ -105,7 +105,7 @@
 				qs("#alive").textContent = `생존 ${alive}/${total}`;
 			}
 
-			onServer({
+			Parent.on({
 				init(data) {
 					const night = data.phase === "night";
 					qs("#panel").classList.add(night ? "night" : "day");
@@ -130,7 +130,6 @@
 					qs("#deaths").innerHTML = html`${deaths.map(line => html`<span>${line}</span>`)}`;
 
 					startTimer(qs("#timer"), data.timer);
-					rearrange(data.isMobile);
 				},
 			});
 		</script>

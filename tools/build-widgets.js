@@ -25,6 +25,20 @@ const OUT = path.join(ROOT, "res");
 /** 위젯이 외부에서 받아오면 안 되는 것. 오프라인·CDN 차단 환경에서 화면이 빈다 */
 const EXTERNAL = /\b(?:https?:)?\/\/(?!localhost)[a-z0-9-]+\.[a-z]/gi;
 
+/**
+ * 모든 위젯에 인라인되는 공통 스크립트. 순서가 곧 정의 순서다.
+ * bridge.js의 const Parent는 최상위 스코프라 호이스팅되지 않는다 —
+ * 위젯 본문 스크립트보다 먼저 와야 한다.
+ */
+const SHARED = ["shared.js", "bridge.js"];
+
+/**
+ * 부모(ZEP 클라이언트)를 만지는 일은 bridge.js 하나로 모았다.
+ * 위젯이 window.parent를 직접 쓰면 그 계약이 다시 흩어지므로 빌드에서 막는다.
+ * 이 검사가 없으면 규칙은 주석에만 남고, 주석은 지켜지지 않는다.
+ */
+const DIRECT_PARENT = /\bwindow\s*\.\s*parent\b/;
+
 function read(file) {
 	return fs.readFileSync(file, "utf8");
 }
@@ -42,8 +56,8 @@ function assertInlineSafe(name, code, closer) {
 
 function build() {
 	const theme = read(path.join(SRC, "theme.css"));
-	const shared = read(path.join(SRC, "shared.js"));
-	assertInlineSafe("shared.js", shared, "</script");
+	const shared = SHARED.map(name => read(path.join(SRC, name))).join("\n");
+	assertInlineSafe(SHARED.join(" + "), shared, "</script");
 	assertInlineSafe("theme.css", theme, "</style");
 
 	const sources = fs
@@ -70,6 +84,11 @@ function build() {
 			problems.push(`${name}: 치환되지 않은 자리표시자가 남았습니다`);
 		}
 
+		// 같은 이유로 소스에만 건다. bridge.js는 window.parent를 쓰는 게 일이다
+		if (DIRECT_PARENT.test(source)) {
+			problems.push(`${name}: window.parent를 직접 씁니다. bridge.js의 Parent를 쓰세요`);
+		}
+
 		// 치환값은 반드시 함수로 준다.
 		//
 		// String.replace(문자열, 문자열)은 두 번째 인자 안의 $$ · $& · $` · $' ·
@@ -87,7 +106,7 @@ function build() {
 		// 위 실수는 빌드도 테스트도 통과하고 ZEP에 올린 뒤에야 드러났다.
 		// 이 검사가 있으면 같은 종류의 변형은 무엇이든 빌드에서 멈춘다.
 		if (!output.includes(theme)) problems.push(`${name}: theme.css가 변형되어 들어갔습니다`);
-		if (!output.includes(shared)) problems.push(`${name}: shared.js가 변형되어 들어갔습니다`);
+		if (!output.includes(shared)) problems.push(`${name}: ${SHARED.join(" + ")}가 변형되어 들어갔습니다`);
 
 		const external = output.match(EXTERNAL);
 		if (external) {

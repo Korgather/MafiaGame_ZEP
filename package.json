@@ -14,7 +14,7 @@
 		"check:ui": "npm run build:ui && node tools/check-widgets.js",
 		"preview:ui": "npm run build:ui && node tools/preview-widgets.js",
 		"verify": "npm run type-check && npm run lint && npm run check:zep && npm test && npm run check:ui",
-		"build": "npm run clean && npm run verify && webpack",
+		"build": "npm run clean && npm run verify && webpack && zep-script archive",
 		"archive": "npm run build && zep-script archive",
 		"deploy": "npm run archive && zep-script publish",
 		"type-check": "tsc --noEmit",

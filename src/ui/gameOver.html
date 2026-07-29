@@ -148,7 +148,7 @@
 				</div>`;
 			}
 
-			onServer({
+			Parent.on({
 				init(data) {
 					const mafiaWon = data.winner === "mafia";
 					qs("#verdict").classList.add(mafiaWon ? "mafia" : "citizen");
@@ -168,8 +168,6 @@
 
 					const players = Array.isArray(data.players) ? data.players : [];
 					qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
-
-					rearrange(data.isMobile);
 				},
 			});
 		</script>

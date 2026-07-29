@@ -310,9 +310,11 @@ const SCENES = [
 			{
 				type: "init",
 				data: [
-					{ id: "p1", name: "김철수", level: "Lv.12", runCount: 2, ready: true, kickCount: 0 },
-					{ id: "p2", name: "이영희", level: "Lv.3", runCount: 0, ready: false, kickCount: 1 },
-					{ id: "p3", name: "박민수", level: "Lv.30", runCount: 9, ready: true, kickCount: 0 },
+					{ id: "p1", name: "김철수", rank: "Lv.12", runCount: 2, ready: true, kickCount: 0 },
+					// 운영자·비로그인 유저는 레벨 대신 칭호가 그대로 들어온다.
+					// 위젯이 "Lv."를 덧붙이지 않는지 이 두 줄이 지킨다.
+					{ id: "p2", name: "이영희", rank: "운영자", runCount: 0, ready: false, kickCount: 1 },
+					{ id: "p3", name: "박민수", rank: "비로그인 유저", runCount: 9, ready: true, kickCount: 0 },
 				],
 			},
 		],
@@ -332,6 +334,7 @@ const SCENES = [
 				active: "MAFIA",
 				quick: ["1번 어때?", "나 아니야", "조용히 가자"],
 				open: true,
+				focus: "",
 				myId: "p2",
 				lines: [
 					line(1, { channel: "ROOM", kind: "SYSTEM", text: "🌙 2번째 밤이 되었습니다." }),
@@ -394,6 +397,7 @@ const SCENES = [
 				active: "GHOST",
 				quick: ["아까 그 사람 수상해", "아쉽다", "잘 봐 둬"],
 				open: true,
+				focus: "",
 				myId: "p3",
 				lines: [
 					line(1, { channel: "GHOST", kind: "SYSTEM", text: "👻 박민수 님이 유령이 되었습니다." }),
@@ -430,8 +434,31 @@ const SCENES = [
 				active: "ROOM",
 				quick: [],
 				open: false,
+				focus: "",
 				myId: "p1",
 				lines: [],
+			},
+		],
+	},
+	/*
+	 * 게임 화면에서 /를 눌러 펼쳐진 직후. 접힌 위젯이 서버에 focus를 알리고
+	 * 사라진 다음, 새로 뜬 위젯이 그 의도를 받아 입력창을 잡는 경로다.
+	 * 눈으로는 보통 채팅창과 같아 보이지만 지나는 코드가 다르다.
+	 */
+	{
+		label: "채팅 — 게임 화면에서 / 로 펼친 직후",
+		file: "chat.html",
+		size: CHAT_SIZE,
+		messages: [
+			{
+				type: "init",
+				channels: [tab("ROOM", { write: true }), tab("GLOBAL", { write: false })],
+				active: "ROOM",
+				quick: ["준비 완료", "잠깐만요"],
+				open: true,
+				focus: "command",
+				myId: "p1",
+				lines: [line(1, { channel: "ROOM", kind: "NOTICE", text: "/도움말 로 명령어를 봅니다." })],
 			},
 		],
 	},

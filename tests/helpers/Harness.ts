@@ -27,6 +27,8 @@ let nextPlayerId = 1;
 
 export interface ConnectOptions {
 	isMobile?: boolean;
+	/** 태블릿. ZEP에서 태블릿은 모바일의 한 종류라 isMobile도 함께 켜진다 */
+	isTablet?: boolean;
 	isGuest?: boolean;
 	/** ScriptPlayer.role. 3000 이상이면 운영자 */
 	role?: number;
@@ -61,6 +63,11 @@ export function resetWorld(seed = 1): void {
 export function connect(name: string, options: ConnectOptions = {}): FakePlayer {
 	const player = new FakePlayer(`p${nextPlayerId++}`, name);
 	if (options.isMobile) player.isMobile = true;
+	// 태블릿인데 모바일이 아닌 기기는 없다. 테스트가 그런 기기를 만들지 못하게 한다
+	if (options.isTablet) {
+		player.isMobile = true;
+		player.isTablet = true;
+	}
 	if (options.isGuest) player.isGuest = true;
 	if (options.role !== undefined) player.role = options.role;
 	if (options.storage !== undefined) player.storage = options.storage;

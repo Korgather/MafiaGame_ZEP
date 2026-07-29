@@ -8,15 +8,62 @@
  * sendMessage를 호출했다.
  */
 import type { ScriptPlayer, ScriptWidget, WidgetAlign } from "zep-script";
-import type { ChatChannelView, RevealView, SeatView, Team } from "../types/Game.types.ts";
+import type {
+	ChatChannelView,
+	LobbySeatView,
+	RevealView,
+	SeatView,
+	Team,
+	WidgetLayout,
+} from "../types/Game.types.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
-import { WidgetFile, WidgetSize } from "../constants/Assets.ts";
+import type { WidgetBox } from "../constants/Assets.ts";
+import { MAIN_TIGHT, MobileWidth, TopNudge, WidgetFile, WidgetSize } from "../constants/Assets.ts";
 import { KICK, MAX_PLAYERS, MIN_PLAYERS } from "../constants/GameConfig.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 
 /** 화면 위쪽 고정 위젯의 정렬. 모바일은 가로 폭이 좁아 중앙 상단을 쓴다 */
 function topAlign(player: ScriptPlayer): "top" | "topright" {
 	return player.isMobile ? "top" : "topright";
+}
+
+/**
+ * 위젯이 실제로 차지할 상자. 여는 쪽에서 한 번 정해 payload에 실어 보낸다.
+ *
+ * 기존 구조의 문제
+ * ----------------
+ * 크기 결정이 두 층으로 갈려 있었다. 서버는 픽셀을 showWidget에 넘기고,
+ * 위젯은 뜬 뒤에 bridge.js의 rearrange()를 불러 가로 폭만 %로 덮어썼다.
+ * 세로는 어느 쪽도 덮지 않아 모바일에서도 픽셀 그대로 남았다 —
+ * 이것이 화면의 85%가 위젯으로 덮인 직접 원인이다.
+ * 게다가 rearrange를 부르는 것은 위젯의 자유라서 채팅과 직업 카드
+ * 두 개는 아예 부르지 않았고, 모바일 보정이 통째로 빠져 있었다.
+ *
+ * 지금은 이 함수가 유일한 결정 지점이고 bridge.js는 받은 대로 적용만 한다.
+ * 위젯이 "부르는 것을 잊을" 수 있는 자리가 없어졌다.
+ *
+ * @param tight 채팅이 펼쳐져 있어 자리를 내주어야 하는가 (모바일 전용)
+ */
+function layoutOf(
+	player: ScriptPlayer,
+	align: WidgetAlign,
+	size: WidgetBox,
+	tight: boolean
+): WidgetLayout {
+	const mobile = player.isMobile;
+	const tablet = mobile && player.isTablet;
+	const percent = size.mobile ? Math.round(size.mobile * (tight ? MAIN_TIGHT : 1)) : 0;
+	const layout: WidgetLayout = {
+		anchor: align,
+		width: mobile ? (tablet ? MobileWidth.TABLET : MobileWidth.PHONE) : `${size.width}px`,
+		height: mobile && percent > 0 ? `${percent}%` : `${size.height}px`,
+	};
+	// 상단 보정은 위쪽에 붙는 위젯에만 뜻이 있다. 아래(채팅)나 가운데(직업
+	// 카드)에 붙이면 제자리에서 그만큼 밀려난다. startsWith는 Jint에 없다.
+	if (align.indexOf("top") === 0) {
+		layout.top = !mobile ? TopNudge.DESKTOP : tablet ? TopNudge.TABLET : TopNudge.PHONE;
+	}
+	return layout;
 }
 
 /**
@@ -41,19 +88,62 @@ function chatAlign(player: ScriptPlayer): "bottom" | "bottomleft" {
  *     보정(WidgetRearrange)이 통째로 실행되지 않았다
  *
  * payload를 여는 함수의 필수 인자로 만들면 이 부류가 전부 컴파일 에러가 된다.
- * isMobile을 여기서 붙이는 것도 같은 이유다 — 정렬 분기가 이미 여기 있으니
- * "모바일이냐"를 아는 곳을 하나로 못 박으면 호출부가 빠뜨릴 수 없다.
+ * layout을 여기서 붙이는 것도 같은 이유다 — 크기를 아는 곳이 하나뿐이면
+ * 호출부가 빠뜨릴 수 없다. 예전에는 isMobile만 실어 보내고 그것으로 무엇을
+ * 할지는 위젯에게 맡겼는데, 그래서 둘이 아무것도 하지 않았다.
  */
 function open(
 	player: ScriptPlayer,
 	fileName: string,
 	align: WidgetAlign,
-	size: { readonly width: number; readonly height: number },
-	payload: object
+	size: WidgetBox,
+	payload: object,
+	tight: boolean
 ): ScriptWidget {
 	const widget = player.showWidget(fileName, align, size.width, size.height);
-	widget.sendMessage({ ...payload, isMobile: player.isMobile });
+	widget.sendMessage({ ...payload, layout: layoutOf(player, align, size, tight) });
 	return widget;
+}
+
+/**
+ * 단계별 메인 위젯을 연다. 한 사람에게 하나만 떠 있다 (tag.widget).
+ *
+ * 다섯 개의 여는 함수가 전부 "닫고 · 열고 · tag에 물리는" 같은 세 줄이었다.
+ * 모바일 축소(tight)와 상자 기억(mainBox)이 늘면서 같은 것을 다섯 번
+ * 적어야 할 뻔했으므로 여기서 한 번만 적는다.
+ */
+function openMain(
+	player: ScriptPlayer,
+	fileName: string,
+	align: WidgetAlign,
+	size: WidgetBox,
+	payload: object
+): ScriptWidget {
+	closeMain(player);
+	const tag = tagOf(player);
+	// 채팅이 이미 펼쳐진 채로 단계가 바뀌면 새 위젯도 줄어든 채로 떠야 한다
+	const widget = open(player, fileName, align, size, payload, player.isMobile && tag.chatOpen);
+	// 나중에 채팅을 펼칠 때 이 위젯의 상자를 다시 계산해야 한다.
+	// 위젯 핸들에는 자기가 어떤 크기로 열렸는지가 남지 않아 여기 적어둔다.
+	tag.mainBox = { align, size };
+	tag.widget = widget;
+	return widget;
+}
+
+/**
+ * 모바일에서 채팅을 펼치면 메인 위젯이 자리를 내주고, 접으면 되돌린다.
+ *
+ * 위젯을 다시 열지 않는다 — 투표 중이라면 누르던 것이 사라진다.
+ * bridge.js가 payload에 실린 layout을 종류와 무관하게 적용하므로,
+ * 상자만 바꾸는 메시지에 위젯 쪽 핸들러는 필요 없다.
+ */
+export function squeezeMain(player: ScriptPlayer, chatOpen: boolean): void {
+	const tag = tagOf(player);
+	if (!player.isMobile || !tag.widget || !tag.mainBox) return;
+	tag.widget.sendMessage({
+		type: "layout",
+		layout: layoutOf(player, tag.mainBox.align, tag.mainBox.size, chatOpen),
+	});
 }
 
 /**
@@ -158,6 +248,16 @@ export interface NightActionPayload extends Identity {
 }
 
 /**
+ * 새로 열린 채팅창이 어디에 포커스를 둘지.
+ *
+ * ""는 건드리지 않는다는 뜻이다. 게임을 보고 있던 사람의 포커스를 뺏는 것은
+ * 채팅창이 뜨는 것보다 훨씬 거슬리므로 이쪽이 기본이다. 나머지 둘은
+ * "게임 화면에서 Enter(또는 /)를 눌러서 열었다"는 뜻이고, 그때만 포커스를
+ * 가져간다. "command"는 /까지 미리 찍어준다.
+ */
+export type ChatFocus = "" | "input" | "command";
+
+/**
  * 통합 채팅창을 여는 payload.
  *
  * 위젯은 직업도 단계도 모른다. 어떤 탭이 있는지(channels), 어디에 쓸 수
@@ -184,6 +284,15 @@ export interface ChatPayload {
 	myId: string;
 	/** 권한에 맞게 걸러낸 지난 기록 (오래된 것부터) */
 	lines: ChatMessage[];
+	/**
+	 * 뜨자마자 어디에 포커스를 둘지.
+	 *
+	 * 접기/펴기가 위젯 재생성이라 "펴고 나서 입력창에 포커스"를 위젯이 혼자
+	 * 이어 할 수 없다. 앞 문서가 남긴 의도를 서버가 한 번 들고 있다가 새 문서에
+	 * 넘겨준다. 서버에 저장하지는 않는다 — 저장하면 재접속 때 되살아나서
+	 * 게임을 보고 있는 사람의 포커스를 뜬금없이 가져간다.
+	 */
+	focus: ChatFocus;
 }
 
 /** 채널 목록·빠른 메시지만 다시 보낸다. 단계가 바뀌거나 죽었을 때 */
@@ -255,24 +364,40 @@ export function updateChat(
  * GameConfig를 바꾸면 화면도 따라 바뀐다.
  */
 export function openLobby(player: ScriptPlayer): ScriptWidget {
-	closeMain(player);
-	const widget = open(player, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY, {
+	// 방 선택 크기로 연다. 방 안이었다면 곧바로 오는 pushLobby가 늘려준다
+	return openMain(player, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY_ROOMS, {
 		type: "setID",
 		id: player.id,
 		minPlayers: MIN_PLAYERS,
 		maxPlayers: MAX_PLAYERS,
 		kickVotes: KICK.VOTES_REQUIRED,
 	});
-	tagOf(player).widget = widget;
-	return widget;
+}
+
+/**
+ * 대기실 좌석 목록을 다시 그린다. 빈 목록은 "방 밖"이라는 뜻이다.
+ *
+ * 크기를 여기서 함께 보내는 이유: lobby.html은 방 선택과 좌석 목록
+ * 두 화면을 그리는데 크기는 하나뿐이라, 방 버튼 8개만 있는 화면도
+ * 좌석 8줄짜리 높이를 차지한 채 아래 절반이 비어 있었다.
+ * 어느 화면인지는 목록이 비었는지로 정해지므로 보내는 쪽이 곧 아는 쪽이다.
+ */
+export function pushLobby(player: ScriptPlayer, seats: LobbySeatView[]): void {
+	const tag = tagOf(player);
+	if (!tag.widget) return;
+	const size = seats.length > 0 ? WidgetSize.LOBBY : WidgetSize.LOBBY_ROOMS;
+	const align = topAlign(player);
+	tag.mainBox = { align, size };
+	tag.widget.sendMessage({
+		type: "init",
+		data: seats,
+		layout: layoutOf(player, align, size, player.isMobile && tag.chatOpen),
+	});
 }
 
 /** 밤/아침 진행 화면 */
 export function openPhase(player: ScriptPlayer, payload: PhasePayload): ScriptWidget {
-	closeMain(player);
-	const widget = open(player, WidgetFile.PHASE, topAlign(player), WidgetSize.PHASE, payload);
-	tagOf(player).widget = widget;
-	return widget;
+	return openMain(player, WidgetFile.PHASE, topAlign(player), WidgetSize.PHASE, payload);
 }
 
 /** 투표 화면. 개표도 같은 파일이라 payload 타입만 다르다 */
@@ -280,26 +405,17 @@ export function openVote(
 	player: ScriptPlayer,
 	payload: VotePayload | VoteResultPayload
 ): ScriptWidget {
-	closeMain(player);
-	const widget = open(player, WidgetFile.VOTE, topAlign(player), WidgetSize.VOTE, payload);
-	tagOf(player).widget = widget;
-	return widget;
+	return openMain(player, WidgetFile.VOTE, topAlign(player), WidgetSize.VOTE, payload);
 }
 
 /** 종료 화면 */
 export function openGameOver(player: ScriptPlayer, payload: GameOverPayload): ScriptWidget {
-	closeMain(player);
-	const widget = open(player, WidgetFile.GAME_OVER, topAlign(player), WidgetSize.GAME_OVER, payload);
-	tagOf(player).widget = widget;
-	return widget;
+	return openMain(player, WidgetFile.GAME_OVER, topAlign(player), WidgetSize.GAME_OVER, payload);
 }
 
 /** 밤 능력 위젯. 조작 대상이 많아 모바일에서도 상단 중앙 고정 */
 export function openRoleAction(player: ScriptPlayer, payload: NightActionPayload): ScriptWidget {
-	closeMain(player);
-	const widget = open(player, WidgetFile.ROLE_ACTION, "top", WidgetSize.ROLE_ACTION, payload);
-	tagOf(player).widget = widget;
-	return widget;
+	return openMain(player, WidgetFile.ROLE_ACTION, "top", WidgetSize.ROLE_ACTION, payload);
 }
 
 /**
@@ -315,7 +431,9 @@ export function openChat(player: ScriptPlayer, payload: ChatPayload): ScriptWidg
 		WidgetFile.CHAT,
 		chatAlign(player),
 		payload.open ? WidgetSize.CHAT : WidgetSize.CHAT_BAR,
-		payload
+		payload,
+		// 자리를 내주는 쪽은 메인 위젯이다. 채팅은 늘 제 크기로 뜬다
+		false
 	);
 	tagOf(player).chatWidget = widget;
 	return widget;
@@ -336,7 +454,8 @@ export function openRoleCard(player: ScriptPlayer, payload: RoleCardPayload): Sc
 		WidgetFile.ROLE_CARD,
 		player.isMobile ? "middle" : "middleright",
 		WidgetSize.ROLE_CARD,
-		payload
+		payload,
+		false
 	);
 	tagOf(player).roleWidget = widget;
 	return widget;

@@ -4,7 +4,7 @@
  * 이 파일은 ZEP API에 의존하지 않는다 (ScriptWidget 참조는 PlayerTag 한 곳뿐).
  * 덕분에 도메인 로직을 Node에서 그대로 테스트할 수 있다.
  */
-import type { ScriptWidget } from "zep-script";
+import type { ScriptWidget, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 
@@ -226,9 +226,31 @@ export interface Room {
  * 여기에는 이 접속에서만 의미가 있는 것 — 위젯 핸들과 원래 닉네임 — 만 남긴다.
  * 기존에는 21개 필드가 tag.data와 tag에 경계 없이 섞여 있었다.
  */
+/**
+ * ZEP 클라이언트에게 "이 위젯을 이 상자에 담아라"라고 말하는 값.
+ *
+ * 서버가 정해서 payload에 실어 보내면 bridge.js가 WidgetRearrange로 넘긴다.
+ * 길이는 CSS 문자열이라 "96%"와 "320px"이 한 자리에 들어간다 — 데스크톱은
+ * 픽셀, 모바일은 화면 대비 %를 쓰기 때문에 이 유연함이 필요하다.
+ */
+export interface WidgetLayout {
+	anchor: string;
+	width: string;
+	height: string;
+	/** 상단바 보정. 위쪽에 붙는 위젯에만 있다 */
+	top?: string;
+}
+
 export interface PlayerTag {
 	/** 대기실/단계별 메인 위젯 */
 	widget: ScriptWidget | null;
+	/**
+	 * 메인 위젯이 어떤 정렬·크기로 열렸는가.
+	 *
+	 * 위젯 핸들에는 자기 크기가 남지 않는데, 채팅을 펼칠 때 메인 위젯의
+	 * 상자를 다시 계산해야 한다(Widgets.squeezeMain). 그 재료를 여기 둔다.
+	 */
+	mainBox: { align: WidgetAlign; size: { width: number; height: number; mobile?: number } } | null;
 	/** 직업 카드 위젯 */
 	roleWidget: ScriptWidget | null;
 	/**
@@ -251,6 +273,16 @@ export interface PlayerTag {
 	 * 저장하고 개수는 기록에서 매번 센다.
 	 */
 	chatSeen: { [channel: string]: number };
+	/**
+	 * 남은 채팅 여유분. 한 줄 보낼 때마다 1 줄고 시간이 지나면 다시 찬다.
+	 *
+	 * 이 값이 tag에 있는 이유는 chatSeen과 같다 — 접속해 있는 동안만 의미가
+	 * 있고 플레이어와 함께 사라져야 하는 값이다. Lobby의 kickedUntil처럼
+	 * 모듈 전역 표에 두면 나간 사람의 항목이 영영 남는다.
+	 */
+	chatTokens: number;
+	/** 여유분을 마지막으로 계산한 시각(ms). 그 사이 흐른 시간만큼 채운다 */
+	chatRefilledAt: number;
 	/** 게임 중 이름을 바꾸므로 원래 닉네임을 보관한다 */
 	originalName: string;
 }

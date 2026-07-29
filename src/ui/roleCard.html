@@ -115,10 +115,10 @@
 		<!--@shared-->
 		<script>
 			qs("#close").addEventListener("click", () => {
-				send({ type: "close" });
+				Parent.send({ type: "close" });
 			});
 
-			onServer({
+			Parent.on({
 				init(data) {
 					const mafia = data.team === "mafia";
 					qs("#card").classList.add(mafia ? "mafia" : "citizen");

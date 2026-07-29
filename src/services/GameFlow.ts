@@ -32,7 +32,7 @@ import { broadcastRoomCounts, enterLobby } from "./Lobby.ts";
 import { beginNight, openNightView, resolveNight } from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay, refreshTitle } from "./Rewards.ts";
-import { clearSilhouettes, resetPlayerAppearance } from "./Stage.ts";
+import { clearSilhouettes, resetPlayerAppearance, spawnInLobby } from "./Stage.ts";
 import {
 	beginDay,
 	beginVote,
@@ -270,6 +270,11 @@ export function returnToLobby(room: Room): void {
 		closeRoleCard(player);
 		resetPlayerAppearance(player);
 		refreshTitle(player);
+		// 화면만 대기실로 돌려보내면 몸은 방금 끝난 방 좌석에 남는다.
+		// 방으로 들어가는 이동은 첫 밤의 seatPlayer 하나뿐이고 되돌리는 짝이
+		// 없었다. 다음 판 첫 밤에 seatPlayer가 다시 옮겨줘서 증상이 스스로
+		// 지워졌던 자리다. 접속 경로(index.ts)와 같은 두 줄로 맞춘다.
+		spawnInLobby(player);
 		enterLobby(player);
 		// 좌석이 사라졌으므로 마피아·유령 탭도 함께 사라진다
 		Chat.refresh(player);

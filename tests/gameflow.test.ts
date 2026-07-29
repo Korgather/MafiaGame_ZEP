@@ -11,6 +11,7 @@ import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { WidgetFile } from "../src/constants/Assets.ts";
 import { MIN_PLAYERS, TIMING } from "../src/constants/GameConfig.ts";
+import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import {
 	chatSaw,
 	connect,
@@ -37,8 +38,19 @@ import {
 // 받아버리지 않도록 인자를 끊는다.
 beforeEach(() => resetWorld());
 
+/** 맵 위 대기실 스폰 구역 안에 서 있는가 */
+function inLobbyArea(pos: { x: number; y: number }): boolean {
+	const area = LOBBY_SPAWN_AREA;
+	return (
+		pos.x >= area.x &&
+		pos.x < area.x + area.width &&
+		pos.y >= area.y &&
+		pos.y < area.y + area.height
+	);
+}
+
 describe("대기실 → 게임 시작", () => {
-	it("접속하면 대기실 위젯이 열리고 setID에 isMobile이 들어간다", () => {
+	it("접속하면 대기실 위젯이 열리고 payload에 크기가 함께 온다", () => {
 		const player = connect("모바일유저", { isMobile: true });
 		const widget = mainWidget(player);
 
@@ -46,9 +58,10 @@ describe("대기실 → 게임 시작", () => {
 		const setId = widget.lastOfType("setID");
 		assert.ok(setId, "setID를 받지 못했습니다");
 		assert.equal(setId.id, player.id);
-		// WatingRoom.html은 모바일 레이아웃 보정 전체를 이 필드로 판단한다.
-		// 빠뜨리면 모바일 유저가 데스크톱 레이아웃을 본다 (실제로 있던 회귀).
-		assert.equal(setId.isMobile, true);
+		// 위젯이 차지할 상자는 서버가 정해 payload에 실어 보낸다. 빠뜨리면
+		// 위젯이 showWidget에 넘긴 데스크톱 픽셀 그대로 뜬다 (실제로 있던 회귀 —
+		// 예전에는 위젯이 스스로 rearrange를 불러야 했고 둘이 부르지 않았다).
+		assert.ok(setId.layout, "layout을 받지 못했습니다");
 	});
 
 	it("최소 인원 미만이면 전원 준비해도 시작하지 않는다", () => {
@@ -514,6 +527,51 @@ describe("승패와 대기실 복귀", () => {
 			assert.equal(mainWidget(player).fileName, WidgetFile.LOBBY);
 			assert.equal(player.moveSpeed, 80);
 			assert.equal(player.hidden, false);
+		}
+	});
+
+	/**
+	 * 판이 끝나면 아바타도 대기실로 돌아온다.
+	 *
+	 * 방으로 들어가는 이동은 첫 밤(beginNightStage → seatPlayer)에만 일어나는데
+	 * 되돌리는 쪽은 이름·스프라이트·이동속도만 복구했다. 그래서 종료 뒤에는
+	 * 대기실 위젯을 든 채로 방금 끝난 방 좌석에 그대로 서 있었다 — 화면은
+	 * 대기실인데 몸은 방 안이라, 위젯으로 다른 방에 참가해도 여전히 옛 방
+	 * 좌석에 서 있게 된다. 다음 판 첫 밤의 seatPlayer가 결국 다시 옮겨줘서
+	 * 증상이 자기 자신을 지웠고, 그래서 오래 남아 있었다.
+	 */
+	it("게임이 끝나면 아바타도 대기실 구역으로 돌아온다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT: 전원이 방 자리로 옮겨진다
+		assert.ok(
+			players.every(player => !inLobbyArea(player)),
+			"밤이 됐는데 아직 대기실 구역에 서 있는 사람이 있습니다"
+		);
+
+		// 마피아가 이길 때까지 밤마다 시민을 하나씩 지운다
+		let guard = 0;
+		while (target.phase !== GamePhase.GAME_OVER && guard++ < 10) {
+			if (target.phase === GamePhase.NIGHT) {
+				const mafia = seatsWithRole(target, Role.MAFIA)[0];
+				const victim = target.seats.filter(
+					seat => seat.alive && seat.role !== Role.MAFIA
+				)[0];
+				send(playerOf(mafia), { type: "select", num: victim.index });
+			}
+			finishPhase(target);
+		}
+		assert.equal(target.phase, GamePhase.GAME_OVER, "게임이 끝나지 않았습니다");
+
+		finishPhase(target); // GAME_OVER → 대기실
+		assert.equal(target.phase, GamePhase.LOBBY);
+
+		for (const player of players) {
+			assert.ok(
+				inLobbyArea(player),
+				`${player.name} 님이 방금 끝난 방 좌석(${player.x}, ${player.y})에 그대로 서 있습니다`
+			);
 		}
 	});
 

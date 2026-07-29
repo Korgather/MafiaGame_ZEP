@@ -30,7 +30,7 @@ function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
 		playerId: `p${index}`,
 		index,
 		name: `p${index}`,
-		level: "Lv.1",
+		rank: "Lv.1",
 		role,
 		team: ROLE_DEFS[role].team,
 		alive: true,
@@ -103,7 +103,8 @@ describe("RoleAssignment", () => {
 		// 6명 판에 마피아+짐승인간이 뽑히면 첫 밤에 둘이 죽어 2 대 2가 되고,
 		// 아침에 곧바로 마피아 승이 선언됐다 — 토론도 투표도 한 번 없이.
 		// 인원 구성 자체는 맞았기 때문에 위의 덱 테스트 다섯 개는 전부 통과했다.
-		// 세어야 할 것은 마피아의 "인원"이 아니라 밤에 생기는 "시체 수"다.
+		// 세어야 할 것은 마피아의 "인원"이 아니라 첫 밤이 지난 뒤의 진영 격차다.
+		// 사망자만 세던 시절에는 스파이의 진영 전환이 이 그물을 그냥 통과했다.
 		//
 		// 판정은 evaluateWinner에 맡긴다. 승리 조건을 테스트가 다시 적어두면
 		// 규칙이 바뀔 때 둘이 조용히 어긋난다.
@@ -111,10 +112,12 @@ describe("RoleAssignment", () => {
 			for (let trial = 0; trial < 200; trial++) {
 				const deck = buildRoleDeck(count);
 				const seats = afterWorstFirstNight(deck);
+				const alive = seats.filter(s => s.alive);
 				assert.equal(
 					evaluateWinner(seats),
 					null,
-					`${count}명 [${deck.join(", ")}] — 첫 밤에 ${firstNightKills(deck)}명이 죽고 끝났다`,
+					`${count}명 [${deck.join(", ")}] — 첫 밤 뒤 마피아 ${alive.filter(s => s.team === Team.MAFIA).length}`
+						+ ` 대 시민 ${alive.filter(s => s.team === Team.CITIZEN).length}로 끝났다`,
 				);
 			}
 		}
@@ -136,35 +139,16 @@ describe("RoleAssignment", () => {
 });
 
 /**
- * 이 덱이 **첫 밤에** 만들 수 있는 시체 수.
- *
- * 밀담에 낀 공격자는 몇 명이든 상의해서 한 명만 치므로 통틀어 1,
- * 밀담 밖에서 죽이는 직업은 표적을 맞출 방법이 없으므로 각자 1이다.
- * 자책(backfiresOnAlly)이 있는 직업이 시민을 쏘면 본인도 함께 죽어 2가 된다.
- *
- * 진영을 가리지 않는다. 처음에는 마피아 진영만 셌는데, 그러면 자경단원처럼
- * 시민 편에서 혼자 죽이는 직업이 이 계산에서 통째로 빠진다 — 실제로 그렇게
- * 빠져서 4명 판에 자경단원이 들어가는 덱이 이 테스트를 통과했다.
- * "누구 편인가"가 아니라 "밤에 시체가 몇 구 나오는가"가 질문이다.
- */
-function firstNightKills(deck: Role[]): number {
-	let lone = 0;
-	let inChat = 0;
-	for (const role of deck) {
-		const def = ROLE_DEFS[role];
-		if (def.nightAction !== NightActionKind.ATTACK) continue;
-		// 첫 밤에 못 쓰는 능력은 첫 밤 시체를 만들지 않는다
-		if (def.needsPriorDay) continue;
-		if (def.nightChat === ChatChannel.MAFIA) inChat = 1;
-		else lone += def.backfiresOnAlly ? 2 : 1;
-	}
-	return inChat + lone;
-}
-
-/**
  * 첫 밤이 최악으로 끝난 좌석들 — 의사가 아무도 못 살리고, 공격이 전부
- * 평범한 시민에게 꽂힌 상태. 군인의 방탄이나 겹친 표적은 시민에게 유리한
- * 경우이므로 하한을 보려면 빼고 센다.
+ * 평범한 시민에게 꽂히고, 스파이는 첫 조사에서 하필 마피아를 짚은 상태.
+ * 군인의 방탄이나 겹친 표적은 시민에게 유리한 경우이므로 하한을 보려면 빼고 센다.
+ *
+ * 이 함수는 원래 "밤에 시체가 몇 구 나오는가"만 셌다. 그런데 승패를 가르는
+ * 값은 시체 수가 아니라 마진(시민 - 마피아)이고, 마진을 깎는 수단은 살인만이
+ * 아니다 — 스파이가 마피아를 찾아내면 아무도 죽지 않은 채로 마진이 2 움직인다
+ * (마피아 +1, 시민 -1). 그래서 4·6명 판은 사망자 0명으로 첫 아침에 끝날 수
+ * 있었는데도 이 테스트는 통과했다. 시체를 세는 대신 직업마다 "첫 밤에 좌석을
+ * 어떻게 바꾸는가"를 그대로 적용하면 새로운 수단이 생겨도 같은 자리에서 잡힌다.
  *
  * 시민 진영이 깎이는 쪽만 본다. 반대 가지(자경단원이 첫 밤에 마피아를
  * 맞혀 시민이 즉시 이기는 경우)는 여기서 모델링하지 않는다 — 지금은
@@ -173,7 +157,27 @@ function firstNightKills(deck: Role[]): number {
  */
 function afterWorstFirstNight(deck: Role[]): Seat[] {
 	const seats = deck.map((role, i) => seat(i + 1, role));
-	let remaining = firstNightKills(deck);
+
+	// 밀담에 낀 공격자는 몇 명이든 상의해서 한 명만 치므로 통틀어 1,
+	// 밀담 밖에서 죽이는 직업은 표적을 맞출 방법이 없으므로 각자 1이다.
+	let mafiaChatKill = 0;
+	let loneKills = 0;
+	for (const actor of seats) {
+		const def = ROLE_DEFS[actor.role];
+		// 첫 밤에 못 쓰는 능력은 첫 밤 균형을 건드릴 수 없다
+		if (def.needsPriorDay) continue;
+		if (def.nightAction === NightActionKind.INSPECT_ROLE) {
+			// 조사한 사람이 하필 마피아였던 경우. 진영이 통째로 옮겨간다
+			actor.team = Team.MAFIA;
+		} else if (def.nightAction === NightActionKind.ATTACK) {
+			if (def.nightChat === ChatChannel.MAFIA) mafiaChatKill = 1;
+			// 자책이 있는 직업이 시민을 쏘면 시전자까지 둘이 사라진다
+			else loneKills += def.backfiresOnAlly ? 2 : 1;
+		}
+	}
+
+	// 진영이 바뀐 뒤에 표적을 고른다 — 마피아가 된 스파이는 밤에 죽지 않는다
+	let remaining = mafiaChatKill + loneKills;
 	for (const victim of seats) {
 		if (remaining === 0) break;
 		if (victim.team !== Team.CITIZEN || victim.armored) continue;

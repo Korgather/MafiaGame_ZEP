@@ -200,7 +200,7 @@
 			qs("#rooms").addEventListener("click", event => {
 				const el = event.target.closest(".room");
 				if (!el || el.disabled) return;
-				send({ type: "join", roomNum: Number(el.dataset.num) });
+				Parent.send({ type: "join", roomNum: Number(el.dataset.num) });
 			});
 
 			/* ---------- 좌석 목록 ---------- */
@@ -255,15 +255,15 @@
 			qs("#seats").addEventListener("click", event => {
 				const el = event.target.closest(".kick");
 				if (!el) return;
-				send({ type: "kick", id: el.dataset.id });
+				Parent.send({ type: "kick", id: el.dataset.id });
 			});
 
 			qs("#ready").addEventListener("click", () => {
-				send({ type: iAmReady ? "cancle-ready" : "ready" });
+				Parent.send({ type: iAmReady ? "cancle-ready" : "ready" });
 			});
 
 			qs("#quit").addEventListener("click", () => {
-				send({ type: "quit" });
+				Parent.send({ type: "quit" });
 			});
 
 			/* ---------- 화면 전환 ---------- */
@@ -278,13 +278,12 @@
 				}
 			}
 
-			onServer({
+			Parent.on({
 				setID(data) {
 					myId = data.id;
 					if (data.minPlayers) config.min = data.minPlayers;
 					if (data.maxPlayers) config.max = data.maxPlayers;
 					if (data.kickVotes) config.kickVotes = data.kickVotes;
-					rearrange(data.isMobile);
 				},
 
 				init(data) {

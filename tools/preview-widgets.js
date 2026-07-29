@@ -27,20 +27,36 @@ function attr(html) {
 	return html.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
+/**
+ * 장면의 메시지를 위젯 문서 안에서 스스로 전달하게 만든다.
+ *
+ * 부모에서 iframe.load를 기다려 postMessage하던 방식은 못 쓴다. srcdoc
+ * 프레임은 부모의 마지막 스크립트가 돌기 전에 이미 다 뜰 수 있어서 load를
+ * 놓치고, 그렇다고 readyState를 봐도 소용없다 — 아직 시작도 안 한 iframe의
+ * about:blank 문서가 이미 "complete"이라 빈 문서에 대고 쏘게 된다.
+ * 어느 쪽이든 앞쪽 몇 장면이 payload를 못 받은 빈 화면으로 남았다.
+ *
+ * 같은 문서 안의 <script>는 순서가 보장된다. 위젯이 onServer로 구독을
+ * 마친 뒤에 실행되므로 경합 자체가 없어진다.
+ */
+function inject(source, messages) {
+	const payload = messages.map(m => JSON.stringify({ ...m, isMobile: false })).join(",");
+	const script = `<script>[${payload}].forEach(function (data) {
+		window.dispatchEvent(new MessageEvent("message", { data: data }));
+	});<\/script>`;
+	return source.replace("</body>", `${script}</body>`);
+}
+
 function build() {
 	const cache = {};
 	const cards = SCENES.map((scene, i) => {
 		if (!cache[scene.file]) cache[scene.file] = fs.readFileSync(path.join(RES, scene.file), "utf8");
 		// 위젯은 자기 크기를 모른 채 부모가 정한 폭에 맞춘다. ZEP과 같은 조건이다.
+		const doc = inject(cache[scene.file], scene.messages);
 		return `<figure>
 	<figcaption><b>${scene.label}</b><span>${scene.file} · ${scene.size[0]}×${scene.size[1]}</span></figcaption>
-	<iframe id="f${i}" width="${scene.size[0]}" height="${scene.size[1]}" srcdoc="${attr(cache[scene.file])}"></iframe>
+	<iframe id="f${i}" width="${scene.size[0]}" height="${scene.size[1]}" srcdoc="${attr(doc)}"></iframe>
 </figure>`;
-	}).join("\n");
-
-	const script = SCENES.map((scene, i) => {
-		const messages = scene.messages.map(m => JSON.stringify({ ...m, isMobile: false }));
-		return `send(${i}, [${messages.join(",")}]);`;
 	}).join("\n");
 
 	const page = `<!doctype html>
@@ -67,15 +83,6 @@ function build() {
 <div class="wrap">
 ${cards}
 </div>
-<script>
-	function send(index, messages) {
-		var frame = document.getElementById("f" + index);
-		frame.addEventListener("load", function () {
-			messages.forEach(function (message) { frame.contentWindow.postMessage(message, "*"); });
-		});
-	}
-${script}
-</script>
 </body>
 </html>
 `;

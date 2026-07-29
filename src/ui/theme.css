@@ -590,18 +590,47 @@ body {
 	border-radius: 99px;
 }
 
+/*
+ * 접기 버튼.
+ *
+ * 전에는 글리프 ▾ 하나가 투명한 배경 위에 --ink-3(흐린 회색)으로 떠 있었다.
+ * 데스크톱에서는 겨우 읽혔지만 모바일에서는 "여기를 누를 수 있다"는 신호가
+ * 전혀 아니었다 — 탭 줄 오른쪽 끝의 장식으로 보였다.
+ *
+ * 그래서 셋을 바꾼다.
+ *   1. 글자를 붙인다("접기"). 글리프만으로는 무엇이 일어날지 알 수 없다.
+ *   2. 테두리와 배경을 준다. 눌리는 것과 아닌 것이 색으로 갈린다.
+ *   3. 손가락이 닿을 크기를 준다(min-height 40px, min-width 44px).
+ *
+ * 이 높이가 머리말 전체의 높이가 된다(.chat-head가 stretch다) — 위아래
+ * 여백까지 더해 45px. 세로 320px 중 17px쯤을 더 쓰는 셈인데, 진짜 과녁은
+ * 이 버튼이 아니라 머리말 한 줄 전체이고(chat.html의 .chat-head 리스너)
+ * 그 줄이 45px면 손가락 기준(44px)을 넘긴다. 누를 수 없는 버튼은 없는 것과
+ * 같으므로 이쪽이 남는 장사다.
+ */
 .chat-fold {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s1);
 	flex: 0 0 auto;
+	min-width: 44px;
+	min-height: 40px;
+	margin: 2px var(--s1) 2px 0;
 	padding: 0 var(--s2);
 	font: inherit;
-	font-size: var(--t-sm);
-	color: var(--ink-3);
-	background: transparent;
-	border: none;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-2);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	white-space: nowrap;
 	cursor: pointer;
+	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .chat-fold:hover {
 	color: var(--ink);
+	border-color: var(--ink-3);
 }
 .chat-fold:focus-visible {
 	outline: 2px solid var(--accent);

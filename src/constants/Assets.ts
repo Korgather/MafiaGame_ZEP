@@ -47,17 +47,55 @@ export const WidgetFile = {
 	CHAT: "chat.html",
 } as const;
 
-/** 위젯 크기 (align은 모바일 여부에 따라 런타임에 결정) */
+/**
+ * 위젯이 화면에서 차지하는 자리.
+ *
+ * width/height는 픽셀이다 — showWidget이 픽셀만 받는다. mobile은 그중
+ * 세로만 다시 적은 값으로, 화면 높이에 대한 %다.
+ *
+ * 왜 모바일만 %인가
+ * -----------------
+ * 400px은 데스크톱에서 화면의 1/4쯤이지만 세로 850px 폰에서는 절반이다.
+ * "게임 화면을 얼마나 남길 것인가"는 픽셀로는 말할 수 없는 값인데, 지금까지
+ * 이 질문을 가진 층이 아무 데도 없었다. 그래서 대기실 400px(47%)과
+ * 채팅 320px(38%)이 아무도 말리지 않는 사이 화면의 85%를 덮었고, 남은
+ * 게임 화면은 위아래로 갈린 두 조각이었다.
+ *
+ * 세로 예산 (모바일)
+ *   메인 위젯          ≤ 46%
+ *   + 접힌 채팅 막대     44px  (모바일 기본값, PlayerTag)
+ *   ------------------------
+ *   게임 화면          ≥ 48%
+ *
+ * 채팅을 펼치면 CHAT(34%)이 올라오므로 메인 위젯은 MAIN_TIGHT배로 줄어든다
+ * (Widgets.ts의 layoutOf). 둘이 동시에 제 크기로 뜨는 경우는 없다.
+ */
+export interface WidgetBox {
+	readonly width: number;
+	readonly height: number;
+	/** 모바일 세로. 화면 높이 대비 %. 없으면 height(px)를 그대로 쓴다 */
+	readonly mobile?: number;
+}
+
 export const WidgetSize = {
-	LOBBY: { width: 400, height: 400 },
-	ROLE_ACTION: { width: 400, height: 460 },
-	ROLE_CARD: { width: 320, height: 400 },
+	/** 대기실 — 좌석 목록. 8줄 + 머리말 + 준비/나가기 */
+	LOBBY: { width: 400, height: 400, mobile: 46 },
+	/**
+	 * 대기실 — 방 선택.
+	 *
+	 * 같은 lobby.html이 두 화면을 그리는데 크기는 하나뿐이었다. 방 버튼
+	 * 8개는 좌석 목록의 2/3면 충분해서, 방 선택 중에는 아래 절반이 늘 빈
+	 * 채로 게임 화면을 가리고 있었다 (모바일에서 특히 눈에 띈다).
+	 */
+	LOBBY_ROOMS: { width: 400, height: 280, mobile: 30 },
+	ROLE_ACTION: { width: 400, height: 460, mobile: 46 },
+	ROLE_CARD: { width: 320, height: 400, mobile: 44 },
 	/** 사람 8명을 타일로 그린다. PHASE보다 높아야 한다 */
-	VOTE: { width: 400, height: 400 },
+	VOTE: { width: 400, height: 400, mobile: 46 },
 	/** 전원의 직업 공개 목록이 들어간다 */
-	GAME_OVER: { width: 380, height: 420 },
+	GAME_OVER: { width: 380, height: 420, mobile: 46 },
 	/** 밤/아침: 읽을 것만 있고 조작이 없다 */
-	PHASE: { width: 380, height: 260 },
+	PHASE: { width: 380, height: 260, mobile: 28 },
 	/**
 	 * 펼친 채팅창.
 	 *
@@ -66,10 +104,30 @@ export const WidgetSize = {
 	 * 접기는 CHAT_BAR 크기로 다시 여는 것으로 구현한다. 미확인 개수 같은
 	 * 상태는 서버(PlayerTag)가 들고 있어서 다시 열어도 잃지 않는다.
 	 */
-	CHAT: { width: 330, height: 320 },
-	/** 접은 채팅창. 채널 아이콘과 미확인 배지만 보인다 */
+	CHAT: { width: 330, height: 320, mobile: 34 },
+	/**
+	 * 접은 채팅창. 채널 아이콘과 미확인 배지만 보인다.
+	 * 글자 한 줄이라 화면이 커진다고 같이 커질 이유가 없다 — 여기만 픽셀 그대로다.
+	 */
 	CHAT_BAR: { width: 190, height: 44 },
 } as const;
+
+/**
+ * 모바일 가로 폭. 화면 대비 %.
+ *
+ * 세로와 달리 가로는 위젯마다 다를 이유가 없다. 폰은 꽉 채우는 편이 읽기
+ * 좋고, 태블릿에서 꽉 채우면 글줄이 너무 길어져 오히려 읽기 나빠진다.
+ */
+export const MobileWidth = { PHONE: "96%", TABLET: "60%" } as const;
+
+/**
+ * 상단 고정 위젯을 ZEP 상단바 아래로 끌어올리는 보정.
+ * 기기마다 상단바 높이가 달라 값이 셋이다.
+ */
+export const TopNudge = { DESKTOP: "-12px", PHONE: "-62px", TABLET: "-40px" } as const;
+
+/** 채팅을 펼쳤을 때 메인 위젯이 줄어드는 비율 (위 세로 예산 참고) */
+export const MAIN_TIGHT = 0.6;
 
 /**
  * 스프라이트시트 정의.

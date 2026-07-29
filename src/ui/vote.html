@@ -158,11 +158,11 @@
 				// 없었고, 눌렸다는 표시조차 없어서 오조작을 알 방법이 없었다
 				myPick = myPick === num ? null : num;
 				paintPick();
-				send({ type: "vote", target: myPick });
+				Parent.send({ type: "vote", target: myPick });
 				qs("#note").textContent = pickNote();
 			});
 
-			onServer({
+			Parent.on({
 				init(data) {
 					// 건달에게 협박당했으면 표를 낼 수 없다. 서버도 같은 판정으로
 					// 막지만(Voting.canVote), 눌리는 버튼을 두고 거절만 하면
@@ -182,7 +182,6 @@
 							? "고르지 않으면 기권입니다."
 							: pickNote();
 					startTimer(qs("#timer"), data.timer);
-					rearrange(data.isMobile);
 				},
 
 				// 투표한 사람 수만 갱신한다. 누가 누구를 찍었는지는 개표까지 감춘다
@@ -225,7 +224,6 @@
 
 					qs("#note").textContent = data.message || "";
 					startTimer(qs("#timer"), data.timer);
-					rearrange(data.isMobile);
 				},
 			});
 		</script>

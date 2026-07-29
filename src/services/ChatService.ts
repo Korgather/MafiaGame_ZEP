@@ -48,7 +48,8 @@ import { ADMIN_EXP_GRANT, ADMIN_ROLE_LEVEL } from "../constants/GameConfig.ts";
 import { asText, field, MAX_CHAT_LENGTH, messageType } from "../types/Widget.types.ts";
 import { forEachPlayer } from "./Broadcast.ts";
 import { awardExp } from "./Rewards.ts";
-import { openChat, updateChat } from "./Widgets.ts";
+import type { ChatFocus } from "./Widgets.ts";
+import { openChat, squeezeMain, updateChat } from "./Widgets.ts";
 
 /** 방이 기억하는 줄 수. 한 판이 길어야 밤낮 10턴이라 이 정도면 전부 남는다 */
 const ROOM_LOG_LIMIT = 120;
@@ -263,8 +264,14 @@ export function tell(player: ScriptPlayer, text: string): void {
 
 // ────────────────────────────────────────────────────────────── 창 열고 닫기
 
-/** 접속 직후·재접속 직후. 권한에 맞는 기록까지 함께 되살린다 */
-export function openFor(player: ScriptPlayer): void {
+/**
+ * 접속 직후·재접속 직후. 권한에 맞는 기록까지 함께 되살린다.
+ *
+ * focus는 창이 뜬 뒤 입력창을 잡을지 정한다. 부르는 쪽이 반드시 적어야 하고
+ * 기본값을 두지 않았다 — 포커스를 뺏는 것은 눈에 띄는 동작이라 "그냥 열기"와
+ * "눌러서 열기"를 호출부에서 구분해 두는 편이 안전하다.
+ */
+export function openFor(player: ScriptPlayer, focus: ChatFocus): void {
 	const ctx = contextOf(player.id);
 	const tag = tagOf(player);
 	const log = visibleLog(player.id, ctx);
@@ -286,6 +293,7 @@ export function openFor(player: ScriptPlayer): void {
 		open: tag.chatOpen,
 		myId: player.id,
 		lines: log.slice(-HISTORY_LIMIT),
+		focus,
 	});
 	bind(widget);
 }
@@ -332,9 +340,42 @@ function bind(widget: ScriptWidget): void {
 	});
 }
 
+/**
+ * 도배를 막되 대화는 막지 않는다 — 여유분(토큰) 방식.
+ *
+ * 마지막 계산 이후 흐른 시간만큼 여유분을 채우고, 한 줄에 하나를 쓴다.
+ * 남은 것이 없으면 그 줄만 버린다. 음소거도 강퇴도 없고 잠시 뒤 저절로
+ * 풀리므로, 정상적으로 대화하던 사람은 제한이 있다는 사실조차 모른다.
+ *
+ * 알림을 채팅이 아니라 라벨로 보내는 것이 중요하다. 채팅으로 보내면
+ * 연타하는 사람의 창이 경고로 뒤덮여서, 도배를 막으려다 그 경고가 다시
+ * 도배가 된다. 라벨은 서로 덮어쓰고 저절로 사라져 몇 번을 맞아도 한 줄이다.
+ *
+ * 서버에 두는 이유는 MAX_CHAT_LENGTH와 같다 — 위젯에 같은 제한을 걸면
+ * 입력창이 즉각 반응해 손맛이 좋아지지만, 위젯은 조작할 수 있으므로 그쪽은
+ * 어디까지나 표시이고 실제 한계는 이 함수다.
+ */
+function spendChatToken(sender: ScriptPlayer): boolean {
+	const tag = tagOf(sender);
+	const now = Time.getUtcTime();
+	const refilled = tag.chatTokens + (now - tag.chatRefilledAt) / CHAT_RATE.REFILL_MS;
+	tag.chatTokens = Math.min(CHAT_RATE.BURST, refilled);
+	tag.chatRefilledAt = now;
+
+	if (tag.chatTokens < 1) {
+		label(sender, "🕐 조금 천천히 말해 주세요.");
+		return false;
+	}
+	tag.chatTokens -= 1;
+	return true;
+}
+
 function submit(sender: ScriptPlayer, data: unknown): void {
 	const text = asText(field(data, "text"), MAX_CHAT_LENGTH);
 	if (text === null) return;
+	// 명령어보다 앞에 둔다. /도움말도 연타하면 tell이 그만큼 쏟아진다 —
+	// 도배 경로는 발언과 명령 둘인데 관문을 하나만 세우면 반만 막힌다.
+	if (!spendChatToken(sender)) return;
 	if (text.charAt(0) === "/") {
 		runCommand(sender, text);
 		return;
@@ -378,9 +419,28 @@ function switchChannel(sender: ScriptPlayer, data: unknown): void {
 }
 
 function toggle(sender: ScriptPlayer, data: unknown): void {
-	tagOf(sender).chatOpen = field(data, "open") === true;
-	// 접기는 CSS가 아니라 더 작은 위젯으로 다시 여는 것이다 (WidgetSize.CHAT 주석 참고)
-	openFor(sender);
+	const open = field(data, "open") === true;
+	tagOf(sender).chatOpen = open;
+	// 접기는 CSS가 아니라 더 작은 위젯으로 다시 여는 것이다 (WidgetSize.CHAT 주석 참고).
+	// 그래서 "게임 화면에서 Enter로 폈다"는 사실도 위젯이 혼자 이어갈 수 없다 —
+	// 앞 문서가 알려준 의도를 그대로 새 문서에 넘겨준다.
+	openFor(sender, asFocus(field(data, "focus")));
+	// 모바일은 세로가 좁아 채팅과 단계 위젯이 제 크기로 함께 뜰 수 없다.
+	// 펼치는 쪽이 아니라 자리를 내주는 쪽을 여기서 줄인다 — 채팅은 늘 제
+	// 크기로 뜨고, 단계 위젯은 다시 열리지 않으므로 누르던 것이 살아 있다.
+	squeezeMain(sender, open);
+}
+
+/**
+ * 위젯이 보낸 포커스 요청을 아는 값으로만 좁힌다.
+ *
+ * 위젯에서 오는 것은 전부 남이 보낸 값이다. 조작된 클라이언트가 아무 문자열을
+ * 넣어도 여기서 ""가 된다 — 모르는 값에 대한 답은 "아무것도 하지 않는다"다.
+ */
+function asFocus(value: unknown): ChatFocus {
+	if (value === "input") return "input";
+	if (value === "command") return "command";
+	return "";
 }
 
 // ────────────────────────────────────────────────────────────── 채팅 명령어

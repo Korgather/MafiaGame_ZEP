@@ -11,6 +11,7 @@
 import type { ScriptPlayer } from "zep-script";
 import type { PlayerTag } from "../types/Game.types.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
+import { CHAT_RATE } from "../constants/GameConfig.ts";
 
 export function tagOf(player: ScriptPlayer): PlayerTag {
 	const existing = player.tag as PlayerTag | undefined | null;
@@ -19,13 +20,25 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 	}
 	const created: PlayerTag = {
 		widget: null,
+		mainBox: null,
 		roleWidget: null,
 		chatWidget: null,
-		// 처음 들어오면 펼친 채로 시작한다. 채팅이 있다는 사실 자체를
-		// 모르고 지나가는 것이 접혀 있어서 얻는 시야보다 손해가 크다.
-		chatOpen: true,
+		/*
+		 * 데스크톱은 펼친 채로 시작한다. 채팅이 있다는 사실 자체를 모르고
+		 * 지나가는 것이 접혀 있어서 얻는 시야보다 손해가 크기 때문이다.
+		 *
+		 * 모바일은 반대다. 펼친 채팅이 세로의 34%를 먹는데, 접어도 💬 막대와
+		 * 미확인 배지는 그대로 남는다 — 채팅이 있다는 사실은 접힌 채로도
+		 * 전해지므로 펼쳐 둘 이유가 없다. 세로가 좁은 쪽에서는 "있다는 것을
+		 * 알린다"와 "화면을 가린다"의 값이 뒤집힌다.
+		 */
+		chatOpen: !player.isMobile,
 		chatChannel: ChatChannel.GLOBAL,
 		chatSeen: {},
+		// 여유분을 가득 채운 채로 시작한다. 막 들어온 사람이 첫 인사부터
+		// 걸리면 제한이 아니라 고장으로 보인다.
+		chatTokens: CHAT_RATE.BURST,
+		chatRefilledAt: Time.getUtcTime(),
 		originalName: player.name,
 	};
 	player.tag = created;
