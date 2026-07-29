@@ -19,6 +19,9 @@
 		"allowImportingTsExtensions": true,
 		"typeRoots": ["./node_modules/@types"]
 	},
-	"include": ["main.ts", "src/**/*"],
-	"exclude": ["node_modules", "res", "tests", "tools"]
+	// 테스트도 타입 검사 대상이다. 가짜 ZEP(FakeZep)이 진짜 ScriptApp 시그니처와
+	// 어긋나면 그 순간 잡아야지, 잘못된 가짜 위에서 초록불이 나면 테스트가
+	// 오히려 해롭다.
+	"include": ["main.ts", "src/**/*", "tests/**/*"],
+	"exclude": ["node_modules", "res", "tools"]
 }

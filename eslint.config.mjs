@@ -2,15 +2,20 @@ import pluginJs from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+/** ZEP(Jint) 런타임에서 실행되는 코드. 아래 제약이 전부 여기에만 적용된다 */
+const ZEP_RUNTIME = ["src/**/*.ts", "main.ts"];
+
+/** Node에서 실행되는 테스트. 문법 규칙은 같지만 ZEP 런타임 제약은 무관하다 */
+const NODE_TESTS = ["tests/**/*.ts"];
+
+const ALL = [...ZEP_RUNTIME, ...NODE_TESTS];
+
 export default [
 	{ ignores: ["res/**/*", "node_modules/**/*", "tools/**/*"] },
-	{ files: ["src/**/*.ts", "main.ts"], ...pluginJs.configs.recommended },
-	...tseslint.configs.recommended.map(config => ({
-		...config,
-		files: ["src/**/*.ts", "main.ts"],
-	})),
+	{ files: ALL, ...pluginJs.configs.recommended },
+	...tseslint.configs.recommended.map(config => ({ ...config, files: ALL })),
 	{
-		files: ["src/**/*.ts", "main.ts"],
+		files: ALL,
 		languageOptions: {
 			parser: tseslint.parser,
 			parserOptions: { ecmaVersion: "latest", sourceType: "module" },
@@ -24,7 +29,11 @@ export default [
 			// catch 바인딩은 문법상 필요할 뿐 죽은 변수가 아니다.
 			// (선택적 catch 바인딩은 Jint 지원 여부가 불확실해 쓰지 않는다)
 			"@typescript-eslint/no-unused-vars": ["error", { caughtErrors: "none" }],
-
+		},
+	},
+	{
+		files: ZEP_RUNTIME,
+		rules: {
 			// ZEP API는 C# 메서드다. Jint는 인자 "개수"로 오버로드를 고르므로
 			// 자리를 채우려 넣은 undefined는 생략이 아니라 잘못된 인자가 되고,
 			// "No public methods with the specified arguments were found"로 죽는다.
