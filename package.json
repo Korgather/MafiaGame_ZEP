@@ -9,7 +9,8 @@
 	},
 	"scripts": {
 		"clean": "node tools/clean-res-js.js",
-		"build": "npm run clean && webpack",
+		"check:zep": "node tools/check-zep-calls.js",
+		"build": "npm run clean && npm run check:zep && webpack",
 		"archive": "npm run build && zep-script archive",
 		"deploy": "npm run archive && zep-script publish",
 		"type-check": "tsc --noEmit",

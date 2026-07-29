@@ -10,8 +10,9 @@ npm install
 
 | 명령                | 하는 일                                            |
 | ------------------- | -------------------------------------------------- |
-| `npm run build`     | `main.ts` → `res/main.js` 번들 생성                 |
+| `npm run build`     | `main.ts` → `res/main.js` 번들 생성 (`check:zep` 포함)|
 | `npm run type-check`| 타입 검사 (`tsc --noEmit`)                          |
+| `npm run check:zep` | ZEP API에 `undefined` 인자가 가는지 검사            |
 | `npm test`          | 도메인 로직 단위 테스트 (`node --test`, 빌드 불필요)|
 | `npm run lint`      | ESLint                                              |
 | `npm run archive`   | 빌드 후 zip 패키징                                  |
@@ -50,7 +51,12 @@ loadSpritesheet(file, w, h, frames);            // ✓ 인자를 아예 뺀다
 (`showCustomLabel`의 표시 시간은 7번째 인자라 앞의 `width`/`opacity`를 건널 수 없다.
 그래서 라벨은 시간이 5번째인 `showCenterLabel`만 쓴다 — `services/Broadcast.ts`)
 
-이 규칙들은 ESLint의 `no-restricted-globals` / `no-restricted-syntax`로 강제된다.
+`npm run check:zep`이 이걸 강제한다. TypeScript 컴파일러 API로 각 호출의 시그니처를
+해석해서, 선언이 `zep-script` 안에 있는 호출의 인자 중 타입에 `undefined`가 섞인 것을
+전부 찾는다. 리터럴이든 `number | undefined` 타입의 변수든 똑같이 잡히고,
+`npm run build`가 번들을 만들기 전에 먼저 돌린다.
+
+나머지 규칙은 ESLint의 `no-restricted-globals` / `no-restricted-syntax`가 맡는다.
 
 ## 구조
 

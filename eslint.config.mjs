@@ -29,6 +29,10 @@ export default [
 			// 자리를 채우려 넣은 undefined는 생략이 아니라 잘못된 인자가 되고,
 			// "No public methods with the specified arguments were found"로 죽는다.
 			// .d.ts의 `param?: T`는 "생략 가능"이지 "undefined 허용"이 아니다.
+			//
+			// 여기서는 리터럴 undefined만 잡는다. 편집 중 즉시 뜨는 게 목적이고,
+			// `number | undefined` 같은 변수 경로까지 보는 진짜 방어선은
+			// npm run check:zep (tools/check-zep-calls.js)이다.
 			"no-restricted-syntax": [
 				"error",
 				{
