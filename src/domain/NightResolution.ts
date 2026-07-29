@@ -37,6 +37,33 @@ export interface NightSelectResult {
 const REVEAL_MS = 6000;
 
 /**
+ * 지금 이 좌석이 밤 능력을 쓸 수 없는 이유. 쓸 수 있으면 null.
+ *
+ * 같은 판정이 Night.ts에 세 벌 있었다 — 격자를 열지 말지(canAct), 격자 없이
+ * 보는 사람에게 띄울 안내(nightNote), 그리고 위젯이 보낸 select를 거절할지.
+ * 셋은 조건이 같아야 하는데 문구는 서로 달랐고, 실제로 nightNote는
+ * "능력이 있는 직업은 대상을 지목하세요"를 능력이 없는 사람에게도 보냈다.
+ * 조건을 한 벌로 합치면 위젯을 잠그는 근거와 거절하는 근거가 어긋날 수 없다.
+ *
+ * 반환값이 문구인 것도 그래서다. boolean이면 "왜 안 되는지"는 다시 호출자
+ * 몫이 되어 세 벌로 갈라진다. 능력에 조건이 하나 늘 때 고칠 곳은 여기뿐이다.
+ *
+ * turnCount는 지나간 낮의 수다(첫 밤이면 0).
+ */
+export function nightActionBlockedReason(seat: Seat, turnCount: number): string | null {
+	const def = roleDef(seat.role);
+	if (def.nightAction === null) return "밤에 쓸 능력이 없는 직업입니다. 아침을 기다리세요.";
+	if (def.oncePerGame && seat.skillSpent) {
+		return "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.";
+	}
+	if (def.needsPriorDay && turnCount === 0) {
+		return "첫 밤에는 쓸 수 없습니다. 낮의 이야기를 듣고 내일 밤에 쓰세요.";
+	}
+	if (seat.usedSkill) return "이미 대상을 선택했습니다.";
+	return null;
+}
+
+/**
  * 밤에 대상을 지목했을 때의 결과.
  * actor/target의 healed·attackedBy·silenced·scooped·team을 직접 갱신한다.
  * (Seat은 순수 데이터라 이 갱신도 Node 테스트에서 그대로 관찰할 수 있다)

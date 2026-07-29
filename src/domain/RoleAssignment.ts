@@ -6,7 +6,13 @@
  * "if (i === 7)" 앞에 아무것도 없다는 사실로만 알 수 있었다.
  */
 import { Role } from "../types/Game.types.ts";
-import { MAFIA_PAIR_AT, SPECIAL_CITIZEN_RATIO } from "../constants/GameConfig.ts";
+import {
+	CITIZENS_PER_NIGHT_KILL,
+	MAFIA_PAIR_AT,
+	SPECIAL_CITIZEN_RATIO,
+} from "../constants/GameConfig.ts";
+import { ChatChannel } from "./chat/ChatChannel.ts";
+import { NightActionKind, roleDef } from "./Roles.ts";
 
 /**
  * 마피아 진영의 첫 자리. 마피아 없는 판은 성립하지 않는다.
@@ -19,6 +25,10 @@ const MAFIA_LEAD: Role = Role.MAFIA;
  * 셋 다 마피아 팀이지만 하는 일이 다르다 — 둘째 마피아는 같이 죽일 사람을
  * 고르고, 건달은 투표를 막고, 짐승인간은 혼자 따로 문다. 판마다 달라져야
  * 시민이 "마피아 팀에 누가 있는지"를 다시 추리한다.
+ *
+ * 다만 밤 사망자 예산(CITIZENS_PER_NIGHT_KILL)을 넘는 후보는 그 판에서
+ * 걸러진다. 지금 인원 상한(8명)에서 짐승인간은 항상 걸러지고, MAX_PLAYERS가
+ * 10 이상이 되면 조건 없이 다시 뽑힌다.
  */
 const MAFIA_POOL: readonly Role[] = [Role.MAFIA, Role.THUG, Role.BEAST];
 
@@ -54,6 +64,26 @@ export function mafiaCount(playerCount: number): number {
 	return playerCount >= MAFIA_PAIR_AT ? 2 : 1;
 }
 
+/**
+ * 이 직업이 밤 사망자를 한 구 더 만드는가.
+ *
+ * 마피아 밀담에서 죽이는 직업은 몇 명이 있든 상의해서 한 명만 친다.
+ * 밀담 밖에서 죽이는 직업은 표적을 맞출 방법이 없어 시체가 따로 생긴다.
+ * 그래서 판정 기준은 "공격하는가"가 아니라 "혼자 공격하는가"다.
+ */
+function killsIndependently(role: Role): boolean {
+	const def = roleDef(role);
+	return def.nightAction === NightActionKind.ATTACK && def.nightChat !== ChatChannel.MAFIA;
+}
+
+/**
+ * 이 인원의 시민 진영이 감당할 수 있는 밤 사망자 수.
+ * 마피아 밀담이 이미 하나를 쓰므로 2 이상이어야 단독 킬러가 들어갈 수 있다.
+ */
+function nightKillBudget(citizenSlots: number): number {
+	return Math.max(1, Math.floor(citizenSlots / CITIZENS_PER_NIGHT_KILL));
+}
+
 /** 풀에서 중복 없이 n개를 뽑는다 */
 function draw(pool: readonly Role[], count: number, rng: () => number): Role[] {
 	if (count <= 0) return [];
@@ -75,17 +105,34 @@ function draw(pool: readonly Role[], count: number, rng: () => number): Role[] {
  */
 export function buildRoleDeck(playerCount: number, rng: () => number = Math.random): Role[] {
 	const mafia = mafiaCount(playerCount);
-	const deck: Role[] = [MAFIA_LEAD];
-	for (const role of draw(MAFIA_POOL, mafia - 1, rng)) deck.push(role);
-
 	const citizenSlots = playerCount - mafia;
+	const deck: Role[] = [MAFIA_LEAD];
+
+	// 마피아 리더가 이미 밤 사망자 하나를 쓴다. 예산이 남지 않으면 두 번째 자리는
+	// 따로 죽이지 않는 직업 중에서만 뽑는다 — 인원 상한이 올라가면 이 필터가
+	// 저절로 풀리므로, 직업을 지우거나 인원별 예외를 적어둘 필요가 없다.
+	const affordsLoneKiller = nightKillBudget(citizenSlots) > 1;
+	const mafiaPool = affordsLoneKiller
+		? MAFIA_POOL
+		: MAFIA_POOL.filter(role => !killsIndependently(role));
+	for (const role of draw(mafiaPool, mafia - 1, rng)) deck.push(role);
+
 	const required = CITIZEN_REQUIRED.slice(0, Math.max(citizenSlots, 0));
 	for (const role of required) deck.push(role);
 
 	// 남은 시민 자리의 일부만 능력자로 채운다. 전원이 능력자면 "정보 없는 다수"가
 	// 사라져 마피아가 섞여들 여지도 함께 사라진다.
+	//
+	// floor가 아니라 round인 이유: 자리가 하나 남는 4명 판은 floor(0.5)=0이라
+	// 능력자가 아예 못 들어왔고, 그래서 4명 판은 매번 마피아·의사·경찰·시민으로
+	// 똑같았다. 직업 12개를 만들어놓고 최소 인원 판의 경우의 수가 하나였다.
+	// (7명도 floor(1.5)=1이라 5명과 구성이 같았다 — 절벽이 두 군데였다)
 	const plainSlots = citizenSlots - required.length;
-	const special = Math.min(Math.floor(plainSlots * SPECIAL_CITIZEN_RATIO), CITIZEN_POOL.length);
+	const special = Math.min(
+		Math.round(plainSlots * SPECIAL_CITIZEN_RATIO),
+		plainSlots,
+		CITIZEN_POOL.length,
+	);
 	for (const role of draw(CITIZEN_POOL, special, rng)) deck.push(role);
 
 	while (deck.length < playerCount) deck.push(Role.CITIZEN);

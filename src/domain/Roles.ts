@@ -110,6 +110,17 @@ export interface RoleDef {
 	/** 첫 공격을 한 번 버티는가 (군인) */
 	readonly survivesFirstAttack?: boolean;
 	/**
+	 * 낮을 한 번은 보내야 쓸 수 있는가 (자경단원)
+	 *
+	 * 첫 밤에는 아무도 아무것도 모른다. 그 상태로 쏘는 총은 추리가 아니라
+	 * 주사위이고, 결과는 대개 시민 두 명(대상 + 자책)이 사라지는 것이다.
+	 * 4~7명 판에서는 그 한 방으로 첫 아침이 오기 전에 게임이 끝났다.
+	 *
+	 * 덱에서 직업을 빼는 대신 능력에 조건을 다는 쪽을 택했다. 원인은
+	 * "자경단원이 있다"가 아니라 "정보 없이 쏜다"이기 때문이다.
+	 */
+	readonly needsPriorDay?: boolean;
+	/**
 	 * 공격을 지목한 순간 방 전체에 들리는 소리.
 	 *
 	 * 총성은 연출이자 정보다 — "오늘 밤 마피아가 움직였다"를 모두가 안다.
@@ -133,7 +144,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightAction: NightActionKind.ATTACK,
 		nightChat: ChatChannel.MAFIA,
 		nightSprite: "mafia",
-		nightAttackSprite: "mafiaAttack",
+		nightAttackSprite: "bullet",
 		nightPrompt: "처형할 대상을 선택하세요.",
 		nightNotice: MAFIA_CHAT,
 		immuneToVote: false,
@@ -216,17 +227,18 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "자경단원",
 		team: Team.CITIZEN,
 		glyph: "🔫",
-		ability: "게임에 딱 한 번, 밤에 한 명을 사살합니다.",
-		tip: "확신이 설 때만 쏘세요. 시민을 쏘면 책임을 지고 당신도 죽습니다.",
+		ability: "둘째 밤부터, 게임에 딱 한 번 한 명을 사살합니다.",
+		tip: "낮의 이야기를 듣고 쏘세요. 시민을 쏘면 책임을 지고 당신도 죽습니다.",
 		nightAction: NightActionKind.ATTACK,
 		nightChat: null,
 		nightSprite: null,
-		nightAttackSprite: "mafiaAttack",
+		nightAttackSprite: "bullet",
 		nightPrompt: "사살할 대상을 선택하세요. 이 판에 한 번뿐입니다.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
 		oncePerGame: true,
 		backfiresOnAlly: true,
+		needsPriorDay: true,
 	},
 	SOLDIER: {
 		displayName: "군인",
@@ -278,7 +290,10 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.MAFIA,
 		glyph: "🐺",
 		ability: "밤마다 한 명을 물어 죽입니다. 경찰 조사에는 시민으로 나옵니다.",
-		tip: "마피아와 대화할 수 없습니다. 마피아와 같은 사람을 물면 그날 밤은 한 명만 죽습니다.",
+		// 전에는 "마피아와 같은 사람을 물면 한 명만 죽습니다"였다. 사실이긴 해도
+		// 겹치는 쪽이 손해라 아무도 따를 이유가 없는 조언이었고, 대화 수단도 없어
+		// 겹칠지 말지 고를 수조차 없었다. 실제로 할 수 있는 판단만 적는다.
+		tip: "마피아와 대화할 수 없습니다. 마피아가 노릴 만한 사람은 피해야 시체가 둘 나옵니다.",
 		nightAction: NightActionKind.ATTACK,
 		nightChat: null,
 		nightSprite: null,
