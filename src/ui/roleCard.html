@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>직업 공개</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 직업 카드.
+			 *
+			 * 기존에는 직업 하나당 HTML 파일 하나였다(7개). 일곱 파일은
+			 * background-image URL 한 줄을 빼면 바이트 단위로 같았고,
+			 * 그중 셋(정치인·영매·스파이)은 그림을 base64로 품어 148KB였다.
+			 * 나머지 넷은 imgur를 봤다 — imgur가 죽으면 카드가 빈 화면이 된다.
+			 *
+			 * 그림에는 직업 이름 말고 아무 정보도 없었다. 카드가 5초 떠 있는
+			 * 동안 "나는 무엇이고 무엇을 해야 하는가"를 알려주지 못해서,
+			 * 초보자는 30초 뒤 밤 화면에서 처음으로 자기 능력을 읽었다.
+			 *
+			 * 이제 카드는 한 개이고 내용은 서버가 보낸다. 직업을 추가해도
+			 * 파일이 늘지 않고, 능력 설명이 카드에 실린다.
+			 */
+			.card {
+				position: relative;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: var(--s3);
+				flex: 1 1 auto;
+				padding: var(--s4);
+				text-align: center;
+				border-radius: var(--r3);
+				border: 2px solid var(--line);
+				background: radial-gradient(120% 80% at 50% 0%, var(--surface-2), var(--bg));
+				animation: reveal 420ms var(--ease);
+			}
+
+			.card.mafia {
+				border-color: var(--mafia);
+				background: radial-gradient(120% 80% at 50% 0%, var(--mafia-dim), var(--bg));
+			}
+			.card.citizen {
+				border-color: var(--citizen);
+				background: radial-gradient(120% 80% at 50% 0%, var(--citizen-dim), var(--bg));
+			}
+
+			@keyframes reveal {
+				from {
+					opacity: 0;
+					transform: rotateY(-12deg) scale(0.94);
+				}
+			}
+
+			.glyph {
+				font-size: var(--t-2xl);
+				line-height: 1;
+			}
+
+			.role {
+				font-size: var(--t-2xl);
+				font-weight: 800;
+				letter-spacing: -0.02em;
+			}
+
+			.ability {
+				font-size: var(--t-md);
+				color: var(--ink);
+				word-break: keep-all;
+			}
+
+			.tip {
+				font-size: var(--t-sm);
+				color: var(--ink-2);
+				word-break: keep-all;
+			}
+
+			/* 남은 시간을 막대로. 카드가 곧 닫힌다는 것을 알 수 있어야 한다 */
+			.fuse {
+				position: absolute;
+				left: var(--s4);
+				right: var(--s4);
+				bottom: var(--s2);
+				height: 3px;
+				border-radius: 99px;
+				background: var(--surface-3);
+				overflow: hidden;
+			}
+
+			.fuse i {
+				display: block;
+				height: 100%;
+				width: 100%;
+				background: var(--accent);
+				transform-origin: left;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel">
+			<div class="card" id="card" role="status" aria-live="polite">
+				<div class="glyph" id="glyph" aria-hidden="true">🎭</div>
+				<div>
+					<div class="role" id="role">직업</div>
+					<span class="chip" id="team">진영</span>
+				</div>
+				<div class="ability" id="ability"></div>
+				<div class="tip" id="tip"></div>
+				<div class="fuse" aria-hidden="true"><i id="fuse"></i></div>
+			</div>
+			<button class="btn ghost" id="close" type="button">닫기</button>
+		</div>
+
+		<!--@shared-->
+		<script>
+			$("#close").addEventListener("click", function () {
+				send({ type: "close" });
+			});
+
+			onServer({
+				init: function (data) {
+					var card = $("#card");
+					card.classList.add(data.team === "mafia" ? "mafia" : "citizen");
+
+					$("#glyph").textContent = data.glyph || "🎭";
+					$("#role").textContent = data.role || "";
+					$("#ability").textContent = data.ability || "";
+					$("#tip").textContent = data.tip || "";
+
+					var team = $("#team");
+					team.textContent = data.team === "mafia" ? "마피아 팀" : "시민 팀";
+					team.classList.add(data.team === "mafia" ? "mafia" : "citizen");
+
+					// 카드가 열려 있는 시간만큼 막대가 줄어든다
+					var seconds = Number(data.timer) || 0;
+					if (seconds > 0) {
+						var fuse = $("#fuse");
+						fuse.style.transition = "transform " + seconds + "s linear";
+						requestAnimationFrame(function () {
+							fuse.style.transform = "scaleX(0)";
+						});
+					}
+				},
+			});
+		</script>
+	</body>
+</html>

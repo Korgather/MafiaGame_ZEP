@@ -21,6 +21,14 @@ import { LabelColor } from "../constants/Assets.ts";
 /**
  * 방의 모든 좌석을 순회하며 접속 중인 플레이어에게만 콜백을 실행한다.
  * 순회 중 좌석 배열이 바뀌어도(퇴장 등) 안전하도록 복사본을 돈다.
+ *
+ * seat.connected는 **내려가기만 한다**. 다시 올리는 것은 onJoinPlayer뿐이다.
+ * getPlayerByID가 null을 주면 그 사람이 없다는 것은 확실하지만, 값을 준다고
+ * 접속 중이라는 보장은 없다 — onLeavePlayer가 불리는 시점에 ZEP이 아직
+ * players 목록에서 빼지 않았다면 여기서 true로 되돌아간다. 실제로 그렇게 되면
+ * handleDisconnect가 방금 내린 플래그를 바로 뒤의 centerLabel이 지워버려
+ * GameFlow의 "인원 부족 중단" 판정이 영원히 걸리지 않는다.
+ * 어느 순서인지는 ZEP 문서에 없으므로, 어느 쪽이든 맞도록 단조로 만든다.
  */
 export function forEachPlayer(room: Room, fn: (player: ScriptPlayer, seat: Seat) => void): void {
 	for (const seat of room.seats.slice()) {
@@ -30,7 +38,6 @@ export function forEachPlayer(room: Room, fn: (player: ScriptPlayer, seat: Seat)
 			seat.connected = false;
 			continue;
 		}
-		seat.connected = true;
 		fn(player, seat);
 	}
 }

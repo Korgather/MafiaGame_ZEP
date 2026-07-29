@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>투표</title>
+		<title>직업 공개</title>
 		<style>
 /*
  * 위젯 공통 디자인 시스템.
@@ -628,101 +628,109 @@ body {
 </style>
 		<style>
 			/*
-			 * 투표 + 개표.
+			 * 직업 카드.
 			 *
-			 * 기존에는 vote.html과 voteResult.html 두 파일이었다. 둘 다 같은
-			 * 사람 목록을 그리는데 배치가 서로 달라서, 투표할 때 누르던 자리와
-			 * 결과에 나온 자리가 일치하지 않았다.
+			 * 기존에는 직업 하나당 HTML 파일 하나였다(7개). 일곱 파일은
+			 * background-image URL 한 줄을 빼면 바이트 단위로 같았고,
+			 * 그중 셋(정치인·영매·스파이)은 그림을 base64로 품어 148KB였다.
+			 * 나머지 넷은 imgur를 봤다 — imgur가 죽으면 카드가 빈 화면이 된다.
 			 *
-			 * voteResult.html은 더 심했다. 격자가
-			 *   grid-template-columns: 140px 140px; grid-template-rows: 30px 30px 30px
-			 * 로 못 박혀 있어서 정확히 6명일 때만 맞았다. 4명이면 아래 두 줄이
-			 * 비고, 8명이면 마지막 두 명이 컨테이너 밖으로 잘렸다. MAX_PLAYERS가
-			 * 8인데 화면은 6명 전용이었다.
+			 * 그림에는 직업 이름 말고 아무 정보도 없었다. 카드가 5초 떠 있는
+			 * 동안 "나는 무엇이고 무엇을 해야 하는가"를 알려주지 못해서,
+			 * 초보자는 30초 뒤 밤 화면에서 처음으로 자기 능력을 읽었다.
 			 *
-			 * 이제 한 파일이 두 메시지를 받는다. init(투표) / result(개표).
-			 * 격자는 auto-fill이라 인원수와 무관하다.
+			 * 이제 카드는 한 개이고 내용은 서버가 보낸다. 직업을 추가해도
+			 * 파일이 늘지 않고, 능력 설명이 카드에 실린다.
 			 */
+			.card {
+				position: relative;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: var(--s3);
+				flex: 1 1 auto;
+				padding: var(--s4);
+				text-align: center;
+				border-radius: var(--r3);
+				border: 2px solid var(--line);
+				background: radial-gradient(120% 80% at 50% 0%, var(--surface-2), var(--bg));
+				animation: reveal 420ms var(--ease);
+			}
 
-			/* 투표 진행률: 몇 명이 투표를 마쳤는지. 기존에는 이 정보가 없어서
-			   남은 시간이 다 될 때까지 다들 기다리는지 알 수 없었다 */
-			.progress {
-				flex: 0 0 auto;
-				height: 4px;
+			.card.mafia {
+				border-color: var(--mafia);
+				background: radial-gradient(120% 80% at 50% 0%, var(--mafia-dim), var(--bg));
+			}
+			.card.citizen {
+				border-color: var(--citizen);
+				background: radial-gradient(120% 80% at 50% 0%, var(--citizen-dim), var(--bg));
+			}
+
+			@keyframes reveal {
+				from {
+					opacity: 0;
+					transform: rotateY(-12deg) scale(0.94);
+				}
+			}
+
+			.glyph {
+				font-size: var(--t-2xl);
+				line-height: 1;
+			}
+
+			.role {
+				font-size: var(--t-2xl);
+				font-weight: 800;
+				letter-spacing: -0.02em;
+			}
+
+			.ability {
+				font-size: var(--t-md);
+				color: var(--ink);
+				word-break: keep-all;
+			}
+
+			.tip {
+				font-size: var(--t-sm);
+				color: var(--ink-2);
+				word-break: keep-all;
+			}
+
+			/* 남은 시간을 막대로. 카드가 곧 닫힌다는 것을 알 수 있어야 한다 */
+			.fuse {
+				position: absolute;
+				left: var(--s4);
+				right: var(--s4);
+				bottom: var(--s2);
+				height: 3px;
 				border-radius: 99px;
-				background: var(--surface-2);
+				background: var(--surface-3);
 				overflow: hidden;
 			}
 
-			.progress i {
+			.fuse i {
 				display: block;
 				height: 100%;
-				width: 0;
+				width: 100%;
 				background: var(--accent);
-				transition: width var(--dur) var(--ease);
-			}
-
-			/* 개표에서 처형된 사람 */
-			.tile.out {
-				border-color: var(--danger);
-				background: var(--mafia-dim);
-				animation: shake 420ms var(--ease);
-			}
-
-			@keyframes shake {
-				0%,
-				100% {
-					transform: translateX(0);
-				}
-				25% {
-					transform: translateX(-4px);
-				}
-				75% {
-					transform: translateX(4px);
-				}
-			}
-
-			/* 협박당해 투표가 막힌 상태. 목록을 숨기지 않고 흐리게만 둔다 —
-			   누가 살아 있는지는 여전히 봐야 낮 토론을 따라갈 수 있다 */
-			.grid.blocked {
-				opacity: 0.4;
-				pointer-events: none;
-				filter: grayscale(1);
-			}
-
-			.note.blocked {
-				color: var(--danger);
-				font-weight: 600;
-			}
-
-			/* 득표 막대. 숫자 하나보다 상대 비교가 빠르다 */
-			.bar {
-				position: absolute;
-				left: 0;
-				bottom: 0;
-				height: 3px;
-				background: var(--accent);
-				transition: width 600ms var(--ease);
+				transform-origin: left;
 			}
 		</style>
 	</head>
 	<body>
-		<div class="panel vote">
-			<div class="hd">
-				<div class="hd-title grow">
-					<span id="heading">투표</span>
-					<span class="hd-sub" id="sub"></span>
+		<div class="panel">
+			<div class="card" id="card" role="status" aria-live="polite">
+				<div class="glyph" id="glyph" aria-hidden="true">🎭</div>
+				<div>
+					<div class="role" id="role">직업</div>
+					<span class="chip" id="team">진영</span>
 				</div>
-				<div class="timer" id="timer"></div>
+				<div class="ability" id="ability"></div>
+				<div class="tip" id="tip"></div>
+				<div class="fuse" aria-hidden="true"><i id="fuse"></i></div>
 			</div>
-
-			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
-
-			<div class="body scroll">
-				<div class="grid" id="grid" role="group" aria-label="투표 대상"></div>
-			</div>
-
-			<p class="note" id="note" role="status" aria-live="polite"></p>
+			<button class="btn ghost" id="close" type="button">닫기</button>
 		</div>
 
 		<script>
@@ -859,145 +867,33 @@ function scrollToEnd(el) {
 
 </script>
 		<script>
-			var myNum = 0;
-			var myPick = null;
-			var locked = false;
-
-			/**
-			 * 사람 타일 하나.
-			 * seat: { num, name, alive, votes }
-			 * "나"는 좌석마다 표시를 실어 보내지 않고 myNum과 비교해서 정한다 —
-			 * 같은 목록을 전원에게 그대로 보낼 수 있어야 하기 때문이다.
-			 */
-			function tile(seat, extra) {
-				var classes = ["tile"];
-				if (seat.num === myNum) classes.push("me");
-				if (!seat.alive) classes.push("dead");
-				if (extra) classes.push(extra);
-
-				var caption = seat.num === myNum ? "나" : seat.alive ? esc(seat.name || "") : "사망";
-				return (
-					'<button type="button" class="' +
-					classes.join(" ") +
-					'" data-num="' +
-					seat.num +
-					'"' +
-					(seat.alive ? "" : " disabled") +
-					' aria-label="' +
-					seat.num +
-					"번 " +
-					esc(seat.name || "") +
-					'">' +
-					'<span class="num">' +
-					seat.num +
-					"</span>" +
-					'<span class="cap ellip">' +
-					caption +
-					"</span>" +
-					"</button>"
-				);
-			}
-
-			function seats(data) {
-				return Array.isArray(data.seats) ? data.seats : [];
-			}
-
-			function paintPick() {
-				$$(".tile").forEach(function (el) {
-					el.classList.toggle("picked", Number(el.dataset.num) === myPick);
-				});
-			}
-
-			$("#grid").addEventListener("click", function (event) {
-				var el = event.target.closest(".tile");
-				if (!el || el.disabled || locked) return;
-
-				var num = Number(el.dataset.num);
-				// 같은 사람을 다시 누르면 취소. 기존에는 한 번 누르면 되돌릴 수
-				// 없었고, 눌렸다는 표시조차 없어서 오조작을 알 방법이 없었다
-				myPick = myPick === num ? null : num;
-				paintPick();
-				send({ type: "vote", target: myPick });
-				$("#note").textContent =
-					myPick === null ? "기권했습니다. 다시 고를 수 있습니다." : myPick + "번을 지목했습니다. 다시 누르면 취소됩니다.";
+			$("#close").addEventListener("click", function () {
+				send({ type: "close" });
 			});
 
 			onServer({
 				init: function (data) {
-					// 건달에게 협박당했으면 표를 낼 수 없다. 서버도 같은 판정으로
-					// 막지만(Voting.canVote), 눌리는 버튼을 두고 거절만 하면
-					// "왜 안 되는지"를 라벨이 뜬 뒤에야 알게 된다
-					locked = !!data.silenced;
-					myNum = Number(data.myNum) || 0;
-					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다
-					myPick = Number(data.picked) || null;
-					$("#heading").textContent = locked ? "투표할 수 없습니다" : "누구를 처형할까요";
-					$("#grid").innerHTML = seats(data)
-						.map(function (seat) {
-							return tile(seat);
-						})
-						.join("");
-					$("#grid").classList.toggle("blocked", locked);
-					paintPick();
-					$("#note").classList.toggle("blocked", locked);
-					$("#note").textContent = locked
-						? "🥊 협박당해 이번 투표에는 참여할 수 없습니다."
-						: myPick === null
-							? "고르지 않으면 기권입니다."
-							: myPick + "번을 지목했습니다. 다시 누르면 취소됩니다.";
-					startTimer($("#timer"), data.timer);
-					rearrange(data.isMobile);
-				},
+					var card = $("#card");
+					card.classList.add(data.team === "mafia" ? "mafia" : "citizen");
 
-				// 투표한 사람 수만 갱신한다. 누가 누구를 찍었는지는 개표까지 감춘다
-				progress: function (data) {
-					var done = Number(data.voted) || 0;
-					var total = Number(data.alive) || 1;
-					$("#progress").style.width = Math.round((done / total) * 100) + "%";
-					$("#sub").textContent = done + "/" + total + " 투표 완료";
-				},
+					$("#glyph").textContent = data.glyph || "🎭";
+					$("#role").textContent = data.role || "";
+					$("#ability").textContent = data.ability || "";
+					$("#tip").textContent = data.tip || "";
 
-				result: function (data) {
-					locked = true;
-					myNum = Number(data.myNum) || 0;
-					$("#heading").textContent = "개표";
-					$("#sub").textContent = "";
-					$("#progress").style.width = "100%";
-					// 협박당한 사람도 개표는 똑같이 본다. init에서 씌운 흐림을 벗긴다
-					$("#grid").classList.remove("blocked");
-					$("#note").classList.remove("blocked");
+					var team = $("#team");
+					team.textContent = data.team === "mafia" ? "마피아 팀" : "시민 팀";
+					team.classList.add(data.team === "mafia" ? "mafia" : "citizen");
 
-					var list = seats(data);
-					var top = list.reduce(function (max, seat) {
-						return Math.max(max, Number(seat.votes) || 0);
-					}, 0);
-
-					$("#grid").innerHTML = list
-						.map(function (seat) {
-							return tile(seat, seat.num === data.executed ? "out" : null);
-						})
-						.join("");
-
-					// 득표수를 타일 위에 얹는다. 예전에는 이름과 숫자가 별도
-					// 격자에 있어서 어느 숫자가 누구 것인지 눈으로 이어야 했다
-					list.forEach(function (seat) {
-						var el = $('.tile[data-num="' + seat.num + '"]');
-						if (!el) return;
-						var votes = Number(seat.votes) || 0;
-						el.insertAdjacentHTML(
-							"beforeend",
-							'<span class="tally">' +
-								votes +
-								"표</span>" +
-								'<span class="bar" style="width:' +
-								(top > 0 ? (votes / top) * 100 : 0) +
-								'%"></span>'
-						);
-					});
-
-					$("#note").textContent = data.message || "";
-					startTimer($("#timer"), data.timer);
-					rearrange(data.isMobile);
+					// 카드가 열려 있는 시간만큼 막대가 줄어든다
+					var seconds = Number(data.timer) || 0;
+					if (seconds > 0) {
+						var fuse = $("#fuse");
+						fuse.style.transition = "transform " + seconds + "s linear";
+						requestAnimationFrame(function () {
+							fuse.style.transform = "scaleX(0)";
+						});
+					}
 				},
 			});
 		</script>

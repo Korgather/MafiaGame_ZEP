@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>밤 행동</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 밤 능력 사용 + 밤 채팅(마피아 / 유령).
+			 *
+			 * 기존 roleAction.html의 문제 셋:
+			 *
+			 * 1. 직업별 문구를 한국어 문자열 switch로 골랐다.
+			 *      switch (_myRole) { case "영매": ... case "경찰": ... }
+			 *    직업을 추가하면 서버뿐 아니라 이 파일도 고쳐야 했고,
+			 *    직업 이름을 바꾸면 조용히 기본 분기로 떨어졌다.
+			 *    이제 무엇을 하라는 문구는 서버가 보낸다.
+			 *
+			 * 2. 채팅 자동 스크롤이 항상 한 줄 어긋났다. 붙이기 *전에*
+			 *    maxScrollTop을 재고 붙인 *뒤에* 그 값으로 스크롤해서,
+			 *    방금 온 메시지가 늘 화면 밖에 있었다.
+			 *
+			 * 3. 아이콘 6종을 base64로 품어 132KB였다. 그중 일부는 그려지지도
+			 *    않는 자리에 있었다.
+			 */
+
+			/* 채팅이 없는 직업(의사·경찰 등)은 격자가 화면을 다 쓴다 */
+			.body.no-chat .grid {
+				align-content: center;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel night">
+			<div class="hd">
+				<div class="hd-title grow">
+					<span class="chip" id="myrole">직업</span>
+					<span class="hd-sub ellip" id="prompt"></span>
+				</div>
+				<div class="timer" id="timer"></div>
+			</div>
+
+			<div class="body" id="body">
+				<div class="grid scroll" id="grid" role="group" aria-label="지목 대상"></div>
+
+				<div class="chat hidden" id="chat">
+					<div class="chat-log" id="log" role="log" aria-live="polite" aria-label="밤 채팅"></div>
+					<input
+						class="chat-input"
+						id="input"
+						type="text"
+						maxlength="100"
+						autocomplete="off"
+						placeholder="메시지 입력 후 Enter"
+						aria-label="메시지 입력"
+					/>
+				</div>
+			</div>
+
+			<p class="note" id="note" role="status" aria-live="polite"></p>
+		</div>
+
+		<!--@shared-->
+		<script>
+			var myNum = 0;
+			var picked = null;
+			var canPick = false;
+
+			function tile(seat) {
+				var classes = ["tile"];
+				if (seat.num === myNum) classes.push("me");
+				if (!seat.alive) classes.push("dead");
+				if (seat.ally) classes.push("ally");
+
+				var caption = seat.num === myNum ? "나" : seat.alive ? esc(seat.name || "") : "사망";
+				// 마피아 팀원은 직업까지 보인다. 배지로 색 외의 표시도 남긴다
+				var badge = seat.ally && seat.num !== myNum ? '<span class="badge">🔻</span>' : "";
+
+				return (
+					'<button type="button" class="' +
+					classes.join(" ") +
+					'" data-num="' +
+					seat.num +
+					'"' +
+					(seat.alive ? "" : " disabled") +
+					' aria-label="' +
+					seat.num +
+					"번 " +
+					esc(seat.name || "") +
+					'">' +
+					badge +
+					'<span class="num">' +
+					seat.num +
+					"</span>" +
+					'<span class="cap ellip">' +
+					caption +
+					"</span>" +
+					"</button>"
+				);
+			}
+
+			$("#grid").addEventListener("click", function (event) {
+				var el = event.target.closest(".tile");
+				if (!el || el.disabled || !canPick) return;
+				send({ type: "select", num: Number(el.dataset.num) });
+			});
+
+			function append(html) {
+				var log = $("#log");
+				log.insertAdjacentHTML("beforeend", html);
+				// 붙인 뒤에 내린다. 기존 코드는 붙이기 전 높이로 내려서 늘 한 줄 모자랐다
+				scrollToEnd(log);
+			}
+
+			function openChat() {
+				$("#chat").classList.remove("hidden");
+				$("#body").classList.remove("no-chat");
+			}
+
+			$("#input").addEventListener("keydown", function (event) {
+				if (event.key !== "Enter") return;
+				var text = event.target.value.trim();
+				if (!text) return;
+				event.target.value = "";
+				send({ type: "sendMessage", message: text });
+				append('<div class="msg mine"><span class="txt">' + esc(text) + "</span></div>");
+			});
+
+			onServer({
+				init: function (data) {
+					myNum = Number(data.myNum) || 0;
+					picked = null;
+
+					var role = $("#myrole");
+					role.textContent = data.role || "";
+					role.classList.add(data.team === "mafia" ? "mafia" : "citizen");
+					$("#prompt").textContent = data.prompt || "";
+
+					var seats = Array.isArray(data.seats) ? data.seats : [];
+					canPick = seats.length > 0;
+					$("#grid").innerHTML = seats.map(tile).join("");
+					$("#grid").classList.toggle("hidden", !canPick);
+
+					if (data.chatEnable) openChat();
+					else $("#body").classList.add("no-chat");
+
+					$("#note").textContent = data.note || "";
+					if (data.timer) startTimer($("#timer"), data.timer);
+					rearrange(data.isMobile);
+				},
+
+				// 서버가 지목을 받아들였을 때만 표시가 바뀐다. 기존에는 누른 즉시
+				// 빨간 테두리를 그려서, 서버가 거절해도 화면은 선택된 것처럼 보였다
+				selectResponse: function (data) {
+					picked = Number(data.num);
+					canPick = false;
+					$$(".tile").forEach(function (el) {
+						var mine = Number(el.dataset.num) === picked;
+						el.classList.toggle("picked", mine);
+						if (!mine) el.disabled = true;
+					});
+					$("#note").textContent = picked + "번을 지목했습니다.";
+				},
+
+				// 스파이가 마피아를 찾아 합류했을 때
+				chatEnable: function () {
+					openChat();
+					append('<div class="msg sys"><span class="txt">마피아 채팅에 합류했습니다.</span></div>');
+				},
+
+				chatNotify: function (data) {
+					append(
+						'<div class="msg' +
+							(Number(data.num) === 0 ? " sys" : "") +
+							'"><span class="who">' +
+							esc(data.name) +
+							" · " +
+							esc(data.num) +
+							'번</span><span class="txt">' +
+							esc(data.message) +
+							"</span></div>"
+					);
+				},
+			});
+		</script>
+	</body>
+</html>

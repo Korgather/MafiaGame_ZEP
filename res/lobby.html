@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>투표</title>
+		<title>대기실</title>
 		<style>
 /*
  * 위젯 공통 디자인 시스템.
@@ -628,101 +628,165 @@ body {
 </style>
 		<style>
 			/*
-			 * 투표 + 개표.
+			 * 대기실: 방 목록 <-> 방 안 좌석 목록.
 			 *
-			 * 기존에는 vote.html과 voteResult.html 두 파일이었다. 둘 다 같은
-			 * 사람 목록을 그리는데 배치가 서로 달라서, 투표할 때 누르던 자리와
-			 * 결과에 나온 자리가 일치하지 않았다.
+			 * 기존 WatingRoom.html은 182KB였다. 배경 이미지 2장을 base64로
+			 * 품고 jsdelivr에서 웹폰트 2종을 받았다. 그리고 이런 것들이 있었다:
 			 *
-			 * voteResult.html은 더 심했다. 격자가
-			 *   grid-template-columns: 140px 140px; grid-template-rows: 30px 30px 30px
-			 * 로 못 박혀 있어서 정확히 6명일 때만 맞았다. 4명이면 아래 두 줄이
-			 * 비고, 8명이면 마지막 두 명이 컨테이너 밖으로 잘렸다. MAX_PLAYERS가
-			 * 8인데 화면은 6명 전용이었다.
+			 * - .container가 380x300px 고정이라 폰이 아니라 태블릿에서도 잘렸다.
+			 *   미디어 쿼리는 325px 한 개뿐이었다.
+			 * - 조작 요소가 전부 <div onclick>이었다. 탭 이동도, 포커스 표시도,
+			 *   스크린리더용 이름도 없었다.
+			 * - 강퇴 버튼이 현재 표수만 보여줬다. 몇 표가 필요한지, 내가 이미
+			 *   눌렀는지 알 수 없어서 같은 버튼을 계속 누르게 됐다(토글이라
+			 *   두 번 누르면 취소되는데, 그 사실도 화면에 없었다).
+			 * - 준비 버튼을 눌러도 왜 시작하지 않는지 알려주지 않았다.
+			 *   최소 인원이 4명이라는 사실이 화면 어디에도 없었다.
 			 *
-			 * 이제 한 파일이 두 메시지를 받는다. init(투표) / result(개표).
-			 * 격자는 auto-fill이라 인원수와 무관하다.
+			 * 두 화면 사이 이동은 서버가 보내는 좌석 목록의 길이로 정해진다.
+			 * 빈 목록 = 방 밖. 이건 기존 프로토콜 그대로다.
 			 */
+			.rooms {
+				display: grid;
+				grid-template-columns: repeat(2, 1fr);
+				gap: var(--s2);
+				align-content: start;
+			}
 
-			/* 투표 진행률: 몇 명이 투표를 마쳤는지. 기존에는 이 정보가 없어서
-			   남은 시간이 다 될 때까지 다들 기다리는지 알 수 없었다 */
-			.progress {
-				flex: 0 0 auto;
-				height: 4px;
-				border-radius: 99px;
+			.room {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: var(--s2);
+				padding: var(--s2) var(--s3);
+				font: inherit;
+				font-size: var(--t-sm);
+				font-weight: 700;
+				color: var(--ink);
 				background: var(--surface-2);
-				overflow: hidden;
+				border: 1px solid var(--line);
+				border-radius: var(--r2);
+				cursor: pointer;
+				transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 			}
 
-			.progress i {
-				display: block;
-				height: 100%;
-				width: 0;
-				background: var(--accent);
-				transition: width var(--dur) var(--ease);
+			.room:hover:not(:disabled) {
+				background: var(--surface-3);
+				border-color: var(--accent);
+			}
+			.room:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+			}
+			.room:disabled {
+				cursor: default;
+				color: var(--ink-3);
+				opacity: 0.6;
 			}
 
-			/* 개표에서 처형된 사람 */
-			.tile.out {
-				border-color: var(--danger);
-				background: var(--mafia-dim);
-				animation: shake 420ms var(--ease);
+			.room .cnt {
+				font-variant-numeric: tabular-nums;
+				font-weight: 500;
+				color: var(--ink-2);
+			}
+			.room.full .cnt {
+				color: var(--warn);
+			}
+			.room.playing .cnt {
+				color: var(--mafia);
 			}
 
-			@keyframes shake {
-				0%,
-				100% {
-					transform: translateX(0);
-				}
-				25% {
-					transform: translateX(-4px);
-				}
-				75% {
-					transform: translateX(4px);
-				}
+			/* 좌석 한 줄 */
+			.seat {
+				display: flex;
+				align-items: center;
+				gap: var(--s2);
+				padding: var(--s2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r2);
 			}
 
-			/* 협박당해 투표가 막힌 상태. 목록을 숨기지 않고 흐리게만 둔다 —
-			   누가 살아 있는지는 여전히 봐야 낮 토론을 따라갈 수 있다 */
-			.grid.blocked {
-				opacity: 0.4;
-				pointer-events: none;
-				filter: grayscale(1);
+			.seat.ready {
+				border-color: var(--ok);
+			}
+			.seat.me {
+				background: var(--surface-3);
 			}
 
-			.note.blocked {
-				color: var(--danger);
+			.seat .idx {
+				flex: 0 0 auto;
+				width: 18px;
+				font-size: var(--t-sm);
+				font-weight: 700;
+				color: var(--ink-3);
+				text-align: right;
+			}
+
+			.seat .nm {
+				font-size: var(--t-sm);
 				font-weight: 600;
 			}
 
-			/* 득표 막대. 숫자 하나보다 상대 비교가 빠르다 */
-			.bar {
-				position: absolute;
-				left: 0;
-				bottom: 0;
-				height: 3px;
-				background: var(--accent);
-				transition: width 600ms var(--ease);
+			.seat .meta {
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+			}
+
+			.seat .state {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				color: var(--ink-3);
+			}
+			.seat.ready .state {
+				color: var(--ok);
+			}
+
+			.kick {
+				flex: 0 0 auto;
+				min-height: 26px;
+				padding: 2px var(--s2);
+				font-size: var(--t-xs);
+			}
+			.kick.voted {
+				color: var(--danger);
+				border-color: var(--danger);
+			}
+
+			.list {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s1);
+			}
+
+			.foot {
+				display: flex;
+				gap: var(--s2);
+				flex: 0 0 auto;
 			}
 		</style>
 	</head>
 	<body>
-		<div class="panel vote">
+		<div class="panel">
 			<div class="hd">
 				<div class="hd-title grow">
-					<span id="heading">투표</span>
+					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
-				<div class="timer" id="timer"></div>
 			</div>
 
-			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
-
 			<div class="body scroll">
-				<div class="grid" id="grid" role="group" aria-label="투표 대상"></div>
+				<div class="rooms" id="rooms" role="group" aria-label="방 목록"></div>
+				<div class="list hidden" id="seats" role="list" aria-label="참가자"></div>
 			</div>
 
 			<p class="note" id="note" role="status" aria-live="polite"></p>
+
+			<div class="foot hidden" id="foot">
+				<button class="btn ghost" id="quit" type="button">나가기</button>
+				<button class="btn primary grow" id="ready" type="button">준비</button>
+			</div>
 		</div>
 
 		<script>
@@ -859,145 +923,172 @@ function scrollToEnd(el) {
 
 </script>
 		<script>
-			var myNum = 0;
-			var myPick = null;
-			var locked = false;
+			var myId = null;
+			var iAmReady = false;
+			var config = { min: 4, max: 8, kickVotes: 3 };
+			var counts = {};
 
-			/**
-			 * 사람 타일 하나.
-			 * seat: { num, name, alive, votes }
-			 * "나"는 좌석마다 표시를 실어 보내지 않고 myNum과 비교해서 정한다 —
-			 * 같은 목록을 전원에게 그대로 보낼 수 있어야 하기 때문이다.
-			 */
-			function tile(seat, extra) {
-				var classes = ["tile"];
-				if (seat.num === myNum) classes.push("me");
-				if (!seat.alive) classes.push("dead");
-				if (extra) classes.push(extra);
-
-				var caption = seat.num === myNum ? "나" : seat.alive ? esc(seat.name || "") : "사망";
-				return (
-					'<button type="button" class="' +
-					classes.join(" ") +
-					'" data-num="' +
-					seat.num +
-					'"' +
-					(seat.alive ? "" : " disabled") +
-					' aria-label="' +
-					seat.num +
-					"번 " +
-					esc(seat.name || "") +
-					'">' +
-					'<span class="num">' +
-					seat.num +
-					"</span>" +
-					'<span class="cap ellip">' +
-					caption +
-					"</span>" +
-					"</button>"
-				);
-			}
-
-			function seats(data) {
-				return Array.isArray(data.seats) ? data.seats : [];
-			}
-
-			function paintPick() {
-				$$(".tile").forEach(function (el) {
-					el.classList.toggle("picked", Number(el.dataset.num) === myPick);
+			/* ---------- 방 목록 ---------- */
+			function paintRooms() {
+				var nums = Object.keys(counts).sort(function (a, b) {
+					return Number(a) - Number(b);
 				});
+
+				$("#rooms").innerHTML = nums
+					.map(function (num) {
+						var info = counts[num] || { count: 0, started: false };
+						var full = info.count >= config.max;
+						var blocked = info.started || full;
+						var state = info.started ? "진행 중" : full ? "가득 참" : info.count + "/" + config.max;
+
+						return (
+							'<button type="button" class="room' +
+							(info.started ? " playing" : full ? " full" : "") +
+							'" data-num="' +
+							num +
+							'"' +
+							(blocked ? " disabled" : "") +
+							' aria-label="' +
+							num +
+							"번 방, " +
+							state +
+							'">' +
+							"<span>" +
+							num +
+							"번 방</span>" +
+							'<span class="cnt">' +
+							state +
+							"</span>" +
+							"</button>"
+						);
+					})
+					.join("");
 			}
 
-			$("#grid").addEventListener("click", function (event) {
-				var el = event.target.closest(".tile");
-				if (!el || el.disabled || locked) return;
-
-				var num = Number(el.dataset.num);
-				// 같은 사람을 다시 누르면 취소. 기존에는 한 번 누르면 되돌릴 수
-				// 없었고, 눌렸다는 표시조차 없어서 오조작을 알 방법이 없었다
-				myPick = myPick === num ? null : num;
-				paintPick();
-				send({ type: "vote", target: myPick });
-				$("#note").textContent =
-					myPick === null ? "기권했습니다. 다시 고를 수 있습니다." : myPick + "번을 지목했습니다. 다시 누르면 취소됩니다.";
+			$("#rooms").addEventListener("click", function (event) {
+				var el = event.target.closest(".room");
+				if (!el || el.disabled) return;
+				send({ type: "join", roomNum: Number(el.dataset.num) });
 			});
 
-			onServer({
-				init: function (data) {
-					// 건달에게 협박당했으면 표를 낼 수 없다. 서버도 같은 판정으로
-					// 막지만(Voting.canVote), 눌리는 버튼을 두고 거절만 하면
-					// "왜 안 되는지"를 라벨이 뜬 뒤에야 알게 된다
-					locked = !!data.silenced;
-					myNum = Number(data.myNum) || 0;
-					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다
-					myPick = Number(data.picked) || null;
-					$("#heading").textContent = locked ? "투표할 수 없습니다" : "누구를 처형할까요";
-					$("#grid").innerHTML = seats(data)
-						.map(function (seat) {
-							return tile(seat);
-						})
-						.join("");
-					$("#grid").classList.toggle("blocked", locked);
-					paintPick();
-					$("#note").classList.toggle("blocked", locked);
-					$("#note").textContent = locked
-						? "🥊 협박당해 이번 투표에는 참여할 수 없습니다."
-						: myPick === null
-							? "고르지 않으면 기권입니다."
-							: myPick + "번을 지목했습니다. 다시 누르면 취소됩니다.";
-					startTimer($("#timer"), data.timer);
-					rearrange(data.isMobile);
-				},
+			/* ---------- 좌석 목록 ---------- */
+			function paintSeats(list) {
+				var readyCount = 0;
+				var me = null;
 
-				// 투표한 사람 수만 갱신한다. 누가 누구를 찍었는지는 개표까지 감춘다
-				progress: function (data) {
-					var done = Number(data.voted) || 0;
-					var total = Number(data.alive) || 1;
-					$("#progress").style.width = Math.round((done / total) * 100) + "%";
-					$("#sub").textContent = done + "/" + total + " 투표 완료";
-				},
+				$("#seats").innerHTML = list
+					.map(function (seat, i) {
+						if (seat.ready) readyCount++;
+						var mine = seat.id === myId;
+						if (mine) me = seat;
 
-				result: function (data) {
-					locked = true;
-					myNum = Number(data.myNum) || 0;
-					$("#heading").textContent = "개표";
-					$("#sub").textContent = "";
-					$("#progress").style.width = "100%";
-					// 협박당한 사람도 개표는 똑같이 본다. init에서 씌운 흐림을 벗긴다
-					$("#grid").classList.remove("blocked");
-					$("#note").classList.remove("blocked");
+						// 강퇴는 필요 표수를 함께 보여준다. 몇 표가 남았는지 모르면
+						// 누를지 말지 판단할 수 없다
+						var kick = mine
+							? ""
+							: '<button type="button" class="btn ghost kick' +
+								(seat.kickCount > 0 ? " voted" : "") +
+								'" data-id="' +
+								esc(seat.id) +
+								'" aria-label="' +
+								esc(seat.name) +
+								' 강퇴 투표">강퇴 ' +
+								seat.kickCount +
+								"/" +
+								config.kickVotes +
+								"</button>";
 
-					var list = seats(data);
-					var top = list.reduce(function (max, seat) {
-						return Math.max(max, Number(seat.votes) || 0);
-					}, 0);
-
-					$("#grid").innerHTML = list
-						.map(function (seat) {
-							return tile(seat, seat.num === data.executed ? "out" : null);
-						})
-						.join("");
-
-					// 득표수를 타일 위에 얹는다. 예전에는 이름과 숫자가 별도
-					// 격자에 있어서 어느 숫자가 누구 것인지 눈으로 이어야 했다
-					list.forEach(function (seat) {
-						var el = $('.tile[data-num="' + seat.num + '"]');
-						if (!el) return;
-						var votes = Number(seat.votes) || 0;
-						el.insertAdjacentHTML(
-							"beforeend",
-							'<span class="tally">' +
-								votes +
-								"표</span>" +
-								'<span class="bar" style="width:' +
-								(top > 0 ? (votes / top) * 100 : 0) +
-								'%"></span>'
+						return (
+							'<div class="seat' +
+							(seat.ready ? " ready" : "") +
+							(mine ? " me" : "") +
+							'" role="listitem">' +
+							'<span class="idx">' +
+							(i + 1) +
+							"</span>" +
+							'<span class="grow ellip">' +
+							'<span class="nm">' +
+							esc(seat.name) +
+							(mine ? " (나)" : "") +
+							"</span> " +
+							'<span class="meta">Lv.' +
+							esc(seat.level) +
+							" · " +
+							esc(seat.runCount) +
+							"판</span>" +
+							"</span>" +
+							'<span class="state">' +
+							(seat.ready ? "준비" : "대기") +
+							"</span>" +
+							kick +
+							"</div>"
 						);
-					});
+					})
+					.join("");
 
-					$("#note").textContent = data.message || "";
-					startTimer($("#timer"), data.timer);
+				iAmReady = !!(me && me.ready);
+				var ready = $("#ready");
+				ready.textContent = iAmReady ? "준비 취소" : "준비";
+				ready.classList.toggle("primary", !iAmReady);
+				ready.classList.toggle("ok", iAmReady);
+
+				$("#sub").textContent = list.length + "명 · 준비 " + readyCount + "명";
+
+				// 왜 시작하지 않는지 항상 한 줄로 말해준다
+				if (list.length < config.min) {
+					$("#note").textContent = config.min - list.length + "명 더 모이면 시작할 수 있습니다.";
+				} else if (readyCount < list.length) {
+					$("#note").textContent = list.length - readyCount + "명이 아직 준비하지 않았습니다.";
+				} else {
+					$("#note").textContent = "곧 시작합니다.";
+				}
+			}
+
+			$("#seats").addEventListener("click", function (event) {
+				var el = event.target.closest(".kick");
+				if (!el) return;
+				send({ type: "kick", id: el.dataset.id });
+			});
+
+			$("#ready").addEventListener("click", function () {
+				send({ type: iAmReady ? "cancle-ready" : "ready" });
+			});
+
+			$("#quit").addEventListener("click", function () {
+				send({ type: "quit" });
+			});
+
+			/* ---------- 화면 전환 ---------- */
+			function showRooms(inRoom) {
+				$("#rooms").classList.toggle("hidden", inRoom);
+				$("#seats").classList.toggle("hidden", !inRoom);
+				$("#foot").classList.toggle("hidden", !inRoom);
+				$("#heading").textContent = inRoom ? "대기실" : "방 선택";
+				if (!inRoom) {
+					$("#sub").textContent = "";
+					$("#note").textContent = "참가할 방을 고르세요.";
+				}
+			}
+
+			onServer({
+				setID: function (data) {
+					myId = data.id;
+					if (data.minPlayers) config.min = data.minPlayers;
+					if (data.maxPlayers) config.max = data.maxPlayers;
+					if (data.kickVotes) config.kickVotes = data.kickVotes;
 					rearrange(data.isMobile);
+				},
+
+				init: function (data) {
+					var list = Array.isArray(data.data) ? data.data : [];
+					showRooms(list.length > 0);
+					if (list.length > 0) paintSeats(list);
+					else paintRooms();
+				},
+
+				updatePlayerCount: function (data) {
+					counts = data.data || {};
+					if (!$("#rooms").classList.contains("hidden")) paintRooms();
 				},
 			});
 		</script>
