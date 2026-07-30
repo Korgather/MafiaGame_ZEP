@@ -14,7 +14,6 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import type { SeatView } from "../types/Widget.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { TIMING } from "../constants/GameConfig.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
@@ -29,14 +28,15 @@ import { beginDayStage } from "./Stage.ts";
 import { bindMessage, identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
 
 /** 생존자 수에 비례하는 토론 시간 */
-function dayDuration(aliveCount: number): number {
-	const seconds = TIMING.DAY_PER_ALIVE * aliveCount;
-	return seconds > TIMING.DAY_MAX ? TIMING.DAY_MAX : seconds;
+function dayDuration(room: Room, aliveCount: number): number {
+	const timing = room.ruleSet.timing;
+	const seconds = timing.DAY_PER_ALIVE * aliveCount;
+	return seconds > timing.DAY_MAX ? timing.DAY_MAX : seconds;
 }
 
 export function beginDay(room: Room): void {
 	room.phase = GamePhase.DAY;
-	room.phaseTimer = dayDuration(aliveSeats(room).length);
+	room.phaseTimer = dayDuration(room, aliveSeats(room).length);
 	room.tickTockPlayed = false;
 
 	beginDayStage(room);
@@ -102,7 +102,7 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 
 export function beginVote(room: Room): void {
 	room.phase = GamePhase.VOTE;
-	room.phaseTimer = TIMING.VOTE;
+	room.phaseTimer = room.ruleSet.timing.VOTE;
 	room.tickTockPlayed = false;
 
 	// 표는 이번 투표에서만 유효하다
@@ -250,7 +250,7 @@ export function broadcastVoteProgress(room: Room): void {
 
 export function beginVoteResult(room: Room): void {
 	room.phase = GamePhase.VOTE_RESULT;
-	room.phaseTimer = TIMING.VOTE_RESULT;
+	room.phaseTimer = room.ruleSet.timing.VOTE_RESULT;
 	room.tickTockPlayed = true; // 결과 발표 중에는 째깍 사운드를 울리지 않는다
 
 	// 판을 먼저 남긴다. 아래 kill이 처형자를 좌석에서 죽이면 집계가 달라진다.

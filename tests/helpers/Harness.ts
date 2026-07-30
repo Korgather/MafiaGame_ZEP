@@ -420,7 +420,7 @@ export function finishCountdown(target: Room): void {
 /**
  * 첫 밤에 서 있는 판을 둘째 밤이 시작되는 시점까지 넘긴다.
  *
- * 8인 이하 판의 첫 밤에는 아무도 죽지 않으므로(FIRST_NIGHT_PEACEFUL_UP_TO)
+ * 8인 이하 판의 첫 밤에는 아무도 죽지 않으므로(룰셋의 firstNightPeacefulUpTo)
  * 사망이 걸린 테스트는 전부 이 네 걸음(밤 → 낮 → 투표 → 개표 → 밤)을 앞에
  * 붙여야 한다. 다섯 곳이 각자 finishPhase를 세고 있었고, 한 걸음만 어긋나도
  * 뒤따르는 select가 밤이 아닌 단계로 날아가 조용히 버려진다 — 그 뒤의 단언은

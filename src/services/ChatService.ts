@@ -111,6 +111,7 @@ function contextOf(playerId: string): ChatContext {
 		// 켜고 다음 밤이 끄는 값이라, 판이 끝난 뒤 남아 있으면 대기실에서
 		// 말을 못 하는 사람이 생긴다.
 		silenced: room.started && seat.silenced,
+		chatMode: room.ruleSet.chatMode,
 	};
 }
 
@@ -134,6 +135,7 @@ function spectatorContext(playerId: string): ChatContext {
 		mafiaChat: false,
 		ghostChat: false,
 		silenced: false,
+		chatMode: watching.room.ruleSet.chatMode,
 	};
 }
 
@@ -221,7 +223,8 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 			// 잠긴 탭의 안내 문구는 채널이 아니라 잠근 이유가 정한다.
 			// 위젯이 지어내던 문장(“지금은 읽기만 됩니다”)이 밤·사망·협박을
 			// 한 마디로 덮고 있었다 — 세 경우에 해야 할 행동이 전혀 다르다.
-			placeholder: access.write ? def.placeholder : `${access.note} (/도움말)`,
+			placeholder:
+				access.write && access.freeText ? def.placeholder : `${access.note} (/도움말)`,
 		};
 	});
 }
@@ -454,6 +457,12 @@ function submit(sender: ScriptPlayer, data: unknown): void {
 	// 조작된 클라이언트는 어떤 채널이든 보낼 수 있다. 서버가 마지막 관문이다 —
 	// 여기가 뚫리면 죽은 사람이 낮 채팅으로 범인을 불러 게임이 끝난다.
 	if (!accessOf(ctx, channel).write) return;
+	// 침묵전. 자유 입력이 막힌 채널에는 준비된 문구만 통과시킨다 —
+	// 위젯이 입력창을 감춰도 조작된 클라이언트는 아무 문자열이나 보낸다
+	if (!accessOf(ctx, channel).freeText && quickFor(ctx).indexOf(text) < 0) {
+		label(sender, "🤐 준비된 문구만 보낼 수 있습니다.");
+		return;
+	}
 
 	const found = locate(sender.id);
 	const def = channelDef(channel);

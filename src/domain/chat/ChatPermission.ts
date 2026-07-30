@@ -25,6 +25,7 @@
  *   그래서 판정과 이유를 한 번에 돌려준다.
  */
 import { GamePhase } from "../../types/Game.types.ts";
+import type { ChatMode } from "../RuleSet.ts";
 import { ChatChannel, CHANNEL_ORDER } from "./ChatChannel.ts";
 
 export interface ChatContext {
@@ -53,6 +54,8 @@ export interface ChatContext {
 	readonly ghostChat: boolean;
 	/** 건달에게 협박당해 오늘 입이 막혔는가 */
 	readonly silenced: boolean;
+	/** 이 방의 채팅 방식. 침묵전이면 낮에 준비된 문구만 쓸 수 있다 */
+	readonly chatMode: ChatMode;
 }
 
 export interface ChannelAccess {
@@ -66,14 +69,29 @@ export interface ChannelAccess {
 	 * 고치게 만들 만큼 이 값이 무겁지 않다.
 	 */
 	readonly note: string;
+	/**
+	 * 자유롭게 타이핑할 수 있는가.
+	 *
+	 * write와 나눈 이유는 침묵전이다. "준비된 문구만"은 쓸 수 없는 상태가
+	 * 아니라 쓸 수 있는 방식이 좁아진 상태다 — write를 false로 하면 빠른
+	 * 문구 버튼까지 죽는다. 버튼도 자유 입력과 똑같은 전송 경로를 탄다.
+	 *
+	 * write=false면 이 값은 언제나 false다. 쓸 수 없는데 자유롭게 쓸 수는 없다.
+	 */
+	readonly freeText: boolean;
 }
 
-const NONE: ChannelAccess = { read: false, write: false, note: "" };
-const OPEN: ChannelAccess = { read: true, write: true, note: "" };
+const NONE: ChannelAccess = { read: false, write: false, note: "", freeText: false };
+const OPEN: ChannelAccess = { read: true, write: true, note: "", freeText: true };
 
 /** 읽을 수는 있지만 쓸 수 없는 상태. 이유를 반드시 적게 한다 */
 function locked(note: string): ChannelAccess {
-	return { read: true, write: false, note };
+	return { read: true, write: false, note, freeText: false };
+}
+
+/** 쓸 수는 있지만 준비된 문구만. 이유는 입력창 자리에 그대로 나간다 */
+function phrasesOnly(note: string): ChannelAccess {
+	return { read: true, write: true, note, freeText: false };
 }
 
 /** 방 밖(월드 로비)에 서 있는 사람의 기본 상태 */
@@ -86,6 +104,7 @@ export const LOOSE_CONTEXT: ChatContext = {
 	mafiaChat: false,
 	ghostChat: false,
 	silenced: false,
+	chatMode: "free",
 };
 
 export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess {
@@ -142,6 +161,11 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		// 밤에 전원이 자유롭게 말할 수 있으면 마피아가 밤에 무엇을 하든
 		// 의미가 없어진다 — 밤이 정보 비대칭을 만드는 유일한 시간이다.
 		if (ctx.phase === GamePhase.NIGHT) return locked("밤에는 방 채팅이 잠깁니다");
+		// 침묵전. 낮 토론만 좁힌다 — 위 GAME_OVER·NIGHT 분기를 지난 뒤라야
+		// 종료 후 복기와 밤 잠금이 원래대로 남는다
+		if (ctx.chatMode === "phrasesOnly") {
+			return phrasesOnly("🤐 침묵전에서는 준비된 문구만 쓸 수 있습니다");
+		}
 		return OPEN;
 	}
 

@@ -13,6 +13,7 @@ import { describe, it } from "node:test";
 import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
 import { buildRoleDeck, mafiaCount } from "../src/domain/RoleAssignment.ts";
+import { STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import {
 	hasNightTurn,
 	nightActionBlockedReason,
@@ -112,7 +113,7 @@ function roomBox(roomNum: number): {
 describe("RoleAssignment", () => {
 	it("인원수만큼 직업을 배분한다", () => {
 		for (const count of EVERY_COUNT) {
-			assert.equal(buildRoleDeck(count).length, count);
+			assert.equal(buildRoleDeck(STANDARD_RULES.deck, count).length, count);
 		}
 	});
 
@@ -127,8 +128,8 @@ describe("RoleAssignment", () => {
 		for (const count of EVERY_COUNT) {
 			for (let trial = 0; trial < 50; trial++) {
 				assert.equal(
-					teamCount(buildRoleDeck(count), Team.MAFIA),
-					mafiaCount(count),
+					teamCount(buildRoleDeck(STANDARD_RULES.deck, count), Team.MAFIA),
+					mafiaCount(STANDARD_RULES.deck, count),
 					`${count}명`,
 				);
 			}
@@ -139,8 +140,11 @@ describe("RoleAssignment", () => {
 		// 비율에서 반올림하므로 문턱이 어디인지는 상수가 아니라 계산이 정한다.
 		// 그 계산이 뒤집히지 않는다는 것만 못 박는다 — 4~5명 1, 6~9명 2, 10명부터 3.
 		for (const count of EVERY_COUNT) {
-			assert.ok(mafiaCount(count) >= mafiaCount(count - 1), `${count}명에서 줄었다`);
-			assert.ok(mafiaCount(count) < count / 2, `${count}명에서 마피아가 절반 이상이다`);
+			assert.ok(
+				mafiaCount(STANDARD_RULES.deck, count) >= mafiaCount(STANDARD_RULES.deck, count - 1),
+				`${count}명에서 줄었다`
+			);
+			assert.ok(mafiaCount(STANDARD_RULES.deck, count) < count / 2, `${count}명에서 마피아가 절반 이상이다`);
 		}
 	});
 
@@ -152,7 +156,7 @@ describe("RoleAssignment", () => {
 		// 마피아 채팅을 여는 직업이 0이면 마피아가 밤에 아무것도 못 한다.
 		for (const count of EVERY_COUNT) {
 			for (let trial = 0; trial < 50; trial++) {
-				const deck = buildRoleDeck(count);
+				const deck = buildRoleDeck(STANDARD_RULES.deck, count);
 				assert.ok(deck.includes(Role.MAFIA), `${count}명 [${deck.join(", ")}]`);
 			}
 		}
@@ -165,7 +169,7 @@ describe("RoleAssignment", () => {
 		// 숨을 곳이 없다 — 비율이 뜻한 것과 정반대의 결과였다.
 		for (const count of EVERY_COUNT) {
 			for (let trial = 0; trial < 50; trial++) {
-				const deck = buildRoleDeck(count);
+				const deck = buildRoleDeck(STANDARD_RULES.deck, count);
 				assert.ok(
 					deck.filter(role => role === Role.CITIZEN).length >= MIN_PLAIN_CITIZENS,
 					`${count}명 [${deck.join(", ")}]`,
@@ -184,7 +188,8 @@ describe("RoleAssignment", () => {
 		const MAY_REPEAT: Role[] = [Role.CITIZEN, Role.MAFIA];
 		for (const count of EVERY_COUNT) {
 			for (let trial = 0; trial < 50; trial++) {
-				const deck = buildRoleDeck(count).filter(role => !MAY_REPEAT.includes(role));
+				const drawn = buildRoleDeck(STANDARD_RULES.deck, count);
+				const deck = drawn.filter(role => !MAY_REPEAT.includes(role));
 				assert.equal(new Set(deck).size, deck.length, `${count}명 [${deck.join(", ")}]`);
 			}
 		}
@@ -199,9 +204,10 @@ describe("RoleAssignment", () => {
 		// 성격 자체가 사라지므로 여기를 줄였다. 어느 쪽이 남는지는 판마다 다르다.
 		for (const count of EVERY_COUNT) {
 			for (let trial = 0; trial < 50; trial++) {
-				const deck = buildRoleDeck(count);
+				const deck = buildRoleDeck(STANDARD_RULES.deck, count);
 				const info = deck.filter(role => role === Role.DOCTOR || role === Role.POLICE);
-				if (count - mafiaCount(count) - MIN_PLAIN_CITIZENS - MIN_SPECIAL_CITIZENS >= 2) {
+				const citizenSlots = count - mafiaCount(STANDARD_RULES.deck, count);
+				if (citizenSlots - MIN_PLAIN_CITIZENS - MIN_SPECIAL_CITIZENS >= 2) {
 					assert.ok(deck.includes(Role.DOCTOR), `${count}명에 의사가 없다`);
 					assert.ok(deck.includes(Role.POLICE), `${count}명에 경찰이 없다`);
 				} else {
@@ -216,7 +222,7 @@ describe("RoleAssignment", () => {
 		// 직업을 12개 만들어 두고 최소 인원 판에서는 그중 하나가 사장되는 셈이다.
 		const survivors = new Set<Role>();
 		for (let trial = 0; trial < 200; trial++) {
-			for (const role of buildRoleDeck(MIN_PLAYERS)) {
+			for (const role of buildRoleDeck(STANDARD_RULES.deck, MIN_PLAYERS)) {
 				if (role === Role.DOCTOR || role === Role.POLICE) survivors.add(role);
 			}
 		}
@@ -296,7 +302,7 @@ describe("RoleAssignment", () => {
 		// 규칙이 바뀔 때 둘이 조용히 어긋난다.
 		for (let count = MIN_PLAYERS; count <= MAX_PLAYERS + 2; count++) {
 			for (let trial = 0; trial < 200; trial++) {
-				const deck = buildRoleDeck(count);
+				const deck = buildRoleDeck(STANDARD_RULES.deck, count);
 				const seats = afterWorstFirstNight(deck);
 				const alive = seats.filter(s => s.alive);
 				assert.equal(
@@ -315,7 +321,7 @@ describe("RoleAssignment", () => {
 		// 최소 인원으로 노는 방은 그 중 넷만 영원히 보는 상태였다.
 		const compositions = new Set<string>();
 		for (let trial = 0; trial < 200; trial++) {
-			compositions.add(buildRoleDeck(MIN_PLAYERS).slice().sort().join(","));
+			compositions.add(buildRoleDeck(STANDARD_RULES.deck, MIN_PLAYERS).slice().sort().join(","));
 		}
 		assert.ok(
 			compositions.size > 1,

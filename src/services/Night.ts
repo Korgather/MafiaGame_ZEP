@@ -16,7 +16,6 @@ import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { TIMING } from "../constants/GameConfig.ts";
 import { inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import {
@@ -97,7 +96,7 @@ function nightNote(room: Room, seat: Seat): string {
 
 export function beginNight(room: Room): void {
 	room.phase = GamePhase.NIGHT;
-	room.phaseTimer = TIMING.NIGHT;
+	room.phaseTimer = room.ruleSet.timing.NIGHT;
 	room.tickTockPlayed = false;
 	/*
 	 * 개표 결과를 resetRound가 지우기 전에 읽어 둔다.
@@ -120,7 +119,7 @@ export function beginNight(room: Room): void {
 	// 첫 밤 무사를 알리지 않으면 마피아는 자기 지목이 실패했다고 믿고,
 	// 시민은 의사가 막은 줄 안다. 양쪽 다 없는 정보를 추리에 넣게 된다.
 	// 시민 팀에게도 같은 줄을 보낸다 — 숨길 규칙이 아니다
-	if (isPeacefulNight(room.turnCount + 1, room.total)) {
+	if (isPeacefulNight(room.turnCount + 1, room.total, room.ruleSet.firstNightPeacefulUpTo)) {
 		Chat.say(room, "🌙 첫 밤에는 아무도 죽지 않습니다. 팀을 확인하고 대상을 익혀 두세요.");
 	}
 
@@ -317,7 +316,7 @@ export function resolveNight(room: Room): void {
 	// 첫 밤 무사는 사망 정산보다 앞이다. resolveNightCasualties는 공격받은
 	// 좌석의 방탄을 소모하므로, 뒤에 두면 군인이 죽지도 않은 채 방탄만 잃는다.
 	// attackedBy는 그대로 남지만 다음 밤 시작의 resetRound가 비운다.
-	if (isPeacefulNight(room.turnCount, room.total)) {
+	if (isPeacefulNight(room.turnCount, room.total, room.ruleSet.firstNightPeacefulUpTo)) {
 		report(room, NO_DEATH_REPORT);
 		publishScoops(room);
 		return;

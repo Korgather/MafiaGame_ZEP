@@ -20,7 +20,7 @@ import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { MIN_PLAYERS, TIMING } from "../constants/GameConfig.ts";
+import { MIN_PLAYERS } from "../constants/GameConfig.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
 import { assignRole, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
@@ -105,7 +105,7 @@ function recover(room: Room): void {
 function advanceLobby(room: Room, dt: number): void {
 	const ready = readyCount(room);
 	if (ready < MIN_PLAYERS || ready !== room.seats.length) {
-		room.countdown = TIMING.START_COUNTDOWN;
+		room.countdown = room.ruleSet.timing.START_COUNTDOWN;
 		room.lastCountdownLabel = -1;
 		return;
 	}
@@ -135,7 +135,7 @@ function advanceGame(room: Room, dt: number): void {
 	// 같은 dt로 함께 줄이면 컷이 걷히는 시점과 단계가 끝나는 시점이 서로 밀리지 않는다.
 	advanceCut(room, dt);
 
-	if (!room.tickTockPlayed && room.phaseTimer < TIMING.TICK_TOCK_AT) {
+	if (!room.tickTockPlayed && room.phaseTimer < room.ruleSet.timing.TICK_TOCK_AT) {
 		room.tickTockPlayed = true;
 		playSound(room, Sound.TICK_TOCK);
 	}
@@ -258,7 +258,7 @@ export function refreshProgress(room: Room): void {
 function beginGame(room: Room): void {
 	room.started = true;
 	room.phase = GamePhase.ROLE_REVEAL;
-	room.phaseTimer = TIMING.ROLE_REVEAL;
+	room.phaseTimer = room.ruleSet.timing.ROLE_REVEAL;
 	// 직업 확인 5초 동안은 째깍 사운드를 울리지 않는다
 	room.tickTockPlayed = true;
 	room.countdown = 0;
@@ -267,7 +267,7 @@ function beginGame(room: Room): void {
 	room.total = room.seats.length;
 
 	shuffle(room.seats);
-	const deck = buildRoleDeck(room.seats.length);
+	const deck = buildRoleDeck(room.ruleSet.deck, room.seats.length);
 	for (let i = 0; i < room.seats.length; i++) {
 		assignRole(room.seats[i], i + 1, deck[i]);
 	}

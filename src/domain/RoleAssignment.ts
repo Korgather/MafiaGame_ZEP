@@ -8,65 +8,13 @@
 import { Role } from "../types/Game.types.ts";
 import {
 	CITIZENS_PER_NIGHT_KILL,
-	MAFIA_TEAM_SIZE,
 	MIN_PLAIN_CITIZENS,
 	MIN_SPECIAL_CITIZENS,
 	SPECIAL_CITIZEN_RATIO,
 } from "../constants/GameConfig.ts";
 import { ChatChannel } from "./chat/ChatChannel.ts";
 import { NightActionKind, roleDef } from "./Roles.ts";
-
-/**
- * 마피아 진영의 첫 자리. 마피아 없는 판은 성립하지 않는다.
- */
-const MAFIA_LEAD: Role = Role.MAFIA;
-
-/**
- * 두 번째 마피아 진영 자리에 뽑히는 후보.
- *
- * 둘 다 마피아 팀이지만 하는 일이 다르다 — 둘째 마피아는 같이 죽일 사람을
- * 고르고, 짐승인간은 혼자 따로 문다. 다만 건달이 시민으로 돌아간 뒤로 후보가
- * 둘뿐이라, 실제로 판마다 구성이 갈리는 인원은 10인 하나다. 뽑는 개수
- * (mafia - 1)와 아래 예산 필터를 겹쳐 보면 이렇게 된다.
- *   4~6인  : 0개를 뽑는다 — 마피아 한 명으로 고정
- *   7~9인  : 짐승인간이 걸러져 남는 후보가 하나뿐이라 늘 마피아
- *   10인   : 후보 둘 중 하나를 뽑는다 — 구성이 갈리는 유일한 인원
- *   11~12인: 후보 2개에서 2개를 뽑으니 늘 마피아 + 짐승인간
- *
- * 그런데도 Role.MAFIA를 풀에 남겨 둔 이유는 둘째 줄에 있다. 짐승인간을
- * 감당하지 못하는 판에도 두 번째 자리는 채워야 하고, 아무 능력 없는 공범이
- * 그 메움패다 — 빼면 7~9인 판의 둘째 마피아가 통째로 사라진다.
- *
- * 걸러지는 기준은 밤 사망자 예산(CITIZENS_PER_NIGHT_KILL)이다. 조건은
- * 인원수가 아니라 시민 자리 수(citizenSlots)이므로 마피아 수와 함께 움직인다 —
- * 정리하면 citizenSlots >= 8일 때만 짐승인간이 후보로 남는다. 인원표에서
- * 10인 판이 마피아 2명이 되면서 시민 자리가 8이 되었고, 짐승인간은 그
- * 10인부터 뽑힌다.
- *
- * 주의: 이 배열의 길이(2)가 곧 최대 추첨 수(11~12인의 mafia - 1 = 2)라 여유가
- * 한 칸도 없다. MAFIA_TEAM_SIZE를 고쳐서 mafia >= 3인 인원이 짐승인간이
- * 걸러지는 구간(citizenSlots < 8)과 겹치면 draw가 요청보다 적게 돌려주고,
- * 덱은 마피아 한 명이 모자란 채로 조용히 나간다. 그때는 인원표만이 아니라 이
- * 풀에도 후보를 더해야 한다 (tests/deck.test.ts "마피아 진영 인원이 표와
- * 정확히 같다"가 4~12인을 훑으므로 그 자리에서 걸린다).
- */
-const MAFIA_POOL: readonly Role[] = [Role.MAFIA, Role.BEAST];
-
-/**
- * 시민이 이길 수단. 이 둘이 빠진 판은 시민에게 정보가 아예 없어서
- * 토론이 근거 없는 지목으로만 흘러간다.
- */
-const CITIZEN_REQUIRED: readonly Role[] = [Role.DOCTOR, Role.POLICE];
-
-/** 남는 시민 자리 중 일부에 뽑히는 능력자 */
-const CITIZEN_POOL: readonly Role[] = [
-	Role.POLITICIAN,
-	Role.SHAMAN,
-	Role.SPY,
-	Role.SOLDIER,
-	Role.REPORTER,
-	Role.VIGILANTE,
-];
+import type { DeckSpec } from "./RuleSet.ts";
 
 /** Fisher-Yates. rng를 주입할 수 있어 테스트에서 결정적으로 돌릴 수 있다 */
 export function shuffle<T>(array: T[], rng: () => number = Math.random): T[] {
@@ -85,9 +33,9 @@ export function shuffle<T>(array: T[], rng: () => number = Math.random): T[] {
  * 정원 밖(테스트가 정원 + 2까지 부른다)은 마지막 칸으로 자른다. 표를 벗어난
  * 인원에 답이 없는 것보다, 가장 큰 판과 같게 다루는 편이 안전하다.
  */
-export function mafiaCount(playerCount: number): number {
-	const last = MAFIA_TEAM_SIZE.length - 1;
-	return MAFIA_TEAM_SIZE[playerCount > last ? last : playerCount];
+export function mafiaCount(deck: DeckSpec, playerCount: number): number {
+	const last = deck.mafiaTeamSize.length - 1;
+	return deck.mafiaTeamSize[playerCount > last ? last : playerCount];
 }
 
 /**
@@ -129,19 +77,25 @@ function draw(pool: readonly Role[], count: number, rng: () => number): Role[] {
  * (인원수별 구성표를 두는 길도 있었지만, 그쪽은 직업 하나를 추가할 때마다
  *  4~8명 다섯 줄을 전부 손봐야 해서 확장성에서 진다)
  */
-export function buildRoleDeck(playerCount: number, rng: () => number = Math.random): Role[] {
-	const mafia = mafiaCount(playerCount);
+export function buildRoleDeck(
+	spec: DeckSpec,
+	playerCount: number,
+	rng: () => number = Math.random
+): Role[] {
+	const mafia = mafiaCount(spec, playerCount);
 	const citizenSlots = playerCount - mafia;
-	const deck: Role[] = [MAFIA_LEAD];
+	// 첫 자리를 무작위로 고르는 것은 여기가 아니다. 지금은 두 모드 모두
+	// 후보가 하나뿐이라 첫 칸을 그대로 쓴다.
+	const roles: Role[] = [spec.leadPool.length > 0 ? spec.leadPool[0] : Role.MAFIA];
 
 	// 마피아 리더가 이미 밤 사망자 하나를 쓴다. 예산이 남지 않으면 두 번째 자리는
 	// 따로 죽이지 않는 직업 중에서만 뽑는다 — 인원 상한이 올라가면 이 필터가
 	// 저절로 풀리므로, 직업을 지우거나 인원별 예외를 적어둘 필요가 없다.
 	const affordsLoneKiller = nightKillBudget(citizenSlots) > 1;
 	const mafiaPool = affordsLoneKiller
-		? MAFIA_POOL
-		: MAFIA_POOL.filter(role => !killsIndependently(role));
-	for (const role of draw(mafiaPool, mafia - 1, rng)) deck.push(role);
+		? spec.mafiaPool
+		: spec.mafiaPool.filter(role => !killsIndependently(role));
+	for (const role of draw(mafiaPool, mafia - 1, rng)) roles.push(role);
 
 	/*
 	 * 시민 자리는 세 갈래로 나뉜다 — 정보(의사·경찰) / 판마다 뽑는 능력자 /
@@ -160,12 +114,12 @@ export function buildRoleDeck(playerCount: number, rng: () => number = Math.rand
 	 */
 	const reservedSlots = MIN_PLAIN_CITIZENS + MIN_SPECIAL_CITIZENS;
 	const requiredSlots = Math.max(
-		Math.min(CITIZEN_REQUIRED.length, citizenSlots - reservedSlots),
+		Math.min(spec.citizenRequired.length, citizenSlots - reservedSlots),
 		0,
 	);
 	// 잘릴 때 의사·경찰 중 누가 남는지는 판마다 다르다. 앞에서부터 자르면
 	// 4명 판에 경찰이 영원히 나오지 않는다.
-	for (const role of draw(CITIZEN_REQUIRED, requiredSlots, rng)) deck.push(role);
+	for (const role of draw(spec.citizenRequired, requiredSlots, rng)) roles.push(role);
 
 	// 남은 시민 자리의 일부만 능력자로 채운다.
 	//
@@ -176,10 +130,10 @@ export function buildRoleDeck(playerCount: number, rng: () => number = Math.rand
 	const special = Math.min(
 		Math.max(Math.round(plainSlots * SPECIAL_CITIZEN_RATIO), MIN_SPECIAL_CITIZENS),
 		Math.max(plainSlots - MIN_PLAIN_CITIZENS, 0),
-		CITIZEN_POOL.length,
+		spec.citizenPool.length,
 	);
-	for (const role of draw(CITIZEN_POOL, special, rng)) deck.push(role);
+	for (const role of draw(spec.citizenPool, special, rng)) roles.push(role);
 
-	while (deck.length < playerCount) deck.push(Role.CITIZEN);
-	return shuffle(deck, rng);
+	while (roles.length < playerCount) roles.push(Role.CITIZEN);
+	return shuffle(roles, rng);
 }

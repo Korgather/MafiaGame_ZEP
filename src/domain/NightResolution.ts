@@ -14,7 +14,6 @@
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { FIRST_NIGHT_PEACEFUL_UP_TO } from "../constants/GameConfig.ts";
 import { inMafiaChat, NightActionKind, roleDef, roleName } from "./Roles.ts";
 
 export interface NightSelectResult {
@@ -270,6 +269,10 @@ function hasCasualty(casualties: readonly NightCasualty[], seat: Seat): boolean 
  * 못 했으므로 남은 사람이 그 사람에 대해 아는 것이 없고, 추리가 시작되기
  * 전에 인원만 줄어든다.
  */
-export function isPeacefulNight(nightNumber: number, playerCount: number): boolean {
-	return nightNumber === 1 && playerCount <= FIRST_NIGHT_PEACEFUL_UP_TO;
+export function isPeacefulNight(
+	nightNumber: number,
+	playerCount: number,
+	peacefulUpTo: number
+): boolean {
+	return nightNumber === 1 && playerCount <= peacefulUpTo;
 }

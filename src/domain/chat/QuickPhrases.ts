@@ -29,6 +29,23 @@ const QUICK_MAFIA: string[] = ["이 사람 칩시다", "오늘은 넘기죠", "�
 const QUICK_GHOST: string[] = ["누가 죽였는지 봤어요", "억울합니다", "잘 싸웠습니다"];
 const QUICK_NONE: string[] = [];
 
+/**
+ * 침묵전의 낮 문구.
+ *
+ * 번호를 넣지 않는다 — 12명 × 문구 종류만큼 칩이 늘어난다. 지목은 투표와
+ * 맵 위의 위치로 한다.
+ */
+const QUICK_SILENCE_DAY: string[] = [
+	"의심됩니다",
+	"저는 시민입니다",
+	"정보 있어요",
+	"동의합니다",
+	"반대합니다",
+	"저를 믿어주세요",
+	"오늘은 넘기죠",
+	"잘 모르겠습니다",
+];
+
 export function quickFor(ctx: ChatContext): string[] {
 	if (!ctx.seated) return QUICK_WORLD;
 	if (!ctx.alive) return QUICK_GHOST;
@@ -36,6 +53,8 @@ export function quickFor(ctx: ChatContext): string[] {
 	if (ctx.phase === GamePhase.NIGHT) return ctx.mafiaChat ? QUICK_MAFIA : QUICK_NONE;
 	if (ctx.phase === GamePhase.LOBBY) return QUICK_LOBBY;
 	if (ctx.phase === GamePhase.VOTE || ctx.phase === GamePhase.VOTE_RESULT) return QUICK_VOTE;
-	if (ctx.phase === GamePhase.DAY) return QUICK_DAY;
+	if (ctx.phase === GamePhase.DAY) {
+		return ctx.chatMode === "phrasesOnly" ? QUICK_SILENCE_DAY : QUICK_DAY;
+	}
 	return QUICK_WORLD;
 }

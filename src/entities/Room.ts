@@ -15,6 +15,7 @@ import { GamePhase, Role, Team } from "../types/Game.types.ts";
 import { KICK } from "../constants/GameConfig.ts";
 import { roomOrigin } from "../constants/RoomLayout.ts";
 import { roleDef, roleName } from "../domain/Roles.ts";
+import { rulesForRoom } from "../domain/RuleSet.ts";
 
 /** 아직 개표가 없었을 때의 값 */
 function emptyVoteRecord(): VoteRecord {
@@ -25,6 +26,7 @@ export function createRoom(num: number): Room {
 	const room: Room = {
 		num,
 		startPoint: roomOrigin(num),
+		ruleSet: rulesForRoom(num),
 		phase: GamePhase.LOBBY,
 		started: false,
 		phaseTimer: 0,

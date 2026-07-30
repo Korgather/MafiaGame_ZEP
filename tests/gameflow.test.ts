@@ -10,7 +10,8 @@ import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
-import { ACTION_RATE, MIN_PLAYERS, TIMING } from "../src/constants/GameConfig.ts";
+import { ACTION_RATE, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import {
 	cardWidget,
@@ -80,7 +81,7 @@ describe("대기실 → 게임 시작", () => {
 			setReady(player);
 		}
 
-		tick(TIMING.START_COUNTDOWN + 1);
+		tick(STANDARD_RULES.timing.START_COUNTDOWN + 1);
 
 		assert.equal(target.started, false);
 		assert.equal(target.phase, GamePhase.LOBBY);
@@ -265,10 +266,10 @@ describe("밤 단계", () => {
 		assert.equal(payload.phase, "night");
 		assert.equal(payload.total, MIN_PLAYERS);
 		assert.equal(payload.aliveCount, MIN_PLAYERS);
-		// TIMING.NIGHT가 아니라 방의 시계와 맞춘다. 단계 앞에 전환 컷이 붙으면서
+		// 룰셋의 NIGHT가 아니라 방의 시계와 맞춘다. 단계 앞에 전환 컷이 붙으면서
 		// 단계 길이가 상수보다 길어졌고, 화면이 봐야 하는 것은 늘어난 쪽이다
 		assert.equal(payload.timer, target.phaseTimer);
-		assert.ok(payload.timer > TIMING.NIGHT, "컷이 단계 시간을 늘리지 않았습니다");
+		assert.ok(payload.timer > STANDARD_RULES.timing.NIGHT, "컷이 단계 시간을 늘리지 않았습니다");
 		// 직업 칩은 모든 화면에 실린다. 자기 능력을 확인할 곳이 여기뿐이다
 		assert.equal(payload.role, "정치인");
 	});
@@ -302,7 +303,7 @@ describe("밤 단계", () => {
 	/**
 	 * 사망이 걸린 밤 테스트는 둘째 밤에서 본다.
 	 *
-	 * 4인 판의 첫 밤에는 아무도 죽지 않는다(FIRST_NIGHT_PEACEFUL_UP_TO).
+	 * 4인 판의 첫 밤에는 아무도 죽지 않는다(룰셋의 firstNightPeacefulUpTo).
 	 * 첫 밤에서 보면 "죽었다"도 "살렸다"도 같은 결과가 나와서, 의사 테스트는
 	 * 의사가 아무 일도 하지 않아도 통과한다.
 	 */
@@ -824,7 +825,7 @@ describe("전환 컷", () => {
 
 		assert.equal(target.phase, GamePhase.ROLE_REVEAL);
 		assert.ok(
-			target.phaseTimer > TIMING.ROLE_REVEAL,
+			target.phaseTimer > STANDARD_RULES.timing.ROLE_REVEAL,
 			"컷을 걸었는데 단계 시간이 그대로입니다"
 		);
 
@@ -834,7 +835,8 @@ describe("전환 컷", () => {
 			assert.ok(payload, `${seat.name}의 컷이 payload 없이 열렸습니다`);
 			// ms가 없으면 위젯이 기본값 3초로 제 속도를 잡고, 서버가 걷는
 			// 순간과 어긋나 마지막 줄이 뜨기도 전에 화면이 사라진다
-			assert.equal(payload.ms, Math.round((target.phaseTimer - TIMING.ROLE_REVEAL) * 1000));
+			const cutMs = (target.phaseTimer - STANDARD_RULES.timing.ROLE_REVEAL) * 1000;
+			assert.equal(payload.ms, Math.round(cutMs));
 			assert.equal(payload.tone, "neutral");
 		}
 	});
@@ -843,7 +845,7 @@ describe("전환 컷", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		const player = playerOf(target.seats[0]);
-		const cutLength = target.phaseTimer - TIMING.ROLE_REVEAL;
+		const cutLength = target.phaseTimer - STANDARD_RULES.timing.ROLE_REVEAL;
 
 		tick(cutLength + 0.001);
 

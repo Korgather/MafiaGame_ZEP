@@ -16,6 +16,7 @@ import type { ScriptWidget, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { Bucket } from "../domain/RateLimit.ts";
+import type { RuleSet } from "../domain/RuleSet.ts";
 
 /**
  * 게임 진행 단계.
@@ -199,6 +200,13 @@ export interface Room {
 	readonly num: number;
 	/** 맵 상의 방 좌상단 좌표 */
 	readonly startPoint: readonly [number, number];
+	/**
+	 * 이 방이 쓰는 규칙. 방이 만들어질 때 정해지고 바뀌지 않는다.
+	 *
+	 * 방에 매달아 두는 이유는 전역 상수를 읽던 코드가 전부 room을 이미
+	 * 들고 있기 때문이다 — 인자를 새로 넘길 필요 없이 참조만 바꾸면 된다.
+	 */
+	readonly ruleSet: RuleSet;
 	phase: GamePhase;
 	/** 게임이 진행 중인가 (대기실이 아닌가) */
 	started: boolean;

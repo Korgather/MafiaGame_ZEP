@@ -71,6 +71,7 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
 		mafiaChat: false,
 		ghostChat: false,
 		silenced: false,
+		chatMode: "free",
 	};
 	return { ...base, ...over };
 }
@@ -123,7 +124,7 @@ function nightGame(): {
  * 밤에 서 있는 판을 둘째 밤까지 끌고 가 victim을 실제로 죽인다.
  * 돌아온 시점은 낮이고 victim은 유령이다.
  *
- * 8인 이하 판의 첫 밤에는 아무도 죽지 않는다(FIRST_NIGHT_PEACEFUL_UP_TO).
+ * 8인 이하 판의 첫 밤에는 아무도 죽지 않는다(룰셋의 firstNightPeacefulUpTo).
  * 그래서 "죽은 뒤"를 보는 테스트가 첫 밤에 지목하면, 단언이 산 사람을
  * 상대로 돌아 조용히 통과한다 — 채널이 유령으로 옮겨갔는지 같은 것은
  * 애초에 아무것도 옮겨가지 않았으므로 검사할 대상이 없다.

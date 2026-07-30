@@ -13,7 +13,6 @@ import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat, Team as TeamType } from "../types/Game.types.ts";
 import { GamePhase, Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { TIMING } from "../constants/GameConfig.ts";
 import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
 import { revealViews } from "../entities/Room.ts";
@@ -37,7 +36,7 @@ export function finishIfDecided(room: Room): boolean {
 
 export function finish(room: Room, winner: TeamType): void {
 	room.phase = GamePhase.GAME_OVER;
-	room.phaseTimer = TIMING.GAME_OVER;
+	room.phaseTimer = room.ruleSet.timing.GAME_OVER;
 	room.tickTockPlayed = true;
 	room.winner = winner;
 	// 판 요약을 외부로 내보내는 자리다. 시즌 1은 계측 없이 출하했다 —

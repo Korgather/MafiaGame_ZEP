@@ -223,6 +223,10 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 	// 시점에 아직 방 탭이 없기 때문이다.
 	Chat.refresh(player);
 	Chat.notice(room, `🚪 ${name} 님이 입장했습니다.`);
+	// 어느 규칙의 방인지 들어온 사람에게만 알린다. 온보딩 카드에 넣지 않은
+	// 이유는 그 카드가 첫 판인 사람에게만 뜨고(needsGuide) 안내판 트리거에서도
+	// 열려 방이 스코프에 없기 때문이다 — 거기 넣으면 거의 아무도 못 본다
+	Chat.tell(player, `📋 ${room.ruleSet.displayName} — ${room.ruleSet.summary}`);
 
 	refreshRoom(room);
 	broadcastRoomCounts();
