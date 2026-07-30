@@ -9,6 +9,8 @@
  * FSM 전이표, 투표 위젯 → 집계 → 처형, 밤 지목 → 정산 → 사망 순서처럼
  * 순수 함수 테스트로는 닿을 수 없던 부분이 여기서 처음 커버된다.
  */
+// node:assert는 부작용이 없는 내장 모듈이라 아래 평가 순서와 무관하다.
+import { strict as assert } from "node:assert";
 // FakeZep이 먼저 평가돼야 한다. ESM은 import 선언 순서대로 깊이 우선
 // 평가하므로 이 한 줄이 아래 src import보다 반드시 먼저 끝난다.
 // (Sprites.ts가 모듈 로드 시점에 ScriptApp.loadSpritesheet를 부른다)
@@ -24,7 +26,7 @@ import type { ChatMessage } from "../../src/domain/chat/ChatMessage.ts";
 import { resetGlobalLog } from "../../src/services/ChatService.ts";
 import type { PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
 import type { ChatChannelView } from "../../src/types/Widget.types.ts";
-import { Role } from "../../src/types/Game.types.ts";
+import { GamePhase, Role } from "../../src/types/Game.types.ts";
 
 let nextPlayerId = 1;
 
@@ -413,6 +415,26 @@ export function finishPhase(target: Room): void {
 /** 전원 준비된 대기실의 카운트다운을 소진시켜 게임을 시작한다 */
 export function finishCountdown(target: Room): void {
 	tick(target.countdown + 0.001);
+}
+
+/**
+ * 첫 밤에 서 있는 판을 둘째 밤이 시작되는 시점까지 넘긴다.
+ *
+ * 8인 이하 판의 첫 밤에는 아무도 죽지 않으므로(FIRST_NIGHT_PEACEFUL_UP_TO)
+ * 사망이 걸린 테스트는 전부 이 네 걸음(밤 → 낮 → 투표 → 개표 → 밤)을 앞에
+ * 붙여야 한다. 다섯 곳이 각자 finishPhase를 세고 있었고, 한 걸음만 어긋나도
+ * 뒤따르는 select가 밤이 아닌 단계로 날아가 조용히 버려진다 — 그 뒤의 단언은
+ * 죽지 않은 사람을 상대로 돌아 원인과 한참 떨어진 자리에서 깨진다.
+ * 그래서 도착 단계를 여기서 확인하고 돌려준다.
+ */
+export function passPeacefulFirstNight(target: Room): void {
+	assert.equal(target.phase, GamePhase.NIGHT, "밤이 아닌 단계에서 불렀습니다");
+	assert.equal(target.turnCount, 0, "첫 밤이 아닙니다");
+	finishPhase(target); // 첫 밤(무사) → DAY
+	finishPhase(target); // → VOTE
+	finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+	finishPhase(target); // → NIGHT (둘째 밤)
+	assert.equal(target.phase, GamePhase.NIGHT, "둘째 밤에 도착하지 못했습니다");
 }
 
 /**

@@ -41,6 +41,7 @@ import {
 	finishPhase,
 	joinRoom,
 	paintPrivateArea,
+	passPeacefulFirstNight,
 	playerOf,
 	reconnect,
 	resetWorld,
@@ -128,10 +129,7 @@ function nightGame(): {
  * 애초에 아무것도 옮겨가지 않았으므로 검사할 대상이 없다.
  */
 function killOnSecondNight(target: Room, mafia: FakePlayer, victim: Seat): void {
-	finishPhase(target); // 첫 밤(무사) → DAY
-	finishPhase(target); // → VOTE
-	finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
-	finishPhase(target); // → NIGHT (둘째 밤)
+	passPeacefulFirstNight(target);
 	send(mafia, { type: "select", num: victim.index });
 	finishPhase(target); // → 정산 → DAY
 }
@@ -633,6 +631,10 @@ describe("알림과 기록", () => {
 
 		killOnSecondNight(target, mafia, victim);
 
+		// 죽었는지부터 확인한다. 이름만 훑는 아래 단언은 지목이 통째로 빗나가도
+		// "누가 입장했습니다" 같은 다른 줄에 이름이 있으면 통과한다
+		assert.equal(victim.alive, false, "지목 대상이 죽지 않았습니다");
+
 		const events = chatLines(doctor).filter(line => line.kind === MessageKind.EVENT);
 		assert.ok(events.length > 0, "사건 기록이 하나도 없습니다");
 		assert.ok(events.some(line => line.text.indexOf(victim.name) >= 0));
@@ -674,11 +676,8 @@ describe("알림과 기록", () => {
 		const { target, mafia } = nightGame();
 		const mafiaSeat = seatsWithRole(target, Role.MAFIA)[0];
 
-		// 첫 밤은 무사히 지나간다. 결착은 둘째 밤부터 세야 맞는다
-		finishPhase(target); // 첫 밤(무사) → DAY
-		finishPhase(target); // → VOTE
-		finishPhase(target); // → VOTE_RESULT
-		finishPhase(target); // → NIGHT (둘째 밤)
+		// 결착은 둘째 밤부터 세야 맞는다
+		passPeacefulFirstNight(target);
 
 		// 마피아가 시민을 계속 줄이면 결국 인원이 같아진다
 		for (const seat of target.seats.filter(s => s !== mafiaSeat).slice(0, 2)) {

@@ -50,6 +50,15 @@ import { sprite } from "../infrastructure/Sprites.ts";
 const NIGHT_PROMPT_MS = 6000;
 
 /**
+ * 아무도 죽지 않은 아침의 보고.
+ *
+ * 아무도 죽지 않는 아침은 두 갈래다 — 첫 밤 무사(정산을 아예 건너뛴다)와
+ * 지목이 없었거나 전부 막힌 밤. 두 곳에 같은 문장을 따로 적어 두면 한쪽만
+ * 고쳐졌을 때 같은 결과가 밤마다 다른 말로 나온다.
+ */
+const NO_DEATH_REPORT = "✨ 이번 밤에 아무도 죽지 않았습니다.";
+
+/**
  * 지목할 것이 없는 사람들이 보는 밤 화면.
  *
  * 원본 문구는 "마피아, 경찰, 의사는 밤에 움직일 수 있습니다"로 직업을 나열했다.
@@ -309,13 +318,13 @@ export function resolveNight(room: Room): void {
 	// 좌석의 방탄을 소모하므로, 뒤에 두면 군인이 죽지도 않은 채 방탄만 잃는다.
 	// attackedBy는 그대로 남지만 다음 밤 시작의 resetRound가 비운다.
 	if (isPeacefulNight(room.turnCount, room.total)) {
-		report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
+		report(room, NO_DEATH_REPORT);
 		publishScoops(room);
 		return;
 	}
 
 	const casualties = resolveNightCasualties(room.seats);
-	if (casualties.length === 0) report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
+	if (casualties.length === 0) report(room, NO_DEATH_REPORT);
 
 	for (const casualty of casualties) {
 		switch (casualty.outcome) {

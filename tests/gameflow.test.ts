@@ -25,6 +25,7 @@ import {
 	hasCut,
 	joinRoom,
 	mainWidget,
+	passPeacefulFirstNight,
 	playerOf,
 	reconnect,
 	resetWorld,
@@ -308,11 +309,7 @@ describe("밤 단계", () => {
 	function reachSecondNight(): ReturnType<typeof room> {
 		const target = room(1);
 		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
-		finishPhase(target); // → DAY
-		finishPhase(target); // → VOTE
-		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
-		finishPhase(target); // → NIGHT (둘째 밤)
-		assert.equal(target.phase, GamePhase.NIGHT);
+		passPeacefulFirstNight(target);
 		return target;
 	}
 
@@ -411,6 +408,18 @@ describe("밤 단계", () => {
 		const players = startPlainGame(6);
 		const target = room(1);
 		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		// 밤이 시작될 때 미리 알린다. 이 안내가 없으면 마피아는 자기 지목이
+		// 실패했다고 믿고 시민은 의사가 막은 줄 알아, 양쪽 다 없는 정보를
+		// 추리에 넣는다. 아침 보고("아무도 죽지 않았습니다")와는 다른 줄이다
+		assert.ok(
+			chatSaw(players[0], "첫 밤에는 아무도 죽지 않습니다"),
+			"첫 밤 안내가 시민에게 오지 않았습니다"
+		);
+		assert.ok(
+			chatSaw(playerOf(seatsWithRole(target, Role.MAFIA)[0]), "첫 밤에는 아무도 죽지 않습니다"),
+			"첫 밤 안내가 마피아에게 오지 않았습니다"
+		);
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
@@ -569,10 +578,7 @@ describe("투표", () => {
 		const target = room(1);
 		// 첫 밤에는 아무도 죽지 않으므로 유령은 둘째 밤에 나온다
 		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
-		finishPhase(target); // → DAY
-		finishPhase(target); // → VOTE
-		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
-		finishPhase(target); // → NIGHT (둘째 밤)
+		passPeacefulFirstNight(target);
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
