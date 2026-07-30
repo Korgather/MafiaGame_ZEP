@@ -179,8 +179,15 @@
 			let iAmReady = false;
 			/*
 			 * 서버가 알려주기 전까지 쓰는 기본값. 여기 적힌 숫자가 규칙인 것은
-			 * 아니다 — min/max는 setID, kickVotes는 좌석 목록(init)이 덮어쓴다.
-			 * 강퇴 표수만 init에 실리는 이유는 지금 인원에 따라 변하기 때문이다.
+			 * 아니다 — 셋 다 좌석 목록(init)이 덮어쓴다.
+			 *
+			 * 셋 다 init에 실리는 이유는 한 번 보내고 마는 setID로는 늦기
+			 * 때문이다. min/max는 어느 방에 앉았는지가 정하고(속도전 4~8,
+			 * 침묵전 8~12), kickVotes는 지금 인원이 정한다. 방을 고르기 전에
+			 * 오는 setID에 실으면 화면은 영원히 전역값만 알게 된다.
+			 *
+			 * 방 목록 화면의 정원은 여기가 아니라 방마다 따로 온다
+			 * (updatePlayerCount의 max). max는 그 값이 빠졌을 때의 보루다.
 			 */
 			const config = { min: 4, max: 12, kickVotes: 3 };
 			let counts = {};
@@ -196,12 +203,15 @@
 			 */
 			function roomHtml(num) {
 				const info = counts[num] || { count: 0, started: false, watching: 0 };
-				const full = info.count >= config.max;
+				// 정원은 방마다 다르다. 서버가 방마다 실어 보내므로 config.max는
+				// 그 값이 빠진 방을 undefined로 그리지 않기 위한 보루로만 쓴다
+				const max = info.max || config.max;
+				const full = info.count >= max;
 				const state = info.started
 					? `관전 ${info.watching || 0}`
 					: full
 						? "가득 참"
-						: `${info.count}/${config.max}`;
+						: `${info.count}/${max}`;
 
 				return html`<button
 					type="button"
@@ -307,14 +317,16 @@
 			Parent.on({
 				setID(data) {
 					myId = data.id;
-					if (data.minPlayers) config.min = data.minPlayers;
-					if (data.maxPlayers) config.max = data.maxPlayers;
 				},
 
 				init(data) {
 					const list = Array.isArray(data.data) ? data.data : [];
-					// 좌석을 그리기 전에 갱신해야 "강퇴 2/3"이 이번 인원의 수를 쓴다
+					// 좌석을 그리기 전에 갱신해야 "강퇴 2/3"이 이번 인원의 수를,
+					// "3명 더 모이면"이 이번 방의 하한을 쓴다.
+					// 방 밖에서는 정원이 0으로 와서 마지막 값이 그대로 남는다
 					if (data.kickVotes) config.kickVotes = data.kickVotes;
+					if (data.minPlayers) config.min = data.minPlayers;
+					if (data.maxPlayers) config.max = data.maxPlayers;
 					showRooms(list.length > 0);
 					if (list.length > 0) paintSeats(list);
 					else paintRooms();

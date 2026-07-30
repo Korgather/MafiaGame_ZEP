@@ -74,6 +74,17 @@ describe("속도전", () => {
 		assert.deepEqual(BLITZ_RULES.deck.citizenPool, [Role.SOLDIER]);
 	});
 
+	it("4~8인 전용이다", () => {
+		// 리터럴로 못 박는다. gameflow.test.ts의 "아홉 번째 사람" 테스트는 이
+		// 값을 읽어서 방을 채우므로 정원을 12로 올려도 초록으로 지나가는데,
+		// 그 순간 Lobby.join 주석이 경고하는 "속도전 9인부터 첫 밤 사망"이
+		// 조용히 사실이 된다(firstNightPeacefulUpTo가 8이라 9인부터 풀린다).
+		// 침묵전 하한과 정확히 같은 이유로 같은 자리에 적어 둔다
+		assert.equal(BLITZ_RULES.minPlayers, 4);
+		assert.equal(BLITZ_RULES.maxPlayers, 8);
+		assert.equal(BLITZ_RULES.firstNightPeacefulUpTo, 8);
+	});
+
 	it("인원표에 0이 남아 있지 않다", () => {
 		// 정원(8) 밖은 도달 경로가 없지만, 0을 두면 그 칸을 읽었을 때 마피아
 		// 0명 판이 되어 시작하자마자 시민 승리가 난다. 8인 값을 반복한다

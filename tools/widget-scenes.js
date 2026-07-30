@@ -32,8 +32,10 @@ const { GUIDE_CARDS, roleBook } = require("../src/domain/Guide.ts");
  * 12로 올린 다음에도 미리보기는 8명짜리 대기실만 보여준다 — 늘어난 인원에서
  * 레이아웃이 깨지는지 볼 수 없는데 검사는 통과한다.
  */
-const { MAX_PLAYERS, MIN_PLAYERS } = require("../src/constants/GameConfig.ts");
+const { MAX_PLAYERS } = require("../src/constants/GameConfig.ts");
 const { kickVotesNeeded } = require("../src/entities/Room.ts");
+/* 정원은 이제 방마다 다르다. 미리보기도 그 차이를 그대로 보여줘야 한다 */
+const { BLITZ_RULES, STANDARD_RULES } = require("../src/domain/RuleSet.ts");
 
 /** 도감 12장. 첫 장(마피아)은 직업 공개 장면이 함께 쓴다 */
 const BOOK = roleBook();
@@ -387,18 +389,28 @@ const SCENES = [
 		file: "lobby.html",
 		size: [360, 440],
 		messages: [
-			// setID에는 강퇴 표수가 없다. 그 값은 지금 인원에 따라 변해서
-			// 좌석 목록(init)에 실린다 — 방 밖에서는 아직 인원이 없다
-			{ type: "setID", id: "p1", minPlayers: MIN_PLAYERS, maxPlayers: MAX_PLAYERS },
+			// setID에는 정원도 강퇴 표수도 없다. 정원은 어느 방에 앉았는지가,
+			// 강퇴 표수는 지금 인원이 정하는데 이 메시지는 방을 고르기 전에
+			// 한 번만 나간다. 둘 다 좌석 목록(init)에 실린다
+			{ type: "setID", id: "p1" },
 			{
 				type: "updatePlayerCount",
 				data: {
-					1: { count: 3, started: false, watching: 0 },
-					2: { count: 0, started: false, watching: 0 },
+					1: { count: 3, started: false, watching: 0, max: STANDARD_RULES.maxPlayers },
+					2: { count: 0, started: false, watching: 0, max: STANDARD_RULES.maxPlayers },
 					// 진행 중인 방. 이제 disabled가 아니라 관전 버튼이다
-					3: { count: 8, started: true, watching: 2 },
+					3: { count: 8, started: true, watching: 2, max: STANDARD_RULES.maxPlayers },
 					// 정원까지 찬 방. 이쪽만 눌리지 않는다
-					4: { count: MAX_PLAYERS, started: false, watching: 0 },
+					4: { count: MAX_PLAYERS, started: false, watching: 0, max: STANDARD_RULES.maxPlayers },
+					// 정원이 더 작은 모드. 같은 8명인데 3번 방은 아직 자리가
+					// 있고 이 방은 가득 찼다 — 전역값 하나로 그리던 동안에는
+					// 여기가 "8/12"로 보였고, 눌러 보면 튕겼다
+					6: {
+						count: BLITZ_RULES.maxPlayers,
+						started: false,
+						watching: 0,
+						max: BLITZ_RULES.maxPlayers,
+					},
 				},
 			},
 		],
@@ -408,10 +420,12 @@ const SCENES = [
 		file: "lobby.html",
 		size: [360, 440],
 		messages: [
-			{ type: "setID", id: "p1", minPlayers: MIN_PLAYERS, maxPlayers: MAX_PLAYERS },
+			{ type: "setID", id: "p1" },
 			{
 				type: "init",
 				kickVotes: kickVotesNeeded(3),
+				minPlayers: STANDARD_RULES.minPlayers,
+				maxPlayers: STANDARD_RULES.maxPlayers,
 				data: [
 					{ id: "p1", name: "김철수", rank: "Lv.12", runCount: 2, ready: true, kickCount: 0 },
 					// 운영자·비로그인 유저는 레벨 대신 칭호가 그대로 들어온다.
@@ -427,8 +441,14 @@ const SCENES = [
 		file: "lobby.html",
 		size: [360, 440],
 		messages: [
-			{ type: "setID", id: "p1", minPlayers: MIN_PLAYERS, maxPlayers: MAX_PLAYERS },
-			{ type: "init", kickVotes: kickVotesNeeded(MAX_PLAYERS), data: FULL_SEATS },
+			{ type: "setID", id: "p1" },
+			{
+				type: "init",
+				kickVotes: kickVotesNeeded(MAX_PLAYERS),
+				minPlayers: STANDARD_RULES.minPlayers,
+				maxPlayers: STANDARD_RULES.maxPlayers,
+				data: FULL_SEATS,
+			},
 		],
 	},
 	{

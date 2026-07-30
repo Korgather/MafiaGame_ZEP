@@ -12,7 +12,8 @@ import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { WidgetFile } from "../src/constants/Assets.ts";
-import { MAX_PLAYERS, MAX_SPECTATORS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { MAX_SPECTATORS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
@@ -203,11 +204,23 @@ describe("판이 끝난 뒤", () => {
 	 * 좌석이 12로 늘어난 지금은 관전 정원(8)이 먼저 막혀서 그 상황이 만들어지지
 	 * 않는다 — 그건 두 상수의 관계에서 나오는 성질이므로 관계를 먼저 못 박는다.
 	 * 관계가 뒤집히면 이 assert가 "못 앉는 경로에 테스트가 없다"고 알려준다.
+	 *
+	 * 비교 대상은 전역 MAX_PLAYERS가 아니라 **가장 작은 방의 정원**이다.
+	 * seatSpectators가 실제로 보는 것은 room.ruleSet.maxPlayers이고, 그 값이
+	 * 가장 작은 모드(속도전 8)에서 먼저 자리가 모자란다. 12와 비교하면
+	 * 속도전 방에서 못 앉는 사람이 생겨도 이 테스트는 초록으로 지나간다 —
+	 * Lobby.seatSpectators의 주석이 "관계는 여기가 지킨다"고 가리키는 관계가
+	 * 바로 이것이라, 가리키는 곳에 그 관계가 실제로 있어야 한다.
 	 */
 	it("관전 정원을 다 채워도 기다린 전원이 좌석에 앉는다", () => {
+		const smallestRoom = Math.min(
+			STANDARD_RULES.maxPlayers,
+			BLITZ_RULES.maxPlayers,
+			SILENCE_RULES.maxPlayers,
+		);
 		assert.ok(
-			MAX_SPECTATORS <= MAX_PLAYERS,
-			"관전 정원이 좌석보다 많습니다 — 못 앉는 사람이 생기는 경로에 테스트가 필요합니다",
+			MAX_SPECTATORS <= smallestRoom,
+			"관전 정원이 가장 작은 방의 좌석보다 많습니다 — 못 앉는 사람이 생기는 경로에 테스트가 필요합니다",
 		);
 		startPlainGame(MIN_PLAYERS);
 		const watchers: FakePlayer[] = [];

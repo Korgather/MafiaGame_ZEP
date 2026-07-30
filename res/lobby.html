@@ -215,8 +215,9 @@ function roomHtml(num) {
   started: false,
   watching: 0
  };
- const full = info.count >= config.max;
- const state = info.started ? `관전 ${info.watching || 0}` : full ? "가득 참" : `${info.count}/${config.max}`;
+ const max = info.max || config.max;
+ const full = info.count >= max;
+ const state = info.started ? `관전 ${info.watching || 0}` : full ? "가득 참" : `${info.count}/${max}`;
  return html`<button
 					type="button"
 					class="room${info.started ? " playing" : full ? " full" : ""}"
@@ -313,12 +314,12 @@ function showRooms(inRoom) {
 Parent.on({
  setID(data) {
   myId = data.id;
-  if (data.minPlayers) config.min = data.minPlayers;
-  if (data.maxPlayers) config.max = data.maxPlayers;
  },
  init(data) {
   const list = Array.isArray(data.data) ? data.data : [];
   if (data.kickVotes) config.kickVotes = data.kickVotes;
+  if (data.minPlayers) config.min = data.minPlayers;
+  if (data.maxPlayers) config.max = data.maxPlayers;
   showRooms(list.length > 0);
   if (list.length > 0) paintSeats(list); else paintRooms();
  },

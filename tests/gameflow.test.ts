@@ -13,6 +13,7 @@ import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
 import { ACTION_RATE, MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
+import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
 	cardWidget,
 	chatLines,
@@ -250,12 +251,15 @@ describe("모드별 정원", () => {
 	 * 좌석 수(상한)로 남고, 실제로 몇 명이 앉고 몇 명부터 시작하는지는
 	 * 그 방의 룰셋이 정한다.
 	 */
-	function fill(roomNum: number, count: number, ready = false): void {
+	function fill(roomNum: number, count: number, ready = false): FakePlayer[] {
+		const players: FakePlayer[] = [];
 		for (let i = 0; i < count; i++) {
 			const player = connect(`${roomNum}번방${i + 1}`);
 			joinRoom(player, roomNum);
 			if (ready) setReady(player);
+			players.push(player);
 		}
+		return players;
 	}
 
 	it("속도전 방은 아홉 번째 사람을 앉히지 않는다", () => {
@@ -308,6 +312,61 @@ describe("모드별 정원", () => {
 
 		startGame(MIN_PLAYERS, 2);
 		assert.equal(room(2).started, true, "네 명으로는 시작하지 못했습니다");
+	});
+
+	/**
+	 * 화면이 서버와 같은 정원을 본다.
+	 *
+	 * 서버만 방별 정원을 알던 동안 8번 방(침묵전)은 네 명이 전원 준비하면
+	 * "곧 시작합니다."를 띄운 채 영원히 시작하지 않았다 — 위젯은 접속할 때
+	 * 한 번 받은 전역 4/12만 알고 있었기 때문이다. 테스트는 HTML을 그릴 수
+	 * 없으므로 화면이 그 문장을 쓰는 근거, 즉 서버가 보낸 payload를 본다.
+	 */
+	describe("대기실 화면이 받는 정원", () => {
+		/** 이 사람의 대기실 위젯이 마지막으로 받은 좌석 목록 */
+		function lastInit(player: FakePlayer): Record<string, unknown> {
+			const init = mainWidget(player).lastOfType("init");
+			assert.ok(init, `${player.name}이(가) 좌석 목록을 받지 못했습니다`);
+			return init;
+		}
+
+		it("침묵전 방은 여덟 명 하한을 화면에도 보낸다", () => {
+			const waiting = fill(8, SILENCE_RULES.minPlayers - 1, true);
+			const init = lastInit(waiting[0]);
+
+			assert.equal(init.minPlayers, 8);
+			// lobby.html의 #note는 list.length >= min일 때만 "곧 시작합니다."를
+			// 쓴다. 일곱 명까지는 그 조건에 닿지 않아야 한다
+			assert.ok(
+				(init.data as unknown[]).length < (init.minPlayers as number),
+				"일곱 명뿐인데 화면이 시작을 예고합니다",
+			);
+		});
+
+		it("속도전 방은 여덟 명 정원을 화면에도 보낸다", () => {
+			const init = lastInit(fill(6, 2)[0]);
+			assert.equal(init.minPlayers, 4);
+			assert.equal(init.maxPlayers, 8);
+		});
+
+		it("표준전 방은 전역 상수를 그대로 보낸다", () => {
+			const init = lastInit(fill(1, 2)[0]);
+			assert.equal(init.minPlayers, MIN_PLAYERS);
+			assert.equal(init.maxPlayers, MAX_PLAYERS);
+		});
+
+		it("방 목록은 방마다 다른 정원을 싣는다", () => {
+			// 전역 최댓값 하나로 그리면 8명 찬 속도전 방이 "8/12"로 보인다 —
+			// 눌러도 "방이 가득 찼습니다."로 튕기는 버튼이다
+			const watcher = connect("구경꾼");
+			const counts = mainWidget(watcher).lastOfType("updatePlayerCount");
+			assert.ok(counts, "방 목록을 받지 못했습니다");
+			const rooms = counts.data as { [num: string]: { max: number } };
+
+			assert.equal(rooms["1"].max, 12, "표준전");
+			assert.equal(rooms["6"].max, 8, "속도전");
+			assert.equal(rooms["8"].max, 12, "침묵전");
+		});
 	});
 });
 

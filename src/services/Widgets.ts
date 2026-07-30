@@ -19,6 +19,7 @@ import type {
 	WidgetLayout,
 } from "../types/Widget.types.ts";
 import { roleName } from "../domain/Roles.ts";
+import type { RuleSet } from "../domain/RuleSet.ts";
 import type { ZepAudience } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { WidgetBox } from "../constants/Assets.ts";
@@ -30,7 +31,6 @@ import {
 	WidgetFile,
 	WidgetSize,
 } from "../constants/Assets.ts";
-import { MAX_PLAYERS, MIN_PLAYERS } from "../constants/GameConfig.ts";
 import { kickVotesNeeded } from "../entities/Room.ts";
 import { guard } from "../infrastructure/Fault.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
@@ -525,20 +525,18 @@ export function updateChat(
 /**
  * 대기실 위젯을 열고 tag.widget에 물린다.
  *
- * 최소·최대 인원을 함께 보낸다. 기존 위젯은 이 값들을 몰라서 "왜 시작하지
- * 않는지"를 화면에 쓸 수 없었다. HTML에 4/12를 다시 적는 대신 서버가
- * 알려준다 — GameConfig를 바꾸면 화면도 따라 바뀐다.
+ * 정원(최소·최대 인원)은 여기서 보내지 않는다. 이 메시지는 월드에 들어올 때
+ * 한 번만 나가는데, 그 시점에는 아직 어느 방도 고르지 않았다. 정원은 방마다
+ * 다르므로(속도전 4~8, 침묵전 8~12) 여기 실으면 화면은 영원히 전역값만 알고,
+ * 8번 방에서 네 명이 준비했을 때 "곧 시작합니다."를 띄운 채 시작하지 않는다.
  *
- * 강퇴 필요 표수는 여기서 보내지 않는다. 지금 인원에 따라 달라지는 값이고
- * 이 시점에는 아직 방이 없다. 좌석 목록과 같은 메시지(pushLobby)에 실린다.
+ * 강퇴 필요 표수도 같은 이유로 빠진다. 둘 다 좌석 목록(pushLobby)에 실린다.
  */
 export function openLobby(player: ScriptPlayer): ScriptWidget {
 	// 방 선택 크기로 연다. 방 안이었다면 곧바로 오는 pushLobby가 늘려준다
 	return openMain(player, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY_ROOMS, {
 		type: "setID",
 		id: player.id,
-		minPlayers: MIN_PLAYERS,
-		maxPlayers: MAX_PLAYERS,
 	});
 }
 
@@ -550,11 +548,19 @@ export function openLobby(player: ScriptPlayer): ScriptWidget {
  * 좌석 8줄짜리 높이를 차지한 채 아래 절반이 비어 있었다.
  * 어느 화면인지는 목록이 비었는지로 정해지므로 보내는 쪽이 곧 아는 쪽이다.
  *
- * 강퇴 필요 표수도 같이 보낸다. 인원에 따라 변하는 값이라 한 번 보내고 마는
- * setID에 실을 수 없고, 좌석이 늘거나 줄면 이 메시지가 어차피 다시 오므로
- * 화면의 "강퇴 2/3"이 항상 판정과 같은 수를 가리킨다.
+ * 정원과 강퇴 필요 표수도 같이 보낸다. 둘 다 한 번 보내고 마는 setID에 실을
+ * 수 없는 값이다 — 정원은 어느 방에 앉았는지가, 강퇴 표수는 지금 인원이
+ * 정한다. 좌석이 늘거나 줄면 이 메시지가 어차피 다시 오므로 화면의
+ * "3명 더 모이면"과 "강퇴 2/3"이 항상 서버가 판정하는 수를 가리킨다.
+ *
+ * rules가 null이면 방 밖이다. 그 화면(방 선택)에는 정원이라는 것이 없으므로
+ * 전역 상수로 메우지 않고 0을 보낸다 — 위젯은 0을 "받지 않았다"로 읽는다.
  */
-export function pushLobby(player: ScriptPlayer, seats: LobbySeatView[]): void {
+export function pushLobby(
+	player: ScriptPlayer,
+	seats: LobbySeatView[],
+	rules: RuleSet | null
+): void {
 	const tag = tagOf(player);
 	if (!tag.widget) return;
 	const size = seats.length > 0 ? WidgetSize.LOBBY : WidgetSize.LOBBY_ROOMS;
@@ -564,6 +570,8 @@ export function pushLobby(player: ScriptPlayer, seats: LobbySeatView[]): void {
 		type: "init",
 		data: seats,
 		kickVotes: kickVotesNeeded(seats.length),
+		minPlayers: rules ? rules.minPlayers : 0,
+		maxPlayers: rules ? rules.maxPlayers : 0,
 		layout: layoutOf(player, align, size, player.isMobile && tag.chatOpen),
 	});
 }

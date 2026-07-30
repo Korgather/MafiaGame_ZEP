@@ -74,7 +74,12 @@ export function enterLobby(player: ScriptPlayer): void {
  */
 function pushSeatList(player: ScriptPlayer): void {
 	const found = locate(player.id);
-	pushLobby(player, found ? lobbySeatViews(found.room) : []);
+	// 방 밖이면 정원도 없다. 규칙을 아는 것은 방이므로 방이 없으면 null이다
+	if (!found) {
+		pushLobby(player, [], null);
+		return;
+	}
+	pushLobby(player, lobbySeatViews(found.room), found.room.ruleSet);
 }
 
 /** 방 안 전원의 목록을 갱신한다 (한 명이라도 바뀌면 전원에게) */
@@ -83,7 +88,7 @@ function refreshRoom(room: Room): void {
 	for (const seat of room.seats.slice()) {
 		const player = ScriptApp.getPlayerByID(seat.playerId);
 		if (!player) continue;
-		pushLobby(player, views);
+		pushLobby(player, views, room.ruleSet);
 	}
 }
 
@@ -137,6 +142,12 @@ interface RoomCount {
 	started: boolean;
 	/** 지켜보는 사람 수. 참가 인원과 절대 합치지 않는다 */
 	watching: number;
+	/**
+	 * 이 방의 정원. 방마다 다르므로(속도전 8, 표준·침묵전 12) 인원수와 같이
+	 * 실어 보낸다. 전역 최댓값 하나로 그리면 8명이 찬 속도전 방이 "8/12"로
+	 * 보이고, 눌러 보면 join이 "방이 가득 찼습니다."로 튕긴다.
+	 */
+	max: number;
 }
 
 function roomCounts(): { [roomNum: string]: RoomCount } {
@@ -146,6 +157,7 @@ function roomCounts(): { [roomNum: string]: RoomCount } {
 			count: room.seats.length,
 			started: room.started,
 			watching: room.spectators.length,
+			max: room.ruleSet.maxPlayers,
 		};
 	}
 	return counts;
@@ -370,7 +382,12 @@ function stopSpectating(player: ScriptPlayer): void {
  * 정원보다도 크지 않으니 — 표준·침묵전은 12, 속도전은 8이다 — 지금 실제로
  * 밀려나는 사람은 접속이 끊긴 사람뿐이다. 아래 break는 그래서 지금 도달하지
  * 않지만, 두 정원의 관계가 뒤집혔을 때 좌석이 조용히 넘치는 것을 막는 자리라
- * 남겨둔다. 관계 자체는 spectate.test.ts가 지킨다.
+ * 남겨둔다.
+ *
+ * 관계 자체는 spectate.test.ts의 "관전 정원을 다 채워도 기다린 전원이 좌석에
+ * 앉는다"가 지킨다 — 거기서 비교하는 상대는 전역 MAX_PLAYERS가 아니라 세
+ * 룰셋 정원의 최솟값이다. 여기서 읽는 값이 room.ruleSet.maxPlayers이므로
+ * 가장 작은 방(속도전 8)에서 먼저 자리가 모자라기 때문이다.
  */
 export function seatSpectators(room: Room, watchers: readonly Seat[]): string[] {
 	const seated: string[] = [];
@@ -472,7 +489,8 @@ function removeFromRoom(room: Room, playerId: string, kicked: boolean): void {
 	const player = ScriptApp.getPlayerByID(playerId);
 	if (player) {
 		// 빈 목록이 곧 "방 밖" 상태다. 별도의 kicked 메시지는 필요 없다.
-		pushLobby(player, []);
+		// 방에서 떨어져 나온 사람이라 이제 어느 정원에도 매여 있지 않다
+		pushLobby(player, [], null);
 		if (kicked) label(player, "강퇴당했습니다.");
 		// 좌석이 사라졌으니 방 탭도 사라진다
 		Chat.refresh(player);
