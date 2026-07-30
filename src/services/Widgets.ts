@@ -9,13 +9,16 @@
  */
 import type { ScriptPlayer, ScriptWidget, WidgetAlign } from "zep-script";
 import type {
+	CardView,
 	ChatChannelView,
 	LobbySeatView,
 	RevealView,
+	Seat,
 	SeatView,
 	Team,
 	WidgetLayout,
 } from "../types/Game.types.ts";
+import { roleName } from "../domain/Roles.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { WidgetBox } from "../constants/Assets.ts";
 import { MAIN_TIGHT, MobileWidth, TopNudge, WidgetFile, WidgetSize } from "../constants/Assets.ts";
@@ -155,10 +158,29 @@ export function squeezeMain(player: ScriptPlayer, chatOpen: boolean): void {
  * 화면마다 직업 칩 하나를 상시 노출하면 그 질문이 사라진다.
  */
 interface Identity {
+	/** 칩에 그대로 찍히는 문구. 유령이면 "유령" */
 	role: string;
 	team: Team;
-	/** false면 유령으로 표시된다 */
+	/** false면 유령 색으로 표시된다 */
 	alive: boolean;
+}
+
+/**
+ * 좌석에서 직업 칩을 만든다.
+ *
+ * "죽으면 유령으로 보인다"는 규칙이 전에는 phase.html 안에만 있었다
+ * (`data.alive === false ? "유령" : data.role`). 그래서 같은 칩을 쓰는
+ * roleAction 위젯은 그 규칙을 몰라 죽은 사람에게 직업을 그대로 보여줬고,
+ * 서버는 세 곳(밤 화면·낮 화면·밤 능력)에서 role/team/alive 세 줄을
+ * 각각 손으로 적고 있었다. 규칙과 조립을 서버 한 곳으로 모은다 —
+ * 관전자 칩("관전")도 같은 자리에 들어갈 수 있게 된다.
+ */
+export function identityOf(seat: Seat): Identity {
+	return {
+		role: seat.alive ? roleName(seat.role) : "유령",
+		team: seat.team,
+		alive: seat.alive,
+	};
 }
 
 /** 밤/아침 진행 화면 */
@@ -173,6 +195,14 @@ export interface PhasePayload extends Identity {
 	note: string;
 	/** 밤사이 일어난 일. 채팅으로 흘러가면 놓친다 */
 	deaths: string[];
+	/**
+	 * 좌석 없이 보고만 있는가.
+	 *
+	 * 선택 항목이 아니라 필수다. 빠뜨리면 undefined가 되어 "관전이 아니다"로
+	 * 조용히 읽히는데, 그 실수의 결과가 "관전 종료 버튼이 없어 갇힌 사람"이다.
+	 * 화면을 여는 네 곳이 전부 한 번씩 답하게 만든다.
+	 */
+	spectating: boolean;
 }
 
 /** 투표 화면 */
@@ -217,15 +247,22 @@ export interface GameOverPayload {
 	timer: number;
 }
 
-/** 직업 공개 카드. 직업별 차이는 전부 payload로 온다 */
-export interface RoleCardPayload {
+/**
+ * 겹쳐 읽는 카드. 직업 공개·첫 안내·직업 도감이 이 하나를 함께 쓴다.
+ *
+ * 셋의 차이는 내용이 아니라 "몇 장을 어떻게 넘기는가"뿐이라 nav 하나로
+ * 갈린다. 직업별 문구는 물론이고 안내 문구까지 서버가 완성해서 보내므로
+ * 위젯은 직업이 몇 종인지도, 규칙이 무엇인지도 알 필요가 없다.
+ */
+export interface CardPayload {
 	type: "init";
-	role: string;
-	team: Team;
-	glyph: string;
-	ability: string;
-	tip: string;
+	cards: CardView[];
+	/** none=한 장 · steps=앞으로만 · grid=목록에서 골라 들어간다 */
+	nav: "none" | "steps" | "grid";
+	/** 0이면 남은 시간 막대를 숨긴다 (스스로 닫히지 않는 카드) */
 	timer: number;
+	/** 마지막 장에 "직업 보러 가기"를 붙인다 */
+	bookLink: boolean;
 }
 
 /**
@@ -330,11 +367,11 @@ export function closeMain(player: ScriptPlayer): void {
 	}
 }
 
-export function closeRoleCard(player: ScriptPlayer): void {
+export function closeCard(player: ScriptPlayer): void {
 	const tag = tagOf(player);
-	if (tag.roleWidget) {
-		tag.roleWidget.destroy();
-		tag.roleWidget = null;
+	if (tag.cardWidget) {
+		tag.cardWidget.destroy();
+		tag.cardWidget = null;
 	}
 }
 
@@ -440,23 +477,30 @@ export function openChat(player: ScriptPlayer, payload: ChatPayload): ScriptWidg
 }
 
 /**
- * 직업 공개 카드.
+ * 겹쳐 읽는 카드를 연다.
  *
  * 기존에는 직업별 HTML 파일명을 인자로 받았고 payload는 아예 보내지 않았다
  * (카드가 읽을 것이 없었으니까). 그래서 카드는 그림 한 장이었고,
  * 5초 동안 "당신은 의사입니다"만 말한 뒤 사라졌다. 무엇을 해야 하는지는
  * 알려주지 않았다.
+ *
+ * 메인 위젯(tag.widget)을 건드리지 않는다. 대기실에서 도감을 열면 대기실이
+ * 그대로 살아 있고 카드만 위에 뜬다. 반대로 단계가 바뀌면 그 단계가
+ * closeCard로 이 자리를 회수하므로, 밤이 되었는데 도감이 지목 화면을
+ * 덮고 있는 일은 생기지 않는다.
  */
-export function openRoleCard(player: ScriptPlayer, payload: RoleCardPayload): ScriptWidget {
-	closeRoleCard(player);
+export function openCard(player: ScriptPlayer, payload: CardPayload): ScriptWidget {
+	closeCard(player);
+	// 도감만 격자가 들어가 더 크다. 나머지는 카드 한 장 크기로 충분하다
+	const size = payload.nav === "grid" ? WidgetSize.CARD_BOOK : WidgetSize.CARD;
 	const widget = open(
 		player,
-		WidgetFile.ROLE_CARD,
+		WidgetFile.CARD,
 		player.isMobile ? "middle" : "middleright",
-		WidgetSize.ROLE_CARD,
+		size,
 		payload,
 		false
 	);
-	tagOf(player).roleWidget = widget;
+	tagOf(player).cardWidget = widget;
 	return widget;
 }

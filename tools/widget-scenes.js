@@ -13,6 +13,23 @@
  * 굳어 있던 인원수), 득표 0인 사람. 레이아웃이 깨지는 조건을 미리 본다.
  */
 
+/*
+ * 카드 화면만 표본을 지어내지 않고 도메인에서 그대로 가져온다.
+ *
+ * 나머지 장면의 표본(SEATS 등)은 "깨지기 쉬운 입력"을 일부러 만든 것이라
+ * 지어낸 값이 맞다. 그런데 카드의 내용은 지어낼 수 있는 값이 아니다 —
+ * 직업 12종의 설명은 ROLE_DEFS 하나에만 있어야 하고(Guide.ts가 그 규칙이다),
+ * 여기에 옮겨 적으면 직업을 하나 고칠 때 고칠 곳이 둘이 된다. 그러면 미리보기가
+ * 실제와 다른 글을 보여주면서도 아무 검사에 걸리지 않는다.
+ *
+ * node 24는 require()로 .ts를 그대로 읽는다(타입 제거). 별도 빌드 단계가
+ * 필요 없어서 도구가 소스의 진실을 바로 본다.
+ */
+const { GUIDE_CARDS, roleBook } = require("../src/domain/Guide.ts");
+
+/** 도감 12장. 첫 장(마피아)은 직업 공개 장면이 함께 쓴다 */
+const BOOK = roleBook();
+
 /** 이름이 길거나 죽었거나 — 레이아웃이 깨지기 쉬운 표본 */
 const SEATS = [
 	{ num: 1, name: "김철수", alive: true },
@@ -104,6 +121,7 @@ const SCENES = [
 				alive: true,
 				note: "밤입니다. 능력이 있는 직업은 대상을 지목하세요.",
 				deaths: [],
+				spectating: false,
 			},
 		],
 	},
@@ -119,29 +137,59 @@ const SCENES = [
 				total: 6,
 				aliveCount: 4,
 				timer: 40,
-				role: "경찰",
+				// 칩 문구는 서버(identityOf)가 고른다. 죽으면 직업이 아니라 "유령"이
+				// 찍히므로 장면도 서버가 실제로 보내는 값을 그대로 쓴다
+				role: "유령",
 				team: "citizen",
 				alive: false,
 				note: "당신은 죽었습니다. 관전 중입니다.",
 				deaths: ["☠️ 박민수 님이 죽었습니다.", "💖 의사가 누군가를 살려냈습니다."],
+				spectating: false,
 			},
 		],
 	},
 	{
-		label: "직업 카드 — 마피아",
-		file: "roleCard.html",
-		size: [340, 380],
+		label: "관전 — 게임 중 난입한 사람",
+		file: "phase.html",
+		size: [340, 300],
 		messages: [
 			{
 				type: "init",
-				role: "마피아",
-				team: "mafia",
-				glyph: "🔪",
-				ability: "밤마다 한 명을 지목해 제거할 수 있습니다.",
-				tip: "낮에는 시민인 척하며 의심을 다른 사람에게 돌리세요.",
-				timer: 9,
+				phase: "day",
+				turn: 1,
+				total: 6,
+				aliveCount: 5,
+				timer: 40,
+				role: "관전",
+				team: "citizen",
+				alive: false,
+				note: "관전 중입니다. 이번 판이 끝나면 자리에 앉습니다.",
+				deaths: ["☠️ 박민수 님이 죽었습니다."],
+				// 이 한 값이 "관전 종료" 버튼을 띄운다. 관전자에게는 대기실
+				// 위젯이 없어 이 버튼이 유일한 퇴장 경로다
+				spectating: true,
 			},
 		],
+	},
+	{
+		label: "카드 — 직업 공개",
+		file: "card.html",
+		size: [320, 400],
+		messages: [{ type: "init", cards: [BOOK[0]], nav: "none", timer: 9, bookLink: false }],
+	},
+	{
+		label: "카드 — 첫 안내 (3장)",
+		file: "card.html",
+		size: [320, 400],
+		messages: [
+			{ type: "init", cards: GUIDE_CARDS.slice(), nav: "steps", timer: 0, bookLink: true },
+		],
+	},
+	{
+		label: "카드 — 직업 도감 (12종)",
+		file: "card.html",
+		size: [360, 480],
+		messages: [{ type: "init", cards: BOOK, nav: "grid", timer: 0, bookLink: false }],
 	},
 	{
 		label: "밤 지목 — 마피아",
@@ -214,6 +262,7 @@ const SCENES = [
 				alive: true,
 				note: "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.",
 				deaths: [],
+				spectating: false,
 			},
 		],
 	},
@@ -293,10 +342,11 @@ const SCENES = [
 			{
 				type: "updatePlayerCount",
 				data: {
-					1: { count: 3, started: false },
-					2: { count: 0, started: false },
-					3: { count: 8, started: true },
-					4: { count: 1, started: false },
+					1: { count: 3, started: false, watching: 0 },
+					2: { count: 0, started: false, watching: 0 },
+					// 진행 중인 방. 이제 disabled가 아니라 관전 버튼이다
+					3: { count: 8, started: true, watching: 2 },
+					4: { count: 1, started: false, watching: 0 },
 				},
 			},
 		],

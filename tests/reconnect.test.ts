@@ -16,6 +16,7 @@ import { leave } from "../src/services/Lobby.ts";
 import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer, FakeWidget } from "./helpers/FakeZep.ts";
 import {
+	cardWidget,
 	chatChannels,
 	chatLines,
 	connect,
@@ -229,9 +230,10 @@ describe("재접속", () => {
 		disconnect(player);
 		reconnect(player);
 
-		const tag = player.tag as { roleWidget: { destroyed: boolean } | null };
-		assert.ok(tag.roleWidget, "직업 카드가 다시 열리지 않았습니다");
-		assert.equal(tag.roleWidget.destroyed, false);
+		// 구조 캐스팅(player.tag as { ... })으로 직접 읽지 않는다. 그 캐스팅은
+		// tag의 실제 필드 이름이 바뀌어도 tsc가 잡지 못해서, roleWidget →
+		// cardWidget 개명 때 실제로 조용히 깨진 채 남아 있었다.
+		assert.equal(cardWidget(player).destroyed, false, "직업 카드가 다시 열리지 않았습니다");
 	});
 
 	it("죽은 채로 돌아오면 유령 이름과 밤 화면을 받는다", () => {

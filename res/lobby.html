@@ -325,6 +325,41 @@ body {
 	background: transparent;
 }
 
+/*
+ * 기호 하나짜리 버튼. 채팅의 ☺·➤와 대기실의 📖이 같은 것을 쓴다.
+ *
+ * 채팅 섹션에 있던 것을 여기로 옮겼다. 대기실이 두 번째 사용처가 되는 순간
+ * "채팅의 부품"이라는 자리가 거짓이 됐고, 그대로 두면 다음 사람이 채팅과
+ * 무관한 화면에서 이 클래스를 찾지 못해 똑같은 것을 다시 만든다.
+ *
+ * 최소 크기를 .btn과 같은 34px로 맞춘다. 그러지 않으면 글자 크기만큼만
+ * 커져서(27px) 손가락으로 누르기 어렵다 — 실제로 채팅의 보내기 버튼이
+ * 그 크기였다. 44px(모바일 권장)까지 키우지 않는 이유는 채팅 입력줄이
+ * 그만큼 세로를 더 먹기 때문이고, 이 화면의 다른 모든 버튼이 34px다.
+ */
+.icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	min-width: 34px;
+	min-height: 34px;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-md);
+	color: var(--ink-2);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.icon-btn:hover {
+	color: var(--ink);
+}
+.icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
 /* ---------- 참가자 타일 ---------- */
 /*
  * 밤 지목·투표가 같은 격자를 쓴다. 예전에는 밤은 4열 정사각 타일,
@@ -857,23 +892,6 @@ body {
 	outline-offset: -2px;
 }
 
-.icon-btn {
-	flex: 0 0 auto;
-	padding: var(--s1) var(--s2);
-	font: inherit;
-	font-size: var(--t-md);
-	color: var(--ink-2);
-	background: transparent;
-	border: none;
-	cursor: pointer;
-}
-.icon-btn:hover {
-	color: var(--ink);
-}
-.icon-btn:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
 
 /* 접힌 막대: 위젯 전체가 버튼 하나다 */
 .chat-mini {
@@ -1011,8 +1029,10 @@ body {
 			.room.full .cnt {
 				color: var(--warn);
 			}
+			/* 진행 중 = 관전 가능. 눌러도 되는 버튼이므로 경고색(--mafia)이 아니라
+			   강조색을 쓴다. 빨간 글씨는 "막혔다"로 읽힌다 */
 			.room.playing .cnt {
-				color: var(--mafia);
+				color: var(--accent);
 			}
 
 			/* 좌석 한 줄 */
@@ -1093,6 +1113,15 @@ body {
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
+				<!--
+					도감을 여는 자리는 여기 하나뿐이다. 게임이 시작되면 이 위젯은
+					닫히므로(GameFlow.beginGame → closeMain) 밤·투표 중에 도감을
+					여는 길은 채팅의 /도감 하나만 남는다 — 지목 화면을 가릴 수
+					있는 버튼을 지목 화면에 두지 않기 위해서다.
+				-->
+				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
+					📖
+				</button>
 			</div>
 
 			<div class="body scroll">
@@ -1460,17 +1489,29 @@ const Parent = (function () {
 			let counts = {};
 
 			/* ---------- 방 목록 ---------- */
+			/*
+			 * 진행 중인 방은 이제 눌린다. 예전에는 disabled였는데, 한 판이
+			 * 5~15분이라 늦게 온 사람은 방 목록 전체가 회색인 화면을 보고
+			 * 나가버렸다. 지금은 같은 버튼이 관전으로 들어가는 문이다.
+			 *
+			 * 문구를 "관전 N"으로 바꿔 클릭하면 무슨 일이 일어나는지 버튼
+			 * 안에서 알려준다 — "진행 중"만 남기면 눌러도 되는지 알 수 없다.
+			 */
 			function roomHtml(num) {
-				const info = counts[num] || { count: 0, started: false };
+				const info = counts[num] || { count: 0, started: false, watching: 0 };
 				const full = info.count >= config.max;
-				const state = info.started ? "진행 중" : full ? "가득 참" : `${info.count}/${config.max}`;
+				const state = info.started
+					? `관전 ${info.watching || 0}`
+					: full
+						? "가득 참"
+						: `${info.count}/${config.max}`;
 
 				return html`<button
 					type="button"
 					class="room${info.started ? " playing" : full ? " full" : ""}"
 					data-num="${num}"
-					${flag(info.started || full, "disabled")}
-					aria-label="${num}번 방, ${state}"
+					${flag(!info.started && full, "disabled")}
+					aria-label="${num}번 방, ${info.started ? "진행 중, 관전하기" : state}"
 				>
 					<span>${num}번 방</span><span class="cnt">${state}</span>
 				</button>`;
@@ -1548,6 +1589,10 @@ const Parent = (function () {
 
 			qs("#quit").addEventListener("click", () => {
 				Parent.send({ type: "quit" });
+			});
+
+			qs("#book").addEventListener("click", () => {
+				Parent.send({ type: "book" });
 			});
 
 			/* ---------- 화면 전환 ---------- */

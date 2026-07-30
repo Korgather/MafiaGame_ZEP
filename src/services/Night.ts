@@ -33,7 +33,7 @@ import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { PhasePayload } from "./Widgets.ts";
-import { closeRoleCard, openPhase, openRoleAction } from "./Widgets.ts";
+import { closeCard, identityOf, openPhase, openRoleAction } from "./Widgets.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 
 /** 밤 능력 안내 라벨 표시 시간(ms). 지목할 시간을 충분히 준다 */
@@ -54,11 +54,10 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 		total: room.total,
 		aliveCount: aliveSeats(room).length,
 		timer: room.phaseTimer,
-		role: roleName(seat.role),
-		team: seat.team,
-		alive: seat.alive,
+		...identityOf(seat),
 		note: nightNote(room, seat),
 		deaths: [],
+		spectating: false,
 	};
 }
 
@@ -90,7 +89,7 @@ export function beginNight(room: Room): void {
 	Chat.say(room, `🌙 ${room.turnCount + 1}번째 밤이 되었습니다.`);
 
 	forEachPlayer(room, (player, seat) => {
-		closeRoleCard(player);
+		closeCard(player);
 		openNightView(room, player, seat);
 	});
 }
@@ -131,9 +130,7 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	const widget = openRoleAction(player, {
 		type: "init",
 		myNum: seat.index,
-		role: roleName(seat.role),
-		team: seat.team,
-		alive: true,
+		...identityOf(seat),
 		prompt: def.nightPrompt || "",
 		seats: seatViews(room, inMafiaChat(seat) ? seat.team : undefined),
 		timer: room.phaseTimer,

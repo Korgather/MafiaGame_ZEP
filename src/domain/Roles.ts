@@ -271,7 +271,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "건달",
 		team: Team.MAFIA,
 		glyph: "🥊",
-		ability: "밤마다 한 명을 협박해 다음 낮 투표를 막습니다.",
+		ability: "밤마다 한 명을 협박해 다음 낮 발언과 투표를 막습니다.",
 		tip: "마피아와 대화할 수 없습니다. 경찰에게 잡히니 낮에는 조용히 계세요.",
 		nightAction: NightActionKind.SILENCE,
 		nightChat: null,

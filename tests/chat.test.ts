@@ -15,8 +15,9 @@ import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import type { Room, Seat } from "../src/types/Game.types.ts";
 import { GamePhase, Role } from "../src/types/Game.types.ts";
-import { MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { CHAT_RATE, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
+import { maskProfanity } from "../src/domain/chat/ChatFilter.ts";
 import { MessageKind } from "../src/domain/chat/ChatMessage.ts";
 import type { ChatContext } from "../src/domain/chat/ChatPermission.ts";
 import {
@@ -46,6 +47,7 @@ import {
 	startGame,
 	startPlainGame,
 	switchChannel,
+	tick,
 } from "./helpers/Harness.ts";
 
 beforeEach(() => resetWorld());
@@ -57,10 +59,23 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
 		started: true,
 		phase: GamePhase.DAY,
 		alive: true,
+		spectating: false,
 		mafiaChat: false,
 		ghostChat: false,
+		silenced: false,
 	};
 	return { ...base, ...over };
+}
+
+/**
+ * 권한 표의 결과를 읽기·쓰기만으로 본다.
+ *
+ * note(잠긴 이유)까지 deepEqual로 묶으면 안내 문구를 다듬을 때마다 규칙과
+ * 무관한 테스트가 깨진다. 문구가 규칙을 대신 지키는 곳(협박·사망)에서만
+ * 따로 확인한다.
+ */
+function rw(access: { read: boolean; write: boolean }): { read: boolean; write: boolean } {
+	return { read: access.read, write: access.write };
 }
 
 function unreadOf(player: FakePlayer, channel: ChatChannel): number {
@@ -108,11 +123,11 @@ describe("채널 권한 표", () => {
 	});
 
 	it("마피아는 낮에 지난밤 밀담을 읽되 새로 쓰지는 못한다", () => {
-		assert.deepEqual(accessOf(ctx({ mafiaChat: true }), ChatChannel.MAFIA), {
+		assert.deepEqual(rw(accessOf(ctx({ mafiaChat: true }), ChatChannel.MAFIA)), {
 			read: true,
 			write: false,
 		});
-		assert.deepEqual(accessOf(ctx({ mafiaChat: true, phase: GamePhase.NIGHT }), ChatChannel.MAFIA), {
+		assert.deepEqual(rw(accessOf(ctx({ mafiaChat: true, phase: GamePhase.NIGHT }), ChatChannel.MAFIA)), {
 			read: true,
 			write: true,
 		});
@@ -120,8 +135,8 @@ describe("채널 권한 표", () => {
 
 	it("죽은 사람은 낮 토론을 보되 끼어들 수 없다", () => {
 		const dead = ctx({ alive: false });
-		assert.deepEqual(accessOf(dead, ChatChannel.ROOM), { read: true, write: false });
-		assert.deepEqual(accessOf(dead, ChatChannel.GHOST), { read: true, write: true });
+		assert.deepEqual(rw(accessOf(dead, ChatChannel.ROOM)), { read: true, write: false });
+		assert.deepEqual(rw(accessOf(dead, ChatChannel.GHOST)), { read: true, write: true });
 	});
 
 	it("영매는 밤에만 유령의 말을 듣는다", () => {
@@ -137,6 +152,33 @@ describe("채널 권한 표", () => {
 		// 죽은 사람을 유령 탭에 붙잡아 둔 채 종료 화면을 맞는다.
 		assert.equal(accessOf(over, ChatChannel.GHOST).write, false);
 		assert.equal(preferredChannel(over, ChatChannel.GHOST), ChatChannel.ROOM);
+	});
+
+	it("협박당한 사람은 방 채팅에서만 입이 막힌다", () => {
+		// 협박은 "오늘 낮에 말을 못 한다"는 규칙이다. 마피아인 채로 협박당해도
+		// 밤의 밀담까지 잠기면 건달이 같은 편의 작전을 끊어버리게 된다.
+		const muted = ctx({ silenced: true });
+		assert.equal(accessOf(muted, ChatChannel.ROOM).write, false);
+		assert.ok(accessOf(muted, ChatChannel.ROOM).note.indexOf("협박") >= 0);
+		// 듣는 것은 그대로다 — 오늘의 토론을 못 보면 내일 판단할 근거가 없다
+		assert.equal(accessOf(muted, ChatChannel.ROOM).read, true);
+
+		const mafia = ctx({ silenced: true, mafiaChat: true, phase: GamePhase.NIGHT });
+		assert.equal(accessOf(mafia, ChatChannel.MAFIA).write, true);
+	});
+
+	it("잠긴 탭은 저마다 다른 이유를 들고 온다", () => {
+		// 위젯이 "지금은 읽기만 됩니다" 한 문장으로 덮던 자리다. 밤·사망·협박은
+		// 해야 할 행동이 전혀 다른데, 같은 문구를 보면 셋을 구분할 수 없다.
+		const notes = [
+			accessOf(ctx({ phase: GamePhase.NIGHT }), ChatChannel.ROOM).note,
+			accessOf(ctx({ alive: false }), ChatChannel.ROOM).note,
+			accessOf(ctx({ silenced: true }), ChatChannel.ROOM).note,
+		];
+		for (const note of notes) assert.notEqual(note, "");
+		assert.equal(new Set(notes).size, notes.length, "잠긴 이유가 서로 겹칩니다");
+		// 말할 수 있는 탭은 이유를 달지 않는다
+		assert.equal(accessOf(ctx(), ChatChannel.ROOM).note, "");
 	});
 
 	it("방 밖에 선 사람에게는 전체 채팅만 보인다", () => {
@@ -439,5 +481,288 @@ describe("채팅 명령어", () => {
 		assert.equal(chatSaw(admin, "운영자만 쓸 수 있는"), false);
 		// 안내는 본인에게만 간다
 		assert.equal(chatSaw(admin, "모르는 명령어입니다"), false);
+	});
+});
+
+describe("채팅 속도 제한", () => {
+	/** 이 사람이 실제로 화면에 띄운 발언만 센다 */
+	function spoken(player: FakePlayer): string[] {
+		return chatLines(player)
+			.filter(line => line.kind === MessageKind.USER && line.senderId === player.id)
+			.map(line => line.text);
+	}
+
+	it("몰아 쳐도 여유분만큼은 그대로 나가고, 그 다음 줄부터 막힌다", () => {
+		// 제한의 목적은 도배를 막는 것이지 대화를 막는 것이 아니다. 짧은 말을
+		// 잇달아 치는 것은 낮 토론의 정상적인 모습이라 여기서 걸리면 안 된다.
+		const player = connect("수다쟁이");
+
+		for (let i = 1; i <= CHAT_RATE.BURST + 1; i++) chat(player, `말${i}`);
+
+		assert.deepEqual(spoken(player), ["말1", "말2", "말3", "말4"]);
+	});
+
+	it("잠시 기다리면 저절로 풀린다", () => {
+		// 음소거도 강퇴도 아니다. 걸린 사람이 아무것도 하지 않아도 돌아와야 한다.
+		const player = connect("수다쟁이");
+		for (let i = 0; i < CHAT_RATE.BURST + 1; i++) chat(player, "도배");
+
+		tick(CHAT_RATE.REFILL_MS / 1000);
+		chat(player, "이제 됩니다");
+
+		assert.equal(spoken(player).slice(-1)[0], "이제 됩니다");
+	});
+
+	it("막힌 줄은 다른 사람에게도 가지 않는다", () => {
+		// 보낸 사람 화면에서만 지우는 것은 제한이 아니라 착시다.
+		const speaker = connect("수다쟁이");
+		const listener = connect("옆사람");
+
+		for (let i = 0; i < CHAT_RATE.BURST; i++) chat(speaker, "여유분");
+		chat(speaker, "넘친줄");
+
+		assert.equal(chatSaw(listener, "넘친줄"), false);
+	});
+
+	it("명령어 연타도 같은 여유분을 쓴다", () => {
+		// 관문이 발언에만 있으면 /도움말 연타로 tell이 그대로 쏟아진다.
+		// 도배 경로는 발언과 명령 둘이고, 여유분은 둘이 함께 쓰는 하나여야 한다.
+		const player = connect("수다쟁이");
+
+		for (let i = 0; i < CHAT_RATE.BURST; i++) chat(player, "/도움말");
+		const before = chatLines(player).length;
+		chat(player, "/도움말");
+
+		assert.equal(chatLines(player).length, before);
+	});
+
+	it("빈 줄은 여유분을 쓰지 않는다", () => {
+		// 서버가 버릴 줄을 세면, 조작된 클라이언트가 빈 줄만 보내 남의 발언권을
+		// 깎을 수 있다. 값을 치르는 시점은 실제로 무언가를 하기 직전이다.
+		const player = connect("수다쟁이");
+
+		for (let i = 0; i < 20; i++) chat(player, "   ");
+		for (let i = 1; i <= CHAT_RATE.BURST; i++) chat(player, `말${i}`);
+
+		assert.deepEqual(spoken(player), ["말1", "말2", "말3", "말4"]);
+	});
+});
+
+describe("건달의 협박", () => {
+	/** 건달 하나가 시민 하나를 협박할 수 있는 밤 */
+	function thugGame(): {
+		target: Room;
+		thug: FakePlayer;
+		muted: FakePlayer;
+		mutedSeat: Seat;
+		bystander: FakePlayer;
+	} {
+		startGame(6, 1, [Role.THUG, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		const citizens = seatsWithRole(target, Role.CITIZEN);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		return {
+			target,
+			thug: playerOf(seatsWithRole(target, Role.THUG)[0]),
+			muted: playerOf(citizens[0]),
+			mutedSeat: citizens[0],
+			bystander: playerOf(citizens[1]),
+		};
+	}
+
+	it("협박당한 사람은 다음 낮에 말할 수 없다", () => {
+		// 원본에서 silenced는 투표만 막았다. 협박의 본체는 발언 봉쇄이고
+		// 투표 차단은 그 결과인데, 기본 채팅을 쓰던 시절에는 발언을 가로챌
+		// 지점이 없어 절반만 구현돼 있었다.
+		const { target, thug, muted, mutedSeat, bystander } = thugGame();
+
+		send(thug, { type: "select", num: mutedSeat.index });
+		finishPhase(target); // → DAY
+
+		const roomTab = chatChannels(muted).filter(tab => tab.id === ChatChannel.ROOM)[0];
+		assert.equal(roomTab.write, false, "협박당했는데 방 탭이 열려 있습니다");
+		assert.ok(roomTab.placeholder.indexOf("협박") >= 0, "잠긴 이유가 화면에 전해지지 않았습니다");
+
+		chat(muted, "저는 시민입니다", ChatChannel.ROOM);
+		assert.equal(chatSaw(bystander, "저는 시민입니다"), false, "협박당한 사람의 말이 나갔습니다");
+
+		// 듣기는 그대로다. 오늘 토론을 못 보면 내일 판단할 근거까지 사라진다
+		chat(bystander, "누가 수상한가요", ChatChannel.ROOM);
+		assert.ok(chatSaw(muted, "누가 수상한가요"), "협박이 듣는 것까지 막았습니다");
+	});
+
+	it("협박당했다는 사실은 당사자만 안다", () => {
+		// 방 전체에 알리면 그것이 곧 "건달이 누구를 지목했는가"의 단서가 된다.
+		const { target, thug, muted, mutedSeat, bystander } = thugGame();
+
+		send(thug, { type: "select", num: mutedSeat.index });
+		finishPhase(target); // → DAY
+
+		assert.ok(chatSaw(muted, "간밤에 협박당했습니다"), "본인이 안내받지 못했습니다");
+		assert.equal(chatSaw(bystander, "협박당했습니다"), false, "협박 사실이 새어 나갔습니다");
+	});
+
+	it("협박은 딱 하루만 간다", () => {
+		const { target, thug, muted, mutedSeat, bystander } = thugGame();
+
+		send(thug, { type: "select", num: mutedSeat.index });
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+		finishPhase(target); // → NIGHT (여기서 좌석이 초기화된다)
+		finishPhase(target); // → DAY (건달이 이번 밤엔 아무도 지목하지 않았다)
+
+		assert.equal(mutedSeat.silenced, false, "협박이 다음 날까지 남았습니다");
+		chat(muted, "이제 말할 수 있습니다", ChatChannel.ROOM);
+		assert.ok(chatSaw(bystander, "이제 말할 수 있습니다"));
+	});
+});
+
+describe("귓속말", () => {
+	it("적은 사람에게만 닿는다", () => {
+		const sender = connect("가");
+		const target = connect("나");
+		const other = connect("다");
+
+		chat(sender, "/귓속말 나 둘만 아는 얘기");
+
+		assert.ok(chatSaw(target, "둘만 아는 얘기"));
+		assert.ok(chatSaw(sender, "둘만 아는 얘기"), "보낸 사람이 자기 귓속말을 못 봅니다");
+		assert.equal(chatSaw(other, "둘만 아는 얘기"), false, "귓속말이 제삼자에게 샜습니다");
+	});
+
+	it("게임이 시작되면 막힌다", () => {
+		// 판 안에서 통하면 마피아가 낮에 몰래 합을 맞추고 죽은 사람이 산 사람에게
+		// 범인을 찍어줄 수 있다. 채널 표가 막아 둔 것을 명령어로 우회하는 셈이다.
+		const players = startPlainGame(MIN_PLAYERS);
+
+		chat(players[0], `/귓속말 ${players[1].name} 마피아 누구야`);
+
+		assert.ok(chatSaw(players[0], "게임 중에는 귓속말을 보낼 수 없습니다"));
+		assert.equal(chatSaw(players[1], "마피아 누구야"), false);
+	});
+
+	it("없는 사람을 부르면 알려준다", () => {
+		const sender = connect("가");
+
+		chat(sender, "/귓속말 없는사람 안녕");
+
+		assert.ok(chatSaw(sender, "찾지 못했습니다"));
+	});
+});
+
+describe("차단", () => {
+	it("차단한 사람의 말은 내 화면에서만 사라진다", () => {
+		const me = connect("가");
+		const rude = connect("나");
+		const other = connect("다");
+
+		chat(me, "/차단 나");
+		chat(rude, "안 보일 말");
+
+		assert.equal(chatSaw(me, "안 보일 말"), false);
+		assert.ok(chatSaw(other, "안 보일 말"), "차단이 남의 화면까지 지웠습니다");
+	});
+
+	it("창을 다시 열어도 되살아나지 않는다", () => {
+		// 배달에서만 막으면 기록을 되살릴 때 차단한 사람의 말이 그대로 돌아온다.
+		const me = connect("가");
+		const rude = connect("나");
+
+		chat(me, "/차단 나");
+		chat(rude, "안 보일 말");
+		sendChat(me, { type: "toggle", open: true }); // 기록을 통째로 다시 받는 경로
+
+		assert.equal(chatSaw(me, "안 보일 말"), false);
+	});
+
+	it("진행 안내까지 가리지는 않는다", () => {
+		// 사람이 친 말만 가린다. 시스템 안내와 사건 기록까지 덮으면 차단이
+		// "저 사람을 안 본다"가 아니라 "게임 진행을 못 본다"가 된다.
+		const me = connect("가");
+		const rude = connect("나");
+		joinRoom(me, 1);
+		joinRoom(rude, 1);
+
+		chat(me, "/차단 나");
+		disconnect(rude);
+
+		assert.ok(chatSaw(me, "나 님이 퇴장했습니다"), "차단이 진행 안내까지 가렸습니다");
+	});
+
+	it("나간 사람의 차단도 이름으로 풀 수 있다", () => {
+		// id로만 풀 수 있으면 접속을 끊은 사람의 차단은 영영 남는다.
+		const me = connect("가");
+		const rude = connect("나");
+
+		chat(me, "/차단 나");
+		disconnect(rude);
+		chat(me, "/차단해제 나");
+		chat(me, "/차단목록");
+
+		assert.ok(chatSaw(me, "차단한 사람이 없습니다"));
+	});
+});
+
+describe("신고", () => {
+	it("접속한 운영자에게만 간다", () => {
+		const admin = connect("운영자", { role: 3000 });
+		const reporter = connect("신고자");
+		const rude = connect("무례한사람");
+
+		chat(reporter, "/신고 무례한사람 계속 도배합니다");
+
+		assert.ok(chatSaw(admin, "신고한 사람: 신고자"));
+		assert.ok(chatSaw(admin, "계속 도배합니다"));
+		assert.ok(chatSaw(reporter, "운영자 1명에게 전달"));
+		assert.equal(chatSaw(rude, "신고"), false, "신고당한 사실이 당사자에게 알려졌습니다");
+	});
+
+	it("운영자가 없으면 전달되지 않았다고 말한다", () => {
+		// 앱 전역 저장소가 없어 신고는 접속한 운영자에게 닿지 않으면 사라진다.
+		// 접수된 것처럼 말해두고 아무 일도 일어나지 않는 쪽이 더 나쁘다.
+		const reporter = connect("신고자");
+		connect("무례한사람");
+
+		chat(reporter, "/신고 무례한사람");
+
+		assert.ok(chatSaw(reporter, "전달되지 않았습니다"));
+	});
+
+	it("같은 사람을 두 번 신고할 수 없다", () => {
+		const reporter = connect("신고자");
+		connect("무례한사람");
+
+		chat(reporter, "/신고 무례한사람");
+		chat(reporter, "/신고 무례한사람");
+
+		assert.ok(chatSaw(reporter, "이미 신고한 사람입니다"));
+	});
+});
+
+describe("채팅 필터", () => {
+	it("걸리는 말은 가려서 나간다", () => {
+		const speaker = connect("가");
+		const listener = connect("나");
+
+		chat(speaker, "야 이 병신아");
+
+		assert.equal(chatSaw(listener, "병신"), false);
+		assert.ok(chatSaw(listener, "야 이 ●●아"));
+	});
+
+	it("귓속말도 같은 체를 지난다", () => {
+		// 체가 명령어 분기보다 앞에 있어야 하는 이유. 뒤에 두면 새 명령을
+		// 만들 때마다 거르지 않는 통로가 하나씩 늘어난다.
+		const sender = connect("가");
+		const target = connect("나");
+
+		chat(sender, "/귓속말 나 이 병신아");
+
+		assert.equal(chatSaw(target, "병신"), false);
+	});
+
+	it("영어 욕은 대소문자를 가리지 않는다", () => {
+		assert.equal(maskProfanity("What the FUCK"), "What the ●●●●");
 	});
 });

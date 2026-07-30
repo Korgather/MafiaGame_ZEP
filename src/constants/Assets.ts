@@ -34,8 +34,8 @@ export const Sound = {
  */
 export const WidgetFile = {
 	LOBBY: "lobby.html",
-	/** 직업 공개 카드. 내용은 payload가 정한다 */
-	ROLE_CARD: "roleCard.html",
+	/** 겹쳐 읽고 닫는 카드 — 직업 공개·첫 안내·직업 도감. 내용은 payload가 정한다 */
+	CARD: "card.html",
 	/** 밤 능력 지목 */
 	ROLE_ACTION: "roleAction.html",
 	/** 밤/아침 진행 화면. phase 필드로 갈린다 */
@@ -45,6 +45,16 @@ export const WidgetFile = {
 	GAME_OVER: "gameOver.html",
 	/** 통합 채팅. 접속해 있는 내내 떠 있는 유일한 위젯 */
 	CHAT: "chat.html",
+} as const;
+
+/**
+ * 맵 오브젝트의 param1 값. 맵 에디터에 손으로 적어 넣는 문자열이라
+ * 코드 쪽 오타를 컴파일러가 잡아주지 못한다 — 최소한 코드 안에서는
+ * 한 곳만 보게 모아 둔다.
+ */
+export const MapTrigger = {
+	/** 대기실 안내판. 부딪히면 첫 안내 카드가 다시 뜬다 */
+	GUIDE_BOARD: "GUIDE_CARDS",
 } as const;
 
 /**
@@ -89,7 +99,16 @@ export const WidgetSize = {
 	 */
 	LOBBY_ROOMS: { width: 400, height: 280, mobile: 30 },
 	ROLE_ACTION: { width: 400, height: 460, mobile: 46 },
-	ROLE_CARD: { width: 320, height: 400, mobile: 44 },
+	/** 카드 한 장 또는 몇 장 — 직업 공개, 첫 안내 */
+	CARD: { width: 320, height: 400, mobile: 44 },
+	/**
+	 * 직업 도감.
+	 *
+	 * 12칸 격자와 진영 구분선이 들어가서 CARD로는 목록이 두 줄만 보인다.
+	 * 이 화면만 메인 위젯 예산(46%)을 넘는데, 도감은 메인 위젯 위에 겹쳐
+	 * 읽고 곧 닫는 것이라 게임 화면을 항구적으로 먹지 않는다.
+	 */
+	CARD_BOOK: { width: 360, height: 480, mobile: 54 },
 	/** 사람 8명을 타일로 그린다. PHASE보다 높아야 한다 */
 	VOTE: { width: 400, height: 400, mobile: 46 },
 	/** 전원의 직업 공개 목록이 들어간다 */

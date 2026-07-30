@@ -139,7 +139,7 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 			return {
 				consumed: true,
 				confirmed: true,
-				label: `${target.index}번 참가자는 내일 투표할 수 없습니다.`,
+				label: `${target.index}번 참가자는 내일 말할 수도 투표할 수도 없습니다.`,
 			};
 
 		case NightActionKind.SCOOP:

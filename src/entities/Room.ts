@@ -35,6 +35,7 @@ export function createRoom(num: number): Room {
 		voteRecord: emptyVoteRecord(),
 		nightReport: [],
 		seats: [],
+		spectators: [],
 		silhouettes: [],
 		chatLog: [],
 	};
@@ -92,11 +93,35 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.scooped = false;
 }
 
-export function findSeat(room: Room, playerId: string): Seat | undefined {
-	for (const seat of room.seats) {
+/*
+ * 아래 네 함수는 "어느 목록에서 찾는가"만 다르다. 좌석과 관전자가 같은 Seat
+ * 값이면서 다른 배열에 살기 때문인데, 찾기·빼기를 각 목록마다 다시 적으면
+ * 네 벌이 조금씩 어긋난다(실제로 removeSeat만 splice 반환값을 돌려줬다).
+ * 목록을 인자로 받는 두 함수를 두고 나머지는 이름만 붙인다.
+ */
+function findIn(seats: Seat[], playerId: string): Seat | undefined {
+	for (const seat of seats) {
 		if (seat.playerId === playerId) return seat;
 	}
 	return undefined;
+}
+
+function removeFrom(seats: Seat[], playerId: string): Seat | undefined {
+	for (let i = 0; i < seats.length; i++) {
+		if (seats[i].playerId === playerId) {
+			return seats.splice(i, 1)[0];
+		}
+	}
+	return undefined;
+}
+
+export function findSeat(room: Room, playerId: string): Seat | undefined {
+	return findIn(room.seats, playerId);
+}
+
+/** 관전자 목록에서 찾는다. 좌석과 섞이지 않게 이름을 나눠 둔다 */
+export function findSpectator(room: Room, playerId: string): Seat | undefined {
+	return findIn(room.spectators, playerId);
 }
 
 export function seatAt(room: Room, index: number): Seat | undefined {
@@ -164,12 +189,11 @@ export function readyCount(room: Room): number {
 }
 
 export function removeSeat(room: Room, playerId: string): Seat | undefined {
-	for (let i = 0; i < room.seats.length; i++) {
-		if (room.seats[i].playerId === playerId) {
-			return room.seats.splice(i, 1)[0];
-		}
-	}
-	return undefined;
+	return removeFrom(room.seats, playerId);
+}
+
+export function removeSpectator(room: Room, playerId: string): Seat | undefined {
+	return removeFrom(room.spectators, playerId);
 }
 
 /** 이 좌석을 강퇴 투표한 사람 수 */
@@ -235,6 +259,10 @@ export function resetRoom(room: Room): void {
 	room.voteRecord = emptyVoteRecord();
 	room.nightReport = [];
 	room.seats = [];
+	// 관전자를 좌석으로 승격하는 것은 returnToLobby의 일이다. 여기서는 지운다 —
+	// 이 함수는 "방을 빈 상태로" 만드는 곳이지 사람을 옮기는 곳이 아니고,
+	// 테스트 격리(resetWorld)도 이 함수를 부르므로 사람이 남으면 다음 테스트로 샌다.
+	room.spectators = [];
 	room.silhouettes = [];
 	// 지난 판의 대화는 다음 판에 남기지 않는다. 죽은 사람의 유령 채팅이
 	// 다음 판 대기실에 되살아나면 그 자체로 정보 유출이다.

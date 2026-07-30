@@ -22,7 +22,9 @@ import { expReward, levelFromExp, recordKey } from "../src/domain/Progression.ts
 import { tallyVotes, VoteOutcome } from "../src/domain/Vote.ts";
 import { evaluateWinner } from "../src/domain/WinCondition.ts";
 import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
+import { cardForRole, GUIDE_CARDS, roleBook } from "../src/domain/Guide.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
+import { newBucket, spend } from "../src/domain/RateLimit.ts";
 import { MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 
 function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
@@ -535,5 +537,92 @@ describe("ROLE_DEFS", () => {
 			if (def.team !== Team.MAFIA || def.nightChat !== null) continue;
 			assert.match(def.nightNotice, /마피아 팀/, `${role}에 진영 안내가 없다`);
 		}
+	});
+});
+
+describe("Guide", () => {
+	it("도감은 직업을 하나도 빠뜨리지 않는다", () => {
+		// 직업을 추가하고 도감에 넣는 것을 잊는 자리를 막는다.
+		// ROLE_DEFS를 훑는 구조라 지금은 잊을 수 없지만, 나중에 "숨김 직업"
+		// 같은 이유로 걸러내기 시작하면 그때 이 테스트가 결정을 강제한다
+		assert.equal(roleBook().length, Object.keys(ROLE_DEFS).length);
+	});
+
+	it("도감은 마피아 팀을 먼저 보여준다", () => {
+		// 처음 보는 사람이 가장 먼저 알아야 하는 것은 "누가 적인가"다
+		const teams = roleBook().map(card => card.team);
+		const firstCitizen = teams.indexOf(Team.CITIZEN);
+		assert.ok(firstCitizen > 0, "마피아 팀이 하나도 없거나 맨 앞이 아니다");
+		assert.equal(teams.indexOf(Team.MAFIA, firstCitizen), -1, "진영이 섞여 있다");
+	});
+
+	it("모든 카드에 읽을 내용이 있다", () => {
+		// 카드는 글리프·제목·본문·덧붙임 네 칸을 그린다. 비면 빈 칸이 보인다
+		for (const card of roleBook().concat(GUIDE_CARDS.slice())) {
+			assert.ok(card.glyph, `${card.title}에 glyph가 없다`);
+			assert.ok(card.title, "제목이 없는 카드가 있다");
+			assert.ok(card.body, `${card.title}에 본문이 없다`);
+			assert.ok(card.note, `${card.title}에 덧붙임이 없다`);
+		}
+	});
+
+	it("직업 카드는 ROLE_DEFS의 글을 그대로 쓴다", () => {
+		// 도감이 자기 사본을 들면 직업을 고칠 때 고칠 곳이 둘이 되고,
+		// 그중 하나만 고쳐진 채로 남는다
+		const card = cardForRole(Role.MAFIA);
+		const def = ROLE_DEFS[Role.MAFIA];
+		assert.equal(card.title, def.displayName);
+		assert.equal(card.body, def.ability);
+		assert.equal(card.note, def.tip);
+	});
+
+	it("규칙 안내에는 진영이 없다", () => {
+		// 진영 칩을 숨기는 신호가 null이다. 빈 문자열이면 칩이 빈 채로 뜬다
+		for (const card of GUIDE_CARDS) {
+			assert.equal(card.team, null, `${card.title}에 진영이 붙어 있다`);
+		}
+	});
+});
+
+/**
+ * 도배 방지의 규칙 자체.
+ *
+ * 서비스 테스트(chat/gameflow)는 "관문이 배선되어 있는가"를 보고,
+ * 여기서는 "규칙이 옳은가"를 본다. 둘을 나눠 두면 나중에 세 번째 관문을
+ * 다는 사람이 규칙을 다시 검증할 필요가 없다.
+ */
+describe("RateLimit", () => {
+	const LIMIT = { BURST: 3, REFILL_MS: 1000 };
+
+	it("여유분만큼 몰아 쓸 수 있고 그 다음부터 막힌다", () => {
+		const bucket = newBucket(LIMIT, 0);
+
+		assert.deepEqual(
+			[spend(bucket, LIMIT, 0), spend(bucket, LIMIT, 0), spend(bucket, LIMIT, 0)],
+			[true, true, true]
+		);
+		assert.equal(spend(bucket, LIMIT, 0), false);
+	});
+
+	it("REFILL_MS보다 짧은 간격도 쌓여서 언젠가 한 번이 된다", () => {
+		// 소수점을 버리면 REFILL_MS 미만으로 두들기는 사람은 영영 안 풀린다.
+		// 그건 브레이크가 아니라 음소거다.
+		const bucket = newBucket(LIMIT, 0);
+		for (let i = 0; i < LIMIT.BURST; i++) spend(bucket, LIMIT, 0);
+
+		for (let ms = 100; ms < 1000; ms += 100) {
+			assert.equal(spend(bucket, LIMIT, ms), false, `${ms}ms에 벌써 풀렸다`);
+		}
+		assert.equal(spend(bucket, LIMIT, 1000), true);
+	});
+
+	it("오래 쉬어도 여유분이 BURST를 넘지 않는다", () => {
+		// 상한이 없으면 한 시간 조용히 있다가 수백 줄을 한꺼번에 쏟을 수 있다.
+		const bucket = newBucket(LIMIT, 0);
+
+		for (let i = 0; i < LIMIT.BURST; i++) {
+			assert.equal(spend(bucket, LIMIT, 3_600_000), true);
+		}
+		assert.equal(spend(bucket, LIMIT, 3_600_000), false);
 	});
 });

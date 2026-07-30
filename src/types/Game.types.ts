@@ -7,6 +7,7 @@
 import type { ScriptWidget, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
+import type { Bucket } from "../domain/RateLimit.ts";
 
 /**
  * 게임 진행 단계.
@@ -204,6 +205,23 @@ export interface Room {
 	 */
 	nightReport: string[];
 	seats: Seat[];
+	/**
+	 * 게임이 시작된 뒤 들어와 지켜보는 사람들.
+	 *
+	 * 좌석과 같은 Seat 값이지만 **일부러 다른 배열에 산다.** seats에 섞고
+	 * spectator 플래그로 거르는 방법도 있었는데, 그러면 좌석을 도는 코드가
+	 * 전부(승패 판정·개표·밤 지목·번호 배정·인원수·준비 판정) 그 플래그를
+	 * 함께 봐야 한다. 한 곳만 빠뜨리면 관전자가 표를 받거나 마피아로 뽑히는
+	 * 조용한 버그가 되고, 앞으로 좌석을 도는 코드를 쓰는 사람마다 같은
+	 * 함정을 다시 만난다. 목록을 나누면 "참가자"를 도는 코드는 관전자를
+	 * 볼 수 없고, 관전자에게 보낼 것은 보내는 쪽이 명시적으로 골라야 한다.
+	 *
+	 * 같은 Seat 타입을 쓰는 이유는 승격 때문이다 — 판이 끝나면 이 값을
+	 * 그대로 seats로 옮기기만 하면 대기실 좌석이 된다. createSeat이 만드는
+	 * 값이 곧 대기실 좌석이라 손볼 필드가 하나도 없다. 관전자는 "잘못된
+	 * 시각에 도착한 대기실 좌석"이지 다른 종류의 존재가 아니다.
+	 */
+	spectators: Seat[];
 	/** 밤에 배치한 실루엣 오브젝트 좌표 (방 단위로만 정리하기 위해 추적) */
 	silhouettes: Array<[number, number]>;
 	/**
@@ -251,8 +269,23 @@ export interface PlayerTag {
 	 * 상자를 다시 계산해야 한다(Widgets.squeezeMain). 그 재료를 여기 둔다.
 	 */
 	mainBox: { align: WidgetAlign; size: { width: number; height: number; mobile?: number } } | null;
-	/** 직업 카드 위젯 */
-	roleWidget: ScriptWidget | null;
+	/**
+	 * 카드 위젯 (직업 공개 · 첫 안내 · 직업 도감이 함께 쓰는 자리).
+	 *
+	 * 셋 다 "메인 화면 위에 잠깐 겹쳐 읽고 닫는 것"이라 슬롯 하나로 충분하다.
+	 * 단계가 바뀌면 다음 open*이 이 자리를 회수한다 — 밤에 도감을 펼쳐 둔 채
+	 * 지목 화면을 가리는 일이 구조적으로 없다.
+	 */
+	cardWidget: ScriptWidget | null;
+	/**
+	 * 이번 접속에서 첫 안내를 이미 봤는가.
+	 *
+	 * 영구 판정은 PlayerStorage.playCount가 한다. 그런데 게스트는 저장이
+	 * 통째로 no-op이라(PlayerStorage.update) playCount가 영원히 0이고,
+	 * 그것만 보면 게스트는 방에 들어갈 때마다 안내를 다시 받는다.
+	 * 접속 범위 플래그가 그 구멍을 막는다.
+	 */
+	guideSeen: boolean;
 	/**
 	 * 통합 채팅 위젯.
 	 *
@@ -274,15 +307,36 @@ export interface PlayerTag {
 	 */
 	chatSeen: { [channel: string]: number };
 	/**
-	 * 남은 채팅 여유분. 한 줄 보낼 때마다 1 줄고 시간이 지나면 다시 찬다.
+	 * 도배 방지용 여유분. 한 번 쓸 때마다 줄고 시간이 지나면 다시 찬다.
 	 *
-	 * 이 값이 tag에 있는 이유는 chatSeen과 같다 — 접속해 있는 동안만 의미가
+	 * 두 값이 tag에 있는 이유는 chatSeen과 같다 — 접속해 있는 동안만 의미가
 	 * 있고 플레이어와 함께 사라져야 하는 값이다. Lobby의 kickedUntil처럼
 	 * 모듈 전역 표에 두면 나간 사람의 항목이 영영 남는다.
+	 *
+	 * 발언용과 버튼용을 나눠 둔다. 하나로 합치면 방금 채팅을 몇 줄 친 사람이
+	 * 참가 버튼을 못 누른다.
 	 */
-	chatTokens: number;
-	/** 여유분을 마지막으로 계산한 시각(ms). 그 사이 흐른 시간만큼 채운다 */
-	chatRefilledAt: number;
+	chatRate: Bucket;
+	actionRate: Bucket;
+	/**
+	 * 내가 차단한 사람. playerId → 차단하던 시점의 이름.
+	 *
+	 * 이름을 함께 들고 있는 이유는 목록과 해제 때문이다. id만 저장하면
+	 * `/차단목록`이 알아볼 수 없는 문자열을 늘어놓고, 상대가 나간 뒤에는
+	 * 이름으로 찾을 수 없어 영영 풀지 못한다.
+	 *
+	 * ponytail: 접속이 끊기면 함께 사라진다(tag의 수명). 재접속해도 유지하려면
+	 * PlayerStorage에 얹으면 되지만, 그 순간 "차단 목록을 언제 저장하는가"가
+	 * 새 결정이 된다. 한 판짜리 게임에서 세션 범위로 충분하다.
+	 */
+	blocked: { [playerId: string]: string };
+	/**
+	 * 이번 접속에서 이미 신고한 사람.
+	 *
+	 * 같은 사람을 연타로 신고하면 운영자 화면이 그 한 사람으로 덮인다 —
+	 * 신고 기능이 그대로 도배 도구가 된다.
+	 */
+	reported: { [playerId: string]: boolean };
 	/** 게임 중 이름을 바꾸므로 원래 닉네임을 보관한다 */
 	originalName: string;
 }
@@ -335,6 +389,22 @@ export interface ChatChannelView {
 	/** 미확인 메시지 수 */
 	unread: number;
 	placeholder: string;
+}
+
+/**
+ * 카드 한 장. 직업 공개·첫 안내·직업 도감이 전부 이 모양으로 그려진다.
+ *
+ * 셋을 각자 다른 위젯으로 만들지 않은 이유는 셋의 화면이 같기 때문이다 —
+ * 글리프 하나, 제목 한 줄, 설명 한 문단, 덧붙임 한 문단. 다른 것은
+ * "몇 장인가"와 "장을 어떻게 넘기는가"뿐이고, 그건 CardPayload.nav가 정한다.
+ */
+export interface CardView {
+	glyph: string;
+	title: string;
+	/** null이면 진영 칩을 숨긴다 (규칙 안내 카드에는 진영이 없다) */
+	team: Team | null;
+	body: string;
+	note: string;
 }
 
 /** 종료 화면의 직업 공개 한 줄 */

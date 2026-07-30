@@ -133,6 +133,16 @@ export function say(player: FakePlayer, text: string): void {
 	world.hooks.say.emit(player, text);
 }
 
+/**
+ * 맵 오브젝트에 부딪힌다. param1은 맵 에디터에 적어 넣는 값이다.
+ *
+ * 좌표와 타일 ID는 어느 칸인지만 알려줄 뿐 게임 코드가 쓰지 않으므로
+ * 0으로 채운다. 여기서 검증하려는 것은 "어떤 오브젝트인가"뿐이다.
+ */
+export function touchObject(player: FakePlayer, param1: string): void {
+	world.hooks.objectTouched.emit(player, 0, 0, 0, { param1 });
+}
+
 export function room(roomNum: number): Room {
 	const found = getRoom(roomNum);
 	if (!found) throw new Error(`${roomNum}번 방이 없습니다.`);
@@ -215,11 +225,16 @@ export function chatSaw(player: FakePlayer, fragment: string): boolean {
 	return chatLines(player).some(line => line.text.indexOf(fragment) >= 0);
 }
 
-/** 직업 공개 카드 */
-export function roleCardWidget(player: FakePlayer): FakeWidget {
-	const widget = tagOf(player).roleWidget;
-	if (!widget) throw new Error(`${player.name}에게 열린 직업 카드가 없습니다.`);
+/** 겹쳐 뜬 카드 (직업 공개·첫 안내·직업 도감이 같은 자리를 쓴다) */
+export function cardWidget(player: FakePlayer): FakeWidget {
+	const widget = tagOf(player).cardWidget;
+	if (!widget) throw new Error(`${player.name}에게 열린 카드가 없습니다.`);
 	return widget as unknown as FakeWidget;
+}
+
+/** 지금 카드가 떠 있는가 (없어야 정상인 경우를 검사할 때) */
+export function hasCard(player: FakePlayer): boolean {
+	return !!tagOf(player).cardWidget;
 }
 
 /** 메인 위젯이 서버로 메시지를 보낸다 */
@@ -230,6 +245,11 @@ export function send(player: FakePlayer, data: object): void {
 /** 채팅 위젯이 서버로 메시지를 보낸다 */
 export function sendChat(player: FakePlayer, data: object): void {
 	chatWidget(player).emit(player, data);
+}
+
+/** 카드 위젯이 서버로 메시지를 보낸다 (닫기·도감으로 가기) */
+export function sendCard(player: FakePlayer, data: object): void {
+	cardWidget(player).emit(player, data);
 }
 
 /** 지금 보고 있는 탭에 한 줄 친다 */

@@ -71,8 +71,10 @@
 			.room.full .cnt {
 				color: var(--warn);
 			}
+			/* 진행 중 = 관전 가능. 눌러도 되는 버튼이므로 경고색(--mafia)이 아니라
+			   강조색을 쓴다. 빨간 글씨는 "막혔다"로 읽힌다 */
 			.room.playing .cnt {
-				color: var(--mafia);
+				color: var(--accent);
 			}
 
 			/* 좌석 한 줄 */
@@ -153,6 +155,15 @@
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
+				<!--
+					도감을 여는 자리는 여기 하나뿐이다. 게임이 시작되면 이 위젯은
+					닫히므로(GameFlow.beginGame → closeMain) 밤·투표 중에 도감을
+					여는 길은 채팅의 /도감 하나만 남는다 — 지목 화면을 가릴 수
+					있는 버튼을 지목 화면에 두지 않기 위해서다.
+				-->
+				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
+					📖
+				</button>
 			</div>
 
 			<div class="body scroll">
@@ -176,17 +187,29 @@
 			let counts = {};
 
 			/* ---------- 방 목록 ---------- */
+			/*
+			 * 진행 중인 방은 이제 눌린다. 예전에는 disabled였는데, 한 판이
+			 * 5~15분이라 늦게 온 사람은 방 목록 전체가 회색인 화면을 보고
+			 * 나가버렸다. 지금은 같은 버튼이 관전으로 들어가는 문이다.
+			 *
+			 * 문구를 "관전 N"으로 바꿔 클릭하면 무슨 일이 일어나는지 버튼
+			 * 안에서 알려준다 — "진행 중"만 남기면 눌러도 되는지 알 수 없다.
+			 */
 			function roomHtml(num) {
-				const info = counts[num] || { count: 0, started: false };
+				const info = counts[num] || { count: 0, started: false, watching: 0 };
 				const full = info.count >= config.max;
-				const state = info.started ? "진행 중" : full ? "가득 참" : `${info.count}/${config.max}`;
+				const state = info.started
+					? `관전 ${info.watching || 0}`
+					: full
+						? "가득 참"
+						: `${info.count}/${config.max}`;
 
 				return html`<button
 					type="button"
 					class="room${info.started ? " playing" : full ? " full" : ""}"
 					data-num="${num}"
-					${flag(info.started || full, "disabled")}
-					aria-label="${num}번 방, ${state}"
+					${flag(!info.started && full, "disabled")}
+					aria-label="${num}번 방, ${info.started ? "진행 중, 관전하기" : state}"
 				>
 					<span>${num}번 방</span><span class="cnt">${state}</span>
 				</button>`;
@@ -264,6 +287,10 @@
 
 			qs("#quit").addEventListener("click", () => {
 				Parent.send({ type: "quit" });
+			});
+
+			qs("#book").addEventListener("click", () => {
+				Parent.send({ type: "book" });
 			});
 
 			/* ---------- 화면 전환 ---------- */

@@ -21,7 +21,7 @@ import { forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { settleMatch } from "./Rewards.ts";
 import { clearSilhouettes } from "./Stage.ts";
-import { closeRoleCard, openGameOver } from "./Widgets.ts";
+import { closeCard, openGameOver } from "./Widgets.ts";
 
 /**
  * 승패가 갈렸으면 종료 처리를 하고 true를 돌려준다.
@@ -71,7 +71,7 @@ function winReason(winner: TeamType): string {
  * 경험치는 한 번만 줘야 하기 때문이다. 둘을 한 함수에 두면 그 구분이 사라진다.
  */
 export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	closeRoleCard(player);
+	closeCard(player);
 	player.hidden = false;
 	player.moveSpeed = 80;
 	player.sendUpdated();

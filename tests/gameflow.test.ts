@@ -9,28 +9,31 @@
 import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
-import { WidgetFile } from "../src/constants/Assets.ts";
-import { MIN_PLAYERS, TIMING } from "../src/constants/GameConfig.ts";
+import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
+import { ACTION_RATE, MIN_PLAYERS, TIMING } from "../src/constants/GameConfig.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import {
+	cardWidget,
 	chatSaw,
 	connect,
 	disconnect,
 	findMainWidget,
 	finishPhase,
+	hasCard,
 	joinRoom,
 	mainWidget,
 	playerOf,
 	resetWorld,
 	room,
-	roleCardWidget,
 	seatOf,
 	seatsWithRole,
 	send,
+	sendCard,
 	setReady,
 	startGame,
 	startPlainGame,
 	tick,
+	touchObject,
 	vote,
 } from "./helpers/Harness.ts";
 
@@ -104,6 +107,72 @@ describe("대기실 → 게임 시작", () => {
 	});
 
 	/**
+	 * 첫 안내는 처음 온 사람에게만, 그리고 한 번만.
+	 *
+	 * 판정이 둘(저장소 playCount + 접속 범위 guideSeen)이라 한쪽만 배선해도
+	 * 조건 하나는 통과한다. 로그인 사용자·경험자·게스트 셋을 함께 보는 이유다.
+	 */
+	describe("첫 안내", () => {
+		it("처음 온 사람이 방에 들어가면 안내 카드가 뜬다", () => {
+			const player = connect("첫사용자");
+			assert.equal(hasCard(player), false, "방에 들어가기도 전에 안내가 떴습니다");
+
+			joinRoom(player, 1);
+
+			const init = cardWidget(player).messages[0] as { nav: string; cards: unknown[] };
+			assert.equal(init.nav, "steps");
+			assert.ok(init.cards.length > 1, "안내가 한 장뿐입니다");
+			// 대기실 화면은 카드 뒤에 그대로 살아 있어야 한다. 닫으면 방금 들어온
+			// 방의 좌석 목록이 바로 보이는 것이 이 카드가 겹쳐 뜨는 이유다
+			assert.ok(findMainWidget(player), "안내가 대기실 화면을 밀어냈습니다");
+		});
+
+		it("판을 해 본 사람에게는 뜨지 않는다", () => {
+			const player = connect("경험자", { storage: JSON.stringify({ exp: 0, playCount: 1 }) });
+			joinRoom(player, 1);
+			assert.equal(hasCard(player), false);
+		});
+
+		/*
+		 * 게스트는 PlayerStorage.update가 통째로 no-op이라 playCount가 영원히 0이다.
+		 * 저장소만 보면 방을 드나들 때마다 안내가 다시 뜬다.
+		 */
+		it("게스트도 한 접속에 한 번만 본다", () => {
+			const player = connect("게스트", { isGuest: true });
+			joinRoom(player, 1);
+			sendCard(player, { type: "close" });
+			assert.equal(hasCard(player), false);
+
+			send(player, { type: "quit" });
+			joinRoom(player, 1);
+
+			assert.equal(hasCard(player), false, "게스트에게 안내가 다시 떴습니다");
+		});
+
+		it("대기실 안내판에 부딪히면 안내를 다시 볼 수 있다", () => {
+			// 안내는 한 번만 뜨므로, 넘긴 사람이 규칙을 다시 읽을 통로가 필요하다.
+			// 맵 에디터의 param1 문자열이 이 배선의 유일한 입력이다.
+			const player = connect("경험자", { storage: JSON.stringify({ exp: 0, playCount: 5 }) });
+			joinRoom(player, 1);
+			assert.equal(hasCard(player), false);
+
+			touchObject(player, MapTrigger.GUIDE_BOARD);
+
+			const init = cardWidget(player).messages[0] as { nav: string };
+			assert.equal(init.nav, "steps");
+		});
+
+		it("대기실의 📖 버튼은 직업 도감을 연다", () => {
+			const player = connect("구경꾼", { storage: JSON.stringify({ exp: 0, playCount: 3 }) });
+			send(player, { type: "book" });
+
+			const init = cardWidget(player).messages[0] as { nav: string; cards: unknown[] };
+			assert.equal(init.nav, "grid");
+			assert.equal(init.cards.length, 12);
+		});
+	});
+
+	/**
 	 * 직업 공개 중에는 직업 카드만 남는다.
 	 *
 	 * 카드는 메인 위젯과 다른 슬롯이라, 대기실 화면을 닫지 않으면 준비 버튼이
@@ -114,13 +183,42 @@ describe("대기실 → 게임 시작", () => {
 		const players = startGame(MIN_PLAYERS);
 
 		for (const player of players) {
-			assert.ok(roleCardWidget(player), "직업 카드가 열리지 않았습니다");
+			assert.ok(cardWidget(player), "직업 카드가 열리지 않았습니다");
 			assert.equal(
 				findMainWidget(player),
 				undefined,
 				"직업 공개 중에 대기실 화면이 뒤에 남아 있습니다"
 			);
 		}
+	});
+
+	/**
+	 * 대기실 버튼도 채팅과 같은 도배 경로다.
+	 *
+	 * 참가·퇴장은 방 전원의 채팅에 🚪 알림을 남기고 접속자 전원에게 방 목록을
+	 * 다시 보낸다. 클릭 한 번의 값을 누른 사람이 아니라 남들이 치르는 구조라,
+	 * 참가·퇴장을 반복하는 것만으로 남의 채팅을 밀어낼 수 있었다.
+	 *
+	 * 관문이 갈래마다가 아니라 handleMessage 하나에 있으므로, 이 테스트가
+	 * 초록이면 준비·강퇴 연타도 같은 여유분에 함께 묶여 있다.
+	 */
+	it("대기실 버튼 연타는 여유분만큼만 통한다", () => {
+		const player = connect("연타맨");
+		const target = room(1);
+
+		for (let i = 0; i < ACTION_RATE.BURST / 2; i++) {
+			joinRoom(player, 1);
+			send(player, { type: "quit" });
+		}
+		assert.equal(target.seats.length, 0);
+
+		joinRoom(player, 1);
+		assert.equal(target.seats.length, 0, "여유분이 바닥났는데도 참가가 통했습니다");
+
+		// 벌이 아니라 브레이크다. 아무것도 하지 않아도 돌아와야 한다.
+		tick(ACTION_RATE.REFILL_MS / 1000);
+		joinRoom(player, 1);
+		assert.equal(target.seats.length, 1, "기다렸는데도 풀리지 않았습니다");
 	});
 });
 

@@ -266,6 +266,8 @@ export const world = {
 		destroy: new Hook<[]>(),
 		say: new Hook<[FakePlayer, string]>(),
 		update: new Hook<[number]>(),
+		/** 맵 오브젝트 충돌. (player, x, y, tileID, obj) */
+		objectTouched: new Hook<[FakePlayer, number, number, number, { param1: string }]>(),
 	},
 };
 
@@ -320,6 +322,7 @@ const fakeScriptApp = {
 	onDestroy: world.hooks.destroy,
 	onSay: world.hooks.say,
 	onUpdate: world.hooks.update,
+	onObjectTouched: world.hooks.objectTouched,
 };
 
 const fakeScriptMap = {

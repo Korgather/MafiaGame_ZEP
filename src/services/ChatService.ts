@@ -16,23 +16,36 @@
  *   ChatPermission - 어떤 상황에서 읽고 쓸 수 있는가 (순수 함수 표)
  *   ChatMessage    - 한 줄이 무엇을 담는가 (값 객체)
  *   ChatService    - 만들고 저장하고 배달한다 (여기)
+ *   ChatCommands   - "/"로 시작하는 줄을 해석한다 (ChatVoice로만 여기와 닿는다)
  *   chat.html      - 그린다. 직업도 단계도 모른다
  *
- * 확장 지점:
- *   귓속말   - ChatMessage.to에 상대 playerId를 넣고 post하면 끝이다.
- *              tell()이 이미 그 경로로 동작한다.
- *   신고·차단 - ChatMessage.senderId가 대상. deliver()에 차단 목록 필터 한 줄.
- *   필터링   - submit()의 text 한 곳만 지나면 모든 발언이 걸러진다.
- *   명령어   - COMMANDS 표에 한 줄.
+ * 이 층 나누기가 값을 한 이유는 뒤에 붙은 기능들이 전부 예고한 자리에
+ * 그대로 들어갔기 때문이다. 새 개념은 하나도 생기지 않았다:
+ *   귓속말   - ChatMessage.to에 상대 playerId를 넣고 post (whisperTo)
+ *   차단     - deliverTo와 visibleLog의 필터 한 줄 (isBlockedBy)
+ *   필터링   - submit()의 text 한 곳 (ChatFilter.maskProfanity)
+ *   신고     - ChatMessage.senderId로 대상을 지목 (ChatCommands)
+ *   명령어   - ChatCommands의 COMMANDS 표에 한 줄
+ *
+ * 남은 확장 지점:
+ *   이모지·스티커 - 지금은 quickFor()의 빠른 문구가 그 자리를 맡고 있다.
+ *                   그림을 붙이려면 위젯에 격자 하나와 MessageKind 하나,
+ *                   그리고 에셋 배포 경로가 함께 필요하다.
  *
  * 주의: 남는 것은 ZEP 기본 채팅 UI 자체다. 0.16.5에는 그 패널을 숨기는
  * API가 없어서, 우리가 쓰지 않을 뿐 화면에서 없앨 수는 없다.
  */
 import type { ScriptPlayer, ScriptWidget } from "zep-script";
-import type { ChatChannelView, Room } from "../types/Game.types.ts";
+import type { ChatChannelView, PlayerTag, Room } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import type { ChatMessage, MessageDraft } from "../domain/chat/ChatMessage.ts";
-import { addressedTo, buildMessage, MessageKind } from "../domain/chat/ChatMessage.ts";
+import {
+	addressedTo,
+	buildMessage,
+	isUserMessage,
+	MessageKind,
+} from "../domain/chat/ChatMessage.ts";
+import { maskProfanity } from "../domain/chat/ChatFilter.ts";
 import { ChatChannel, channelDef, toChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatContext } from "../domain/chat/ChatPermission.ts";
 import {
@@ -42,12 +55,14 @@ import {
 	readableChannels,
 } from "../domain/chat/ChatPermission.ts";
 import { hearsGhosts, inMafiaChat, roleName } from "../domain/Roles.ts";
-import { locate } from "../entities/RoomRegistry.ts";
+import { spend } from "../domain/RateLimit.ts";
+import { locate, locateSpectator } from "../entities/RoomRegistry.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
-import { ADMIN_EXP_GRANT, ADMIN_ROLE_LEVEL } from "../constants/GameConfig.ts";
+import { CHAT_RATE } from "../constants/GameConfig.ts";
 import { asText, field, MAX_CHAT_LENGTH, messageType } from "../types/Widget.types.ts";
-import { forEachPlayer } from "./Broadcast.ts";
-import { awardExp } from "./Rewards.ts";
+import { forEachAudience, label } from "./Broadcast.ts";
+import type { ChatVoice } from "./ChatCommands.ts";
+import { runCommand } from "./ChatCommands.ts";
 import type { ChatFocus } from "./Widgets.ts";
 import { openChat, squeezeMain, updateChat } from "./Widgets.ts";
 
@@ -74,7 +89,7 @@ export function resetGlobalLog(): void {
 
 function contextOf(playerId: string): ChatContext {
 	const found = locate(playerId);
-	if (!found) return LOOSE_CONTEXT;
+	if (!found) return spectatorContext(playerId);
 	const room = found.room;
 	const seat = found.seat;
 	return {
@@ -85,8 +100,36 @@ function contextOf(playerId: string): ChatContext {
 		// 그 값을 그대로 쓰면 대기실에 앉은 전원이 유령 취급을 받아
 		// 로비 채팅이 통째로 잠긴다. 진행 중일 때만 좌석 값을 믿는다.
 		alive: !room.started || seat.alive,
+		spectating: false,
 		mafiaChat: inMafiaChat(seat),
 		ghostChat: hearsGhosts(seat),
+		// alive와 같은 이유로 started를 함께 본다. 좌석의 silenced는 밤 정산이
+		// 켜고 다음 밤이 끄는 값이라, 판이 끝난 뒤 남아 있으면 대기실에서
+		// 말을 못 하는 사람이 생긴다.
+		silenced: room.started && seat.silenced,
+	};
+}
+
+/**
+ * 좌석이 없는 사람. 진행 중인 방을 보고 있으면 관전, 아니면 로비.
+ *
+ * 관전자의 좌석 값(role·alive·silenced)은 createSeat이 준 기본값 그대로라
+ * 아무 의미가 없다. 그래서 좌석을 들여다보지 않고 상수로 채운다 — 여기서
+ * seat을 읽기 시작하면 "관전자의 직업"이라는 없는 개념이 생긴다.
+ */
+function spectatorContext(playerId: string): ChatContext {
+	const watching = locateSpectator(playerId);
+	if (!watching) return LOOSE_CONTEXT;
+	return {
+		seated: true,
+		started: true,
+		phase: watching.room.phase,
+		// 죽은 것이 아니라 애초에 참가하지 않았다. 유령 채널은 spectating이 막는다
+		alive: false,
+		spectating: true,
+		mafiaChat: false,
+		ghostChat: false,
+		silenced: false,
 	};
 }
 
@@ -110,16 +153,34 @@ function store(room: Room | null, message: ChatMessage): void {
  *
  * 창을 열 때의 되살리기와 미확인 개수 세기가 같은 함수를 쓴다. 두 곳이
  * 서로 다른 기준으로 거르면 "안 읽음 3"이라고 떠 있는데 열어보면
- * 아무것도 없는 상태가 만들어진다.
+ * 아무것도 없는 상태가 만들어진다. 차단도 같은 이유로 여기를 지난다 —
+ * 배달에서만 막으면 창을 다시 열 때 차단한 사람의 말이 되살아난다.
  */
-function visibleLog(playerId: string, ctx: ChatContext): ChatMessage[] {
-	const found = locate(playerId);
+function visibleLog(player: ScriptPlayer, ctx: ChatContext): ChatMessage[] {
+	const found = locate(player.id);
 	const pool = found ? globalLog.concat(found.room.chatLog) : globalLog.slice();
+	const tag = tagOf(player);
 	const visible = pool.filter(
-		message => addressedTo(message, playerId) && accessOf(ctx, message.channel).read
+		message =>
+			addressedTo(message, player.id) &&
+			accessOf(ctx, message.channel).read &&
+			!isBlockedBy(tag, message)
 	);
 	visible.sort((a, b) => a.seq - b.seq);
 	return visible;
+}
+
+/**
+ * 이 사람이 차단한 상대가 보낸 말인가.
+ *
+ * 사람이 친 말만 걸린다. 시스템 안내와 사망 기록까지 가리면 차단이
+ * "저 사람을 안 본다"가 아니라 "게임 진행을 못 본다"가 된다 —
+ * 차단한 사람이 처형당한 사실조차 모르게 된다.
+ */
+function isBlockedBy(tag: PlayerTag, message: ChatMessage): boolean {
+	if (!isUserMessage(message)) return false;
+	if (message.senderId === "") return false;
+	return Object.prototype.hasOwnProperty.call(tag.blocked, message.senderId);
 }
 
 function lastSeqIn(log: ChatMessage[], channel: ChatChannel): number {
@@ -138,9 +199,10 @@ function markSeen(seen: { [channel: string]: number }, channel: ChatChannel, seq
 
 function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[] {
 	const seen = tagOf(player).chatSeen;
-	const log = visibleLog(player.id, ctx);
+	const log = visibleLog(player, ctx);
 	return readableChannels(ctx).map(channel => {
 		const def = channelDef(channel);
+		const access = accessOf(ctx, channel);
 		const floor = seen[channel] || 0;
 		let unread = 0;
 		for (const message of log) {
@@ -150,9 +212,12 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 			id: channel,
 			label: def.label,
 			glyph: def.glyph,
-			write: accessOf(ctx, channel).write,
+			write: access.write,
 			unread,
-			placeholder: def.placeholder,
+			// 잠긴 탭의 안내 문구는 채널이 아니라 잠근 이유가 정한다.
+			// 위젯이 지어내던 문장(“지금은 읽기만 됩니다”)이 밤·사망·협박을
+			// 한 마디로 덮고 있었다 — 세 경우에 해야 할 행동이 전혀 다르다.
+			placeholder: access.write ? def.placeholder : `${access.note} (/도움말)`,
 		};
 	});
 }
@@ -191,6 +256,10 @@ function deliverTo(player: ScriptPlayer, message: ChatMessage): void {
 	if (!accessOf(ctx, message.channel).read) return;
 	const tag = tagOf(player);
 	if (!tag.chatWidget) return;
+	// 차단은 배달에서만 막는다. 기록에는 남으므로 차단을 풀면 그 사이의 말도
+	// 다시 보이고, 무엇보다 "이 사람에게만 안 보인다"가 방 전체의 대화
+	// 흐름을 바꾸지 않는다 — 발언 자체를 지우면 남들과 대화가 어긋난다.
+	if (isBlockedBy(tag, message)) return;
 	// 펼쳐진 채로 지금 보고 있는 탭에 도착했으면 곧바로 읽은 것으로 친다.
 	// 그렇지 않으면 눈앞에 뜬 메시지에 "안 읽음 1"이 계속 붙어 있게 된다.
 	if (tag.chatOpen && tag.chatChannel === message.channel) {
@@ -206,7 +275,9 @@ function post(room: Room | null, draft: MessageDraft): void {
 		for (const player of ScriptApp.players) deliverTo(player, message);
 		return;
 	}
-	if (room) forEachPlayer(room, player => deliverTo(player, message));
+	// 관전자까지 돈다. 실제로 무엇이 보이는지는 deliverTo 안의 accessOf가
+	// 사람마다 다시 판정하므로, 넓게 돌아도 마피아·유령 줄은 새지 않는다.
+	if (room) forEachAudience(room, player => deliverTo(player, message));
 }
 
 // ────────────────────────────────────────────────────────────── 서버가 쓰는 입구
@@ -274,7 +345,7 @@ export function tell(player: ScriptPlayer, text: string): void {
 export function openFor(player: ScriptPlayer, focus: ChatFocus): void {
 	const ctx = contextOf(player.id);
 	const tag = tagOf(player);
-	const log = visibleLog(player.id, ctx);
+	const log = visibleLog(player, ctx);
 
 	// 처음 들어온 사람은 자기가 오기 전의 대화까지 "안 읽음"으로 떠안을 이유가 없다
 	if (isFirstOpen(tag.chatSeen)) {
@@ -316,7 +387,7 @@ export function refresh(player: ScriptPlayer): void {
 	if (!tag.chatWidget) return;
 	const ctx = contextOf(player.id);
 	tag.chatChannel = preferredChannel(ctx, tag.chatChannel);
-	markSeen(tag.chatSeen, tag.chatChannel, lastSeqIn(visibleLog(player.id, ctx), tag.chatChannel));
+	markSeen(tag.chatSeen, tag.chatChannel, lastSeqIn(visibleLog(player, ctx), tag.chatChannel));
 	updateChat(player, {
 		type: "channels",
 		channels: channelViews(player, ctx),
@@ -326,7 +397,7 @@ export function refresh(player: ScriptPlayer): void {
 }
 
 export function refreshRoom(room: Room): void {
-	forEachPlayer(room, player => refresh(player));
+	forEachAudience(room, player => refresh(player));
 }
 
 // ────────────────────────────────────────────────────────────── 위젯이 보내오는 것
@@ -340,44 +411,44 @@ function bind(widget: ScriptWidget): void {
 	});
 }
 
-/**
- * 도배를 막되 대화는 막지 않는다 — 여유분(토큰) 방식.
- *
- * 마지막 계산 이후 흐른 시간만큼 여유분을 채우고, 한 줄에 하나를 쓴다.
- * 남은 것이 없으면 그 줄만 버린다. 음소거도 강퇴도 없고 잠시 뒤 저절로
- * 풀리므로, 정상적으로 대화하던 사람은 제한이 있다는 사실조차 모른다.
- *
- * 알림을 채팅이 아니라 라벨로 보내는 것이 중요하다. 채팅으로 보내면
- * 연타하는 사람의 창이 경고로 뒤덮여서, 도배를 막으려다 그 경고가 다시
- * 도배가 된다. 라벨은 서로 덮어쓰고 저절로 사라져 몇 번을 맞아도 한 줄이다.
- *
- * 서버에 두는 이유는 MAX_CHAT_LENGTH와 같다 — 위젯에 같은 제한을 걸면
- * 입력창이 즉각 반응해 손맛이 좋아지지만, 위젯은 조작할 수 있으므로 그쪽은
- * 어디까지나 표시이고 실제 한계는 이 함수다.
- */
-function spendChatToken(sender: ScriptPlayer): boolean {
-	const tag = tagOf(sender);
-	const now = Time.getUtcTime();
-	const refilled = tag.chatTokens + (now - tag.chatRefilledAt) / CHAT_RATE.REFILL_MS;
-	tag.chatTokens = Math.min(CHAT_RATE.BURST, refilled);
-	tag.chatRefilledAt = now;
-
-	if (tag.chatTokens < 1) {
-		label(sender, "🕐 조금 천천히 말해 주세요.");
-		return false;
-	}
-	tag.chatTokens -= 1;
-	return true;
-}
-
 function submit(sender: ScriptPlayer, data: unknown): void {
-	const text = asText(field(data, "text"), MAX_CHAT_LENGTH);
-	if (text === null) return;
-	// 명령어보다 앞에 둔다. /도움말도 연타하면 tell이 그만큼 쏟아진다 —
-	// 도배 경로는 발언과 명령 둘인데 관문을 하나만 세우면 반만 막힌다.
-	if (!spendChatToken(sender)) return;
+	const raw = asText(field(data, "text"), MAX_CHAT_LENGTH);
+	if (raw === null) return;
+	/*
+	 * 체는 여기 한 곳만 지난다.
+	 *
+	 * 명령어 분기보다 앞이라 귓속말 내용도 같이 걸러진다. 뒤에 두면
+	 * "전체 채팅은 걸러지는데 귓속말은 안 걸러지는" 구멍이 생기고, 그
+	 * 구멍은 새 명령어를 만들 때마다 다시 뚫린다.
+	 *
+	 * 대가는 `/차단 시발놈` 같은 입력에서 상대 이름까지 가려진다는 것이다.
+	 * 걸리는 말이 든 닉네임은 그 자체로 신고 대상이니 감수할 만하다.
+	 */
+	const text = maskProfanity(raw);
+
+	/*
+	 * 여유분을 값이 나가기 직전에 치른다.
+	 *
+	 * 명령어 분기보다 앞에 둔 이유: /도움말도 연타하면 tell이 그만큼 쏟아진다.
+	 * 도배 경로는 발언과 명령 둘인데 관문을 하나만 세우면 반만 막힌다.
+	 * 반대로 빈 줄 검사보다는 뒤다 — 서버가 어차피 버릴 줄을 세면 조작된
+	 * 클라이언트가 빈 줄만 보내 남의 발언권을 깎을 수 있다.
+	 *
+	 * 알림이 채팅이 아니라 라벨인 것이 중요하다. 채팅으로 보내면 연타하는
+	 * 사람의 창이 경고로 뒤덮여서, 도배를 막으려다 그 경고가 다시 도배가 된다.
+	 * 라벨은 서로 덮어쓰고 저절로 사라져 몇 번을 맞아도 한 줄이다.
+	 *
+	 * 서버에 두는 이유는 MAX_CHAT_LENGTH와 같다 — 위젯에 같은 제한을 걸면
+	 * 입력창이 즉각 반응해 손맛이 좋아지지만 위젯은 조작할 수 있다. 그쪽은
+	 * 어디까지나 표시이고 실제 한계는 여기다.
+	 */
+	if (!spend(tagOf(sender).chatRate, CHAT_RATE, Time.getUtcTime())) {
+		label(sender, "🕐 조금 천천히 말해 주세요.");
+		return;
+	}
+
 	if (text.charAt(0) === "/") {
-		runCommand(sender, text);
+		runCommand(VOICE, sender, text);
 		return;
 	}
 
@@ -409,7 +480,7 @@ function switchChannel(sender: ScriptPlayer, data: unknown): void {
 	if (!accessOf(ctx, channel).read) return;
 	const tag = tagOf(sender);
 	tag.chatChannel = channel;
-	markSeen(tag.chatSeen, channel, lastSeqIn(visibleLog(sender.id, ctx), channel));
+	markSeen(tag.chatSeen, channel, lastSeqIn(visibleLog(sender, ctx), channel));
 	updateChat(sender, {
 		type: "channels",
 		channels: channelViews(sender, ctx),
@@ -443,59 +514,49 @@ function asFocus(value: unknown): ChatFocus {
 	return "";
 }
 
-// ────────────────────────────────────────────────────────────── 채팅 명령어
+// ────────────────────────────────────────────────────── 명령어에게 빌려주는 목소리
 
-interface ChatCommand {
-	/** 운영자만 쓸 수 있는가 */
-	readonly admin: boolean;
-	readonly help: string;
-	run(player: ScriptPlayer): void;
+/**
+ * 귓속말 한 줄을 만든다.
+ *
+ * "누구에게 보낼지"는 명령어가 정하고, "어떤 줄이 되는지"는 여기가 정한다.
+ * 줄을 만드는 규칙이 채팅 쪽에 남아야 하는 이유는 아래 USER 주석 그대로다 —
+ * 명령어 파일에 두면 다음에 귓속말을 부르는 곳(예: 위젯의 답장 버튼)이
+ * 같은 규칙을 다시 적게 된다.
+ */
+function whisperTo(from: ScriptPlayer, to: ScriptPlayer, body: string): void {
+	// USER로 보내는 것이 핵심이다. 받은 사람이 이 줄을 그대로 /차단·/신고의
+	// 대상으로 삼을 수 있어야 한다 — SYSTEM으로 보내면 senderId가 비어
+	// 귓속말만 아무 제재도 받지 않는 통로가 된다.
+	post(null, {
+		channel: ChatChannel.GLOBAL,
+		kind: MessageKind.USER,
+		senderId: from.id,
+		name: from.name,
+		text: `💌 ${body}`,
+		to: to.id,
+	});
+	tell(from, `💌 ${to.name} 님에게: ${body}`);
 }
 
 /**
- * 명령어 표.
+ * 귓속말이 게임 밖에서만 열리는 이유:
+ *   귓속말이 판 안에서 통하면 마피아가 낮에 몰래 합을 맞추고, 죽은 사람이
+ *   산 사람에게 범인을 찍어줄 수 있다. 채널 표(ChatPermission)가 막아 둔 것을
+ *   명령어 하나로 우회하는 셈이다.
  *
- * 기존의 `/경험치`는 ScriptApp.onSay 핸들러 안의 if 한 줄이었다. 그 핸들러는
- * 원본에서 `.add`(소문자)로 등록돼 한 번도 불리지 않았고 — ZEP API는 `.Add`다 —
- * 아무도 눈치채지 못했다. 명령이 하나뿐이고 등록도 확인도 한 곳에서만
- * 일어났기 때문이다. 표로 만들면 명령을 늘려도 배선은 그대로다.
- *
- * 키가 전부 "/"로 시작하므로 사용자 입력이 Object.prototype의 멤버("constructor"
- * 등)에 닿을 수 없다. 그것이 여기서 인덱스 조회를 그대로 써도 되는 이유다.
+ * 그래서 새 조건을 쓰지 않고 전체 채팅의 쓰기 권한을 그대로 묻는다.
+ * 둘의 규칙("게임 밖에서만")이 같으므로, 한쪽 규칙이 바뀌면 다른 쪽도
+ * 저절로 따라간다 — 조건을 복사했다면 여기가 먼저 어긋났을 자리다.
  */
-const COMMANDS: { [name: string]: ChatCommand } = {
-	"/도움말": {
-		admin: false,
-		help: "쓸 수 있는 명령어를 봅니다",
-		run: player => tell(player, helpText(player)),
-	},
-	"/경험치": {
-		admin: true,
-		help: "경험치를 지급합니다 (운영자)",
-		run: player => awardExp(player, ADMIN_EXP_GRANT),
-	},
-};
-
-function helpText(player: ScriptPlayer): string {
-	const lines = ["📖 채팅 명령어"];
-	for (const name in COMMANDS) {
-		if (!Object.prototype.hasOwnProperty.call(COMMANDS, name)) continue;
-		const command = COMMANDS[name];
-		if (command.admin && player.role < ADMIN_ROLE_LEVEL) continue;
-		lines.push(`${name} - ${command.help}`);
-	}
-	return lines.join("\n");
+function canWhisper(player: ScriptPlayer): boolean {
+	return accessOf(contextOf(player.id), ChatChannel.GLOBAL).write;
 }
 
-function runCommand(player: ScriptPlayer, text: string): void {
-	const command = COMMANDS[text];
-	if (!command) {
-		tell(player, `❓ 모르는 명령어입니다: ${text}\n/도움말 을 쳐보세요.`);
-		return;
-	}
-	if (command.admin && player.role < ADMIN_ROLE_LEVEL) {
-		tell(player, "🔒 운영자만 쓸 수 있는 명령어입니다.");
-		return;
-	}
-	command.run(player);
-}
+/**
+ * 명령어가 채팅에 닿는 유일한 통로.
+ *
+ * 여기 없는 일은 명령어가 할 수 없다. 표를 넓히기 전에 "이게 정말 채팅이
+ * 해줘야 할 일인가"를 한 번 묻게 만드는 것이 이 객체의 목적이다.
+ */
+const VOICE: ChatVoice = { tell, whisper: whisperTo, canWhisper };

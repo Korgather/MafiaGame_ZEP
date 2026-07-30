@@ -325,6 +325,41 @@ body {
 	background: transparent;
 }
 
+/*
+ * 기호 하나짜리 버튼. 채팅의 ☺·➤와 대기실의 📖이 같은 것을 쓴다.
+ *
+ * 채팅 섹션에 있던 것을 여기로 옮겼다. 대기실이 두 번째 사용처가 되는 순간
+ * "채팅의 부품"이라는 자리가 거짓이 됐고, 그대로 두면 다음 사람이 채팅과
+ * 무관한 화면에서 이 클래스를 찾지 못해 똑같은 것을 다시 만든다.
+ *
+ * 최소 크기를 .btn과 같은 34px로 맞춘다. 그러지 않으면 글자 크기만큼만
+ * 커져서(27px) 손가락으로 누르기 어렵다 — 실제로 채팅의 보내기 버튼이
+ * 그 크기였다. 44px(모바일 권장)까지 키우지 않는 이유는 채팅 입력줄이
+ * 그만큼 세로를 더 먹기 때문이고, 이 화면의 다른 모든 버튼이 34px다.
+ */
+.icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	min-width: 34px;
+	min-height: 34px;
+	padding: var(--s1) var(--s2);
+	font: inherit;
+	font-size: var(--t-md);
+	color: var(--ink-2);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.icon-btn:hover {
+	color: var(--ink);
+}
+.icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
 /* ---------- 참가자 타일 ---------- */
 /*
  * 밤 지목·투표가 같은 격자를 쓴다. 예전에는 밤은 4열 정사각 타일,
@@ -857,23 +892,6 @@ body {
 	outline-offset: -2px;
 }
 
-.icon-btn {
-	flex: 0 0 auto;
-	padding: var(--s1) var(--s2);
-	font: inherit;
-	font-size: var(--t-md);
-	color: var(--ink-2);
-	background: transparent;
-	border: none;
-	cursor: pointer;
-}
-.icon-btn:hover {
-	color: var(--ink);
-}
-.icon-btn:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
 
 /* 접힌 막대: 위젯 전체가 버튼 하나다 */
 .chat-mini {
@@ -1031,6 +1049,13 @@ body {
 			</div>
 
 			<p class="note" id="note" role="status" aria-live="polite"></p>
+
+			<!--
+				관전자에게만 보이는 나가기. 관전자는 좌석이 없어 대기실 위젯이
+				없고, 이 화면이 판이 끝날 때까지 유지되므로 여기 말고는 돌아갈
+				길이 없다. 참가자에게는 숨긴다 — 게임 중 이탈 버튼이 아니다.
+			-->
+			<button type="button" class="btn ghost" id="quit" hidden>관전 종료</button>
 		</div>
 
 		<script>
@@ -1389,6 +1414,10 @@ const Parent = (function () {
 				qs("#alive").textContent = `생존 ${alive}/${total}`;
 			}
 
+			qs("#quit").addEventListener("click", () => {
+				Parent.send({ type: "spectate-quit" });
+			});
+
 			Parent.on({
 				init(data) {
 					const night = data.phase === "night";
@@ -1400,11 +1429,16 @@ const Parent = (function () {
 							? "밤"
 							: "아침";
 
+					// 칩 문구는 서버가 완성해서 보낸다. 전에는 "죽으면 유령"이라는
+					// 규칙이 여기에만 있어서, 같은 칩을 쓰는 roleAction 위젯은 그
+					// 규칙을 몰랐다. 이제 "유령"도 "관전"도 서버가 골라 보낸다.
 					const role = qs("#myrole");
-					role.textContent = data.alive === false ? "유령" : data.role || "";
+					role.textContent = data.role || "";
 					role.classList.add(
 						data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen"
 					);
+
+					qs("#quit").hidden = !data.spectating;
 
 					paintAlive(data.aliveCount, data.total);
 					qs("#note").textContent = data.note || "";

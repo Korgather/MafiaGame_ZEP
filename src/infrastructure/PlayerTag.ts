@@ -11,7 +11,8 @@
 import type { ScriptPlayer } from "zep-script";
 import type { PlayerTag } from "../types/Game.types.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
-import { CHAT_RATE } from "../constants/GameConfig.ts";
+import { newBucket } from "../domain/RateLimit.ts";
+import { ACTION_RATE, CHAT_RATE } from "../constants/GameConfig.ts";
 
 export function tagOf(player: ScriptPlayer): PlayerTag {
 	const existing = player.tag as PlayerTag | undefined | null;
@@ -21,7 +22,8 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 	const created: PlayerTag = {
 		widget: null,
 		mainBox: null,
-		roleWidget: null,
+		cardWidget: null,
+		guideSeen: false,
 		chatWidget: null,
 		/*
 		 * 데스크톱은 펼친 채로 시작한다. 채팅이 있다는 사실 자체를 모르고
@@ -35,10 +37,10 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 		chatOpen: !player.isMobile,
 		chatChannel: ChatChannel.GLOBAL,
 		chatSeen: {},
-		// 여유분을 가득 채운 채로 시작한다. 막 들어온 사람이 첫 인사부터
-		// 걸리면 제한이 아니라 고장으로 보인다.
-		chatTokens: CHAT_RATE.BURST,
-		chatRefilledAt: Time.getUtcTime(),
+		chatRate: newBucket(CHAT_RATE, Time.getUtcTime()),
+		actionRate: newBucket(ACTION_RATE, Time.getUtcTime()),
+		blocked: {},
+		reported: {},
 		originalName: player.name,
 	};
 	player.tag = created;
@@ -52,9 +54,9 @@ export function destroyWidgets(player: ScriptPlayer): void {
 		tag.widget.destroy();
 		tag.widget = null;
 	}
-	if (tag.roleWidget) {
-		tag.roleWidget.destroy();
-		tag.roleWidget = null;
+	if (tag.cardWidget) {
+		tag.cardWidget.destroy();
+		tag.cardWidget = null;
 	}
 	if (tag.chatWidget) {
 		tag.chatWidget.destroy();

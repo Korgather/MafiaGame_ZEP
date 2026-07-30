@@ -10,9 +10,11 @@
  *
  * 이 파일이 얇게 유지되는 한, 게임 로직은 ZEP 없이도 읽고 테스트할 수 있다.
  */
+import { MapTrigger } from "./constants/Assets.ts";
 import { locate } from "./entities/RoomRegistry.ts";
 import { destroyWidgets, tagOf } from "./infrastructure/PlayerTag.ts";
 import { label } from "./services/Broadcast.ts";
+import { showGuide } from "./services/Cards.ts";
 import * as Ccu from "./services/Ccu.ts";
 import * as Chat from "./services/ChatService.ts";
 import * as GameFlow from "./services/GameFlow.ts";
@@ -93,4 +95,10 @@ ScriptApp.onDestroy.Add(() => {
 ScriptApp.onUpdate.Add(dt => {
 	Ccu.tick(dt);
 	GameFlow.tick(dt);
+});
+
+// 대기실 안내판. 규칙을 잊었거나 첫 안내를 넘긴 사람이 다시 읽는 통로다.
+// x·y·tileID는 어느 판인지가 아니라 어느 칸인지라 여기서는 쓸 일이 없다.
+ScriptApp.onObjectTouched.Add((player, _x, _y, _tileID, obj) => {
+	if (obj.param1 === MapTrigger.GUIDE_BOARD) showGuide(player);
 });

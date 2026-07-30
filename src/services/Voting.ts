@@ -16,7 +16,7 @@ import { Sound } from "../constants/Assets.ts";
 import { TIMING } from "../constants/GameConfig.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { tallyVotes, VoteOutcome } from "../domain/Vote.ts";
-import { roleDef, roleName } from "../domain/Roles.ts";
+import { roleDef } from "../domain/Roles.ts";
 import { aliveSeats, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
@@ -24,7 +24,7 @@ import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { beginDayStage } from "./Stage.ts";
-import { openPhase, openVote, updateMain } from "./Widgets.ts";
+import { identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
 
 /** 생존자 수에 비례하는 토론 시간 */
 function dayDuration(aliveCount: number): number {
@@ -49,6 +49,23 @@ export function beginDay(room: Room): void {
 	Chat.say(room, `🌞 ${room.turnCount}번째 아침이 밝았습니다.`);
 
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
+
+	// 채팅 권한 갱신(밤 탭 잠그기·협박당한 사람 입 막기)은 여기서 하지
+	// 않는다. GameFlow.advancePhase가 모든 전이 뒤에 한 번 부른다.
+	notifySilenced(room);
+}
+
+/**
+ * 협박당한 사람에게만 알린다.
+ *
+ * 방 전체에 알리면 누가 협박당했는지가 공개되고, 그것은 곧 건달이
+ * 누구를 지목했는지를 알려주는 단서가 된다. 당사자만 안다.
+ */
+function notifySilenced(room: Room): void {
+	forEachPlayer(room, (player, seat) => {
+		if (!seat.alive || !seat.silenced) return;
+		Chat.tell(player, "🥊 간밤에 협박당했습니다. 오늘은 말할 수도, 투표할 수도 없습니다.");
+	});
 }
 
 /** 한 사람의 아침 화면 */
@@ -60,12 +77,11 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		total: room.total,
 		aliveCount: aliveSeats(room).length,
 		timer: room.phaseTimer,
-		role: roleName(seat.role),
-		team: seat.team,
-		alive: seat.alive,
+		...identityOf(seat),
 		note: seat.alive ? "투표 전까지 이야기를 나누세요." : "당신은 죽었습니다. 관전 중입니다.",
 		// 밤사이 무슨 일이 있었는지는 채팅이 아니라 화면에 남는다
 		deaths: room.nightReport,
+		spectating: false,
 	});
 }
 

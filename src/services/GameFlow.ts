@@ -22,13 +22,12 @@ import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { MIN_PLAYERS, TIMING } from "../constants/GameConfig.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
-import { roleDef } from "../domain/Roles.ts";
 import { assignRole, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
-import { messageType } from "../types/Widget.types.ts";
-import { centerLabel, forEachPlayer, playSound } from "./Broadcast.ts";
+import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
+import { showRoleReveal } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
-import { broadcastRoomCounts, enterLobby } from "./Lobby.ts";
+import { broadcastRoomCounts, enterLobby, refreshSpectators, seatSpectators } from "./Lobby.ts";
 import { beginNight, openNightView, resolveNight } from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay, refreshTitle } from "./Rewards.ts";
@@ -41,7 +40,7 @@ import {
 	openVoteResultView,
 	openVoteView,
 } from "./Voting.ts";
-import { closeMain, closeRoleCard, openRoleCard } from "./Widgets.ts";
+import { closeCard, closeMain } from "./Widgets.ts";
 
 /**
  * 게임을 계속하려면 최소한 이만큼은 접속해 있어야 한다.
@@ -134,6 +133,9 @@ function advancePhase(room: Room): void {
 		case GamePhase.LOBBY:
 			break;
 	}
+	// 관전 화면은 begin*의 forEachPlayer 루프에 들어가지 않는다(그 루프는
+	// 좌석만 돈다). 그래서 단계 표시·타이머·사망자 목록을 여기서 갱신한다.
+	refreshSpectators(room);
 	// 단계가 바뀌면 채팅 권한도 바뀐다 (밤 → 마피아 탭, 낮 → 방 탭).
 	// 전이 switch 바로 옆에 두는 이유는, 단계를 추가하는 사람이 채팅 권한
 	// 갱신을 따로 기억하지 않아도 되게 하기 위해서다.
@@ -157,7 +159,7 @@ function advancePhase(room: Room): void {
 export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	switch (room.phase) {
 		case GamePhase.ROLE_REVEAL:
-			openRoleCardView(player, seat);
+			showRoleReveal(player, seat);
 			break;
 		case GamePhase.NIGHT:
 			openNightView(room, player, seat);
@@ -214,7 +216,7 @@ function beginGame(room: Room): void {
 		// 게다가 이 순간 재접속한 사람은(showPhaseView가 카드만 연다)
 		// 대기실 화면이 없어서, 머문 사람과 돌아온 사람의 화면이 갈렸다.
 		closeMain(player);
-		openRoleCardView(player, seat);
+		showRoleReveal(player, seat);
 	});
 
 	// 대기실 채팅에서 방 채팅으로. 마피아에게는 이 시점에 마피아 탭이 생긴다
@@ -223,31 +225,6 @@ function beginGame(room: Room): void {
 	// 방 탭 미확인만 올라가고, 곧바로 온 탭 목록이 그 수를 덮어쓴다
 	Chat.say(room, `🎭 ${room.total}명으로 게임을 시작합니다. 직업을 확인하세요.`);
 	broadcastRoomCounts();
-}
-
-/**
- * 한 사람의 직업 카드.
- *
- * 기존에는 직업마다 HTML 파일이 따로 있어서 파일명만 넘겼다. 카드에는 그림
- * 한 장뿐이라 "당신은 의사입니다"까지만 알려주고, 무엇을 해야 하는지는
- * 알려주지 않았다. 직업을 추가하면 HTML도 하나 더 만들어야 했다.
- * 이제 카드는 하나이고 직업별 차이는 전부 이 payload로 간다.
- */
-function openRoleCardView(player: ScriptPlayer, seat: Seat): void {
-	const def = roleDef(seat.role);
-	openRoleCard(player, {
-		type: "init",
-		role: def.displayName,
-		team: seat.team,
-		glyph: def.glyph,
-		ability: def.ability,
-		tip: def.tip,
-		timer: TIMING.ROLE_REVEAL,
-	}).onMessage.Add(handleCardMessage);
-}
-
-function handleCardMessage(player: ScriptPlayer, data: unknown): void {
-	if (messageType(data) === "close") closeRoleCard(player);
 }
 
 /**
@@ -262,12 +239,25 @@ export function returnToLobby(room: Room): void {
 
 	// 좌석을 비우기 전에 대상을 확보한다. resetRoom이 seats를 비운다.
 	const playerIds = room.seats.map(seat => seat.playerId);
+	/*
+	 * 관전자도 마찬가지다. resetRoom은 두 목록을 모두 비우므로 먼저 떠 놓고,
+	 * 방이 빈 뒤에 좌석으로 앉힌다.
+	 *
+	 * 순서가 중요하다. 앉히기를 아래 루프보다 먼저 끝내야 enterLobby가 그리는
+	 * 좌석 목록에 새로 앉은 사람이 들어간다 — 뒤집으면 방금까지 같이 있던
+	 * 사람들의 화면에 서로가 안 보이고, 다음 갱신이 올 때까지 그대로다.
+	 */
+	const watchers = room.spectators.slice();
 	resetRoom(room);
+	const promoted = seatSpectators(room, watchers);
 
-	for (const playerId of playerIds) {
+	// 관전자도 같은 대접을 받는다. 앉지 못한 사람까지 포함하는 것이 중요한데,
+	// 그 사람들의 화면은 아직 관전 화면이라 여기서 걷어주지 않으면 끝난 판을
+	// 계속 보게 된다(enterLobby가 메인 위젯을 대기실로 덮는다).
+	for (const playerId of playerIds.concat(watchers.map(seat => seat.playerId))) {
 		const player = ScriptApp.getPlayerByID(playerId);
 		if (!player) continue;
-		closeRoleCard(player);
+		closeCard(player);
 		resetPlayerAppearance(player);
 		refreshTitle(player);
 		// 화면만 대기실로 돌려보내면 몸은 방금 끝난 방 좌석에 남는다.
@@ -278,6 +268,14 @@ export function returnToLobby(room: Room): void {
 		enterLobby(player);
 		// 좌석이 사라졌으므로 마피아·유령 탭도 함께 사라진다
 		Chat.refresh(player);
+	}
+
+	// 기다린 사람에게만 결과를 알린다. 좌석 목록이 떴다는 것만으로는
+	// "내가 이 방에 앉았다"가 눈에 띄지 않는다 — 방금까지 보던 화면과
+	// 자리에 앉은 화면이 둘 다 이 방의 화면이기 때문이다.
+	for (const playerId of promoted) {
+		const player = ScriptApp.getPlayerByID(playerId);
+		if (player) label(player, "👥 자리에 앉았습니다. 준비를 눌러 시작하세요.");
 	}
 
 	broadcastRoomCounts();
