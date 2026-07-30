@@ -14,13 +14,16 @@
 // (Sprites.ts가 모듈 로드 시점에 ScriptApp.loadSpritesheet를 부른다)
 import { FakePlayer, FakeWidget, seedRandom, world } from "./FakeZep.ts";
 import "../../src/index.ts";
+import { Tile } from "../../src/constants/Assets.ts";
 import { MAX_PLAYERS } from "../../src/constants/GameConfig.ts";
+import { seatPosition } from "../../src/constants/RoomLayout.ts";
 import { assignRole, resetRoom } from "../../src/entities/Room.ts";
 import { allRooms, getRoom, locate } from "../../src/entities/RoomRegistry.ts";
 import type { ChatChannel } from "../../src/domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../../src/domain/chat/ChatMessage.ts";
 import { resetGlobalLog } from "../../src/services/ChatService.ts";
-import type { ChatChannelView, PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
+import type { PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
+import type { ChatChannelView } from "../../src/types/Widget.types.ts";
 import { Role } from "../../src/types/Game.types.ts";
 
 let nextPlayerId = 1;
@@ -52,7 +55,11 @@ export function resetWorld(seed = 1): void {
 	resetGlobalLog();
 	world.players.length = 0;
 	world.httpPosts.length = 0;
+	world.staffSays.length = 0;
 	for (const key of Object.keys(world.mapObjects)) delete world.mapObjects[key];
+	// 칠한 프라이빗 영역도 테스트마다 지운다. 남으면 영역을 칠하지 않은
+	// 테스트가 앞 테스트의 영역을 물려받아, 말풍선이 새는 경로를 통과한다.
+	for (const key of Object.keys(world.tiles)) delete world.tiles[key];
 	// Lobby의 강퇴 쿨다운은 모듈 내부 변수라 밖에서 지울 수 없다.
 	// 시계를 크게 앞당겨 이전 테스트가 건 쿨다운을 모두 만료시킨다.
 	world.nowMs += 24 * 60 * 60 * 1000;
@@ -220,9 +227,86 @@ export function chatLines(player: FakePlayer, channel?: ChatChannel): ChatMessag
 	return channel === undefined ? lines : lines.filter(line => line.channel === channel);
 }
 
-/** 채팅에 이런 내용의 줄이 왔는가 */
+/**
+ * 채팅에 이런 내용의 줄이 왔는가.
+ *
+ * 표(rows)도 함께 훑는다. text만 보던 동안에는 전원의 직업 공개나 신고
+ * 내용처럼 표로 내려간 것이 테스트에는 통째로 안 보였다 — 화면에는 멀쩡히
+ * 떠 있는데 "안 왔다"고 판정하는 helper는 없느니만 못하다.
+ *
+ * 한 행은 화면에서 "이름 값"으로 붙어 보이므로 여기서도 그렇게 잇는다.
+ */
 export function chatSaw(player: FakePlayer, fragment: string): boolean {
-	return chatLines(player).some(line => line.text.indexOf(fragment) >= 0);
+	return chatLines(player).some(
+		line =>
+			line.text.indexOf(fragment) >= 0 ||
+			line.rows.some(row => `${row.label} ${row.value || ""}`.indexOf(fragment) >= 0)
+	);
+}
+
+/**
+ * 서버가 "ZEP 기본 채팅으로도 내보내라"고 지시한 말들.
+ *
+ * 말풍선을 실제로 띄우는 것은 클라이언트(native-chat.js)라 여기서는 볼 수 없다.
+ * 볼 수 있고 또 봐야 하는 것은 지시가 나갔는지다 — 마피아 밀담에 이 지시가
+ * 붙으면 밤에 밀담이 방 전체에 뜬다.
+ *
+ * area를 함께 돌려주는 이유: 나갔는지만 보면 절반만 지킨 것이다. 청중이
+ * PRIVATE_AREA여야 할 말이 PUBLIC_AREA로 나가면 방 채팅이 맵 전체에 뜨는데,
+ * 텍스트만 비교하는 검사는 그 사고를 통과시킨다.
+ */
+export interface SpokenLine {
+	readonly text: string;
+	/** ZepAudience. 위젯이 그대로 chatAreaType으로 쓴다 */
+	readonly area: string;
+}
+
+export function spokenAloud(player: FakePlayer): SpokenLine[] {
+	const said: SpokenLine[] = [];
+	for (const message of chatWidget(player).messages) {
+		const payload = message as { type?: string; text?: string; area?: string };
+		if (payload.type !== "say" || payload.text === undefined) continue;
+		// area가 없으면 위젯은 아무것도 쏘지 않는다(native-chat.js). 검사가
+		// 빠뜨린 필드를 대신 채워주면 그 사실이 가려진다.
+		said.push({ text: payload.text, area: payload.area === undefined ? "" : payload.area });
+	}
+	return said;
+}
+
+/**
+ * 이 방의 프라이빗 영역을 칠한다. ZEP 에디터에서 손으로 하는 일의 대역이다.
+ *
+ * 실제 맵 데이터는 이 저장소에 없다(.zepmap은 ZEP 에디터에만 있다). 그래서
+ * 좌석과 그 주변만 칠한다 — 코드가 아는 "방 안"이 좌석 배치이므로
+ * isInsideRoom과 같은 상자를 쓰는 것이 맞다.
+ *
+ * 영역 id는 칠하지 않는다. ScriptMap.getTile은 효과 종류만 돌려주고 id는
+ * 아예 읽을 수 없다 — 그래서 프로덕션도 id를 보지 않고 상자와 타일 두 가지로
+ * 판정한다(Stage.inOwnRoomArea). 가짜가 id를 들고 있으면 검사가 프로덕션이
+ * 쓰지 않는 정보에 기대게 된다.
+ */
+export function paintPrivateArea(roomNum: number): void {
+	for (let index = 1; index <= MAX_PLAYERS; index++) {
+		const seat = seatPosition(roomNum, index);
+		if (!seat) continue;
+		paintTile(seat.x, seat.y);
+	}
+}
+
+/** 한 칸만 프라이빗 영역으로 칠한다 (방 밖·옆 방 경로를 만들 때) */
+export function paintTile(tileX: number, tileY: number): void {
+	world.tiles[`${Tile.EFFECT_LAYER},${tileX},${tileY}`] = Tile.PRIVATE_AREA;
+}
+
+/** 한 칸만 도로 비운다 (칠하다 만 방을 만들 때) */
+export function clearTile(tileX: number, tileY: number): void {
+	delete world.tiles[`${Tile.EFFECT_LAYER},${tileX},${tileY}`];
+}
+
+/** 사람을 특정 타일 위로 옮긴다. 걸어간 것이 아니라 좌표만 바꾼다 */
+export function standAt(player: FakePlayer, tileX: number, tileY: number): void {
+	player.tileX = tileX;
+	player.tileY = tileY;
 }
 
 /** 겹쳐 뜬 카드 (직업 공개·첫 안내·직업 도감이 같은 자리를 쓴다) */
@@ -235,6 +319,18 @@ export function cardWidget(player: FakePlayer): FakeWidget {
 /** 지금 카드가 떠 있는가 (없어야 정상인 경우를 검사할 때) */
 export function hasCard(player: FakePlayer): boolean {
 	return !!tagOf(player).cardWidget;
+}
+
+/** 화면을 덮고 있는 전환 컷 */
+export function cutWidget(player: FakePlayer): FakeWidget {
+	const widget = tagOf(player).cutWidget;
+	if (!widget) throw new Error(`${player.name}에게 열린 컷이 없습니다.`);
+	return widget as unknown as FakeWidget;
+}
+
+/** 지금 컷이 돌고 있는가 (걷혔는지 확인할 때) */
+export function hasCut(player: FakePlayer): boolean {
+	return !!tagOf(player).cutWidget;
 }
 
 /** 메인 위젯이 서버로 메시지를 보낸다 */

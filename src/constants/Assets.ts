@@ -29,8 +29,8 @@ export const Sound = {
  * winCitizen/winMafia는 <img> 한 줄만 달랐다. 직업이 12종이 되면
  * 카드도 12개가 되는 구조였다.
  *
- * 지금은 6개다. 다른 것은 파일이 아니라 payload로 보낸다.
- * 직업을 추가해도 여기는 늘지 않는다.
+ * 지금은 화면의 종류만큼만 있다. 같은 화면의 다른 내용은 파일이 아니라
+ * payload로 보낸다 — 직업을 추가해도 여기는 늘지 않는다.
  */
 export const WidgetFile = {
 	LOBBY: "lobby.html",
@@ -45,6 +45,10 @@ export const WidgetFile = {
 	GAME_OVER: "gameOver.html",
 	/** 통합 채팅. 접속해 있는 내내 떠 있는 유일한 위젯 */
 	CHAT: "chat.html",
+	/** 단계 전환 컷. 화면을 통째로 덮고 서버가 정한 시간에 스스로 닫힌다 */
+	CUT: "cut.html",
+	/** 사람을 클릭했을 때 뜨는 프로필. ZEP 기본 창을 끄고 대신 이걸 띄운다 */
+	PROFILE: "profile.html",
 } as const;
 
 /**
@@ -55,6 +59,24 @@ export const WidgetFile = {
 export const MapTrigger = {
 	/** 대기실 안내판. 부딪히면 첫 안내 카드가 다시 뜬다 */
 	GUIDE_BOARD: "GUIDE_CARDS",
+} as const;
+
+/**
+ * ScriptMap.getTile에 넘기고 되돌려받는 값.
+ *
+ * zep-script에 TileEffectType이라는 enum이 선언돼 있지만 .d.ts에만 있다 —
+ * 런타임에는 존재하지 않아서 값으로 import하면 배포본이 죽는다. 이 프로젝트가
+ * zep-script를 전부 `import type`으로만 쓰는 이유가 이것이다.
+ *
+ * MapTrigger와 같은 성질의 값이라 옆에 둔다: 맵 쪽 사실이고, 어긋나도
+ * 컴파일러가 잡아주지 않는다. 둘을 한 객체에 넣은 것은 항상 함께 쓰이기
+ * 때문이다 — 레이어를 틀리면 값 비교는 의미가 없다.
+ */
+export const Tile = {
+	/** 타일 효과 레이어 */
+	EFFECT_LAYER: 2,
+	/** 효과 레이어의 값: 프라이빗 영역 */
+	PRIVATE_AREA: 4,
 } as const;
 
 /**
@@ -85,6 +107,15 @@ export interface WidgetBox {
 	readonly height: number;
 	/** 모바일 세로. 화면 높이 대비 %. 없으면 height(px)를 그대로 쓴다 */
 	readonly mobile?: number;
+	/**
+	 * 화면을 통째로 덮는가. 켜면 width/height/mobile을 모두 무시하고
+	 * 100% × 100% + OVERLAY_Z가 된다 (Widgets.ts의 layoutOf).
+	 *
+	 * 위 세로 예산이 적용되지 않는 유일한 예외다. 예산은 "게임 화면을 얼마나
+	 * 남길 것인가"를 정하는데, 덮는 위젯은 게임 화면을 남기지 않는 것이
+	 * 목적이고 서버가 정한 시간에 스스로 닫힌다.
+	 */
+	readonly fill?: true;
 }
 
 export const WidgetSize = {
@@ -129,6 +160,26 @@ export const WidgetSize = {
 	 * 글자 한 줄이라 화면이 커진다고 같이 커질 이유가 없다 — 여기만 픽셀 그대로다.
 	 */
 	CHAT_BAR: { width: 190, height: 44 },
+	/**
+	 * 단계 전환 컷.
+	 *
+	 * 화면을 덮는다. 위젯이 iframe이라 투명해도 클릭을 먹는다는 성질이 여기서는
+	 * 오히려 필요한 것이다 — 컷이 도는 동안은 아무것도 누를 수 없어야 한다.
+	 * 이 방식이 허용되는 조건은 "서버가 닫아 준다"이고(Assets의 CHAT 주석),
+	 * 컷은 그 조건을 만족하는 유일한 화면이다.
+	 *
+	 * width/height는 fill이 켜져 있어 쓰이지 않지만 showWidget이 픽셀을
+	 * 요구해서 남는다 — 첫 프레임의 상자 크기다.
+	 */
+	CUT: { width: 480, height: 320, fill: true },
+	/**
+	 * 프로필 창.
+	 *
+	 * 카드와 같은 성질이다 — 겹쳐 읽고 닫는다. 그래서 도감처럼 예산(46%)을
+	 * 조금 넘겨도 되지만 그럴 필요가 없다: 내용이 아바타 한 장과 여덟 줄이라
+	 * 카드보다 낮게 잡아도 스크롤이 생기지 않는다.
+	 */
+	PROFILE: { width: 300, height: 340, mobile: 42 },
 } as const;
 
 /**
@@ -147,6 +198,16 @@ export const TopNudge = { DESKTOP: "-12px", PHONE: "-62px", TABLET: "-40px" } as
 
 /** 채팅을 펼쳤을 때 메인 위젯이 줄어드는 비율 (위 세로 예산 참고) */
 export const MAIN_TIGHT = 0.6;
+
+/**
+ * 화면을 덮는 위젯의 쌓임 순서.
+ *
+ * ZEP은 위젯이 뜬 순서대로 쌓는다. 채팅창은 접속 내내 떠 있고 컷은 나중에
+ * 뜨므로 보통은 컷이 위지만, 채팅을 접었다 펴면 그 순간 채팅이 다시 떠서
+ * 컷 위를 덮는다 — 순서에 기대면 "언제 접었는가"가 연출을 가린다.
+ * 값을 못으로 박아 순서와 무관하게 만든다.
+ */
+export const OVERLAY_Z = 9999;
 
 /**
  * 스프라이트시트 정의.
@@ -171,6 +232,7 @@ export type SpriteKey =
 	| "spy"
 	| "ghost"
 	| "bullet"
+	| "claw"
 	| "silhouette"
 	| "blank";
 
@@ -181,6 +243,22 @@ function walk48(file: string): SpriteDef {
 		width: 48,
 		height: 48,
 		frames: { left: [3, 4, 5], up: [9, 10, 11], down: [0, 1, 2], right: [6, 7, 8] },
+		fps: 8,
+	};
+}
+
+/**
+ * 날아가는 공격 이펙트 (24x24 시트, 오른쪽·아래·왼쪽·위 순서 4프레임).
+ *
+ * 이펙트 하나가 더 생기는 순간 24·24·프레임 배치·fps 네 값이 두 군데로
+ * 갈라진다. 시트를 같은 규격으로 그리기로 한 이상 규격도 한 곳에 둔다.
+ */
+function projectile24(file: string): SpriteDef {
+	return {
+		file,
+		width: 24,
+		height: 24,
+		frames: { left: [2], right: [0], up: [3], down: [1] },
 		fps: 8,
 	};
 }
@@ -218,17 +296,26 @@ export const SPRITE_DEFS: Record<SpriteKey, SpriteDef> = {
 	 * 자경단원이 생기면서 "시민 편이 마피아 리소스를 빌려 쓴다"로 읽혔다.
 	 * 파일은 총알 그림이지 마피아 그림이 아니므로 이름을 그림에 맞춘다.
 	 *
-	 * 짐승인간은 물어 죽이는데 여기에 맞는 그림이 없어 이펙트가 없다(에셋 공백).
-	 * 총알을 빌려주면 밤마다 총성 대신 총알이 두 번 날아 정체가 새어 나간다.
+	 * 짐승인간에게 빌려주지 않는 이유는 아래 claw 참고.
 	 */
-	bullet: {
-		file: "bulletSprite2.png",
-		width: 24,
-		height: 24,
-		frames: { left: [2], right: [0], up: [3], down: [1] },
-		fps: 8,
-	},
-	silhouette: still("silhouette2.png", 48, 48, 0),
+	bullet: projectile24("bulletSprite2.png"),
+	/**
+	 * 발톱 자국. 짐승인간 전용.
+	 *
+	 * 총알을 빌려 쓸 수도 있었지만 그러면 밤마다 총성 없이 총알만 두 번 날아
+	 * "총을 안 쏘는 쪽이 짐승인간"이라는 공짜 단서가 생긴다. 이펙트는 정체를
+	 * 가리키면 안 되므로 총알과 겹치지 않는 붉은 계열 그림을 따로 둔다.
+	 */
+	claw: projectile24("clawSprite.png"),
+	/**
+	 * 밤에 자리마다 세워두는 실루엣. 세로 두 칸(32x64)을 한 오브젝트로 덮는다
+	 * — placeSilhouettes가 머리 위 칸에 놓고 두 칸을 정리 목록에 넣는 이유다.
+	 *
+	 * 전에는 48x48로 적혀 있었다. 실제 파일은 32x64라 프레임 0의 사각형이
+	 * 시트를 벗어났고, 클라이언트가 잘라 그려 준 덕분에 "대충 보이는" 상태로
+	 * 남아 있었다. tests/assets.test.ts가 이제 이런 어긋남을 잡는다.
+	 */
+	silhouette: still("silhouette2.png", 32, 64, 0),
 	blank: still("blank.png", 32, 32, 0),
 };
 

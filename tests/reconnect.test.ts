@@ -236,7 +236,7 @@ describe("재접속", () => {
 		assert.equal(cardWidget(player).destroyed, false, "직업 카드가 다시 열리지 않았습니다");
 	});
 
-	it("죽은 채로 돌아오면 유령 이름과 밤 화면을 받는다", () => {
+	it("죽은 채로 돌아오면 유령 이름표와 밤 화면을 받는다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
@@ -253,7 +253,14 @@ describe("재접속", () => {
 		disconnect(ghost);
 		reconnect(ghost);
 
-		assert.ok(ghost.name.indexOf("(유령)") >= 0, `이름이 ${ghost.name}입니다`);
+		/*
+		 * 죽었다는 사실은 이름표에 있다(Stage.applyNameplate). 전에는 닉네임
+		 * 뒤에 "(유령)"을 붙였는데, 그러면 되돌리는 코드가 원래 닉네임을 따로
+		 * 기억해야 하고 그걸 잊은 경로가 실제로 있었다 — 한 번 죽은 사람은
+		 * 대기실로 돌아가도 계속 유령이었다. 지금은 닉네임을 건드리지 않고
+		 * 첫 줄만 갈아끼우므로 되돌릴 것이 없다.
+		 */
+		assert.deepEqual(ghost.title.split("\n"), ["유령", ghost.name]);
 		const widget = freshMain(ghost);
 		assert.equal(widget.fileName, WidgetFile.PHASE);
 		const payload = widget.lastOfType("init");

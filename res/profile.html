@@ -3,48 +3,91 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>채팅</title>
+		<title>프로필</title>
 		<style>
 :root {		--bg: #14100f;	--surface: #201a19;	--surface-2: #2d2523;	--surface-3: #3b312e;	--line: #4a3d39;		--ink: #f5efe9;	--ink-2: #b9aaa2;	--ink-3: #7d6e68;		--mafia: #e04b4b;	--mafia-dim: #6d2424;	--citizen: #57a8e0;	--citizen-dim: #24475f;		--accent: #e0b355; 	--ok: #5fbf7f;	--warn: #e0b355;	--danger: #e04b4b;	--dead: #5a4a45;		--s1: 4px;	--s2: 8px;	--s3: 12px;	--s4: 16px;	--s5: 24px;		--t-xs: clamp(10px, 2.6vw, 12px);	--t-sm: clamp(11px, 3vw, 13px);	--t-md: clamp(13px, 3.5vw, 15px);	--t-lg: clamp(15px, 4.2vw, 18px);	--t-xl: clamp(19px, 5.5vw, 24px);	--t-2xl: clamp(24px, 7vw, 34px);	--r1: 6px;	--r2: 10px;	--r3: 14px;	--shadow: 0 4px 16px rgba(0, 0, 0, 0.45);	--dur: 160ms;	--ease: cubic-bezier(0.2, 0, 0.2, 1);}@media (prefers-reduced-motion: reduce) {	:root {		--dur: 1ms;	}	*,	*::before,	*::after {		animation-duration: 1ms !important;		animation-iteration-count: 1 !important;		transition-duration: 1ms !important;	}}* {	margin: 0;	padding: 0;	box-sizing: border-box;}html,body {	width: 100%;	height: 100%;	overflow: hidden;}body {		font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",		"Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;	font-size: var(--t-md);	line-height: 1.45;	color: var(--ink);	background: transparent;	-webkit-font-smoothing: antialiased;	-webkit-user-select: none;	user-select: none;	-webkit-tap-highlight-color: transparent;}.panel {	display: flex;	flex-direction: column;	width: 100%;	height: 100%;	padding: var(--s3);	gap: var(--s2);	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);	border: 1px solid var(--line);	border-radius: var(--r3);	box-shadow: var(--shadow);	overflow: hidden;}.panel.night {	background: linear-gradient(160deg, #1b2340 0%, #0d1020 100%);}.panel.day {	background: linear-gradient(160deg, #40331b 0%, #1a1410 100%);}.panel.vote {	background: linear-gradient(160deg, #2b2036 0%, #140f1a 100%);}.hd {	display: flex;	align-items: center;	justify-content: space-between;	gap: var(--s2);	flex: 0 0 auto;}.hd-title {	display: flex;	align-items: center;	gap: var(--s2);	min-width: 0;	font-size: var(--t-lg);	font-weight: 700;	letter-spacing: -0.01em;}.hd-sub {	font-size: var(--t-xs);	color: var(--ink-3);	white-space: nowrap;}.timer {	position: relative;	flex: 0 0 auto;	display: grid;	place-items: center;	width: 44px;	height: 44px;	font-variant-numeric: tabular-nums;	font-size: var(--t-lg);	font-weight: 700;	color: var(--ink);}.timer svg {	position: absolute;	inset: 0;	transform: rotate(-90deg);}.timer circle {	fill: none;	stroke-width: 3;	stroke-linecap: round;}.timer .track {	stroke: var(--surface-3);}.timer .bar {	stroke: var(--accent);	transition: stroke-dashoffset 1s linear, stroke var(--dur) var(--ease);}.timer.urgent .bar {	stroke: var(--danger);}.timer.urgent {	color: var(--danger);	animation: pulse 1s var(--ease) infinite;}.timer.critical {	animation: pulse 420ms var(--ease) infinite;}@keyframes pulse {	0%,	100% {		transform: scale(1);	}	50% {		transform: scale(1.08);	}}.progress {	flex: 0 0 auto;	height: 4px;	border-radius: 99px;	background: var(--surface-2);	overflow: hidden;}.progress i {	display: block;	height: 100%;	width: 0;	background: var(--accent);	transition: width var(--dur) var(--ease);}.body {	flex: 1 1 auto;	min-height: 0;	display: flex;	flex-direction: column;	gap: var(--s2);}.scroll {	overflow-y: auto;	overscroll-behavior: contain;	scrollbar-width: thin;	scrollbar-color: var(--surface-3) transparent;}.scroll::-webkit-scrollbar {	width: 6px;}.scroll::-webkit-scrollbar-thumb {	background: var(--surface-3);	border-radius: 99px;}.scroll::-webkit-scrollbar-track {	background: transparent;}.foot {	display: flex;	gap: var(--s2);	flex: 0 0 auto;}.btn {	display: inline-flex;	align-items: center;	justify-content: center;	gap: var(--s1);	min-height: 34px;	padding: var(--s2) var(--s3);	font: inherit;	font-size: var(--t-sm);	font-weight: 600;	color: var(--ink);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: var(--r1);	cursor: pointer;	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),		transform var(--dur) var(--ease);}.btn:hover:not(:disabled) {	background: var(--surface-3);}.btn:active:not(:disabled) {	transform: scale(0.97);}.btn:focus-visible {	outline: 2px solid var(--accent);	outline-offset: 2px;}.btn:disabled {	cursor: default;	opacity: 0.45;}.btn.primary {	color: #14100f;	background: var(--accent);	border-color: var(--accent);}.btn.primary:hover:not(:disabled) {	filter: brightness(1.1);}.btn.ok {	color: #0e1a12;	background: var(--ok);	border-color: var(--ok);}.btn.danger {	color: var(--ink);	background: var(--mafia-dim);	border-color: var(--mafia);}.btn.ghost {	background: transparent;}.icon-btn {	display: inline-flex;	align-items: center;	justify-content: center;	flex: 0 0 auto;	min-width: 34px;	min-height: 34px;	padding: var(--s1) var(--s2);	font: inherit;	font-size: var(--t-md);	color: var(--ink-2);	background: transparent;	border: none;	cursor: pointer;}.icon-btn:hover {	color: var(--ink);}.icon-btn:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.grid {	display: grid;	grid-template-columns: repeat(4, 1fr);	gap: var(--s2);	align-content: start;}@media (max-width: 340px) {	.grid {		grid-template-columns: repeat(3, 1fr);	}}.tile {	position: relative;	display: flex;	flex-direction: column;	align-items: center;	justify-content: center;	gap: 2px;	aspect-ratio: 1;	padding: var(--s1);	font: inherit;	font-size: var(--t-sm);	font-weight: 700;	color: var(--ink);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: var(--r2);	cursor: pointer;	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),		transform var(--dur) var(--ease);}.tile:hover:not(:disabled) {	background: var(--surface-3);	border-color: var(--ink-3);}.tile:active:not(:disabled) {	transform: scale(0.95);}.tile:focus-visible {	outline: 2px solid var(--accent);	outline-offset: 2px;}.tile .num {	font-size: var(--t-lg);	line-height: 1.1;}.tile .cap {	font-size: var(--t-xs);	font-weight: 500;	color: var(--ink-3);}.tile.me {	border-color: var(--ok);}.tile.me .cap {	color: var(--ok);}.tile:disabled,.tile.dead {	cursor: default;	color: var(--dead);	background: var(--surface);	border-color: var(--surface-2);}.tile.dead .cap {	color: var(--dead);}.tile.picked {	background: var(--mafia-dim);	border-color: var(--mafia);	box-shadow: 0 0 0 2px var(--mafia) inset;}.tile.ally {	border-color: var(--mafia);	background: color-mix(in srgb, var(--mafia-dim) 60%, var(--surface-2));}.tile .badge {	position: absolute;	top: 2px;	right: 3px;	font-size: var(--t-xs);	line-height: 1;}.tile .tally {	position: absolute;	bottom: 2px;	left: 0;	right: 0;	font-size: var(--t-xs);	font-weight: 700;	color: var(--accent);}.chip {	display: inline-flex;	align-items: center;	gap: var(--s1);	padding: 2px var(--s2);	font-size: var(--t-xs);	font-weight: 700;	white-space: nowrap;	border: 1px solid var(--line);	border-radius: 99px;	background: var(--surface-2);}.chip.mafia {	color: var(--mafia);	border-color: var(--mafia);	background: var(--mafia-dim);}.chip.citizen {	color: var(--citizen);	border-color: var(--citizen);	background: var(--citizen-dim);}.chip.dead {	color: var(--ink-3);}.note {	flex: 0 0 auto;	font-size: var(--t-sm);	color: var(--ink-2);	text-align: center;	word-break: keep-all;}.note strong {	color: var(--ink);}.note.flash {	animation: flash var(--dur) var(--ease);}@keyframes flash {	from {		opacity: 0;		transform: translateY(-4px);	}}.chat {	display: flex;	flex-direction: column;	width: 100%;	height: 100%;	min-height: 0;	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);	border: 1px solid var(--line);	border-radius: var(--r2);	box-shadow: var(--shadow);	overflow: hidden;}.chat-head {	display: flex;	align-items: stretch;	flex: 0 0 auto;	border-bottom: 1px solid var(--line);}.chat-tabs {	display: flex;	gap: 2px;	flex: 1 1 auto;	min-width: 0;	padding: 2px 2px 0;	overflow-x: auto;	scrollbar-width: none;}.chat-tabs::-webkit-scrollbar {	display: none;}.tab {	display: inline-flex;	align-items: center;	gap: var(--s1);	flex: 0 0 auto;	padding: var(--s1) var(--s2);	font: inherit;	font-size: var(--t-xs);	font-weight: 700;	color: var(--ink-3);	background: transparent;	border: none;	border-bottom: 2px solid transparent;	border-radius: var(--r1) var(--r1) 0 0;	white-space: nowrap;	cursor: pointer;	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);}.tab:hover {	color: var(--ink-2);	background: var(--surface-2);}.tab:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.tab[aria-selected="true"] {	color: var(--ink);	background: var(--surface-2);	border-bottom-color: var(--accent);}.tab.ro::after {	content: "🔒";	font-size: 9px;}.badge-n {	min-width: 15px;	padding: 0 4px;	font-size: 9px;	font-weight: 700;	line-height: 15px;	text-align: center;	color: #14100f;	background: var(--accent);	border-radius: 99px;}.chat-fold {	display: inline-flex;	align-items: center;	gap: var(--s1);	flex: 0 0 auto;	min-width: 44px;	min-height: 40px;	margin: 2px var(--s1) 2px 0;	padding: 0 var(--s2);	font: inherit;	font-size: var(--t-xs);	font-weight: 700;	color: var(--ink-2);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: var(--r1);	white-space: nowrap;	cursor: pointer;	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);}.chat-fold:hover {	color: var(--ink);	border-color: var(--ink-3);}.chat-fold:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.chat-body {	position: relative;	display: flex;	flex: 1 1 auto;	min-height: 0;}.chat-log {	display: flex;	flex-direction: column;	gap: var(--s1);	flex: 1 1 auto;	min-height: 0;	padding: var(--s2);}.msg {	display: flex;	flex-direction: column;	max-width: 88%;	font-size: var(--t-sm);}.msg .who {	display: flex;	align-items: center;	gap: var(--s1);	font-size: var(--t-xs);	color: var(--ink-3);}.msg .chip {	padding: 0 var(--s1);	font-size: 9px;}.msg .txt {	padding: var(--s1) var(--s2);	border-radius: var(--r1);	background: var(--surface-2);		white-space: pre-wrap;	word-break: break-word;}.msg.mine {	align-self: flex-end;	align-items: flex-end;}.msg.mine .txt {	color: #14100f;	background: var(--accent);}.when {	flex: 0 0 auto;	font-size: 9px;	color: var(--ink-3);	font-variant-numeric: tabular-nums;}.msg.sys,.msg.evt,.msg.ntc {	align-self: center;	align-items: center;	max-width: 100%;	text-align: center;}.msg.sys .txt,.msg.ntc .txt {	font-size: var(--t-xs);	color: var(--ink-2);	background: transparent;}.msg.ntc .txt {	color: var(--ink-3);}.msg.evt .txt {	font-size: var(--t-xs);	font-weight: 700;	color: var(--accent);	background: color-mix(in srgb, var(--accent) 14%, transparent);	border-radius: 99px;}.msg.card {	align-self: stretch;	align-items: stretch;	max-width: 100%;	gap: 2px;	padding: var(--s2);	text-align: left;	border: 1px solid var(--line);	border-radius: var(--r1);	background: var(--surface-2);}.msg.pm {	align-self: stretch;	align-items: stretch;	max-width: 88%;	text-align: left;}.msg.pm .txt {	font-size: var(--t-sm);	color: var(--ink);	background: color-mix(in srgb, var(--citizen) 18%, transparent);	border-left: 2px solid var(--citizen);	border-radius: 0 var(--r1) var(--r1) 0;}.msg.card .ttl {	font-size: var(--t-xs);	font-weight: 700;	color: var(--accent);}.msg.card .row {	display: flex;	align-items: center;	justify-content: space-between;	gap: var(--s1);	font-size: var(--t-xs);	color: var(--ink-2);}.msg.card .row .ellip {	flex: 1 1 auto;	min-width: 0;}.msg.card .val {	flex: 0 0 auto;	color: var(--ink-3);}.msg.card .row.dim {	opacity: 0.5;}.chat-jump {	position: absolute;	left: 50%;	bottom: var(--s2);	z-index: 2;	transform: translateX(-50%);	padding: 2px var(--s3);	font: inherit;	font-size: var(--t-xs);	font-weight: 700;	color: #14100f;	background: var(--accent);	border: none;	border-radius: 99px;	box-shadow: var(--shadow);	cursor: pointer;}.emoji-pad {	position: absolute;	inset: auto 0 0 0;	z-index: 3;	display: grid;	grid-template-columns: repeat(8, 1fr);	gap: 2px;	padding: var(--s2);	background: var(--surface);	border-top: 1px solid var(--line);}.emoji-pad button {	padding: 2px 0;	font-size: 17px;	line-height: 1.3;	background: transparent;	border: none;	border-radius: var(--r1);	cursor: pointer;}.emoji-pad button:hover {	background: var(--surface-3);}.emoji-pad button:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.quick {	display: flex;	gap: var(--s1);	flex: 0 0 auto;	padding: var(--s1) var(--s2);	overflow-x: auto;	scrollbar-width: none;	border-top: 1px solid var(--line);}.quick::-webkit-scrollbar {	display: none;}.quick button {	flex: 0 0 auto;	padding: 2px var(--s2);	font: inherit;	font-size: var(--t-xs);	color: var(--ink-2);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: 99px;	white-space: nowrap;	cursor: pointer;}.quick button:hover {	color: var(--ink);	background: var(--surface-3);}.quick button:focus-visible {	outline: 2px solid var(--accent);	outline-offset: 1px;}.chat-entry {	display: flex;	align-items: center;	flex: 0 0 auto;	background: var(--surface);	border-top: 1px solid var(--line);}.chat-input {	flex: 1 1 auto;	min-width: 0;	padding: var(--s2) var(--s1);	font: inherit;	font-size: var(--t-sm);	color: var(--ink);	background: transparent;	border: none;	outline: none;	-webkit-user-select: text;	user-select: text;}.chat-input::placeholder {	color: var(--ink-3);}.chat-input:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.chat-mini {	display: flex;	align-items: center;	gap: var(--s2);	width: 100%;	height: 100%;	padding: 0 var(--s3);	font: inherit;	font-size: var(--t-sm);	font-weight: 700;	color: var(--ink-2);	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);	border: 1px solid var(--line);	border-radius: 99px;	box-shadow: var(--shadow);	cursor: pointer;	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);}.chat-mini:hover {	color: var(--ink);	border-color: var(--ink-3);}.chat-mini:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.chat-mini.alert {	color: var(--ink);	border-color: var(--accent);}.hidden {	display: none !important;}.row {	display: flex;	align-items: center;	gap: var(--s2);}.grow {	flex: 1 1 auto;	min-width: 0;}.ellip {	overflow: hidden;	white-space: nowrap;	text-overflow: ellipsis;}.sr {	position: absolute;	width: 1px;	height: 1px;	padding: 0;	margin: -1px;	overflow: hidden;	clip: rect(0, 0, 0, 0);	white-space: nowrap;	border: 0;}
 </style>
-		<style>								</style>
+		<style>			.who {
+				display: flex;
+				align-items: center;
+				gap: var(--s3);
+				flex: 0 0 auto;
+			}
+			.face {
+				display: grid;
+				place-items: center;
+				flex: 0 0 auto;
+				width: 64px;
+				height: 64px;
+				font-size: var(--t-2xl);
+				line-height: 1;
+				background: var(--surface-2);
+				border: 2px solid var(--line);
+				border-radius: 50%;
+				overflow: hidden;
+			}
+			.face img {
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+			}
+			.nick {
+				font-size: var(--t-lg);
+				font-weight: 800;
+				letter-spacing: -0.01em;
+			}
+			.stats {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s1);
+			}
+			.stat {
+				display: flex;
+				align-items: baseline;
+				justify-content: space-between;
+				gap: var(--s3);
+				padding: var(--s2) var(--s3);
+				background: var(--surface-2);
+				border-radius: var(--r1);
+			}
+			.stat .k {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+			}
+			.stat .v {
+				font-size: var(--t-sm);
+				font-weight: 700;
+				text-align: right;
+				word-break: keep-all;
+				font-variant-numeric: tabular-nums;
+			}
+		</style>
 	</head>
 	<body>
-		<button type="button" class="chat-mini hidden" id="mini" aria-label="채팅 열기">
-			<span id="miniGlyph">💬</span>
-			<span class="grow ellip" id="miniText">채팅</span>
-			<span class="badge-n hidden" id="miniBadge">0</span>
-		</button>
-
-		<div class="chat hidden" id="full">
-			<div class="chat-head" id="chatHead">
-				<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
-				
-			<button type="button" class="chat-fold" id="fold" aria-label="채팅 접기">
-				<span aria-hidden="true">▾</span>접기
-			</button>
+		<div class="panel">
+			<div class="hd">
+				<div class="hd-title grow"><span id="heading">프로필</span></div>
+				<span class="hd-sub" id="where"></span>
 			</div>
 
-			<div class="chat-body">
-				<div class="chat-log scroll" id="log" role="log" aria-live="polite"></div>
-				<button type="button" class="chat-jump hidden" id="jump">새 메시지 ↓</button>
-				<div class="emoji-pad hidden" id="pad" role="group" aria-label="이모지"></div>
+			<div class="body">
+				<div class="who">
+					<div class="face" aria-hidden="true">
+						<span id="glyph">🙂</span>
+						<img class="hidden" id="photo" alt="" />
+					</div>
+					<div class="grow">
+						<div class="nick ellip" id="nick"></div>
+						<span class="chip" id="rank"></span>
+					</div>
+				</div>
+
+				<div class="stats scroll" id="stats"></div>
 			</div>
 
-			<div class="quick hidden" id="quick"></div>
-
-			<div class="chat-entry">
-				<button type="button" class="icon-btn" id="emoji" aria-label="이모지">☺</button>
-				
-				<input
-					type="text"
-					class="chat-input"
-					id="input"
-					maxlength="200"
-					autocomplete="off"
-					aria-label="메시지 입력"
-				/>
-				<button type="button" class="icon-btn" id="submit" aria-label="보내기">➤</button>
+			<div class="foot">
+				<button class="btn ghost grow" id="close" type="button">닫기</button>
 			</div>
 		</div>
 
@@ -210,552 +253,38 @@ const Parent = function() {
 }();
 </script>
 		<script>
-const NativeChat = function() {
- let folded = false;
- function fold(reason) {
-  if (!folded) {
-   folded = true;
-   console.warn("[마피아] ZEP 기본 채팅으로 내보내지 못했습니다: " + reason);
-  }
-  return null;
- }
- function keysOf(scope) {
-  const keys = [];
-  try {
-   for (const key in scope) keys.push(key);
-  } catch (error) {}
-  return keys;
- }
- const MODULEISH = /webpack|chunk|__next/i;
- function requireFrom(chunks) {
-  if (!chunks || typeof chunks.push !== "function") return null;
-  let req = null;
-  try {
-   chunks.push([ [ "__mafia_chat_probe__" ], {}, function(webpackRequire) {
-    req = webpackRequire;
-   } ]);
-  } catch (error) {
-   return null;
-  }
-  return typeof req === "function" ? req : null;
- }
- function runtime() {
-  const scopes = [ HostWindow ];
-  try {
-   if (HostWindow.top && HostWindow.top !== HostWindow) scopes.push(HostWindow.top);
-  } catch (error) {}
-  const globals = [];
-  for (const scope of scopes) {
-   for (const name of keysOf(scope)) globals.push({
-    scope: scope,
-    name: name
-   });
-  }
-  const queues = globals.filter(g => g.name.indexOf("webpackChunk") === 0);
-  for (const queue of queues) {
-   const req = requireFrom(queue.scope[queue.name]);
-   if (req) return req;
-  }
-  if (queues.length > 0) {
-   const names = queues.map(q => q.name).join(", ");
-   return fold("청크 큐 " + names + "에서 webpack require를 얻지 못했습니다");
-  }
-  const hints = globals.filter(g => MODULEISH.test(g.name)).map(g => g.name);
-  const clue = hints.length > 0 ? hints.slice(0, 20).join(", ") : "없음";
-  return fold("webpackChunk* 전역이 없습니다 (모듈 관련 전역: " + clue + ")");
- }
- function matchIn(exports, accept) {
-  if (!exports) return null;
-  for (const key in exports) {
-   let value;
-   try {
-    value = exports[key];
-   } catch (error) {
-    continue;
-   }
-   if (!value) continue;
-   const kind = typeof value;
-   if (kind !== "object" && kind !== "function") continue;
-   let ok = false;
-   try {
-    ok = accept(value);
-   } catch (error) {
-    continue;
-   }
-   if (ok) return value;
-  }
-  return null;
- }
- function findInInstances(req, accept) {
-  const cache = req.c;
-  if (!cache) return null;
-  for (const id in cache) {
-   let exports;
-   try {
-    exports = cache[id] && cache[id].exports;
-   } catch (error) {
-    continue;
-   }
-   const hit = matchIn(exports, accept);
-   if (hit) return hit;
-  }
-  return null;
- }
- function findInFactories(req, accept, needle) {
-  const factories = req.m;
-  if (!factories) return null;
-  for (const id in factories) {
-   let source;
-   try {
-    source = String(factories[id]);
-   } catch (error) {
-    continue;
-   }
-   if (source.indexOf(needle) === -1) continue;
-   let exports;
-   try {
-    exports = req(id);
-   } catch (error) {
-    continue;
-   }
-   const hit = matchIn(exports, accept);
-   if (hit) return hit;
-  }
-  return null;
- }
- function isGameConnection(value) {
-  if (typeof value !== "function") return false;
-  const has = Object.prototype.hasOwnProperty;
-  return has.call(value, "instance") && has.call(value, "send") && has.call(value, "connect") && has.call(value, "isMigrating");
- }
- const SIGNATURE_NEEDLE = "isMigrating";
- function sizeOf(registry) {
-  try {
-   return registry ? Object.keys(registry).length + "개" : "없음";
-  } catch (error) {
-   return "읽을 수 없음";
-  }
- }
- function routesOf(req) {
-  return "인스턴스 " + sizeOf(req.c) + ", 팩토리 " + sizeOf(req.m);
- }
- let gameConnection = null;
- let connectionTried = false;
- function connection() {
-  if (connectionTried) return gameConnection;
-  connectionTried = true;
-  if (!HostWindow) {
-   return fold("게임 화면을 읽을 수 없습니다 — 위젯 iframe이 다른 출처이거나 동일 출처 허용이 꺼져 있습니다");
-  }
-  try {
-   const req = runtime();
-   if (!req) return null;
-   gameConnection = findInInstances(req, isGameConnection) || findInFactories(req, isGameConnection, SIGNATURE_NEEDLE);
-   if (!gameConnection) {
-    return fold("GameConnection을 찾지 못했습니다 (" + routesOf(req) + ")");
-   }
-  } catch (error) {
-   return fold("클라이언트 내부를 뒤지는 중 예외: " + error.message);
-  }
-  return gameConnection;
- }
- const AREAS = {
-  PUBLIC_AREA: true,
-  PRIVATE_AREA: true
- };
- function say(text, area) {
-  if (!AREAS[area]) {
-   fold("모르는 채팅 청중: " + area);
-   return false;
-  }
-  const target = connection();
-  if (!target) return false;
-  try {
-   target.send("Z_NET_CHAT_MESSAGE_REQUEST", {
-    message: String(text),
-    chatAreaType: area
-   });
-   return true;
-  } catch (error) {
-   fold("패킷 전송 중 예외: " + error.message);
-   return false;
-  }
- }
- return {
-  say: say
- };
-}();
-</script>
-		<script>
-const MAX_LINES = 200;
-
-const MAX_TEXT = 200;
-
-const BOTTOM_SLACK = 24;
-
-const MAX_SENT = 30;
-
-const EMOJI = [ "👍", "👏", "🙏", "❤️", "😀", "😂", "😅", "😭", "😱", "😡", "🤔", "😎", "🔪", "👻", "🕵️", "🚨" ];
-
-let lines = [];
-
-let channels = [];
-
-let quick = [];
-
-let active = "";
-
-let myId = "";
-
-const sent = Parent.store.chatSent || (Parent.store.chatSent = []);
-
-let sentAt = sent.length;
-
-function clock(at) {
- const d = new Date(Number(at) || 0);
- return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+function showFace(url) {
+ const on = url.length > 0;
+ const photo = qs("#photo");
+ photo.classList.toggle("hidden", !on);
+ qs("#glyph").classList.toggle("hidden", on);
+ if (!on) return;
+ photo.onerror = () => showFace("");
+ photo.src = url;
 }
 
-function viewOf(id) {
- for (const view of channels) {
-  if (view.id === id) return view;
- }
- return null;
-}
-
-function card(line, cls) {
- const rows = line.rows.map(row => {
-  const value = !row.value ? "" : row.tone ? html`<span class="chip ${row.tone === "mafia" ? "mafia" : "citizen"}"
-									>${row.value}</span
-								>` : html`<span class="val">${row.value}</span>`;
-  return html`<div class="row${row.dim ? " dim" : ""}">
-						<span class="ellip">${row.label}</span>${value}
-					</div>`;
- });
- return html`<div class="msg card ${cls}">
-					<div class="ttl">${line.text}</div>
-					${rows}
-				</div>`;
-}
-
-function bubble(line) {
- const when = html`<span class="when">${clock(line.at)}</span>`;
- const pm = line.to !== "" ? " pm" : "";
- if (line.kind !== "USER") {
-  const cls = line.kind === "EVENT" ? "evt" : line.kind === "NOTICE" ? "ntc" : "sys";
-  if (line.rows && line.rows.length) return card(line, cls);
-  return html`<div class="msg ${cls}${pm}">
-						<div class="txt">${when} ${line.text}</div>
-					</div>`;
- }
- const mine = line.senderId !== "" && line.senderId === myId;
- let who = when;
- if (!mine) {
-  const chip = line.role ? html`<span class="chip ${line.team === "mafia" ? "mafia" : "citizen"}"
-								>${line.role}</span
-							>` : "";
-  const name = line.num > 0 ? line.num + "번 " + line.name : line.name;
-  who = html`${chip}<span class="ellip">${name}</span>${when}`;
- }
- return html`<div class="msg${mine ? " mine" : ""}${pm}">
-					<div class="who">${who}</div>
-					<div class="txt">${line.text}</div>
-				</div>`;
-}
-
-function nearBottom(el) {
- return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_SLACK;
-}
-
-function jump(show) {
- qs("#jump").classList.toggle("hidden", !show);
-}
-
-function render() {
- const el = qs("#log");
- el.innerHTML = html`${lines.filter(line => line.channel === active).map(bubble)}`;
- scrollToEnd(el);
- jump(false);
-}
-
-function append(line) {
- lines.push(line);
- if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
- if (line.channel !== active) return;
- const el = qs("#log");
- const follow = nearBottom(el);
- el.insertAdjacentHTML("beforeend", bubble(line));
- while (el.childElementCount > MAX_LINES) el.removeChild(el.firstElementChild);
- if (follow) scrollToEnd(el);
- jump(!follow);
-}
-
-function badgeText(unread) {
- return unread > 99 ? "99+" : String(unread);
-}
-
-function tabHtml(view) {
- const badge = view.unread > 0 ? html`<span class="badge-n">${badgeText(view.unread)}</span>` : "";
- return html`<button
-					type="button"
-					role="tab"
-					class="tab${view.write ? "" : " ro"}"
-					aria-selected="${view.id === active}"
-					data-id="${view.id}"
-					aria-label="${view.label + (view.write ? "" : ", 읽기 전용")}"
-				>
-					<span aria-hidden="true">${view.glyph}</span><span>${view.label}</span>${badge}
-				</button>`;
-}
-
-function drawTabs() {
- qs("#tabs").innerHTML = html`${channels.map(tabHtml)}`;
- const view = viewOf(active);
- qs("#input").placeholder = view ? view.placeholder : "";
-}
-
-function drawBadges() {
- for (const tab of qsa(".tab", qs("#tabs"))) {
-  const view = viewOf(tab.dataset.id);
-  if (!view) continue;
-  let badge = qs(".badge-n", tab);
-  if (view.unread <= 0) {
-   if (badge) badge.remove();
-   continue;
-  }
-  if (!badge) {
-   tab.insertAdjacentHTML("beforeend", '<span class="badge-n"></span>');
-   badge = qs(".badge-n", tab);
-  }
-  badge.textContent = badgeText(view.unread);
- }
-}
-
-function drawQuick() {
- const view = viewOf(active);
- const usable = view !== null && view.write && quick.length > 0;
- qs("#quick").classList.toggle("hidden", !usable);
- if (!usable) return;
- qs("#quick").innerHTML = html`${quick.map(text => html`<button type="button">${text}</button>`)}`;
-}
-
-const MINI_LABEL = Parent.canReadKeys ? "채팅 (Enter)" : "채팅";
-
-function drawMini() {
- let total = 0;
- for (const view of channels) total += view.unread;
- const active_ = viewOf(active);
- qs("#miniGlyph").textContent = active_ ? active_.glyph : "💬";
- qs("#miniText").textContent = total > 0 ? "새 메시지" : MINI_LABEL;
- qs("#miniBadge").textContent = badgeText(total);
- qs("#miniBadge").classList.toggle("hidden", total === 0);
- qs("#mini").classList.toggle("alert", total > 0);
-}
-
-function draw() {
- drawTabs();
- drawQuick();
- drawMini();
-}
-
-function remember(text) {
- if (sent[sent.length - 1] !== text) sent.push(text);
- if (sent.length > MAX_SENT) sent.shift();
- resetRecall();
-}
-
-function resetRecall() {
- sentAt = sent.length;
-}
-
-function recall(step) {
- const at = Math.max(0, Math.min(sent.length, sentAt + step));
- if (at === sentAt) return;
- sentAt = at;
- const input = qs("#input");
- input.value = at === sent.length ? "" : sent[at];
- input.setSelectionRange(input.value.length, input.value.length);
-}
-
-function submit(text) {
- const trimmed = String(text == null ? "" : text).trim();
- if (trimmed === "") return false;
- const view = viewOf(active);
- if (trimmed.charAt(0) !== "/" && (view === null || !view.write)) return false;
+qs("#close").addEventListener("click", () => {
  Parent.send({
-  type: "send",
-  channel: active,
-  text: trimmed
- });
- remember(trimmed);
- return true;
-}
-
-function submitInput() {
- if (!submit(qs("#input").value)) return;
- qs("#input").value = "";
- qs("#pad").classList.add("hidden");
-}
-
-function selectChannel(id) {
- if (id === active) return;
- active = id;
- const view = viewOf(active);
- if (view) view.unread = 0;
- draw();
- render();
- Parent.send({
-  type: "channel",
-  channel: active
- });
-}
-
-function cycleChannel(step) {
- if (channels.length < 2) return;
- let at = 0;
- for (let i = 0; i < channels.length; i++) {
-  if (channels[i].id === active) at = i;
- }
- selectChannel(channels[(at + step + channels.length) % channels.length].id);
-}
-
-qs("#tabs").addEventListener("click", event => {
- const el = event.target.closest(".tab");
- if (el) selectChannel(el.dataset.id);
-});
-
-qs("#chatHead").addEventListener("click", event => {
- if (event.target.closest(".tab")) return;
- Parent.send({
-  type: "toggle",
-  open: false
+  type: "close"
  });
 });
-
-qs("#mini").addEventListener("click", () => {
- Parent.send({
-  type: "toggle",
-  open: true
- });
-});
-
-qs("#jump").addEventListener("click", () => {
- scrollToEnd(qs("#log"));
- jump(false);
-});
-
-qs("#log").addEventListener("scroll", () => {
- if (nearBottom(qs("#log"))) jump(false);
-});
-
-qs("#emoji").addEventListener("click", () => {
- qs("#pad").classList.toggle("hidden");
-});
-
-qs("#pad").addEventListener("click", event => {
- if (event.target.tagName !== "BUTTON") return;
- const input = qs("#input");
- input.value = (input.value + event.target.textContent).slice(0, MAX_TEXT);
- qs("#pad").classList.add("hidden");
- input.focus();
-});
-
-qs("#quick").addEventListener("click", event => {
- if (event.target.tagName !== "BUTTON") return;
- submit(event.target.textContent);
-});
-
-qs("#submit").addEventListener("click", submitInput);
-
-function focusInput(slash) {
- if (qs("#full").classList.contains("hidden")) {
-  Parent.send({
-   type: "toggle",
-   open: true,
-   focus: slash ? "command" : "input"
-  });
-  return;
- }
- takeFocus(slash);
-}
-
-function takeFocus(slash) {
- Parent.grabFocus();
- const input = qs("#input");
- if (slash && input.value === "") input.value = "/";
- input.focus();
- input.setSelectionRange(input.value.length, input.value.length);
-}
-
-qs("#input").addEventListener("keydown", event => {
- const input = qs("#input");
- if (event.key === "Enter") {
-  submitInput();
-  Parent.releaseFocus();
-  return;
- }
- if (event.key === "Escape") {
-  if (input.value !== "") {
-   input.value = "";
-   resetRecall();
-   return;
-  }
-  qs("#pad").classList.add("hidden");
-  input.blur();
-  Parent.releaseFocus();
-  return;
- }
- if (event.key === "Tab") {
-  event.preventDefault();
-  cycleChannel(event.shiftKey ? -1 : 1);
-  return;
- }
- if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-  event.preventDefault();
-  recall(event.key === "ArrowUp" ? -1 : 1);
- }
-});
-
-Parent.onKey(event => {
- if (event.key !== "Enter" && event.key !== "/") return;
- event.preventDefault();
- event.stopImmediatePropagation();
- focusInput(event.key === "/");
-});
-
-qs("#pad").innerHTML = html`${EMOJI.map(glyph => html`<button type="button" aria-label="${glyph}">${glyph}</button>`)}`;
 
 Parent.on({
  init(data) {
-  myId = data.myId || "";
-  channels = data.channels || [];
-  quick = data.quick || [];
-  active = data.active || "";
-  lines = data.lines || [];
-  const open = data.open === true;
-  qs("#full").classList.toggle("hidden", !open);
-  qs("#mini").classList.toggle("hidden", open);
-  draw();
-  render();
-  if (data.focus) takeFocus(data.focus === "command");
- },
- channels(data) {
-  const next = data.active || active;
-  const moved = next !== active;
-  channels = data.channels || [];
-  quick = data.quick || [];
-  active = next;
-  draw();
-  if (moved) render();
- },
- say(data) {
-  NativeChat.say(data.text, data.area);
- },
- line(data) {
-  if (data.channels) channels = data.channels;
-  if (data.line) append(data.line);
-  drawBadges();
-  drawMini();
+  qs("#heading").textContent = data.self ? "내 프로필" : "프로필";
+  qs("#where").textContent = data.where || "";
+  qs("#nick").textContent = data.name || "";
+  qs("#rank").textContent = data.rank || "";
+  showFace(data.avatar || "");
+  const stats = data.stats || [];
+  let out = "";
+  for (let i = 0; i < stats.length; i++) {
+   out += html`<div class="stat">
+							<span class="k">${stats[i].label}</span>
+							<span class="v">${stats[i].value}</span>
+						</div>`;
+  }
+  qs("#stats").innerHTML = out;
  }
 });
 </script>

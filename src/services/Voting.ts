@@ -10,7 +10,8 @@
  *     메시지를 보내는 경로가 남았다.
  */
 import type { ScriptPlayer, ScriptWidget } from "zep-script";
-import type { Room, Seat, SeatView } from "../types/Game.types.ts";
+import type { Room, Seat } from "../types/Game.types.ts";
+import type { SeatView } from "../types/Widget.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { TIMING } from "../constants/GameConfig.ts";
@@ -22,9 +23,10 @@ import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
+import { playCut } from "./Cut.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { beginDayStage } from "./Stage.ts";
-import { identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
+import { bindMessage, identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
 
 /** 생존자 수에 비례하는 토론 시간 */
 function dayDuration(aliveCount: number): number {
@@ -47,6 +49,19 @@ export function beginDay(room: Room): void {
 	// 것이고, 사건은 게임 안에서 벌어진 일이다. 나중에 "이벤트만 보기"를
 	// 켰을 때 아침·밤이 사망과 섞여 나오면 걸러낸 의미가 없다.
 	Chat.say(room, `🌞 ${room.turnCount}번째 아침이 밝았습니다.`);
+
+	/*
+	 * 밤 사이 사건을 컷으로 한 번 읽힌다.
+	 *
+	 * 같은 내용이 낮 화면에도 남아 있지만(openDayView가 deaths로 싣는다)
+	 * 역할이 다르다. 컷은 "무슨 일이 있었는지 다 같이 확인하는 순간"이고
+	 * 낮 화면 목록은 "토론하다 다시 확인하는 곳"이다. 컷이 없으면 낮이
+	 * 시작하자마자 각자 목록을 읽느라 첫 몇 초가 조용하다.
+	 *
+	 * 조용한 밤이면 lines가 비어 제목만 도는 짧은 컷이 된다 — 그것도
+	 * 정보다("아무도 죽지 않았다").
+	 */
+	playCut(room, "day", `🌞 ${room.turnCount}번째 아침`, room.nightReport);
 
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 
@@ -165,7 +180,7 @@ function withdrawVote(room: Room, voter: Seat): void {
  * 표 변경과 기권이 모두 자연스럽게 가능해졌다.
  */
 function bindVoteWidget(widget: ScriptWidget): void {
-	widget.onMessage.Add((sender, data) => {
+	bindMessage(widget, "vote", (sender, data) => {
 		if (messageType(data) !== "vote") return;
 
 		const found = locate(sender.id);
@@ -227,7 +242,8 @@ function sendVoteProgress(room: Room, player: ScriptPlayer): void {
 	updateMain(player, voteProgress(room));
 }
 
-function broadcastVoteProgress(room: Room): void {
+/** 접속 변화로 분모가 바뀌었을 때도 불린다 — GameFlow.refreshProgress 참고 */
+export function broadcastVoteProgress(room: Room): void {
 	const payload = voteProgress(room);
 	forEachPlayer(room, player => updateMain(player, payload));
 }

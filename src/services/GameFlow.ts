@@ -24,23 +24,31 @@ import { MIN_PLAYERS, TIMING } from "../constants/GameConfig.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
 import { assignRole, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
+import { guard } from "../infrastructure/Fault.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import { showRoleReveal } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
+import { advanceCut, playCut, showCut } from "./Cut.ts";
 import { broadcastRoomCounts, enterLobby, refreshSpectators, seatSpectators } from "./Lobby.ts";
-import { beginNight, openNightView, resolveNight } from "./Night.ts";
+import { beginNight, broadcastNightProgress, openNightView, resolveNight } from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
-import { countPlay, refreshTitle } from "./Rewards.ts";
-import { clearSilhouettes, resetPlayerAppearance, spawnInLobby } from "./Stage.ts";
+import { countPlay } from "./Rewards.ts";
+import {
+	applyNameplate,
+	clearSilhouettes,
+	resetPlayerAppearance,
+	spawnInLobby,
+} from "./Stage.ts";
 import {
 	beginDay,
 	beginVote,
 	beginVoteResult,
+	broadcastVoteProgress,
 	openDayView,
 	openVoteResultView,
 	openVoteView,
 } from "./Voting.ts";
-import { closeCard, closeMain } from "./Widgets.ts";
+import { closeCard, closeCut, closeMain } from "./Widgets.ts";
 
 /**
  * 게임을 계속하려면 최소한 이만큼은 접속해 있어야 한다.
@@ -49,11 +57,44 @@ import { closeCard, closeMain } from "./Widgets.ts";
  */
 const MIN_CONNECTED = 2;
 
+/**
+ * 방 8개를 한 프레임 진행시킨다.
+ *
+ * 방마다 따로 격리하는 이유: 이 루프는 onUpdate 콜백 하나 안에서 돈다.
+ * 3번 방에서 예외가 나면 그대로 위로 올라가 그 프레임의 4~8번 방은 아예
+ * 실행되지 않았고, 원인이 방 상태에 남아 있으면 매 프레임 같은 자리에서
+ * 다시 던져 뒤쪽 방들이 영구히 멈췄다. 방은 서로 독립이므로 사고의 범위도
+ * 방 하나여야 한다.
+ */
 export function tick(dt: number): void {
 	for (const room of allRooms()) {
-		if (room.started) advanceGame(room, dt);
-		else advanceLobby(room, dt);
+		const ok = guard(`방 ${room.num} ${room.phase}`, () => {
+			if (room.started) advanceGame(room, dt);
+			else advanceLobby(room, dt);
+		});
+		if (!ok) recover(room);
 	}
+}
+
+/**
+ * 사고가 난 방을 대기실로 되돌린다.
+ *
+ * 그냥 넘기면 안 되는 이유: 예외의 원인은 대개 방 상태에 남아 있어서
+ * 다음 프레임에 같은 자리에서 또 던진다. 격리만 해두면 그 방은 아무 표시도
+ * 없이 영원히 멈춘 채 자리를 점유하고, 안에 있는 사람은 왜 게임이 흐르지
+ * 않는지 알 수 없다. 되돌려야 방이 풀리고 다시 시작할 수 있다.
+ *
+ * 되돌리는 일 자체가 또 던질 수 있다 — 방 상태가 이미 깨져 있으니 오히려
+ * 그럴 법하다. 그때는 사람에게 알리는 것도 위젯을 걷는 것도 포기하고
+ * 방만 비운다. 화면이 남는 것은 다음 판에 덮이지만, 방이 잠기면 그 자리는
+ * 서버가 재시작할 때까지 아무도 쓸 수 없다.
+ */
+function recover(room: Room): void {
+	const ok = guard(`방 ${room.num} 복구`, () => {
+		Chat.say(room, "⚠️ 오류가 발생해 게임을 중단했습니다. 대기실로 돌아갑니다.");
+		returnToLobby(room);
+	});
+	if (!ok) resetRoom(room);
 }
 
 /**
@@ -90,6 +131,9 @@ function advanceGame(room: Room, dt: number): void {
 	}
 
 	room.phaseTimer -= dt;
+	// 컷은 단계 안에서 산다. 단계 시간을 컷 길이만큼 늘려 두었으므로(playCut)
+	// 같은 dt로 함께 줄이면 컷이 걷히는 시점과 단계가 끝나는 시점이 서로 밀리지 않는다.
+	advanceCut(room, dt);
 
 	if (!room.tickTockPlayed && room.phaseTimer < TIMING.TICK_TOCK_AT) {
 		room.tickTockPlayed = true;
@@ -159,7 +203,7 @@ function advancePhase(room: Room): void {
 export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	switch (room.phase) {
 		case GamePhase.ROLE_REVEAL:
-			showRoleReveal(player, seat);
+			showRoleReveal(player, seat, room.phaseTimer);
 			break;
 		case GamePhase.NIGHT:
 			openNightView(room, player, seat);
@@ -179,6 +223,27 @@ export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		case GamePhase.LOBBY:
 			break;
 	}
+	// 컷은 단계 화면 위에 얹힌다. 맨 뒤인 것이 중요하다 — 위젯은 뜬 순서대로
+	// 쌓이므로(그래서 컷은 zIndex도 함께 싣는다) 단계 화면보다 먼저 열면 가려진다.
+	showCut(room, player);
+}
+
+/**
+ * 진행률의 분모가 바뀌었음을 방 전원에게 알린다. 사람이 나가거나 돌아온 순간.
+ *
+ * 분모는 좌석 수가 아니라 "접속해 있고 아직 할 일이 남은 사람"이다. 끊긴
+ * 사람을 남겨두면 절대 안 차는 막대가 되기 때문인데, 정작 그 값은 누군가
+ * 행동했을 때만 다시 계산됐다. 그래서 밤에 한 명이 끊기면 남은 전원이 이미
+ * 마쳤는데도 막대가 2/3에 멈춰 있었다 — 막대가 막으려던 상황이 그대로
+ * 재현된 셈이다.
+ *
+ * 단계별로 갈라지는 일이라 showPhaseView와 나란히 둔다. Night·Voting이
+ * GameFlow를 부르는 방향이었다면 순환 import가 되므로, 단계를 아는 쪽이
+ * 단계를 모르는 쪽을 부르는 이 방향을 지킨다.
+ */
+export function refreshProgress(room: Room): void {
+	if (room.phase === GamePhase.NIGHT) broadcastNightProgress(room);
+	else if (room.phase === GamePhase.VOTE) broadcastVoteProgress(room);
 }
 
 /**
@@ -207,16 +272,20 @@ function beginGame(room: Room): void {
 		assignRole(room.seats[i], i + 1, deck[i]);
 	}
 
+	// 컷을 먼저 건다. playCut이 phaseTimer를 컷 길이만큼 늘리므로, 아래에서
+	// 카드에 실어 보내는 남은 시간이 늘어난 값이어야 서버와 화면이 같은 시계를 본다.
+	playCut(room, "neutral", "🎭 게임 시작", [`${room.total}명이 참가합니다.`]);
+
 	forEachPlayer(room, (player, seat) => {
 		countPlay(player);
-		player.title = `${seat.index} 번 참가자`;
+		applyNameplate(player, seat);
 		player.sendUpdated();
 		// 대기실 위젯을 먼저 치운다. 직업 카드는 별도 슬롯이라 이걸 빼면
 		// 준비 버튼이 달린 대기실 화면이 직업 공개 5초 내내 뒤에 남는다.
 		// 게다가 이 순간 재접속한 사람은(showPhaseView가 카드만 연다)
 		// 대기실 화면이 없어서, 머문 사람과 돌아온 사람의 화면이 갈렸다.
 		closeMain(player);
-		showRoleReveal(player, seat);
+		showRoleReveal(player, seat, room.phaseTimer);
 	});
 
 	// 대기실 채팅에서 방 채팅으로. 마피아에게는 이 시점에 마피아 탭이 생긴다
@@ -258,8 +327,12 @@ export function returnToLobby(room: Room): void {
 		const player = ScriptApp.getPlayerByID(playerId);
 		if (!player) continue;
 		closeCard(player);
+		// 컷이 도는 중에 방이 끝날 수 있다 — 인원 부족(advanceGame)과 사고 복구
+		// (recover)가 그 경로다. resetRoom은 room.cut만 지우므로 화면은 여기서 걷는다.
+		closeCut(player);
+		// 이름표를 판 밖 모습으로 되돌린다. 이 안에서 등급을 다시 계산하므로
+		// 방금 올라간 레벨이 여기서 반영된다(Outcome이 먼저 정산을 끝냈다).
 		resetPlayerAppearance(player);
-		refreshTitle(player);
 		// 화면만 대기실로 돌려보내면 몸은 방금 끝난 방 좌석에 남는다.
 		// 방으로 들어가는 이동은 첫 밤의 seatPlayer 하나뿐이고 되돌리는 짝이
 		// 없었다. 다음 판 첫 밤에 seatPlayer가 다시 옮겨줘서 증상이 스스로

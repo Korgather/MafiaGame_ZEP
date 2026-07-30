@@ -9,8 +9,10 @@
  * 두 곳이 리셋하는 필드 집합이 서로 달랐다(kickList/ready/kickCount는 한쪽에만).
  * 이제 리셋은 여기 한 곳뿐이다.
  */
-import type { RevealView, Room, Seat, SeatView, VoteRecord } from "../types/Game.types.ts";
+import type { Room, Seat, VoteRecord } from "../types/Game.types.ts";
+import type { RevealView, SeatView } from "../types/Widget.types.ts";
 import { GamePhase, Role, Team } from "../types/Game.types.ts";
+import { KICK } from "../constants/GameConfig.ts";
 import { roomOrigin } from "../constants/RoomLayout.ts";
 import { roleDef, roleName } from "../domain/Roles.ts";
 
@@ -38,6 +40,7 @@ export function createRoom(num: number): Room {
 		spectators: [],
 		silhouettes: [],
 		chatLog: [],
+		cut: null,
 	};
 	return room;
 }
@@ -202,6 +205,17 @@ export function kickCount(seat: Seat): number {
 }
 
 /**
+ * 이 인원에서 강퇴에 필요한 표 수.
+ *
+ * 화면(대기실 위젯의 "강퇴 2/3")과 판정(voteKick)이 같은 답을 봐야 하므로
+ * 계산은 여기 한 곳에만 둔다. 두 곳에서 따로 세면 눌러도 안 되는 버튼이나
+ * 예고 없이 쫓겨나는 사람이 생긴다.
+ */
+export function kickVotesNeeded(seatCount: number): number {
+	return Math.max(KICK.MIN_VOTES, Math.ceil(seatCount * KICK.VOTE_SHARE));
+}
+
+/**
  * 강퇴 투표를 토글한다. 돌려주는 값은 토글 후 상태.
  * 기존에는 투표자 쪽 kickList와 대상 쪽 kickCount를 따로 관리해서
  * 둘이 어긋날 수 있었다. 투표자 ID 목록 하나만 두면 개수는 파생된다.
@@ -267,4 +281,7 @@ export function resetRoom(room: Room): void {
 	// 지난 판의 대화는 다음 판에 남기지 않는다. 죽은 사람의 유령 채팅이
 	// 다음 판 대기실에 되살아나면 그 자체로 정보 유출이다.
 	room.chatLog = [];
+	// 돌던 컷도 여기서 끊는다. 위젯은 나가는 사람마다 destroyWidgets가
+	// 닫으므로 남는 것은 이 상태 하나다
+	room.cut = null;
 }

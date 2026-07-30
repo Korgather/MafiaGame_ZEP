@@ -16,7 +16,8 @@
  *    tag가 새로 만들어져 쿨다운이 사라졌다 — 강퇴가 사실상 무의미했다.
  */
 import type { ScriptPlayer } from "zep-script";
-import type { LobbySeatView, Room, Seat } from "../types/Game.types.ts";
+import type { Room, Seat } from "../types/Game.types.ts";
+import type { LobbySeatView } from "../types/Widget.types.ts";
 import { GamePhase, Team } from "../types/Game.types.ts";
 import { ACTION_RATE, KICK, MAX_PLAYERS, MAX_SPECTATORS } from "../constants/GameConfig.ts";
 import { Sound } from "../constants/Assets.ts";
@@ -27,6 +28,7 @@ import {
 	createSeat,
 	findSeat,
 	kickCount,
+	kickVotesNeeded,
 	removeSeat,
 	removeSpectator,
 	toggleKick,
@@ -39,9 +41,9 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachSpectator, label } from "./Broadcast.ts";
 import { needsGuide, showBook, showGuide } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
-import { countAbandon, refreshTitle } from "./Rewards.ts";
+import { countAbandon, rankOf } from "./Rewards.ts";
 import type { PhasePayload } from "./Widgets.ts";
-import { openLobby, openPhase, pushLobby, updateMain } from "./Widgets.ts";
+import { bindMessage, openLobby, openPhase, pushLobby, updateMain } from "./Widgets.ts";
 
 /**
  * 강퇴 쿨다운. player.tag가 아니라 여기에 둔다.
@@ -57,8 +59,7 @@ function isKickBanned(playerId: string): boolean {
 
 /** 대기실 위젯을 열고 현재 상태를 그린다 */
 export function enterLobby(player: ScriptPlayer): void {
-	const widget = openLobby(player);
-	widget.onMessage.Add(handleMessage);
+	bindMessage(openLobby(player), "lobby", handleMessage);
 	pushSeatList(player);
 	pushRoomCounts(player);
 }
@@ -213,9 +214,8 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 		return;
 	}
 
-	const rank = refreshTitle(player);
-	const name = tagOf(player).originalName;
-	room.seats.push(createSeat(player.id, name, rank));
+	const name = player.name;
+	room.seats.push(createSeat(player.id, name, rankOf(player)));
 	player.playSound(Sound.JOIN);
 
 	// 방 탭이 생겼다는 것을 먼저 알린 뒤 입장 알림을 흘린다.
@@ -268,8 +268,7 @@ function spectate(player: ScriptPlayer, room: Room): void {
 		return;
 	}
 
-	const rank = refreshTitle(player);
-	room.spectators.push(createSeat(player.id, tagOf(player).originalName, rank));
+	room.spectators.push(createSeat(player.id, player.name, rankOf(player)));
 
 	// 방 탭을 먼저 붙인 뒤 화면을 연다. 순서를 뒤집으면 관전 화면이 뜬 뒤에야
 	// 채팅 탭이 생겨서, 지금까지의 대화를 못 받은 것처럼 보인다.
@@ -288,8 +287,7 @@ function spectate(player: ScriptPlayer, room: Room): void {
  * 진행 화면 하나를 띄워두고 내용만 다시 그린다(refreshSpectators).
  */
 function openSpectateView(room: Room, player: ScriptPlayer): void {
-	const widget = openPhase(player, spectateView(room));
-	widget.onMessage.Add((sender, data) => {
+	bindMessage(openPhase(player, spectateView(room)), "spectate", (sender, data) => {
 		if (messageType(data) !== "spectate-quit") return;
 		// 이 버튼 한 번이 접속자 전원에게 방 목록을 다시 보낸다.
 		// 대기실 위젯의 다섯 갈래와 같은 이유로 같은 관문을 지난다.
@@ -361,8 +359,10 @@ function stopSpectating(player: ScriptPlayer): void {
  * 방 선택 화면으로 돌려보내면, 그 사람은 다시 방을 고르는 사이에 이미 다음
  * 판 준비가 시작된 방을 보게 된다. 기다린 사람이 가장 늦게 앉는 구조다.
  *
- * 자리가 모자라면 앞에 온 사람부터 앉는다. MAX_SPECTATORS와 MAX_PLAYERS가
- * 같은 값이라 실제로는 접속이 끊긴 사람만 밀려난다.
+ * 자리가 모자라면 앞에 온 사람부터 앉는다. 관전 정원이 좌석 정원보다 작으니
+ * 지금 실제로 밀려나는 사람은 접속이 끊긴 사람뿐이다 — 아래 break는 그래서
+ * 지금 도달하지 않지만, 두 정원의 관계가 뒤집혔을 때 좌석이 조용히 넘치는
+ * 것을 막는 자리라 남겨둔다. 관계 자체는 spectate.test.ts가 지킨다.
  */
 export function seatSpectators(room: Room, watchers: readonly Seat[]): string[] {
 	const seated: string[] = [];
@@ -395,7 +395,7 @@ function voteKick(player: ScriptPlayer, targetId: unknown): void {
 
 	toggleKick(target, player.id);
 
-	if (kickCount(target) >= KICK.VOTES_REQUIRED) {
+	if (kickCount(target) >= kickVotesNeeded(found.room.seats.length)) {
 		kickedUntil[targetId] = Time.getUtcTime() + KICK.COOLDOWN_MS;
 		removeFromRoom(found.room, targetId, true);
 		return;

@@ -1,5 +1,5 @@
 /*
- * ParentBridge — ZEP 클라이언트(부모 창)와 주고받는 유일한 통로.
+ * ParentBridge — ZEP이 문서로 약속한 창구로 부모 창과 주고받는다.
  *
  * 왜 따로 있는가
  * --------------
@@ -15,30 +15,44 @@
  * 빌드(tools/build-widgets.js)가 위젯 HTML에서 window.parent를 직접 쓰면
  * 실패시키므로, 이 파일을 우회하는 길은 막혀 있다.
  *
+ * 세 종류 모두 약속된 창구다. 약속되지 않은 길 — 클라이언트 번들 내부를
+ * 뒤져 채팅 패킷을 직접 쏘는 것 — 은 여기 없다. native-chat.js에 따로
+ * 있고, 그것을 쓰는 chat.html에만 들어간다. 섞여 있던 동안에는 위젯 7개가
+ * 전부 그 코드를 지고 다녔고, "부모 쪽이 바뀌면 무엇이 깨지는가"에
+ * 답하려면 매번 이 파일을 처음부터 읽어야 했다.
+ *
  * 이벤트를 늘리는 법: 아래 세 묶음 중 맞는 곳에 함수를 하나 더한다.
  * 위젯은 Parent.무엇 만 부르므로 부모 쪽 사정이 바뀌어도 고칠 곳은 여기뿐이다.
  */
-const Parent = (function () {
-	/*
-	 * 부모 문서에 직접 닿을 수 있는가.
-	 *
-	 * 같은 출처면 부모의 window를 그대로 만질 수 있고, 그러면 게임 화면에
-	 * 포커스가 있는 동안 눌린 키까지 받을 수 있다. 교차 출처면 만지는 순간
-	 * SecurityError가 나므로 postMessage 말고는 길이 없다.
-	 *
-	 * 판정은 로드 때 한 번만 하고, 안 되면 조용히 기능을 접는다 — 여기서
-	 * 예외가 새어 나가면 위젯 스크립트 전체가 로드에 실패한다.
-	 */
-	const win = (function () {
-		try {
-			// 존재 확인만으로는 부족하다. 실제로 읽어야 교차 출처가 드러난다
-			void window.parent.document.readyState;
-			return window.parent;
-		} catch (error) {
-			return null;
-		}
-	})();
 
+/*
+ * 직접 닿을 수 있는 부모 창. 못 닿으면 null.
+ *
+ * 같은 출처면 부모의 window를 그대로 만질 수 있고, 그러면 게임 화면에
+ * 포커스가 있는 동안 눌린 키까지 받을 수 있다. 교차 출처면 만지는 순간
+ * SecurityError가 나므로 postMessage 말고는 길이 없다.
+ *
+ * 판정은 로드 때 한 번만 하고, 안 되면 조용히 기능을 접는다 — 여기서
+ * 예외가 새어 나가면 위젯 스크립트 전체가 로드에 실패한다.
+ *
+ * Parent 밖에 있는 이유: native-chat.js도 같은 판정을 딛고 선다. 넉 줄이라
+ * 복사하고 싶어지지만, 이 판정은 "존재만 확인하면 안 되고 실제로 읽어야
+ * 한다"는 함정을 아는 코드다 — 두 벌이 되면 한쪽만 고쳐진다.
+ *
+ * 위젯 HTML은 이것도 직접 쓰지 못한다(빌드가 window.parent와 같이 막는다).
+ * 부모 창을 만지는 코드는 여기 공유 스크립트 안에만 있어야 한다.
+ */
+const HostWindow = (function () {
+	try {
+		// 존재 확인만으로는 부족하다. 실제로 읽어야 교차 출처가 드러난다
+		void window.parent.document.readyState;
+		return window.parent;
+	} catch (error) {
+		return null;
+	}
+})();
+
+const Parent = (function () {
 	/*
 	 * 프레임보다 오래 살아야 하는 것을 두는 자리.
 	 *
@@ -49,9 +63,9 @@ const Parent = (function () {
 	 * 교차 출처면 그냥 빈 객체다 — 기능이 사라지는 게 아니라 수명만 짧아진다.
 	 */
 	const store = (function () {
-		if (!win) return {};
-		if (!win.__mafiaWidget) win.__mafiaWidget = {};
-		return win.__mafiaWidget;
+		if (!HostWindow) return {};
+		if (!HostWindow.__mafiaWidget) HostWindow.__mafiaWidget = {};
+		return HostWindow.__mafiaWidget;
 	})();
 
 	// ────────────────────────────────────────────── 1. 게임 서버에게
@@ -106,6 +120,9 @@ const Parent = (function () {
 		};
 		// 상단바 보정은 위쪽에 붙는 위젯에만 실려 온다
 		if (layout.top) message.top = layout.top;
+		// 쌓임 순서는 화면을 덮는 위젯(컷)에만 실려 온다.
+		// 없을 때 undefined를 실어 보내지 않는 것이 top과 같은 이유다
+		if (layout.zIndex) message.zIndex = layout.zIndex;
 		send(message);
 	}
 
@@ -132,10 +149,10 @@ const Parent = (function () {
 	 * 돌려주는 함수를 부르면 구독이 끊긴다. 프레임이 사라질 때도 자동으로 끊는다.
 	 */
 	function onKey(handler) {
-		if (!win) return function () {};
+		if (!HostWindow) return function () {};
 
 		function off() {
-			win.removeEventListener("keydown", listener, true);
+			HostWindow.removeEventListener("keydown", listener, true);
 			window.removeEventListener("pagehide", off);
 		}
 
@@ -158,7 +175,7 @@ const Parent = (function () {
 		// 부모 window의 캡처 단계. 이 프레임에서 닿을 수 있는 가장 이른 지점이다.
 		// 그래도 ZEP이 먼저 등록한 리스너보다 앞설 수는 없다 — 같은 대상·같은
 		// 단계에서는 등록 순서가 곧 실행 순서고, 부모 문서가 우리보다 먼저 뜬다.
-		win.addEventListener("keydown", listener, true);
+		HostWindow.addEventListener("keydown", listener, true);
 		// 위젯이 파괴되면 부모에는 리스너만 남는다. 반드시 같이 떼야 한다
 		window.addEventListener("pagehide", off);
 		return off;
@@ -175,13 +192,29 @@ const Parent = (function () {
 		window.focus();
 	}
 
+	/**
+	 * 포커스를 게임 화면으로 되돌린다. grabFocus의 짝이다.
+	 *
+	 * 입력을 끝낸 뒤(전송·닫기) 위젯이 포커스를 계속 들고 있으면 이동 키가 이
+	 * 프레임으로 들어와 아바타가 멈춘 채로 남는다. 키 이벤트가 프레임 경계를
+	 * 넘지 않는다는 성질이 onKey를 단순하게 만들어주는 대신, 포커스를 넘기고
+	 * 되받는 일은 명시적으로 해야 한다는 뜻이기도 하다.
+	 *
+	 * HostWindow 판정이 필요 없다. focus()는 부모 문서를 읽지 않아 교차 출처에서도
+	 * 허용되는 몇 안 되는 메서드다.
+	 */
+	function releaseFocus() {
+		window.parent.focus();
+	}
+
 	return {
 		send,
 		on,
 		onKey,
 		grabFocus,
+		releaseFocus,
 		store,
 		/** 게임 화면의 키 입력을 받을 수 있는가 (부모와 같은 출처인가) */
-		canReadKeys: win !== null,
+		canReadKeys: HostWindow !== null,
 	};
 })();

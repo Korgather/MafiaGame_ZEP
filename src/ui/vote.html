@@ -23,24 +23,6 @@
 			 * 격자는 auto-fill이라 인원수와 무관하다.
 			 */
 
-			/* 투표 진행률: 몇 명이 투표를 마쳤는지. 기존에는 이 정보가 없어서
-			   남은 시간이 다 될 때까지 다들 기다리는지 알 수 없었다 */
-			.progress {
-				flex: 0 0 auto;
-				height: 4px;
-				border-radius: 99px;
-				background: var(--surface-2);
-				overflow: hidden;
-			}
-
-			.progress i {
-				display: block;
-				height: 100%;
-				width: 0;
-				background: var(--accent);
-				transition: width var(--dur) var(--ease);
-			}
-
 			/* 개표에서 처형된 사람 */
 			.tile.out {
 				border-color: var(--danger);
@@ -80,8 +62,12 @@
 				left: 0;
 				bottom: 0;
 				height: 3px;
+				width: 0;
 				background: var(--accent);
-				transition: width 600ms var(--ease);
+				/* 길이와 순서는 스크립트가 준다(BAR_MS·STAGGER). 처형 흔들림을
+				   "막대가 다 찬 뒤"로 미루려면 같은 값을 알아야 해서 한 곳에만 둔다 */
+				transition-property: width;
+				transition-timing-function: var(--ease);
 			}
 		</style>
 	</head>
@@ -109,6 +95,10 @@
 			let myNum = 0;
 			let myPick = null;
 			let locked = false;
+
+			/* 막대 하나가 차는 시간과 타일 사이 간격(ms) */
+			const BAR_MS = 600;
+			const STAGGER = 90;
 
 			/**
 			 * 사람 타일 하나.
@@ -209,18 +199,43 @@
 						tile(seat, seat.num === data.executed ? "out" : null)
 					)}`;
 
-					// 득표수를 타일 위에 얹는다. 예전에는 이름과 숫자가 별도
-					// 격자에 있어서 어느 숫자가 누구 것인지 눈으로 이어야 했다
-					for (const seat of list) {
+					/*
+					 * 득표수를 타일 위에 얹는다. 예전에는 이름과 숫자가 별도
+					 * 격자에 있어서 어느 숫자가 누구 것인지 눈으로 이어야 했다.
+					 *
+					 * 막대는 폭 0으로 심고 실제 폭은 다음 프레임에 준다. 최종
+					 * 폭을 처음부터 박아 넣으면 브라우저에게는 한 번도 바뀐 적
+					 * 없는 값이라 transition이 걸리지 않는다 — CSS에 600ms가
+					 * 적혀 있었는데도 막대는 자란 적 없이 완성된 채로 떴다.
+					 */
+					const bars = [];
+					let outTile = null;
+					list.forEach((seat, i) => {
 						const el = qs(`.tile[data-num="${seat.num}"]`);
-						if (!el) continue;
+						if (!el) return;
+						if (seat.num === data.executed) outTile = el;
 						const votes = Number(seat.votes) || 0;
 						el.insertAdjacentHTML(
 							"beforeend",
-							html`<span class="tally">${votes}표</span>
-								<span class="bar" style="width:${top > 0 ? (votes / top) * 100 : 0}%"></span>`
+							html`<span class="tally">${votes}표</span><span class="bar"></span>`
 						);
+						const bar = qs(".bar", el);
+						bar.style.transitionDuration = BAR_MS + "ms";
+						// 서버가 득표 내림차순으로 보낸다(Voting.voteBoard). 위에서부터
+						// 차례로 차오르면 1등이 누구인지 마지막 막대를 기다리지 않고 보인다
+						bar.style.transitionDelay = i * STAGGER + "ms";
+						bars.push({ el: bar, width: top > 0 ? (votes / top) * 100 : 0 });
+					});
+
+					// 처형 흔들림은 막대가 다 찬 뒤다. 겹치면 숫자를 읽는 도중에
+					// 화면이 흔들려서 둘 다 눈에 들어오지 않는다
+					if (outTile) {
+						outTile.style.animationDelay = list.length * STAGGER + BAR_MS + "ms";
 					}
+
+					requestAnimationFrame(() => {
+						for (const entry of bars) entry.el.style.width = entry.width + "%";
+					});
 
 					qs("#note").textContent = data.message || "";
 					startTimer(qs("#timer"), data.timer);

@@ -61,6 +61,44 @@
 				}
 			}
 
+			/*
+			 * 직업 공개(nav=none)만 제대로 뒤집는다.
+			 *
+			 * 한 장뿐이라 넘길 것이 없는 화면이고, 판에서 가장 긴장되는 순간이다.
+			 * 안내·도감은 장을 넘길 때마다 도니까 같은 연출을 주면 멀미가 난다.
+			 *
+			 * 뒷면을 그린 두 면짜리 카드를 쓰지 않은 이유: #card는 도감에서
+			 * hidden으로 껐다 켜지는 엘리먼트라 앞뒤를 만들려면 래퍼를 하나 더
+			 * 끼우고 paint()의 flip 대상도 바꿔야 한다. rotateY(-90deg)는 화면에서
+			 * 두께가 0이라 "엎어져 있다가 앞면으로 떨어진다"로 똑같이 읽힌다.
+			 */
+			.card.solo {
+				animation: flip 620ms var(--ease);
+			}
+
+			@keyframes flip {
+				from {
+					opacity: 0.2;
+					transform: perspective(900px) rotateY(-90deg);
+				}
+				65% {
+					opacity: 1;
+					transform: perspective(900px) rotateY(7deg);
+				}
+			}
+
+			/* 도는 동안 글자가 같이 돌면 읽히지 않는다. 카드가 앉은 뒤에 뜬다 */
+			.card.solo > * {
+				animation: rise 260ms var(--ease) 380ms both;
+			}
+
+			@keyframes rise {
+				from {
+					opacity: 0;
+					transform: translateY(6px);
+				}
+			}
+
 			.glyph {
 				font-size: var(--t-2xl);
 				line-height: 1;
@@ -167,12 +205,6 @@
 			.dots i.on {
 				background: var(--accent);
 			}
-
-			.foot {
-				display: flex;
-				gap: var(--s2);
-				flex: 0 0 auto;
-			}
 		</style>
 	</head>
 	<body>
@@ -265,6 +297,8 @@
 				const face = qs("#card");
 				face.classList.remove("mafia", "citizen");
 				if (card.team) face.classList.add(card.team === "mafia" ? "mafia" : "citizen");
+				// 넘길 것이 없는 화면에서만 제대로 뒤집는다
+				face.classList.toggle("solo", nav === "none");
 
 				qs("#glyph").textContent = card.glyph || "🎭";
 				qs("#role").textContent = card.title || "";

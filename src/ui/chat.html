@@ -74,6 +74,7 @@
 		</div>
 
 		<!--@shared-->
+		<!--@native-chat-->
 		<script>
 			/** 위젯이 들고 있는 줄 수 상한. 서버 기록(120줄)보다 넉넉하다 */
 			const MAX_LINES = 200;
@@ -138,13 +139,53 @@
 				return null;
 			}
 
+			/**
+			 * 표가 딸린 줄 — 전원의 직업, 명령어 목록, 신고.
+			 *
+			 * 시각을 붙이지 않는다. 표는 벌어진 사건이 아니라 조회 결과라
+			 * 몇 분에 나왔는지가 아무 의미가 없고, 전원 공개 표 바로 위에는
+			 * 방금 같은 시각을 찍은 처형 안내가 이미 서 있다.
+			 *
+			 * tone은 서버가 준 문자열이지만 class에 그대로 얹지 않는다.
+			 * 아는 두 값으로만 좁힌다 — 아래 bubble의 팀 배지와 같은 이유다.
+			 */
+			function card(line, cls) {
+				const rows = line.rows.map(row => {
+					const value = !row.value
+						? ""
+						: row.tone
+							? html`<span class="chip ${row.tone === "mafia" ? "mafia" : "citizen"}"
+									>${row.value}</span
+								>`
+							: html`<span class="val">${row.value}</span>`;
+					return html`<div class="row${row.dim ? " dim" : ""}">
+						<span class="ellip">${row.label}</span>${value}
+					</div>`;
+				});
+				return html`<div class="msg card ${cls}">
+					<div class="ttl">${line.text}</div>
+					${rows}
+				</div>`;
+			}
+
 			function bubble(line) {
 				const when = html`<span class="when">${clock(line.at)}</span>`;
+
+				/*
+				 * 나 한 사람 앞으로 온 줄인가 (ChatMessage.to).
+				 *
+				 * kind와는 다른 축이다 — kind는 "무엇에 관한 말인가"이고 이쪽은
+				 * "누구 앞으로 온 말인가"다. 그래서 덮어쓰지 않고 함께 붙는다.
+				 * 표(rows)에는 붙이지 않는다: 개인 표는 /도움말·/신고뿐이고,
+				 * 표는 이미 카드로 눈에 띈다.
+				 */
+				const pm = line.to !== "" ? " pm" : "";
 
 				// 사람이 친 말이 아니면 가운데 한 줄로 눕힌다
 				if (line.kind !== "USER") {
 					const cls = line.kind === "EVENT" ? "evt" : line.kind === "NOTICE" ? "ntc" : "sys";
-					return html`<div class="msg ${cls}">
+					if (line.rows && line.rows.length) return card(line, cls);
+					return html`<div class="msg ${cls}${pm}">
 						<div class="txt">${when} ${line.text}</div>
 					</div>`;
 				}
@@ -162,7 +203,7 @@
 					who = html`${chip}<span class="ellip">${name}</span>${when}`;
 				}
 
-				return html`<div class="msg${mine ? " mine" : ""}">
+				return html`<div class="msg${mine ? " mine" : ""}${pm}">
 					<div class="who">${who}</div>
 					<div class="txt">${line.text}</div>
 				</div>`;
@@ -455,6 +496,9 @@
 
 				if (event.key === "Enter") {
 					submitInput();
+					// 한 줄 보냈으면 곧바로 걸어 다닐 수 있어야 한다. 포커스를
+					// 들고 있으면 WASD가 이 입력칸으로 들어온다
+					Parent.releaseFocus();
 					return;
 				}
 
@@ -468,6 +512,7 @@
 					}
 					qs("#pad").classList.add("hidden");
 					input.blur();
+					Parent.releaseFocus();
 					return;
 				}
 
@@ -545,6 +590,18 @@
 					active = next;
 					draw();
 					if (moved) render();
+				},
+
+				/*
+				 * 서버가 허락한 발언을 ZEP 기본 채팅으로도 내보낸다 —
+				 * 내 아바타 위에 말풍선이 뜬다.
+				 *
+				 * 어느 채널이 여기 오는지도, 청중을 어디까지 넓힐지(data.area)도
+				 * 서버가 정한다 (ChatChannel의 zepAudienceFor). 위젯은 판단하지
+				 * 않는다 — 마피아 밀담이 이 길로 새면 게임이 그 자리에서 끝난다.
+				 */
+				say(data) {
+					NativeChat.say(data.text, data.area);
 				},
 
 				line(data) {

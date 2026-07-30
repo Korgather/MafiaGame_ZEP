@@ -157,8 +157,14 @@ export class FakePlayer {
 	attackParam1 = 0;
 	attackParam2 = 0;
 	displayRatio = 1;
-	x = 0;
-	y = 0;
+	/*
+	 * 서 있는 타일. 이름이 실제 ScriptPlayer와 같아야 한다 — 전에는 x/y였고,
+	 * 그래서 player.tileX를 읽는 프로덕션 코드가 테스트에서는 조용히
+	 * undefined를 받았다. 비교가 전부 거짓이 되어 검사는 초록인데
+	 * 실제로는 아무 위치 판정도 일어나지 않는다.
+	 */
+	tileX = 0;
+	tileY = 0;
 
 	// 관찰용 기록
 	readonly widgets: FakeWidget[] = [];
@@ -205,8 +211,8 @@ export class FakePlayer {
 
 	spawnAt(...args: unknown[]): void {
 		checkCall("player.spawnAt", args, 2, 3);
-		this.x = args[0] as number;
-		this.y = args[1] as number;
+		this.tileX = args[0] as number;
+		this.tileY = args[1] as number;
 	}
 
 	sendUpdated(): void {
@@ -255,8 +261,26 @@ export const world = {
 	players: [] as FakePlayer[],
 	/** 맵에 올려둔 오브젝트. 키는 "x,y" */
 	mapObjects: {} as { [position: string]: unknown },
+	/**
+	 * 칠해진 타일. 키는 "레이어,x,y".
+	 *
+	 * 어느 레이어의 어떤 값이 무슨 뜻인지는 여기서 정하지 않는다 — 그것은
+	 * 맵과 프로덕션 코드 사이의 계약이고(constants/Assets의 Tile), 가짜가
+	 * 함께 알고 있으면 계약이 두 곳에 적힌다. 실제 값은 ZEP 에디터에서 손으로
+	 * 칠하는 것이라 이 저장소에 없어서, 테스트가 필요한 칸만 채워 넣는다
+	 * (Harness.paintPrivateArea).
+	 */
+	tiles: {} as { [layerAndPosition: string]: number },
 	spriteLoads: [] as SpriteLoad[],
 	httpPosts: [] as HttpPost[],
+	/**
+	 * 스태프에게만 보인 알림 (infrastructure/Fault).
+	 *
+	 * 예외 격리는 "던져도 계속 돈다"만으로는 검사가 반쪽이다 — 조용히
+	 * 삼키는 코드도 그 조건을 만족한다. 사고가 실제로 밖에 알려졌는지를
+	 * 함께 봐야 하므로 알림을 기록한다.
+	 */
+	staffSays: [] as string[],
 	/** Time.getUtcTime()이 돌려주는 값(ms). tick이 진행시킨다 */
 	nowMs: 1_700_000_000_000,
 	hooks: {
@@ -268,6 +292,8 @@ export const world = {
 		update: new Hook<[number]>(),
 		/** 맵 오브젝트 충돌. (player, x, y, tileID, obj) */
 		objectTouched: new Hook<[FakePlayer, number, number, number, { param1: string }]>(),
+		/** 아바타 클릭. (누른 사람, 눌린 사람) */
+		unitClicked: new Hook<[FakePlayer, FakePlayer]>(),
 	},
 };
 
@@ -313,6 +339,11 @@ const fakeScriptApp = {
 		(args[3] as (response: string) => void)("{}");
 	},
 
+	sayToStaffs(...args: unknown[]): void {
+		checkCall("ScriptApp.sayToStaffs", args, 1, 2);
+		world.staffSays.push(args[0] as string);
+	},
+
 	putMobilePunch(): void {},
 	sendUpdated(): void {},
 
@@ -323,7 +354,34 @@ const fakeScriptApp = {
 	onSay: world.hooks.say,
 	onUpdate: world.hooks.update,
 	onObjectTouched: world.hooks.objectTouched,
+	onUnitClicked: world.hooks.unitClicked,
 };
+
+/**
+ * 가짜가 모르는 이벤트를 배선하면 그 자리에서 이름을 말하고 멈춘다.
+ *
+ * 그냥 두면 `undefined.Add`가 되어 "Cannot read properties of undefined" 한 줄만
+ * 남고, 그 스택은 빠뜨린 쪽(이 파일)이 아니라 index.ts를 가리킨다. 게다가 이
+ * 예외는 모듈 평가 중에 터지므로 index.ts를 가져오는 테스트 파일이 한꺼번에
+ * 죽는다 — onUnitClicked이 추가됐을 때 6개 파일이 그렇게 넘어갔고, 실패 목록만
+ * 보고는 원인이 새 이벤트 하나라는 것을 알 수 없었다.
+ *
+ * 가짜와 실물이 어긋나는 것 자체는 막을 수 없다(zep-script의 이벤트 목록을
+ * 이 파일이 알 방법이 없다). 막을 수 있는 것은 어긋났을 때 아무도 이유를
+ * 모르는 상황이고, 그건 아는 쪽이 말해주면 끝난다.
+ */
+const scriptAppProxy = new Proxy(fakeScriptApp, {
+	get(target, name, receiver): unknown {
+		const value = Reflect.get(target, name, receiver);
+		if (value === undefined && typeof name === "string" && name.indexOf("on") === 0) {
+			throw new Error(
+				`FakeZep에 ScriptApp.${name}이 없습니다. ` +
+					`world.hooks에 Hook을 만들고 fakeScriptApp에 이어주세요 (tests/helpers/FakeZep.ts).`
+			);
+		}
+		return value;
+	},
+});
 
 const fakeScriptMap = {
 	putObject(...args: unknown[]): void {
@@ -331,6 +389,22 @@ const fakeScriptMap = {
 		const key = `${args[0]},${args[1]}`;
 		if (args[2] === null) delete world.mapObjects[key];
 		else world.mapObjects[key] = args[2];
+	},
+
+	/**
+	 * 타일 하나의 값. 칠하지 않은 칸은 -1이다.
+	 *
+	 * -1은 프로덕션이 실제로 돌려주는 값이다(ScriptMap.d.ts). 0으로 두면
+	 * "칠한 적 없음"과 "0번 효과"가 구분되지 않아, 아무것도 칠하지 않은
+	 * 테스트에서 방 채팅이 새는 경로를 통과시켜 버린다.
+	 *
+	 * 레이어를 키에 넣는다. 무시하고 한 표를 돌려주면 엉뚱한 레이어를
+	 * 물어본 코드가 테스트에서만 맞는 답을 받는다.
+	 */
+	getTile(...args: unknown[]): number {
+		checkCall("ScriptMap.getTile", args, 3, 3);
+		const value = world.tiles[`${args[0]},${args[1]},${args[2]}`];
+		return value === undefined ? -1 : value;
 	},
 };
 
@@ -379,8 +453,8 @@ function nextRandom(): number {
  */
 export function installFakeZep(): void {
 	const globals = globalThis as unknown as { [name: string]: unknown };
-	if (globals.ScriptApp === fakeScriptApp) return;
-	globals.ScriptApp = fakeScriptApp;
+	if (globals.ScriptApp === scriptAppProxy) return;
+	globals.ScriptApp = scriptAppProxy;
 	globals.ScriptMap = fakeScriptMap;
 	globals.Time = fakeTime;
 	Math.random = nextRandom;

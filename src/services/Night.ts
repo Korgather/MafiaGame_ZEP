@@ -20,6 +20,7 @@ import { TIMING } from "../constants/GameConfig.ts";
 import { inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import {
+	hasNightTurn,
 	nightActionBlockedReason,
 	NightOutcome,
 	resolveNightCasualties,
@@ -30,10 +31,18 @@ import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
+import { playCut } from "./Cut.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { PhasePayload } from "./Widgets.ts";
-import { closeCard, identityOf, openPhase, openRoleAction } from "./Widgets.ts";
+import {
+	bindMessage,
+	closeCard,
+	identityOf,
+	openPhase,
+	openRoleAction,
+	updateMain,
+} from "./Widgets.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 
 /** 밤 능력 안내 라벨 표시 시간(ms). 지목할 시간을 충분히 준다 */
@@ -80,6 +89,17 @@ export function beginNight(room: Room): void {
 	room.phase = GamePhase.NIGHT;
 	room.phaseTimer = TIMING.NIGHT;
 	room.tickTockPlayed = false;
+	/*
+	 * 개표 결과를 resetRound가 지우기 전에 읽어 둔다.
+	 *
+	 * 처형에 컷을 따로 주지 않고 다음 밤 컷의 첫 줄로 얹는 이유: 투표 결과
+	 * 화면(VOTE_RESULT)이 이미 7초 동안 같은 사실을 보여주고 있다. 그 위에
+	 * 컷을 하나 더 끼우면 같은 소식을 두 번 보고 기다리는 시간만 늘어난다.
+	 * 반대로 밤 컷의 첫 줄이 되면 "그래서 밤이 됐다"는 인과가 한 화면에 남는다.
+	 *
+	 * 첫 밤에는 비어 있다(아직 투표가 없었다) — 그때는 제목만 도는 컷이 된다.
+	 */
+	const verdict = room.voteRecord.message;
 	resetRound(room);
 
 	beginNightStage(room);
@@ -87,6 +107,9 @@ export function beginNight(room: Room): void {
 	// 밤에는 방 채팅이 잠기지만 읽기는 열려 있다. 이 한 줄이 없으면 채팅
 	// 기록만 봤을 때 아침과 아침 사이가 비어 무슨 일이 있었는지 알 수 없다
 	Chat.say(room, `🌙 ${room.turnCount + 1}번째 밤이 되었습니다.`);
+
+	// 컷이 phaseTimer를 늘린다. 아래 openNightView가 그 값을 화면에 싣는다
+	playCut(room, "night", `🌙 ${room.turnCount + 1}번째 밤`, verdict ? [verdict] : []);
 
 	forEachPlayer(room, (player, seat) => {
 		closeCard(player);
@@ -137,6 +160,42 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		note: def.nightNotice,
 	});
 	bindNightWidget(widget);
+	updateMain(player, nightProgress(room));
+}
+
+/**
+ * 밤 진행률 — 차례가 있는 사람 중 몇 명이 지목을 마쳤는가.
+ *
+ * 낮의 voteProgress와 같은 모양이고, 밤에 더 필요하다. 낮에는 채팅이 돌아서
+ * 아직 안 움직인 사람이 티가 나지만 밤에는 아무 신호가 없어서, 전원이 이미
+ * 끝냈어도 남은 22초를 다 같이 앉아서 흘려보냈다.
+ *
+ * 인원수만 센다. 누가 무엇을 골랐는지는 절대 나가지 않는다.
+ */
+function nightProgress(room: Room): { type: "progress"; acted: number; total: number } {
+	let acted = 0;
+	let total = 0;
+	for (const seat of room.seats) {
+		// 접속이 끊긴 사람은 분모에서 뺀다. 남겨 두면 절대 안 차는 막대가 되고,
+		// 그러면 "다 끝났다"를 알리려던 것이 "누군가 뭉개고 있다"로 읽힌다
+		if (!seat.alive || !seat.connected) continue;
+		if (!hasNightTurn(seat, room.turnCount)) continue;
+		total++;
+		if (seat.usedSkill) acted++;
+	}
+	return { type: "progress", acted, total };
+}
+
+/**
+ * 지목이 하나 확정될 때마다 방 전원에게. 차례가 없는 사람의 화면(phase)은
+ * 이 메시지를 그리지 않고 흘려보낸다 — 투표 진행률도 같은 길을 쓴다.
+ *
+ * 접속이 끊기거나 돌아왔을 때도 분모가 바뀌므로 GameFlow.refreshProgress가
+ * 이 함수를 부른다. 그래서 export다.
+ */
+export function broadcastNightProgress(room: Room): void {
+	const payload = nightProgress(room);
+	forEachPlayer(room, player => updateMain(player, payload));
 }
 
 function nightNotice(room: Room, seat: Seat): string {
@@ -169,7 +228,7 @@ function mafiaChatSize(room: Room): number {
  * 조작된 메시지가 올 수 있다.
  */
 function bindNightWidget(widget: ScriptWidget): void {
-	widget.onMessage.Add((sender, data) => {
+	bindMessage(widget, "roleAction", (sender, data) => {
 		if (messageType(data) !== "select") return;
 
 		const found = locate(sender.id);
@@ -199,6 +258,9 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (result.consumed) {
 			seat.usedSkill = true;
 			if (def.oncePerGame) seat.skillSpent = true;
+			// 소모되지 않는 지목(마피아가 대상을 바꾸는 것 등)은 인원수를
+			// 움직이지 않으므로 알리지 않는다
+			broadcastNightProgress(room);
 		}
 		label(sender, result.label, result.labelDurationMs);
 		if (result.confirmed) widget.sendMessage({ type: "selectResponse", num: targetIndex });

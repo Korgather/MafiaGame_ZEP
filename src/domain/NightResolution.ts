@@ -51,15 +51,40 @@ const REVEAL_MS = 6000;
  * turnCount는 지나간 낮의 수다(첫 밤이면 0).
  */
 export function nightActionBlockedReason(seat: Seat, turnCount: number): string | null {
+	const reason = noTurnReason(seat, turnCount);
+	if (reason) return reason;
+	if (seat.usedSkill) return "이미 대상을 선택했습니다.";
+	return null;
+}
+
+/**
+ * 이번 밤에 이 좌석에 차례가 도는가. 그 차례를 이미 썼는지는 보지 않는다.
+ *
+ * 위와 조건을 나눠 갖는 이유는 진행률("3명 중 1명이 지목했습니다")의 분모다.
+ * 분모는 밤이 시작될 때 정해져 있어야 하는데, 막힌 이유를 하나로 뭉쳐 두면
+ * 누군가 지목하는 순간 그 사람이 분모에서도 빠져 1/3이 아니라 0/2가 된다.
+ * 낮의 voteProgress에는 이 문제가 없다 — 자격(canVote)과 행위(votedFor)가
+ * 처음부터 다른 값이라서다.
+ *
+ * 두 함수가 조건을 복사해 갖지 않게 blocked 쪽이 이쪽을 부른다. 능력에
+ * 조건이 하나 늘어도 고칠 곳은 여전히 아래 한 군데다.
+ */
+export function hasNightTurn(seat: Seat, turnCount: number): boolean {
+	return noTurnReason(seat, turnCount) === null;
+}
+
+/** 구조적으로 이번 밤에 할 일이 없는 이유. 할 일이 있으면 null */
+function noTurnReason(seat: Seat, turnCount: number): string | null {
 	const def = roleDef(seat.role);
 	if (def.nightAction === null) return "밤에 쓸 능력이 없는 직업입니다. 아침을 기다리세요.";
-	if (def.oncePerGame && seat.skillSpent) {
+	// skillSpent만 보면 방금 이번 밤에 쓴 사람도 "차례가 없다"가 되어 분모에서
+	// 빠진다. 이번 밤에 쓴 것은 위 usedSkill이 답할 몫이다
+	if (def.oncePerGame && seat.skillSpent && !seat.usedSkill) {
 		return "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.";
 	}
 	if (def.needsPriorDay && turnCount === 0) {
 		return "첫 밤에는 쓸 수 없습니다. 낮의 이야기를 듣고 내일 밤에 쓰세요.";
 	}
-	if (seat.usedSkill) return "이미 대상을 선택했습니다.";
 	return null;
 }
 
@@ -111,9 +136,11 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 			};
 
 		case NightActionKind.INSPECT_ROLE:
-			// 합류 조건은 "마피아 직업"이 아니라 "마피아 채팅에 있는 사람"이다.
-			// 대화 상대가 없는 건달·짐승인간을 찾아낸 것으로 채팅이 열릴 수는 없다.
-			if (inMafiaChat(target)) {
+			// 조건이 둘 곱해진 것이다. 넘어가는 직업인가(def)와, 찾아낸 사람이
+			// 마피아 채팅에 있는가(target). 뒤쪽이 "마피아 직업인가"가 아닌 이유는
+			// 대화 상대가 없는 건달·짐승인간을 찾아낸 것으로 채팅이 열릴 수는
+			// 없기 때문이다. 앞쪽이 없으면 직업을 읽는 능력이 곧 배신이 된다.
+			if (def.defectsToMafia && inMafiaChat(target)) {
 				// 마피아를 찾아내면 진영을 옮기고, 능력은 소모하지 않는다.
 				// (기존 코드도 useSkill을 세우지 않았다 — 의도된 보상이다)
 				actor.team = Team.MAFIA;

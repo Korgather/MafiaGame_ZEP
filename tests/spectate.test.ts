@@ -197,10 +197,21 @@ describe("판이 끝난 뒤", () => {
 		assert.equal(mainWidget(watcher).fileName, WidgetFile.LOBBY);
 	});
 
-	it("자리가 모자라면 앉지 못한 사람도 대기실로 돌아간다", () => {
+	/*
+	 * 예전 이 자리의 테스트는 "자리가 모자라 못 앉는 사람"을 봤다. 관전 정원과
+	 * 좌석 정원이 둘 다 8이던 시절에는 기다린 사람이 좌석보다 많을 수 있었다.
+	 * 좌석이 12로 늘어난 지금은 관전 정원(8)이 먼저 막혀서 그 상황이 만들어지지
+	 * 않는다 — 그건 두 상수의 관계에서 나오는 성질이므로 관계를 먼저 못 박는다.
+	 * 관계가 뒤집히면 이 assert가 "못 앉는 경로에 테스트가 없다"고 알려준다.
+	 */
+	it("관전 정원을 다 채워도 기다린 전원이 좌석에 앉는다", () => {
+		assert.ok(
+			MAX_SPECTATORS <= MAX_PLAYERS,
+			"관전 정원이 좌석보다 많습니다 — 못 앉는 사람이 생기는 경로에 테스트가 필요합니다",
+		);
 		startPlainGame(MIN_PLAYERS);
 		const watchers: FakePlayer[] = [];
-		for (let i = 0; i < MAX_PLAYERS + 1; i++) {
+		for (let i = 0; i < MAX_SPECTATORS; i++) {
 			const watcher = connect(`관전${i}`);
 			joinRoom(watcher, 1);
 			watchers.push(watcher);
@@ -209,12 +220,13 @@ describe("판이 끝난 뒤", () => {
 
 		finishPhase(room(1));
 
-		assert.equal(room(1).seats.length, MAX_PLAYERS);
-		// 넘친 사람의 화면이 끝난 판에 멈춰 있으면 안 된다
-		const overflow = watchers.filter(watcher => !findSeatOf(watcher));
-		assert.ok(overflow.length > 0, "넘친 사람이 없습니다 — 테스트 전제가 깨졌습니다");
-		for (const watcher of overflow) {
-			assert.equal(findMainWidget(watcher)?.fileName, WidgetFile.LOBBY);
+		// 판을 뛴 사람은 좌석에서 비워지고, 기다린 사람만 남는다
+		assert.equal(room(1).spectators.length, 0);
+		assert.equal(room(1).seats.length, MAX_SPECTATORS);
+		for (let i = 0; i < watchers.length; i++) {
+			assert.ok(findSeatOf(watchers[i]), `관전${i}이 좌석을 받지 못했습니다`);
+			// 좌석을 받았어도 화면이 끝난 판에 멈춰 있으면 안 된다
+			assert.equal(findMainWidget(watchers[i])?.fileName, WidgetFile.LOBBY);
 		}
 	});
 });

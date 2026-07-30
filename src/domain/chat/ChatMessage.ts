@@ -27,6 +27,32 @@ export const MessageKind = {
 
 export type MessageKind = (typeof MessageKind)[keyof typeof MessageKind];
 
+/**
+ * 표로 그릴 한 줄. 붙어 있으면 text는 본문이 아니라 그 표의 제목이 된다.
+ *
+ * 왜 생겼는가: 전원의 직업 공개·명령어 목록·신고는 서비스 층에서
+ * `lines.join("\n")`으로 빚은 문자열 하나로 내려갔다. 그래서
+ *   1. 위젯이 그것을 가운데 정렬된 알약 말풍선 하나에 밀어 넣었다.
+ *      표가 표로 보이지 않고, 이름 길이마다 들쭉날쭉했다.
+ *   2. 마피아였는지 시민이었는지 색으로 가를 방법이 없었다 — 판이 끝난
+ *      순간 가장 먼저 알고 싶은 것이 바로 그건데도 전부 한 색이었다.
+ * 위젯에서 "3. 이름 - 직업"을 되파싱하는 길도 있었지만, 그러면 한 줄의
+ * 서식이 만드는 쪽과 읽는 쪽 두 군데에 나뉘어 적힌 규칙이 된다.
+ *
+ * 여기에 서식은 없다. 무엇이 왼쪽이고 무엇이 오른쪽인지만 있고
+ * 어떻게 눕힐지는 위젯이 정한다 — ChatMessage의 나머지 필드와 같은 규칙이다.
+ */
+export interface MessageRow {
+	/** 왼쪽 열 */
+	readonly label: string;
+	/** 오른쪽 열. 없으면 label만 한 줄로 눕는다 */
+	readonly value?: string;
+	/** value를 배지로 칠할 팀("mafia"·"citizen"). 없으면 그냥 글자 */
+	readonly tone?: string;
+	/** 흐리게 그린다 (죽은 사람) */
+	readonly dim?: boolean;
+}
+
 export interface ChatMessage {
 	/** 전역 단조 증가. 정렬과 미확인 계산의 기준이다 */
 	readonly seq: number;
@@ -41,6 +67,8 @@ export interface ChatMessage {
 	readonly role: string;
 	readonly team: string;
 	readonly text: string;
+	/** 비어 있지 않으면 이 줄은 표다. text가 제목이 된다 */
+	readonly rows: MessageRow[];
 	/** 보낸 시각(epoch ms). 표시 형식은 위젯이 정한다 */
 	readonly at: number;
 	/** 받는 사람의 playerId. ""면 채널 전체 */
@@ -57,6 +85,7 @@ export interface MessageDraft {
 	name?: string;
 	role?: string;
 	team?: string;
+	rows?: MessageRow[];
 	to?: string;
 }
 
@@ -72,6 +101,8 @@ export function buildMessage(seq: number, at: number, draft: MessageDraft): Chat
 		name: draft.name || "",
 		role: draft.role || "",
 		team: draft.team || "",
+		// 위젯이 조건 없이 훑을 수 있게 여기서 채운다. 없으면 그냥 빈 표다
+		rows: draft.rows || [],
 		to: draft.to || "",
 	};
 }

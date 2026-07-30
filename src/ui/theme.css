@@ -213,6 +213,17 @@ body {
 	animation: pulse 1s var(--ease) infinite;
 }
 
+/*
+ * 마지막 3초. 색은 그대로 두고 박동만 빨라진다.
+ *
+ * 10초 내내 같은 속도로 뛰면 그 급함이 배경음이 되어, 정작 끝나는 순간이
+ * 눈에 띄지 않는다. 단계가 실제로 넘어가기 직전에 한 번 더 단이 있어야
+ * "지금 눌러야 한다"가 읽힌다.
+ */
+.timer.critical {
+	animation: pulse 420ms var(--ease) infinite;
+}
+
 @keyframes pulse {
 	0%,
 	100% {
@@ -221,6 +232,30 @@ body {
 	50% {
 		transform: scale(1.08);
 	}
+}
+
+/*
+ * 진행률 막대 — "몇 명이 마쳤는가".
+ *
+ * 투표에만 있던 것을 여기로 올렸다. 밤 지목도 같은 것이 필요한데(그쪽이
+ * 더 급하다: 밤에는 서로 무엇을 하는지 보이지 않는다) 두 위젯이 각자
+ * 4px 막대를 그리기 시작하면 색과 두께가 어긋나는 것이 시간 문제다.
+ * 차 오르는 비율은 각 위젯이 계산해서 i의 width로 준다.
+ */
+.progress {
+	flex: 0 0 auto;
+	height: 4px;
+	border-radius: 99px;
+	background: var(--surface-2);
+	overflow: hidden;
+}
+
+.progress i {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: var(--accent);
+	transition: width var(--dur) var(--ease);
 }
 
 /* ---------- 본문 ---------- */
@@ -248,6 +283,20 @@ body {
 }
 .scroll::-webkit-scrollbar-track {
 	background: transparent;
+}
+
+/*
+ * 판 아래의 버튼 줄.
+ *
+ * 대기실과 카드가 같은 네 줄을 각자 갖고 있었고 프로필이 세 번째 사용처가
+ * 되는 자리에서 올렸다. 세 벌이 되는 순간 버튼 사이 간격을 바꾸는 일이
+ * "세 파일을 똑같이 고치는 일"이 되고, 그 셋은 언젠가 어긋난다 — 이 시트가
+ * 처음 생긴 이유가 정확히 그것이다.
+ */
+.foot {
+	display: flex;
+	gap: var(--s2);
+	flex: 0 0 auto;
 }
 
 /* ---------- 버튼 ---------- */
@@ -767,6 +816,89 @@ body {
 	color: var(--accent);
 	background: color-mix(in srgb, var(--accent) 14%, transparent);
 	border-radius: 99px;
+}
+
+/*
+ * 표가 딸린 줄 (ChatMessage.rows) — 전원의 직업, 명령어 목록, 신고.
+ *
+ * 위의 알약을 그대로 쓰면 여러 줄이 99px 곡률 안에서 가운데로 몰려
+ * 표가 표로 보이지 않는다. 이름 길이가 제각각이라 줄마다 시작점이 달라지고,
+ * 무엇보다 알약 하나가 "한 마디"라는 신호를 준다 — 표는 한 마디가 아니다.
+ *
+ * 그래서 가운데가 아니라 폭 전체를 쓰고, 왼쪽에 이름 오른쪽에 값으로 갈라
+ * 눈이 세로로 훑을 수 있게 한다. 앞의 .msg.sys/.evt/.ntc와 같은 특이도라
+ * 반드시 그 뒤에 와야 가운데 정렬을 덮는다.
+ */
+.msg.card {
+	align-self: stretch;
+	align-items: stretch;
+	max-width: 100%;
+	gap: 2px;
+	padding: var(--s2);
+	text-align: left;
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	background: var(--surface-2);
+}
+
+/*
+ * 나 한 사람 앞으로 온 줄 (ChatMessage.to) — 귓속말과 개인 안내.
+ *
+ * 이것이 없을 때 개인 안내는 kind가 정하는 모습으로 나갔고, tell()이 쓰는
+ * kind는 SYSTEM이다. 즉 이 시트에서 가장 작고 흐린 글씨였다 — 흘려보내도
+ * 되는 잡담과 나에게만 온 편지가 같은 모습이었다. 귓속말이 "안 보인다"는
+ * 말이 나온 자리가 여기고, 발언이 막힌 이유·차단 결과·신고 접수도 모두
+ * 같은 길로 나가므로 한 곳을 고치면 함께 보인다.
+ *
+ * 가운데 정렬을 되돌리는 이유: 가운데는 "모두에게 알린다"의 신호다.
+ * 나에게만 온 줄이 그 자리에 있으면 방송처럼 읽힌다.
+ *
+ * 위의 .msg.sys/.ntc와 같은 특이도라 반드시 그 뒤에 와야 한다 (.card와 같은 이유).
+ */
+.msg.pm {
+	align-self: stretch;
+	align-items: stretch;
+	max-width: 88%;
+	text-align: left;
+}
+
+.msg.pm .txt {
+	font-size: var(--t-sm);
+	color: var(--ink);
+	background: color-mix(in srgb, var(--citizen) 18%, transparent);
+	border-left: 2px solid var(--citizen);
+	border-radius: 0 var(--r1) var(--r1) 0;
+}
+
+.msg.card .ttl {
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--accent);
+}
+
+.msg.card .row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s1);
+	font-size: var(--t-xs);
+	color: var(--ink-2);
+}
+
+/* 긴 닉네임이 오른쪽 값을 밀어내지 않게. flex 자식은 min-width:auto가 기본이다 */
+.msg.card .row .ellip {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.msg.card .val {
+	flex: 0 0 auto;
+	color: var(--ink-3);
+}
+
+/* 죽은 사람도 직업은 읽혀야 한다. 지우는 게 아니라 뒤로 물린다 */
+.msg.card .row.dim {
+	opacity: 0.5;
 }
 
 /* 위로 올라가 읽는 중에 새 줄이 오면. 스크롤을 뺏지 않고 알리기만 한다 */

@@ -136,6 +136,9 @@ function startTimer(el, seconds) {
 		bar.style.strokeDashoffset = String(CIRC * (1 - Math.max(0, left) / total));
 		// 마지막 10초는 색과 맥동으로도 알린다. 소리를 못 듣는 환경이 있다
 		el.classList.toggle("urgent", left <= 10);
+		// 마지막 3초는 박동만 빨라진다. 10초를 같은 속도로 뛰면 그 급함이
+		// 배경이 되어 정작 끝나는 순간을 놓친다
+		el.classList.toggle("critical", left <= 3);
 	}
 
 	paint();

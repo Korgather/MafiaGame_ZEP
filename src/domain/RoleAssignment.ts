@@ -8,7 +8,9 @@
 import { Role } from "../types/Game.types.ts";
 import {
 	CITIZENS_PER_NIGHT_KILL,
-	MAFIA_PAIR_AT,
+	MAFIA_RATIO,
+	MIN_PLAIN_CITIZENS,
+	MIN_SPECIAL_CITIZENS,
 	SPECIAL_CITIZEN_RATIO,
 } from "../constants/GameConfig.ts";
 import { ChatChannel } from "./chat/ChatChannel.ts";
@@ -24,11 +26,14 @@ const MAFIA_LEAD: Role = Role.MAFIA;
  *
  * 셋 다 마피아 팀이지만 하는 일이 다르다 — 둘째 마피아는 같이 죽일 사람을
  * 고르고, 건달은 투표를 막고, 짐승인간은 혼자 따로 문다. 판마다 달라져야
- * 시민이 "마피아 팀에 누가 있는지"를 다시 추리한다.
+ * 시민이 "마피아 팀에 누가 있는지"를 다시 추리한다. Role.MAFIA가 풀에 다시
+ * 들어 있는 것은 그래서다 — 아무 능력 없는 공범도 한 갈래다.
  *
  * 다만 밤 사망자 예산(CITIZENS_PER_NIGHT_KILL)을 넘는 후보는 그 판에서
- * 걸러진다. 지금 인원 상한(8명)에서 짐승인간은 항상 걸러지고, MAX_PLAYERS가
- * 10 이상이 되면 조건 없이 다시 뽑힌다.
+ * 걸러진다. 조건은 인원수가 아니라 시민 자리 수(citizenSlots)이므로 정원이
+ * 아니라 마피아 수와 함께 움직인다 — 짐승인간은 시민 자리가 8이 되는
+ * 11명부터 뽑힌다. 10명은 마피아가 셋으로 늘어 시민 자리가 7뿐이라
+ * 아직 걸러진다.
  */
 const MAFIA_POOL: readonly Role[] = [Role.MAFIA, Role.THUG, Role.BEAST];
 
@@ -59,9 +64,17 @@ export function shuffle<T>(array: T[], rng: () => number = Math.random): T[] {
 	return array;
 }
 
-/** 인원수에 따른 마피아 진영 인원 */
+/**
+ * 인원수에 따른 마피아 진영 인원.
+ *
+ * 문턱을 세지 않고 비율에서 반올림한다. 정원이 바뀌어도 여기는 그대로다 —
+ * 문턱 상수를 쓰던 시절에는 정원을 올릴 때마다 상수를 하나씩 더 달아야 했다.
+ *
+ * 1인 하한이 필요한 이유는 3명 이하 판이다. 비율만 쓰면 0명이 되어
+ * 마피아 없는 게임이 시작된다.
+ */
 export function mafiaCount(playerCount: number): number {
-	return playerCount >= MAFIA_PAIR_AT ? 2 : 1;
+	return Math.max(1, Math.round(playerCount * MAFIA_RATIO));
 }
 
 /**
@@ -117,20 +130,39 @@ export function buildRoleDeck(playerCount: number, rng: () => number = Math.rand
 		: MAFIA_POOL.filter(role => !killsIndependently(role));
 	for (const role of draw(mafiaPool, mafia - 1, rng)) deck.push(role);
 
-	const required = CITIZEN_REQUIRED.slice(0, Math.max(citizenSlots, 0));
-	for (const role of required) deck.push(role);
+	/*
+	 * 시민 자리는 세 갈래로 나뉜다 — 정보(의사·경찰) / 판마다 뽑는 능력자 /
+	 * 평범한 시민. 뒤의 둘은 각각 최소 한 자리를 갖고, 정보 직업은 남는
+	 * 만큼만 들어간다.
+	 *
+	 * 우선순위가 이 순서인 이유는 자리가 모자랄 때 무엇이 먼저 깨지는지가
+	 * 다르기 때문이다. 평범한 시민이 0명이면 전원이 "나는 무엇을 할 수 있다"를
+	 * 말할 수 있는 판이 되어 마피아가 숨을 곳이 사라진다. 추첨 자리가 0이면
+	 * 그 인원의 구성이 매 판 똑같아져 두 번째 판을 할 이유가 없어진다.
+	 * 정보 직업은 하나만 있어도 토론이 근거를 갖는다.
+	 *
+	 * 실제로 잘리는 것은 시민 자리가 3개뿐인 4명 판 하나다(1+1+1). 5명
+	 * 이상에서는 셋 다 온전히 들어가므로 아래 계산은 기존 결과를 그대로
+	 * 재현한다 — 인원이 늘면 비율이 하한보다 먼저 조여든다.
+	 */
+	const reservedSlots = MIN_PLAIN_CITIZENS + MIN_SPECIAL_CITIZENS;
+	const requiredSlots = Math.max(
+		Math.min(CITIZEN_REQUIRED.length, citizenSlots - reservedSlots),
+		0,
+	);
+	// 잘릴 때 의사·경찰 중 누가 남는지는 판마다 다르다. 앞에서부터 자르면
+	// 4명 판에 경찰이 영원히 나오지 않는다.
+	for (const role of draw(CITIZEN_REQUIRED, requiredSlots, rng)) deck.push(role);
 
-	// 남은 시민 자리의 일부만 능력자로 채운다. 전원이 능력자면 "정보 없는 다수"가
-	// 사라져 마피아가 섞여들 여지도 함께 사라진다.
+	// 남은 시민 자리의 일부만 능력자로 채운다.
 	//
-	// floor가 아니라 round인 이유: 자리가 하나 남는 4명 판은 floor(0.5)=0이라
-	// 능력자가 아예 못 들어왔고, 그래서 4명 판은 매번 마피아·의사·경찰·시민으로
-	// 똑같았다. 직업 12개를 만들어놓고 최소 인원 판의 경우의 수가 하나였다.
+	// floor가 아니라 round인 이유: 자리가 둘 남는 4명 판은 floor(1)=1로 같지만,
+	// 예전 계산(자리 하나)에서는 floor(0.5)=0이라 능력자가 아예 못 들어왔다.
 	// (7명도 floor(1.5)=1이라 5명과 구성이 같았다 — 절벽이 두 군데였다)
-	const plainSlots = citizenSlots - required.length;
+	const plainSlots = citizenSlots - requiredSlots;
 	const special = Math.min(
-		Math.round(plainSlots * SPECIAL_CITIZEN_RATIO),
-		plainSlots,
+		Math.max(Math.round(plainSlots * SPECIAL_CITIZEN_RATIO), MIN_SPECIAL_CITIZENS),
+		Math.max(plainSlots - MIN_PLAIN_CITIZENS, 0),
 		CITIZEN_POOL.length,
 	);
 	for (const role of draw(CITIZEN_POOL, special, rng)) deck.push(role);

@@ -5,1106 +5,9 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>대기실</title>
 		<style>
-/*
- * 위젯 공통 디자인 시스템.
- *
- * 기존에는 위젯 11개가 각자 CSS를 처음부터 다시 썼다. 같은 의미의 색이
- * 파일마다 다른 값이었고(#484848 / #333333 / #3c3030 / #563d3d …
- * 총 26종), 타이머 글꼴 크기는 화면마다 20px·35px·18px로 제각각이었다.
- * 한 화면의 톤을 바꾸면 나머지 열 개가 어긋났다.
- *
- * 이 파일이 유일한 출처다. tools/build-widgets.js가 각 위젯 HTML의
- * <!--@theme--> 자리에 인라인한다. ZEP 위젯은 iframe이라 외부 CSS 링크의
- * 해석 기준을 신뢰할 수 없어서, 소스는 나누되 산출물은 자기완결로 만든다.
- */
-
-/* ---------- 토큰 ---------- */
-:root {
-	/* 표면: 뒤로 갈수록 어두워진다 */
-	--bg: #14100f;
-	--surface: #201a19;
-	--surface-2: #2d2523;
-	--surface-3: #3b312e;
-	--line: #4a3d39;
-
-	/* 글자 */
-	--ink: #f5efe9;
-	--ink-2: #b9aaa2;
-	--ink-3: #7d6e68;
-
-	/* 진영 */
-	--mafia: #e04b4b;
-	--mafia-dim: #6d2424;
-	--citizen: #57a8e0;
-	--citizen-dim: #24475f;
-
-	/* 상태 */
-	--accent: #e0b355; /* 상호작용 가능·강조 */
-	--ok: #5fbf7f;
-	--warn: #e0b355;
-	--danger: #e04b4b;
-	--dead: #5a4a45;
-
-	/* 간격: 4px 배수 */
-	--s1: 4px;
-	--s2: 8px;
-	--s3: 12px;
-	--s4: 16px;
-	--s5: 24px;
-
-	/* 타이포: 위젯 폭에 따라 늘어난다 */
-	--t-xs: clamp(10px, 2.6vw, 12px);
-	--t-sm: clamp(11px, 3vw, 13px);
-	--t-md: clamp(13px, 3.5vw, 15px);
-	--t-lg: clamp(15px, 4.2vw, 18px);
-	--t-xl: clamp(19px, 5.5vw, 24px);
-	--t-2xl: clamp(24px, 7vw, 34px);
-
-	--r1: 6px;
-	--r2: 10px;
-	--r3: 14px;
-
-	--shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-	--dur: 160ms;
-	--ease: cubic-bezier(0.2, 0, 0.2, 1);
-}
-
-/* 애니메이션을 끈 사용자에게는 전환을 즉시 끝낸다 */
-@media (prefers-reduced-motion: reduce) {
-	:root {
-		--dur: 1ms;
-	}
-	*,
-	*::before,
-	*::after {
-		animation-duration: 1ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 1ms !important;
-	}
-}
-
-/* ---------- 리셋 ---------- */
-* {
-	margin: 0;
-	padding: 0;
-	box-sizing: border-box;
-}
-
-html,
-body {
-	width: 100%;
-	height: 100%;
-	overflow: hidden;
-}
-
-body {
-	/*
-	 * 웹폰트를 쓰지 않는다. 기존 대기실은 jsdelivr에서 폰트 2종을 받았는데,
-	 * 폰트가 도착하기 전까지 목록이 다른 글꼴로 그려졌다가 튀었고(FOUT)
-	 * CDN이 막힌 환경에서는 영영 오지 않았다. 시스템 한글 글꼴로 충분하다.
-	 */
-	font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-		"Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;
-	font-size: var(--t-md);
-	line-height: 1.45;
-	color: var(--ink);
-	background: transparent;
-	-webkit-font-smoothing: antialiased;
-	-webkit-user-select: none;
-	user-select: none;
-	-webkit-tap-highlight-color: transparent;
-}
-
-/* ---------- 판 ---------- */
-/*
- * 모든 위젯은 panel 하나로 시작한다. 기존에는 화면마다 배경 처리가 달라서
- * (이미지 / 반투명 검정 / 없음) 같은 게임인데 화면이 바뀔 때마다
- * 다른 앱처럼 보였다.
- */
-.panel {
-	display: flex;
-	flex-direction: column;
-	width: 100%;
-	height: 100%;
-	padding: var(--s3);
-	gap: var(--s2);
-	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
-	border: 1px solid var(--line);
-	border-radius: var(--r3);
-	box-shadow: var(--shadow);
-	overflow: hidden;
-}
-
-/* 단계별 분위기. 배경만 갈아끼우고 구조는 같다 */
-.panel.night {
-	background: linear-gradient(160deg, #1b2340 0%, #0d1020 100%);
-}
-.panel.day {
-	background: linear-gradient(160deg, #40331b 0%, #1a1410 100%);
-}
-.panel.vote {
-	background: linear-gradient(160deg, #2b2036 0%, #140f1a 100%);
-}
-
-/* ---------- 머리말 ---------- */
-.hd {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--s2);
-	flex: 0 0 auto;
-}
-
-.hd-title {
-	display: flex;
-	align-items: center;
-	gap: var(--s2);
-	min-width: 0;
-	font-size: var(--t-lg);
-	font-weight: 700;
-	letter-spacing: -0.01em;
-}
-
-.hd-sub {
-	font-size: var(--t-xs);
-	color: var(--ink-3);
-	white-space: nowrap;
-}
-
-/* ---------- 타이머 ---------- */
-/*
- * 기존에는 4개 파일이 toHHMMSS를 각자 갖고 있었고 90초를 "00:01:30"으로
- * 표시했다. 시(時) 자리는 이 게임에서 영원히 00이다.
- * 여기서는 남은 초만 크게 보여주고, 링으로 진행률을 함께 그린다.
- */
-.timer {
-	position: relative;
-	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	width: 44px;
-	height: 44px;
-	font-variant-numeric: tabular-nums;
-	font-size: var(--t-lg);
-	font-weight: 700;
-	color: var(--ink);
-}
-
-.timer svg {
-	position: absolute;
-	inset: 0;
-	transform: rotate(-90deg);
-}
-
-.timer circle {
-	fill: none;
-	stroke-width: 3;
-	stroke-linecap: round;
-}
-
-.timer .track {
-	stroke: var(--surface-3);
-}
-
-.timer .bar {
-	stroke: var(--accent);
-	transition: stroke-dashoffset 1s linear, stroke var(--dur) var(--ease);
-}
-
-/* 마지막 10초 */
-.timer.urgent .bar {
-	stroke: var(--danger);
-}
-.timer.urgent {
-	color: var(--danger);
-	animation: pulse 1s var(--ease) infinite;
-}
-
-@keyframes pulse {
-	0%,
-	100% {
-		transform: scale(1);
-	}
-	50% {
-		transform: scale(1.08);
-	}
-}
-
-/* ---------- 본문 ---------- */
-.body {
-	flex: 1 1 auto;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	gap: var(--s2);
-}
-
-.scroll {
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	scrollbar-width: thin;
-	scrollbar-color: var(--surface-3) transparent;
-}
-
-.scroll::-webkit-scrollbar {
-	width: 6px;
-}
-.scroll::-webkit-scrollbar-thumb {
-	background: var(--surface-3);
-	border-radius: 99px;
-}
-.scroll::-webkit-scrollbar-track {
-	background: transparent;
-}
-
-/* ---------- 버튼 ---------- */
-/*
- * 기존 조작 요소는 전부 <div onclick>이었다. 키보드로 도달할 수 없고
- * 포커스 링도 없어서 마우스가 없으면 게임 자체가 불가능했다.
- * 위젯 HTML은 전부 <button>을 쓰고, 모양은 이 클래스가 준다.
- */
-.btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: var(--s1);
-	min-height: 34px;
-	padding: var(--s2) var(--s3);
-	font: inherit;
-	font-size: var(--t-sm);
-	font-weight: 600;
-	color: var(--ink);
-	background: var(--surface-2);
-	border: 1px solid var(--line);
-	border-radius: var(--r1);
-	cursor: pointer;
-	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
-		transform var(--dur) var(--ease);
-}
-
-.btn:hover:not(:disabled) {
-	background: var(--surface-3);
-}
-
-.btn:active:not(:disabled) {
-	transform: scale(0.97);
-}
-
-.btn:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
-
-.btn:disabled {
-	cursor: default;
-	opacity: 0.45;
-}
-
-.btn.primary {
-	color: #14100f;
-	background: var(--accent);
-	border-color: var(--accent);
-}
-.btn.primary:hover:not(:disabled) {
-	filter: brightness(1.1);
-}
-
-.btn.ok {
-	color: #0e1a12;
-	background: var(--ok);
-	border-color: var(--ok);
-}
-
-.btn.danger {
-	color: var(--ink);
-	background: var(--mafia-dim);
-	border-color: var(--mafia);
-}
-
-.btn.ghost {
-	background: transparent;
-}
-
-/*
- * 기호 하나짜리 버튼. 채팅의 ☺·➤와 대기실의 📖이 같은 것을 쓴다.
- *
- * 채팅 섹션에 있던 것을 여기로 옮겼다. 대기실이 두 번째 사용처가 되는 순간
- * "채팅의 부품"이라는 자리가 거짓이 됐고, 그대로 두면 다음 사람이 채팅과
- * 무관한 화면에서 이 클래스를 찾지 못해 똑같은 것을 다시 만든다.
- *
- * 최소 크기를 .btn과 같은 34px로 맞춘다. 그러지 않으면 글자 크기만큼만
- * 커져서(27px) 손가락으로 누르기 어렵다 — 실제로 채팅의 보내기 버튼이
- * 그 크기였다. 44px(모바일 권장)까지 키우지 않는 이유는 채팅 입력줄이
- * 그만큼 세로를 더 먹기 때문이고, 이 화면의 다른 모든 버튼이 34px다.
- */
-.icon-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex: 0 0 auto;
-	min-width: 34px;
-	min-height: 34px;
-	padding: var(--s1) var(--s2);
-	font: inherit;
-	font-size: var(--t-md);
-	color: var(--ink-2);
-	background: transparent;
-	border: none;
-	cursor: pointer;
-}
-.icon-btn:hover {
-	color: var(--ink);
-}
-.icon-btn:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
-/* ---------- 참가자 타일 ---------- */
-/*
- * 밤 지목·투표가 같은 격자를 쓴다. 예전에는 밤은 4열 정사각 타일,
- * 투표는 3열 30px 막대로 서로 다른 화면이었다. 같은 동작(사람 하나를
- * 고른다)이면 같은 모양이어야 무엇을 누르는지 배우는 비용이 한 번이다.
- */
-.grid {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: var(--s2);
-	align-content: start;
-}
-
-@media (max-width: 340px) {
-	.grid {
-		grid-template-columns: repeat(3, 1fr);
-	}
-}
-
-.tile {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 2px;
-	aspect-ratio: 1;
-	padding: var(--s1);
-	font: inherit;
-	font-size: var(--t-sm);
-	font-weight: 700;
-	color: var(--ink);
-	background: var(--surface-2);
-	border: 1px solid var(--line);
-	border-radius: var(--r2);
-	cursor: pointer;
-	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
-		transform var(--dur) var(--ease);
-}
-
-.tile:hover:not(:disabled) {
-	background: var(--surface-3);
-	border-color: var(--ink-3);
-}
-
-.tile:active:not(:disabled) {
-	transform: scale(0.95);
-}
-
-.tile:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
-
-.tile .num {
-	font-size: var(--t-lg);
-	line-height: 1.1;
-}
-
-.tile .cap {
-	font-size: var(--t-xs);
-	font-weight: 500;
-	color: var(--ink-3);
-}
-
-/* 나 */
-.tile.me {
-	border-color: var(--ok);
-}
-.tile.me .cap {
-	color: var(--ok);
-}
-
-/* 죽은 사람 */
-.tile:disabled,
-.tile.dead {
-	cursor: default;
-	color: var(--dead);
-	background: var(--surface);
-	border-color: var(--surface-2);
-}
-.tile.dead .cap {
-	color: var(--dead);
-}
-
-/* 지목·투표 완료 */
-.tile.picked {
-	background: var(--mafia-dim);
-	border-color: var(--mafia);
-	box-shadow: 0 0 0 2px var(--mafia) inset;
-}
-
-/* 같은 팀(마피아 채팅) */
-.tile.ally {
-	border-color: var(--mafia);
-	background: color-mix(in srgb, var(--mafia-dim) 60%, var(--surface-2));
-}
-
-/* 타일 위 배지: 상태를 글자로도 남긴다 (색만으로 구분하지 않기 위해) */
-.tile .badge {
-	position: absolute;
-	top: 2px;
-	right: 3px;
-	font-size: var(--t-xs);
-	line-height: 1;
-}
-
-/* 득표수 */
-.tile .tally {
-	position: absolute;
-	bottom: 2px;
-	left: 0;
-	right: 0;
-	font-size: var(--t-xs);
-	font-weight: 700;
-	color: var(--accent);
-}
-
-/* ---------- 칩 ---------- */
-.chip {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--s1);
-	padding: 2px var(--s2);
-	font-size: var(--t-xs);
-	font-weight: 700;
-	white-space: nowrap;
-	border: 1px solid var(--line);
-	border-radius: 99px;
-	background: var(--surface-2);
-}
-
-.chip.mafia {
-	color: var(--mafia);
-	border-color: var(--mafia);
-	background: var(--mafia-dim);
-}
-.chip.citizen {
-	color: var(--citizen);
-	border-color: var(--citizen);
-	background: var(--citizen-dim);
-}
-.chip.dead {
-	color: var(--ink-3);
-}
-
-/* ---------- 안내 문구 ---------- */
-.note {
-	flex: 0 0 auto;
-	font-size: var(--t-sm);
-	color: var(--ink-2);
-	text-align: center;
-	word-break: keep-all;
-}
-
-.note strong {
-	color: var(--ink);
-}
-
-/* 상태가 바뀔 때 문구가 갈아끼워지는 것을 눈이 따라가도록 */
-.note.flash {
-	animation: flash var(--dur) var(--ease);
-}
-
-@keyframes flash {
-	from {
-		opacity: 0;
-		transform: translateY(-4px);
-	}
-}
-
-/* ---------- 채팅 ---------- */
-/*
- * 채팅은 접속해 있는 내내 떠 있는 유일한 위젯이라 다른 화면과 규칙이 다르다.
- *
- * 1. 두 가지 모습으로 산다 — 펼친 창(.chat)과 접힌 막대(.chat-mini).
- *    위젯은 iframe이라 투명해도 그 자리의 클릭을 먹는다. 그래서 접기는
- *    CSS로 내용을 숨기는 것이 아니라 더 작은 위젯으로 다시 여는 것이고
- *    (WidgetSize.CHAT_BAR), 두 모습이 한 파일 안에 함께 있어야 한다.
- *
- * 2. .panel을 쓰지 않는다. panel은 여닫히는 화면의 문법(머리말·본문·안내)인데
- *    채팅은 늘 떠 있는 도구다. 여백을 panel만큼 주면 세로 320px 중 실제로
- *    글이 보이는 자리가 절반으로 줄어든다.
- */
-.chat {
-	display: flex;
-	flex-direction: column;
-	width: 100%;
-	height: 100%;
-	min-height: 0;
-	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
-	border: 1px solid var(--line);
-	border-radius: var(--r2);
-	box-shadow: var(--shadow);
-	overflow: hidden;
-}
-
-/* 탭 줄 */
-.chat-head {
-	display: flex;
-	align-items: stretch;
-	flex: 0 0 auto;
-	border-bottom: 1px solid var(--line);
-}
-
-.chat-tabs {
-	display: flex;
-	gap: 2px;
-	flex: 1 1 auto;
-	min-width: 0;
-	padding: 2px 2px 0;
-	overflow-x: auto;
-	scrollbar-width: none;
-}
-.chat-tabs::-webkit-scrollbar {
-	display: none;
-}
-
-.tab {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--s1);
-	flex: 0 0 auto;
-	padding: var(--s1) var(--s2);
-	font: inherit;
-	font-size: var(--t-xs);
-	font-weight: 700;
-	color: var(--ink-3);
-	background: transparent;
-	border: none;
-	border-bottom: 2px solid transparent;
-	border-radius: var(--r1) var(--r1) 0 0;
-	white-space: nowrap;
-	cursor: pointer;
-	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
-}
-
-.tab:hover {
-	color: var(--ink-2);
-	background: var(--surface-2);
-}
-
-.tab:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
-.tab[aria-selected="true"] {
-	color: var(--ink);
-	background: var(--surface-2);
-	border-bottom-color: var(--accent);
-}
-
-/* 읽기만 되는 탭. 색이 아니라 글리프로 알린다 */
-.tab.ro::after {
-	content: "🔒";
-	font-size: 9px;
-}
-
-/* 미확인 개수 */
-.badge-n {
-	min-width: 15px;
-	padding: 0 4px;
-	font-size: 9px;
-	font-weight: 700;
-	line-height: 15px;
-	text-align: center;
-	color: #14100f;
-	background: var(--accent);
-	border-radius: 99px;
-}
-
-/*
- * 접기 버튼.
- *
- * 전에는 글리프 ▾ 하나가 투명한 배경 위에 --ink-3(흐린 회색)으로 떠 있었다.
- * 데스크톱에서는 겨우 읽혔지만 모바일에서는 "여기를 누를 수 있다"는 신호가
- * 전혀 아니었다 — 탭 줄 오른쪽 끝의 장식으로 보였다.
- *
- * 그래서 셋을 바꾼다.
- *   1. 글자를 붙인다("접기"). 글리프만으로는 무엇이 일어날지 알 수 없다.
- *   2. 테두리와 배경을 준다. 눌리는 것과 아닌 것이 색으로 갈린다.
- *   3. 손가락이 닿을 크기를 준다(min-height 40px, min-width 44px).
- *
- * 이 높이가 머리말 전체의 높이가 된다(.chat-head가 stretch다) — 위아래
- * 여백까지 더해 45px. 세로 320px 중 17px쯤을 더 쓰는 셈인데, 진짜 과녁은
- * 이 버튼이 아니라 머리말 한 줄 전체이고(chat.html의 .chat-head 리스너)
- * 그 줄이 45px면 손가락 기준(44px)을 넘긴다. 누를 수 없는 버튼은 없는 것과
- * 같으므로 이쪽이 남는 장사다.
- */
-.chat-fold {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--s1);
-	flex: 0 0 auto;
-	min-width: 44px;
-	min-height: 40px;
-	margin: 2px var(--s1) 2px 0;
-	padding: 0 var(--s2);
-	font: inherit;
-	font-size: var(--t-xs);
-	font-weight: 700;
-	color: var(--ink-2);
-	background: var(--surface-2);
-	border: 1px solid var(--line);
-	border-radius: var(--r1);
-	white-space: nowrap;
-	cursor: pointer;
-	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
-}
-.chat-fold:hover {
-	color: var(--ink);
-	border-color: var(--ink-3);
-}
-.chat-fold:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
-/* 기록 */
-.chat-body {
-	position: relative;
-	display: flex;
-	flex: 1 1 auto;
-	min-height: 0;
-}
-
-.chat-log {
-	display: flex;
-	flex-direction: column;
-	gap: var(--s1);
-	flex: 1 1 auto;
-	min-height: 0;
-	padding: var(--s2);
-}
-
-.msg {
-	display: flex;
-	flex-direction: column;
-	max-width: 88%;
-	font-size: var(--t-sm);
-}
-
-.msg .who {
-	display: flex;
-	align-items: center;
-	gap: var(--s1);
-	font-size: var(--t-xs);
-	color: var(--ink-3);
-}
-
-/* 직업 배지는 마피아·유령 탭에서만 온다 (ChannelDef.revealsRole) */
-.msg .chip {
-	padding: 0 var(--s1);
-	font-size: 9px;
-}
-
-.msg .txt {
-	padding: var(--s1) var(--s2);
-	border-radius: var(--r1);
-	background: var(--surface-2);
-	/* 서버 안내는 여러 줄일 수 있다 (/도움말) */
-	white-space: pre-wrap;
-	word-break: break-word;
-}
-
-.msg.mine {
-	align-self: flex-end;
-	align-items: flex-end;
-}
-.msg.mine .txt {
-	color: #14100f;
-	background: var(--accent);
-}
-
-.when {
-	flex: 0 0 auto;
-	font-size: 9px;
-	color: var(--ink-3);
-	font-variant-numeric: tabular-nums;
-}
-
-/*
- * 누구의 말도 아닌 줄은 가운데에 눕는다. 사람의 발언과 같은 말풍선을 주면
- * "시스템이 알려준 사실"과 "누가 주장한 말"이 눈으로 구분되지 않는다 —
- * 마피아 게임에서 그 둘을 헷갈리면 판이 뒤집힌다.
- */
-.msg.sys,
-.msg.evt,
-.msg.ntc {
-	align-self: center;
-	align-items: center;
-	max-width: 100%;
-	text-align: center;
-}
-
-.msg.sys .txt,
-.msg.ntc .txt {
-	font-size: var(--t-xs);
-	color: var(--ink-2);
-	background: transparent;
-}
-
-.msg.ntc .txt {
-	color: var(--ink-3);
-}
-
-/* 사건 기록(사망·처형·특종)은 나중에 판을 되짚을 때 눈으로 찾게 된다 */
-.msg.evt .txt {
-	font-size: var(--t-xs);
-	font-weight: 700;
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
-	border-radius: 99px;
-}
-
-/* 위로 올라가 읽는 중에 새 줄이 오면. 스크롤을 뺏지 않고 알리기만 한다 */
-.chat-jump {
-	position: absolute;
-	left: 50%;
-	bottom: var(--s2);
-	z-index: 2;
-	transform: translateX(-50%);
-	padding: 2px var(--s3);
-	font: inherit;
-	font-size: var(--t-xs);
-	font-weight: 700;
-	color: #14100f;
-	background: var(--accent);
-	border: none;
-	border-radius: 99px;
-	box-shadow: var(--shadow);
-	cursor: pointer;
-}
-
-/* 이모지 판. 기록 위에 겹쳐서 연다 — 세로 320px에 상시 자리를 내줄 수 없다 */
-.emoji-pad {
-	position: absolute;
-	inset: auto 0 0 0;
-	z-index: 3;
-	display: grid;
-	grid-template-columns: repeat(8, 1fr);
-	gap: 2px;
-	padding: var(--s2);
-	background: var(--surface);
-	border-top: 1px solid var(--line);
-}
-
-.emoji-pad button {
-	padding: 2px 0;
-	font-size: 17px;
-	line-height: 1.3;
-	background: transparent;
-	border: none;
-	border-radius: var(--r1);
-	cursor: pointer;
-}
-.emoji-pad button:hover {
-	background: var(--surface-3);
-}
-.emoji-pad button:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
-/* 빠른 메시지 */
-.quick {
-	display: flex;
-	gap: var(--s1);
-	flex: 0 0 auto;
-	padding: var(--s1) var(--s2);
-	overflow-x: auto;
-	scrollbar-width: none;
-	border-top: 1px solid var(--line);
-}
-.quick::-webkit-scrollbar {
-	display: none;
-}
-
-.quick button {
-	flex: 0 0 auto;
-	padding: 2px var(--s2);
-	font: inherit;
-	font-size: var(--t-xs);
-	color: var(--ink-2);
-	background: var(--surface-2);
-	border: 1px solid var(--line);
-	border-radius: 99px;
-	white-space: nowrap;
-	cursor: pointer;
-}
-.quick button:hover {
-	color: var(--ink);
-	background: var(--surface-3);
-}
-.quick button:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 1px;
-}
-
-/* 입력 */
-.chat-entry {
-	display: flex;
-	align-items: center;
-	flex: 0 0 auto;
-	background: var(--surface);
-	border-top: 1px solid var(--line);
-}
-
-.chat-input {
-	flex: 1 1 auto;
-	min-width: 0;
-	padding: var(--s2) var(--s1);
-	font: inherit;
-	font-size: var(--t-sm);
-	color: var(--ink);
-	background: transparent;
-	border: none;
-	outline: none;
-	-webkit-user-select: text;
-	user-select: text;
-}
-
-.chat-input::placeholder {
-	color: var(--ink-3);
-}
-
-.chat-input:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
-
-/* 접힌 막대: 위젯 전체가 버튼 하나다 */
-.chat-mini {
-	display: flex;
-	align-items: center;
-	gap: var(--s2);
-	width: 100%;
-	height: 100%;
-	padding: 0 var(--s3);
-	font: inherit;
-	font-size: var(--t-sm);
-	font-weight: 700;
-	color: var(--ink-2);
-	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
-	border: 1px solid var(--line);
-	border-radius: 99px;
-	box-shadow: var(--shadow);
-	cursor: pointer;
-	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
-}
-.chat-mini:hover {
-	color: var(--ink);
-	border-color: var(--ink-3);
-}
-.chat-mini:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
-/* 접혀 있어도 못 본 말이 있다는 것은 보여야 한다 */
-.chat-mini.alert {
-	color: var(--ink);
-	border-color: var(--accent);
-}
-
-/* ---------- 유틸 ---------- */
-.hidden {
-	display: none !important;
-}
-
-.row {
-	display: flex;
-	align-items: center;
-	gap: var(--s2);
-}
-
-.grow {
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-.ellip {
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-
-/* 스크린리더 전용 */
-.sr {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	padding: 0;
-	margin: -1px;
-	overflow: hidden;
-	clip: rect(0, 0, 0, 0);
-	white-space: nowrap;
-	border: 0;
-}
-
+:root {		--bg: #14100f;	--surface: #201a19;	--surface-2: #2d2523;	--surface-3: #3b312e;	--line: #4a3d39;		--ink: #f5efe9;	--ink-2: #b9aaa2;	--ink-3: #7d6e68;		--mafia: #e04b4b;	--mafia-dim: #6d2424;	--citizen: #57a8e0;	--citizen-dim: #24475f;		--accent: #e0b355; 	--ok: #5fbf7f;	--warn: #e0b355;	--danger: #e04b4b;	--dead: #5a4a45;		--s1: 4px;	--s2: 8px;	--s3: 12px;	--s4: 16px;	--s5: 24px;		--t-xs: clamp(10px, 2.6vw, 12px);	--t-sm: clamp(11px, 3vw, 13px);	--t-md: clamp(13px, 3.5vw, 15px);	--t-lg: clamp(15px, 4.2vw, 18px);	--t-xl: clamp(19px, 5.5vw, 24px);	--t-2xl: clamp(24px, 7vw, 34px);	--r1: 6px;	--r2: 10px;	--r3: 14px;	--shadow: 0 4px 16px rgba(0, 0, 0, 0.45);	--dur: 160ms;	--ease: cubic-bezier(0.2, 0, 0.2, 1);}@media (prefers-reduced-motion: reduce) {	:root {		--dur: 1ms;	}	*,	*::before,	*::after {		animation-duration: 1ms !important;		animation-iteration-count: 1 !important;		transition-duration: 1ms !important;	}}* {	margin: 0;	padding: 0;	box-sizing: border-box;}html,body {	width: 100%;	height: 100%;	overflow: hidden;}body {		font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",		"Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;	font-size: var(--t-md);	line-height: 1.45;	color: var(--ink);	background: transparent;	-webkit-font-smoothing: antialiased;	-webkit-user-select: none;	user-select: none;	-webkit-tap-highlight-color: transparent;}.panel {	display: flex;	flex-direction: column;	width: 100%;	height: 100%;	padding: var(--s3);	gap: var(--s2);	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);	border: 1px solid var(--line);	border-radius: var(--r3);	box-shadow: var(--shadow);	overflow: hidden;}.panel.night {	background: linear-gradient(160deg, #1b2340 0%, #0d1020 100%);}.panel.day {	background: linear-gradient(160deg, #40331b 0%, #1a1410 100%);}.panel.vote {	background: linear-gradient(160deg, #2b2036 0%, #140f1a 100%);}.hd {	display: flex;	align-items: center;	justify-content: space-between;	gap: var(--s2);	flex: 0 0 auto;}.hd-title {	display: flex;	align-items: center;	gap: var(--s2);	min-width: 0;	font-size: var(--t-lg);	font-weight: 700;	letter-spacing: -0.01em;}.hd-sub {	font-size: var(--t-xs);	color: var(--ink-3);	white-space: nowrap;}.timer {	position: relative;	flex: 0 0 auto;	display: grid;	place-items: center;	width: 44px;	height: 44px;	font-variant-numeric: tabular-nums;	font-size: var(--t-lg);	font-weight: 700;	color: var(--ink);}.timer svg {	position: absolute;	inset: 0;	transform: rotate(-90deg);}.timer circle {	fill: none;	stroke-width: 3;	stroke-linecap: round;}.timer .track {	stroke: var(--surface-3);}.timer .bar {	stroke: var(--accent);	transition: stroke-dashoffset 1s linear, stroke var(--dur) var(--ease);}.timer.urgent .bar {	stroke: var(--danger);}.timer.urgent {	color: var(--danger);	animation: pulse 1s var(--ease) infinite;}.timer.critical {	animation: pulse 420ms var(--ease) infinite;}@keyframes pulse {	0%,	100% {		transform: scale(1);	}	50% {		transform: scale(1.08);	}}.progress {	flex: 0 0 auto;	height: 4px;	border-radius: 99px;	background: var(--surface-2);	overflow: hidden;}.progress i {	display: block;	height: 100%;	width: 0;	background: var(--accent);	transition: width var(--dur) var(--ease);}.body {	flex: 1 1 auto;	min-height: 0;	display: flex;	flex-direction: column;	gap: var(--s2);}.scroll {	overflow-y: auto;	overscroll-behavior: contain;	scrollbar-width: thin;	scrollbar-color: var(--surface-3) transparent;}.scroll::-webkit-scrollbar {	width: 6px;}.scroll::-webkit-scrollbar-thumb {	background: var(--surface-3);	border-radius: 99px;}.scroll::-webkit-scrollbar-track {	background: transparent;}.foot {	display: flex;	gap: var(--s2);	flex: 0 0 auto;}.btn {	display: inline-flex;	align-items: center;	justify-content: center;	gap: var(--s1);	min-height: 34px;	padding: var(--s2) var(--s3);	font: inherit;	font-size: var(--t-sm);	font-weight: 600;	color: var(--ink);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: var(--r1);	cursor: pointer;	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),		transform var(--dur) var(--ease);}.btn:hover:not(:disabled) {	background: var(--surface-3);}.btn:active:not(:disabled) {	transform: scale(0.97);}.btn:focus-visible {	outline: 2px solid var(--accent);	outline-offset: 2px;}.btn:disabled {	cursor: default;	opacity: 0.45;}.btn.primary {	color: #14100f;	background: var(--accent);	border-color: var(--accent);}.btn.primary:hover:not(:disabled) {	filter: brightness(1.1);}.btn.ok {	color: #0e1a12;	background: var(--ok);	border-color: var(--ok);}.btn.danger {	color: var(--ink);	background: var(--mafia-dim);	border-color: var(--mafia);}.btn.ghost {	background: transparent;}.icon-btn {	display: inline-flex;	align-items: center;	justify-content: center;	flex: 0 0 auto;	min-width: 34px;	min-height: 34px;	padding: var(--s1) var(--s2);	font: inherit;	font-size: var(--t-md);	color: var(--ink-2);	background: transparent;	border: none;	cursor: pointer;}.icon-btn:hover {	color: var(--ink);}.icon-btn:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.grid {	display: grid;	grid-template-columns: repeat(4, 1fr);	gap: var(--s2);	align-content: start;}@media (max-width: 340px) {	.grid {		grid-template-columns: repeat(3, 1fr);	}}.tile {	position: relative;	display: flex;	flex-direction: column;	align-items: center;	justify-content: center;	gap: 2px;	aspect-ratio: 1;	padding: var(--s1);	font: inherit;	font-size: var(--t-sm);	font-weight: 700;	color: var(--ink);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: var(--r2);	cursor: pointer;	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),		transform var(--dur) var(--ease);}.tile:hover:not(:disabled) {	background: var(--surface-3);	border-color: var(--ink-3);}.tile:active:not(:disabled) {	transform: scale(0.95);}.tile:focus-visible {	outline: 2px solid var(--accent);	outline-offset: 2px;}.tile .num {	font-size: var(--t-lg);	line-height: 1.1;}.tile .cap {	font-size: var(--t-xs);	font-weight: 500;	color: var(--ink-3);}.tile.me {	border-color: var(--ok);}.tile.me .cap {	color: var(--ok);}.tile:disabled,.tile.dead {	cursor: default;	color: var(--dead);	background: var(--surface);	border-color: var(--surface-2);}.tile.dead .cap {	color: var(--dead);}.tile.picked {	background: var(--mafia-dim);	border-color: var(--mafia);	box-shadow: 0 0 0 2px var(--mafia) inset;}.tile.ally {	border-color: var(--mafia);	background: color-mix(in srgb, var(--mafia-dim) 60%, var(--surface-2));}.tile .badge {	position: absolute;	top: 2px;	right: 3px;	font-size: var(--t-xs);	line-height: 1;}.tile .tally {	position: absolute;	bottom: 2px;	left: 0;	right: 0;	font-size: var(--t-xs);	font-weight: 700;	color: var(--accent);}.chip {	display: inline-flex;	align-items: center;	gap: var(--s1);	padding: 2px var(--s2);	font-size: var(--t-xs);	font-weight: 700;	white-space: nowrap;	border: 1px solid var(--line);	border-radius: 99px;	background: var(--surface-2);}.chip.mafia {	color: var(--mafia);	border-color: var(--mafia);	background: var(--mafia-dim);}.chip.citizen {	color: var(--citizen);	border-color: var(--citizen);	background: var(--citizen-dim);}.chip.dead {	color: var(--ink-3);}.note {	flex: 0 0 auto;	font-size: var(--t-sm);	color: var(--ink-2);	text-align: center;	word-break: keep-all;}.note strong {	color: var(--ink);}.note.flash {	animation: flash var(--dur) var(--ease);}@keyframes flash {	from {		opacity: 0;		transform: translateY(-4px);	}}.chat {	display: flex;	flex-direction: column;	width: 100%;	height: 100%;	min-height: 0;	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);	border: 1px solid var(--line);	border-radius: var(--r2);	box-shadow: var(--shadow);	overflow: hidden;}.chat-head {	display: flex;	align-items: stretch;	flex: 0 0 auto;	border-bottom: 1px solid var(--line);}.chat-tabs {	display: flex;	gap: 2px;	flex: 1 1 auto;	min-width: 0;	padding: 2px 2px 0;	overflow-x: auto;	scrollbar-width: none;}.chat-tabs::-webkit-scrollbar {	display: none;}.tab {	display: inline-flex;	align-items: center;	gap: var(--s1);	flex: 0 0 auto;	padding: var(--s1) var(--s2);	font: inherit;	font-size: var(--t-xs);	font-weight: 700;	color: var(--ink-3);	background: transparent;	border: none;	border-bottom: 2px solid transparent;	border-radius: var(--r1) var(--r1) 0 0;	white-space: nowrap;	cursor: pointer;	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);}.tab:hover {	color: var(--ink-2);	background: var(--surface-2);}.tab:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.tab[aria-selected="true"] {	color: var(--ink);	background: var(--surface-2);	border-bottom-color: var(--accent);}.tab.ro::after {	content: "🔒";	font-size: 9px;}.badge-n {	min-width: 15px;	padding: 0 4px;	font-size: 9px;	font-weight: 700;	line-height: 15px;	text-align: center;	color: #14100f;	background: var(--accent);	border-radius: 99px;}.chat-fold {	display: inline-flex;	align-items: center;	gap: var(--s1);	flex: 0 0 auto;	min-width: 44px;	min-height: 40px;	margin: 2px var(--s1) 2px 0;	padding: 0 var(--s2);	font: inherit;	font-size: var(--t-xs);	font-weight: 700;	color: var(--ink-2);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: var(--r1);	white-space: nowrap;	cursor: pointer;	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);}.chat-fold:hover {	color: var(--ink);	border-color: var(--ink-3);}.chat-fold:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.chat-body {	position: relative;	display: flex;	flex: 1 1 auto;	min-height: 0;}.chat-log {	display: flex;	flex-direction: column;	gap: var(--s1);	flex: 1 1 auto;	min-height: 0;	padding: var(--s2);}.msg {	display: flex;	flex-direction: column;	max-width: 88%;	font-size: var(--t-sm);}.msg .who {	display: flex;	align-items: center;	gap: var(--s1);	font-size: var(--t-xs);	color: var(--ink-3);}.msg .chip {	padding: 0 var(--s1);	font-size: 9px;}.msg .txt {	padding: var(--s1) var(--s2);	border-radius: var(--r1);	background: var(--surface-2);		white-space: pre-wrap;	word-break: break-word;}.msg.mine {	align-self: flex-end;	align-items: flex-end;}.msg.mine .txt {	color: #14100f;	background: var(--accent);}.when {	flex: 0 0 auto;	font-size: 9px;	color: var(--ink-3);	font-variant-numeric: tabular-nums;}.msg.sys,.msg.evt,.msg.ntc {	align-self: center;	align-items: center;	max-width: 100%;	text-align: center;}.msg.sys .txt,.msg.ntc .txt {	font-size: var(--t-xs);	color: var(--ink-2);	background: transparent;}.msg.ntc .txt {	color: var(--ink-3);}.msg.evt .txt {	font-size: var(--t-xs);	font-weight: 700;	color: var(--accent);	background: color-mix(in srgb, var(--accent) 14%, transparent);	border-radius: 99px;}.msg.card {	align-self: stretch;	align-items: stretch;	max-width: 100%;	gap: 2px;	padding: var(--s2);	text-align: left;	border: 1px solid var(--line);	border-radius: var(--r1);	background: var(--surface-2);}.msg.pm {	align-self: stretch;	align-items: stretch;	max-width: 88%;	text-align: left;}.msg.pm .txt {	font-size: var(--t-sm);	color: var(--ink);	background: color-mix(in srgb, var(--citizen) 18%, transparent);	border-left: 2px solid var(--citizen);	border-radius: 0 var(--r1) var(--r1) 0;}.msg.card .ttl {	font-size: var(--t-xs);	font-weight: 700;	color: var(--accent);}.msg.card .row {	display: flex;	align-items: center;	justify-content: space-between;	gap: var(--s1);	font-size: var(--t-xs);	color: var(--ink-2);}.msg.card .row .ellip {	flex: 1 1 auto;	min-width: 0;}.msg.card .val {	flex: 0 0 auto;	color: var(--ink-3);}.msg.card .row.dim {	opacity: 0.5;}.chat-jump {	position: absolute;	left: 50%;	bottom: var(--s2);	z-index: 2;	transform: translateX(-50%);	padding: 2px var(--s3);	font: inherit;	font-size: var(--t-xs);	font-weight: 700;	color: #14100f;	background: var(--accent);	border: none;	border-radius: 99px;	box-shadow: var(--shadow);	cursor: pointer;}.emoji-pad {	position: absolute;	inset: auto 0 0 0;	z-index: 3;	display: grid;	grid-template-columns: repeat(8, 1fr);	gap: 2px;	padding: var(--s2);	background: var(--surface);	border-top: 1px solid var(--line);}.emoji-pad button {	padding: 2px 0;	font-size: 17px;	line-height: 1.3;	background: transparent;	border: none;	border-radius: var(--r1);	cursor: pointer;}.emoji-pad button:hover {	background: var(--surface-3);}.emoji-pad button:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.quick {	display: flex;	gap: var(--s1);	flex: 0 0 auto;	padding: var(--s1) var(--s2);	overflow-x: auto;	scrollbar-width: none;	border-top: 1px solid var(--line);}.quick::-webkit-scrollbar {	display: none;}.quick button {	flex: 0 0 auto;	padding: 2px var(--s2);	font: inherit;	font-size: var(--t-xs);	color: var(--ink-2);	background: var(--surface-2);	border: 1px solid var(--line);	border-radius: 99px;	white-space: nowrap;	cursor: pointer;}.quick button:hover {	color: var(--ink);	background: var(--surface-3);}.quick button:focus-visible {	outline: 2px solid var(--accent);	outline-offset: 1px;}.chat-entry {	display: flex;	align-items: center;	flex: 0 0 auto;	background: var(--surface);	border-top: 1px solid var(--line);}.chat-input {	flex: 1 1 auto;	min-width: 0;	padding: var(--s2) var(--s1);	font: inherit;	font-size: var(--t-sm);	color: var(--ink);	background: transparent;	border: none;	outline: none;	-webkit-user-select: text;	user-select: text;}.chat-input::placeholder {	color: var(--ink-3);}.chat-input:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.chat-mini {	display: flex;	align-items: center;	gap: var(--s2);	width: 100%;	height: 100%;	padding: 0 var(--s3);	font: inherit;	font-size: var(--t-sm);	font-weight: 700;	color: var(--ink-2);	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);	border: 1px solid var(--line);	border-radius: 99px;	box-shadow: var(--shadow);	cursor: pointer;	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);}.chat-mini:hover {	color: var(--ink);	border-color: var(--ink-3);}.chat-mini:focus-visible {	outline: 2px solid var(--accent);	outline-offset: -2px;}.chat-mini.alert {	color: var(--ink);	border-color: var(--accent);}.hidden {	display: none !important;}.row {	display: flex;	align-items: center;	gap: var(--s2);}.grow {	flex: 1 1 auto;	min-width: 0;}.ellip {	overflow: hidden;	white-space: nowrap;	text-overflow: ellipsis;}.sr {	position: absolute;	width: 1px;	height: 1px;	padding: 0;	margin: -1px;	overflow: hidden;	clip: rect(0, 0, 0, 0);	white-space: nowrap;	border: 0;}
 </style>
-		<style>
-			/*
-			 * 대기실: 방 목록 <-> 방 안 좌석 목록.
-			 *
-			 * 기존 WatingRoom.html은 182KB였다. 배경 이미지 2장을 base64로
-			 * 품고 jsdelivr에서 웹폰트 2종을 받았다. 그리고 이런 것들이 있었다:
-			 *
-			 * - .container가 380x300px 고정이라 폰이 아니라 태블릿에서도 잘렸다.
-			 *   미디어 쿼리는 325px 한 개뿐이었다.
-			 * - 조작 요소가 전부 <div onclick>이었다. 탭 이동도, 포커스 표시도,
-			 *   스크린리더용 이름도 없었다.
-			 * - 강퇴 버튼이 현재 표수만 보여줬다. 몇 표가 필요한지, 내가 이미
-			 *   눌렀는지 알 수 없어서 같은 버튼을 계속 누르게 됐다(토글이라
-			 *   두 번 누르면 취소되는데, 그 사실도 화면에 없었다).
-			 * - 준비 버튼을 눌러도 왜 시작하지 않는지 알려주지 않았다.
-			 *   최소 인원이 4명이라는 사실이 화면 어디에도 없었다.
-			 *
-			 * 두 화면 사이 이동은 서버가 보내는 좌석 목록의 길이로 정해진다.
-			 * 빈 목록 = 방 밖. 이건 기존 프로토콜 그대로다.
-			 */
-			.rooms {
-				display: grid;
-				grid-template-columns: repeat(2, 1fr);
-				gap: var(--s2);
-				align-content: start;
-			}
-
-			.room {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				gap: var(--s2);
-				padding: var(--s2) var(--s3);
-				font: inherit;
-				font-size: var(--t-sm);
-				font-weight: 700;
-				color: var(--ink);
-				background: var(--surface-2);
-				border: 1px solid var(--line);
-				border-radius: var(--r2);
-				cursor: pointer;
-				transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
-			}
-
-			.room:hover:not(:disabled) {
-				background: var(--surface-3);
-				border-color: var(--accent);
-			}
-			.room:focus-visible {
-				outline: 2px solid var(--accent);
-				outline-offset: 2px;
-			}
-			.room:disabled {
-				cursor: default;
-				color: var(--ink-3);
-				opacity: 0.6;
-			}
-
-			.room .cnt {
-				font-variant-numeric: tabular-nums;
-				font-weight: 500;
-				color: var(--ink-2);
-			}
-			.room.full .cnt {
-				color: var(--warn);
-			}
-			/* 진행 중 = 관전 가능. 눌러도 되는 버튼이므로 경고색(--mafia)이 아니라
-			   강조색을 쓴다. 빨간 글씨는 "막혔다"로 읽힌다 */
-			.room.playing .cnt {
-				color: var(--accent);
-			}
-
-			/* 좌석 한 줄 */
-			.seat {
-				display: flex;
-				align-items: center;
-				gap: var(--s2);
-				padding: var(--s2);
-				background: var(--surface-2);
-				border: 1px solid var(--line);
-				border-radius: var(--r2);
-			}
-
-			.seat.ready {
-				border-color: var(--ok);
-			}
-			.seat.me {
-				background: var(--surface-3);
-			}
-
-			.seat .idx {
-				flex: 0 0 auto;
-				width: 18px;
-				font-size: var(--t-sm);
-				font-weight: 700;
-				color: var(--ink-3);
-				text-align: right;
-			}
-
-			.seat .nm {
-				font-size: var(--t-sm);
-				font-weight: 600;
-			}
-
-			.seat .meta {
-				font-size: var(--t-xs);
-				color: var(--ink-3);
-			}
-
-			.seat .state {
-				flex: 0 0 auto;
-				font-size: var(--t-xs);
-				font-weight: 700;
-				color: var(--ink-3);
-			}
-			.seat.ready .state {
-				color: var(--ok);
-			}
-
-			.kick {
-				flex: 0 0 auto;
-				min-height: 26px;
-				padding: 2px var(--s2);
-				font-size: var(--t-xs);
-			}
-			.kick.voted {
-				color: var(--danger);
-				border-color: var(--danger);
-			}
-
-			.list {
-				display: flex;
-				flex-direction: column;
-				gap: var(--s1);
-			}
-
-			.foot {
-				display: flex;
-				gap: var(--s2);
-				flex: 0 0 auto;
-			}
-		</style>
+		<style>						.rooms {				display: grid;				grid-template-columns: repeat(2, 1fr);				gap: var(--s2);				align-content: start;			}			.room {				display: flex;				align-items: center;				justify-content: space-between;				gap: var(--s2);				padding: var(--s2) var(--s3);				font: inherit;				font-size: var(--t-sm);				font-weight: 700;				color: var(--ink);				background: var(--surface-2);				border: 1px solid var(--line);				border-radius: var(--r2);				cursor: pointer;				transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);			}			.room:hover:not(:disabled) {				background: var(--surface-3);				border-color: var(--accent);			}			.room:focus-visible {				outline: 2px solid var(--accent);				outline-offset: 2px;			}			.room:disabled {				cursor: default;				color: var(--ink-3);				opacity: 0.6;			}			.room .cnt {				font-variant-numeric: tabular-nums;				font-weight: 500;				color: var(--ink-2);			}			.room.full .cnt {				color: var(--warn);			}						.room.playing .cnt {				color: var(--accent);			}						.seat {				display: flex;				align-items: center;				gap: var(--s2);				padding: var(--s2);				background: var(--surface-2);				border: 1px solid var(--line);				border-radius: var(--r2);			}			.seat.ready {				border-color: var(--ok);			}			.seat.me {				background: var(--surface-3);			}			.seat .idx {				flex: 0 0 auto;				width: 18px;				font-size: var(--t-sm);				font-weight: 700;				color: var(--ink-3);				text-align: right;			}			.seat .nm {				font-size: var(--t-sm);				font-weight: 600;			}			.seat .meta {				font-size: var(--t-xs);				color: var(--ink-3);			}			.seat .state {				flex: 0 0 auto;				font-size: var(--t-xs);				font-weight: 700;				color: var(--ink-3);			}			.seat.ready .state {				color: var(--ok);			}			.kick {				flex: 0 0 auto;				min-height: 26px;				padding: 2px var(--s2);				font-size: var(--t-xs);			}			.kick.voted {				color: var(--danger);				border-color: var(--danger);			}			.list {				display: flex;				flex-direction: column;				gap: var(--s1);			}		</style>
 	</head>
 	<body>
 		<div class="panel">
@@ -1113,12 +16,7 @@ body {
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
-				<!--
-					도감을 여는 자리는 여기 하나뿐이다. 게임이 시작되면 이 위젯은
-					닫히므로(GameFlow.beginGame → closeMain) 밤·투표 중에 도감을
-					여는 길은 채팅의 /도감 하나만 남는다 — 지목 화면을 가릴 수
-					있는 버튼을 지목 화면에 두지 않기 위해서다.
-				-->
+				
 				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
 					📖
 				</button>
@@ -1138,123 +36,51 @@ body {
 		</div>
 
 		<script>
-/*
- * 위젯 공통 스크립트 — 화면을 만드는 쪽.
- *
- * 기존에는 toHHMMSS가 4개 파일에, esc가 2개 파일에 복사돼 있었다.
- * 복사본은 갈라진다 — night.html의 타이머는 다 되면 글자를 흰색으로,
- * morning.html은 #484848로 되돌렸다. 같은 타이머인데 화면마다 달랐다.
- *
- * 부모(ZEP 클라이언트)와 주고받는 일은 여기 없다. 전부 bridge.js에 있다 —
- * "글자를 escape한다"와 "부모 창에 키 리스너를 단다"는 같은 파일에 있을
- * 이유가 없고, 섞여 있으면 부모와의 계약이 어디까지인지 보이지 않는다.
- *
- * tools/build-widgets.js가 각 위젯 HTML의 <!--@shared--> 자리에 bridge.js와
- * 함께 인라인한다. 여기는 클라이언트(브라우저·웹뷰)에서 도는 코드다.
- * Jint에서 도는 서버 쪽 src/*.ts 와 달리 최신 문법 제약이 없다.
- */
-
-/** 서버가 보낸 문자열은 다른 플레이어가 정한 값이다. 태그로 해석되면 안 된다 */
 function esc(value) {
-	return String(value == null ? "" : value)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
+ return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-/**
- * 이미 escape를 마친 HTML 조각. html`` 이 만들고 html`` 이 알아본다.
- *
- * 이 표시가 없으면 조각을 조각에 끼울 때마다 두 번 escape되어
- * &amp;lt; 같은 글자가 화면에 뜬다. 표시가 있으니 중첩이 그냥 된다.
- */
 function Html(text) {
-	this.text = text;
+ this.text = text;
 }
 
-Html.prototype.toString = function () {
-	return this.text;
+Html.prototype.toString = function() {
+ return this.text;
 };
 
 function frag(value) {
-	if (value instanceof Html) return value.text;
-	// 배열은 이어 붙인다. 호출부가 .join("")을 하면 그 순간 표시가 벗겨져서
-	// 바깥 템플릿이 조각 전체를 다시 escape해 버린다 — 그 함정을 없앤다.
-	if (Array.isArray(value)) return value.map(frag).join("");
-	return esc(value);
+ if (value instanceof Html) return value.text;
+ if (Array.isArray(value)) return value.map(frag).join("");
+ return esc(value);
 }
 
-/**
- * HTML 조립. 끼워 넣는 값은 전부 자동으로 escape된다.
- *
- *   el.innerHTML = html`<span class="nm">${seat.name}</span>`;
- *
- * 기존에는 위젯마다 문자열 concat으로 태그를 쌓았다. tabHtml() 하나가
- * 22줄이었고, 따옴표와 + 사이에서 esc()를 한 군데 빠뜨려도(chat.html의
- * view.glyph가 그랬다) 눈에 띄지 않았다. 여기서는 빠뜨릴 자리가 없다 —
- * escape가 기본이고, escape를 건너뛰려면 Html 조각이어야 한다.
- */
 function html(strings) {
-	let out = strings[0];
-	for (let i = 1; i < arguments.length; i++) out += frag(arguments[i]) + strings[i];
-	return new Html(out);
+ let out = strings[0];
+ for (let i = 1; i < arguments.length; i++) out += frag(arguments[i]) + strings[i];
+ return new Html(out);
 }
 
-/**
- * boolean 속성. 참이면 속성 이름을, 거짓이면 빈 조각을 낸다.
- *
- *   html`<button class="tile" ${flag(!seat.alive, "disabled")}>`
- *
- * 값을 끼우는 방식으로는 끌 수 없다 — HTML의 boolean 속성은 값이 아니라
- * 존재로 판정되므로 disabled="false"도 disabled다.
- */
 function flag(on, name) {
-	return new Html(on ? name : "");
+ return new Html(on ? name : "");
 }
 
-/*
- * querySelector 두 종.
- *
- * $ / $$ 라는 이름이었는데 두 가지 이유로 바꿨다. 하나는 $가 jQuery로
- * 읽힌다는 것이고(이 프로젝트는 라이브러리를 하나도 쓰지 않는다),
- * 다른 하나는 $가 String.replace의 치환 지시자라는 것이다 —
- * 빌드가 shared.js를 인라인하면서 `function $$`를 `function $`로 바꿔
- * 모든 위젯의 $()가 배열을 돌려준 적이 있다. 이름에 $가 없으면
- * 그 사고 자체가 성립하지 않는다.
- */
 function qs(selector, root) {
-	return (root || document).querySelector(selector);
+ return (root || document).querySelector(selector);
 }
 
 function qsa(selector, root) {
-	return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+ return Array.prototype.slice.call((root || document).querySelectorAll(selector));
 }
 
-/**
- * 남은 시간 표시.
- *
- * 기존 toHHMMSS는 90초를 "00:01:30"으로 그렸다. 이 게임의 최장 단계는
- * 60초라 시(時) 자리는 영원히 00이고, 분 자리도 대부분 00이다.
- * 화면에서 실제로 변하는 것은 초뿐인데 6글자를 읽게 했다.
- *
- * el은 .timer이며 내부에 진행률 링(svg)을 갖는다. 남은 비율을 함께
- * 그려서 숫자를 읽지 않아도 얼마나 남았는지 보이게 한다.
- */
 function startTimer(el, seconds) {
-	if (!el) return;
-	// 같은 위젯이 payload를 두 번 받으면 타이머도 두 개가 된다. 둘 다 살아서
-	// 서로 다른 숫자를 번갈아 쓰기 때문에 남은 시간이 튀어 보인다.
-	// 이전 것을 먼저 끄면 몇 번을 다시 받든 항상 하나만 돈다.
-	if (el.dataset.timerId) clearInterval(Number(el.dataset.timerId));
-	const total = Math.max(1, Math.round(seconds));
-	let left = total;
-	const label = document.createElement("span");
-	const RADIUS = 19;
-	const CIRC = 2 * Math.PI * RADIUS;
-
-	el.innerHTML = html`<svg viewBox="0 0 44 44" aria-hidden="true">
+ if (!el) return;
+ if (el.dataset.timerId) clearInterval(Number(el.dataset.timerId));
+ const total = Math.max(1, Math.round(seconds));
+ let left = total;
+ const label = document.createElement("span");
+ const RADIUS = 19;
+ const CIRC = 2 * Math.PI * RADIUS;
+ el.innerHTML = html`<svg viewBox="0 0 44 44" aria-hidden="true">
 		<circle class="track" cx="22" cy="22" r="${RADIUS}"></circle>
 		<circle
 			class="bar"
@@ -1265,248 +91,133 @@ function startTimer(el, seconds) {
 			stroke-dashoffset="0"
 		></circle>
 	</svg>`;
-	el.appendChild(label);
-	el.setAttribute("role", "timer");
-
-	const bar = qs(".bar", el);
-
-	function paint() {
-		label.textContent = String(Math.max(0, left));
-		el.setAttribute("aria-label", "남은 시간 " + Math.max(0, left) + "초");
-		bar.style.strokeDashoffset = String(CIRC * (1 - Math.max(0, left) / total));
-		// 마지막 10초는 색과 맥동으로도 알린다. 소리를 못 듣는 환경이 있다
-		el.classList.toggle("urgent", left <= 10);
-	}
-
-	paint();
-	const id = setInterval(function () {
-		left--;
-		paint();
-		if (left <= 0) clearInterval(id);
-	}, 1000);
-	el.dataset.timerId = String(id);
-	return id;
+ el.appendChild(label);
+ el.setAttribute("role", "timer");
+ const bar = qs(".bar", el);
+ function paint() {
+  label.textContent = String(Math.max(0, left));
+  el.setAttribute("aria-label", "남은 시간 " + Math.max(0, left) + "초");
+  bar.style.strokeDashoffset = String(CIRC * (1 - Math.max(0, left) / total));
+  el.classList.toggle("urgent", left <= 10);
+  el.classList.toggle("critical", left <= 3);
+ }
+ paint();
+ const id = setInterval(function() {
+  left--;
+  paint();
+  if (left <= 0) clearInterval(id);
+ }, 1e3);
+ el.dataset.timerId = String(id);
+ return id;
 }
 
-/** 로그 맨 아래로. 붙인 뒤에 호출해야 한다 */
 function scrollToEnd(el) {
-	if (el) el.scrollTop = el.scrollHeight;
+ if (el) el.scrollTop = el.scrollHeight;
 }
 
-/*
- * ParentBridge — ZEP 클라이언트(부모 창)와 주고받는 유일한 통로.
- *
- * 왜 따로 있는가
- * --------------
- * 위젯은 ZEP 클라이언트 안의 iframe이다. 그래서 부모와의 대화가 세 종류인데,
- * 지금까지는 셋 다 그냥 window.parent를 직접 만지는 코드였다.
- *
- *   1. 게임 서버(Jint)에게 보내기 — ZEP이 widget.onMessage로 넘겨준다
- *   2. ZEP 클라이언트 자체에게 시키기 — WidgetRearrange 같은 것
- *   3. 부모 문서의 키 입력 가로채기 — 게임 화면에 포커스가 있을 때
- *
- * 셋이 섞여 있으면 "이 postMessage는 서버가 받나 ZEP이 받나"를 볼 때마다
- * 다시 알아내야 한다. 여기 모아두면 부모와의 계약이 이 파일 하나에 다 있다.
- * 빌드(tools/build-widgets.js)가 위젯 HTML에서 window.parent를 직접 쓰면
- * 실패시키므로, 이 파일을 우회하는 길은 막혀 있다.
- *
- * 이벤트를 늘리는 법: 아래 세 묶음 중 맞는 곳에 함수를 하나 더한다.
- * 위젯은 Parent.무엇 만 부르므로 부모 쪽 사정이 바뀌어도 고칠 곳은 여기뿐이다.
- */
-const Parent = (function () {
-	/*
-	 * 부모 문서에 직접 닿을 수 있는가.
-	 *
-	 * 같은 출처면 부모의 window를 그대로 만질 수 있고, 그러면 게임 화면에
-	 * 포커스가 있는 동안 눌린 키까지 받을 수 있다. 교차 출처면 만지는 순간
-	 * SecurityError가 나므로 postMessage 말고는 길이 없다.
-	 *
-	 * 판정은 로드 때 한 번만 하고, 안 되면 조용히 기능을 접는다 — 여기서
-	 * 예외가 새어 나가면 위젯 스크립트 전체가 로드에 실패한다.
-	 */
-	const win = (function () {
-		try {
-			// 존재 확인만으로는 부족하다. 실제로 읽어야 교차 출처가 드러난다
-			void window.parent.document.readyState;
-			return window.parent;
-		} catch (error) {
-			return null;
-		}
-	})();
+const HostWindow = function() {
+ try {
+  void window.parent.document.readyState;
+  return window.parent;
+ } catch (error) {
+  return null;
+ }
+}();
 
-	/*
-	 * 프레임보다 오래 살아야 하는 것을 두는 자리.
-	 *
-	 * 채팅창 접기/펴기는 CSS가 아니라 크기가 다른 위젯으로 다시 여는
-	 * 것이라(Widgets.ts의 openChat) 그때마다 문서가 통째로 새로 만들어진다.
-	 * 입력 기록 같은 것을 위젯 안에만 두면 접을 때마다 지워진다.
-	 *
-	 * 교차 출처면 그냥 빈 객체다 — 기능이 사라지는 게 아니라 수명만 짧아진다.
-	 */
-	const store = (function () {
-		if (!win) return {};
-		if (!win.__mafiaWidget) win.__mafiaWidget = {};
-		return win.__mafiaWidget;
-	})();
-
-	// ────────────────────────────────────────────── 1. 게임 서버에게
-
-	/** 게임 서버(widget.onMessage)로 보낸다 */
-	function send(message) {
-		window.parent.postMessage(message, "*");
-	}
-
-	/**
-	 * 서버 메시지 구독. type별 핸들러 표를 받는다.
-	 *
-	 * 기존 위젯은 전부 addEventListener("message") + switch였고, morning/night는
-	 * type을 아예 보지 않아 어떤 메시지가 와도 타이머를 다시 시작했다.
-	 */
-	function on(handlers) {
-		window.addEventListener("message", function (event) {
-			const data = event && event.data;
-			if (!data) return;
-			// 크기는 메시지 종류와 상관없이 실려 온다. 위젯이 "부르는 것을 잊는"
-			// 자리를 없애기 위해 핸들러보다 먼저, 표에 없는 종류에도 적용한다.
-			if (data.layout) applyLayout(data.layout);
-			const handler = handlers[data.type];
-			if (handler) handler(data);
-		});
-	}
-
-	// ────────────────────────────────────────────── 2. ZEP 클라이언트에게
-
-	/**
-	 * 위젯이 차지할 상자를 ZEP 클라이언트에게 알린다.
-	 * 서버가 아니라 클라이언트가 읽고 처리하는 메시지다.
-	 *
-	 * 기존 구조의 문제
-	 * ----------------
-	 * 여기서 기기를 보고 크기를 스스로 정했다(rearrange). 그런데 세로는
-	 * 아무도 정하지 않아 모바일에서도 데스크톱 픽셀이 그대로 남았고,
-	 * 이 함수를 부를지 말지는 위젯 각자의 자유라 채팅과 직업 카드는
-	 * 아예 부르지 않았다 — 모바일 보정이 통째로 빠진 화면이 둘 있었다.
-	 *
-	 * 지금은 서버(Widgets.ts의 layoutOf)가 한 곳에서 정해 payload에 실어
-	 * 보내고, 여기서는 받은 대로 넘기기만 한다. 기기 판정도 서버가 한다
-	 * (player.isMobile / isTablet) — window.screen.width로 태블릿을
-	 * 넘겨짚을 이유가 없어졌다.
-	 */
-	function applyLayout(layout) {
-		const message = {
-			type: "WidgetRearrange",
-			anchor: layout.anchor,
-			width: layout.width,
-			height: layout.height,
-		};
-		// 상단바 보정은 위쪽에 붙는 위젯에만 실려 온다
-		if (layout.top) message.top = layout.top;
-		send(message);
-	}
-
-	// ────────────────────────────────────────────── 3. 부모 문서의 키 입력
-
-	/** 남이 글을 쓰고 있는 칸인가. ZEP 기본 채팅 입력창이 여기 걸린다 */
-	function editable(el) {
-		if (!el || !el.tagName) return false;
-		const tag = String(el.tagName).toUpperCase();
-		if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-		return el.isContentEditable === true;
-	}
-
-	/**
-	 * 게임 화면(캔버스)에 포커스가 있는 동안 눌린 키를 받는다.
-	 *
-	 * 위젯 안에 포커스가 있을 때는 여기로 오지 않는다 — 키 이벤트는 프레임
-	 * 경계를 넘지 않기 때문이다. 그래서 "게임 중일 때"와 "채팅 치는 중일 때"를
-	 * 따로 판정할 필요가 없다. 브라우저가 이미 나눠준다.
-	 *
-	 * 같은 이유로 "채팅 입력 중 이동·단축키 비활성화"도 따로 할 일이 없다.
-	 * 입력창에 포커스가 있으면 WASD는 애초에 ZEP 캔버스에 도달하지 않는다.
-	 *
-	 * 돌려주는 함수를 부르면 구독이 끊긴다. 프레임이 사라질 때도 자동으로 끊는다.
-	 */
-	function onKey(handler) {
-		if (!win) return function () {};
-
-		function off() {
-			win.removeEventListener("keydown", listener, true);
-			window.removeEventListener("pagehide", off);
-		}
-
-		function listener(event) {
-			// 접었다 펴는 순간 옛 프레임과 새 프레임이 잠깐 함께 산다.
-			// 죽은 쪽이 반응하면 이미 사라진 입력창에 포커스를 주게 된다.
-			const frame = window.frameElement;
-			if (frame && frame.isConnected === false) {
-				off();
-				return;
-			}
-			// 부모에는 ZEP 기본 채팅 입력창이 그대로 남아 있다(0.16.5에는 숨기는
-			// API가 없다). 남이 글을 쓰고 있는 칸은 건드리지 않는다.
-			if (editable(event.target)) return;
-			// 조합키는 브라우저와 ZEP의 몫이다
-			if (event.altKey || event.ctrlKey || event.metaKey) return;
-			handler(event);
-		}
-
-		// 부모 window의 캡처 단계. 이 프레임에서 닿을 수 있는 가장 이른 지점이다.
-		// 그래도 ZEP이 먼저 등록한 리스너보다 앞설 수는 없다 — 같은 대상·같은
-		// 단계에서는 등록 순서가 곧 실행 순서고, 부모 문서가 우리보다 먼저 뜬다.
-		win.addEventListener("keydown", listener, true);
-		// 위젯이 파괴되면 부모에는 리스너만 남는다. 반드시 같이 떼야 한다
-		window.addEventListener("pagehide", off);
-		return off;
-	}
-
-	/**
-	 * 이 프레임으로 포커스를 가져온다.
-	 *
-	 * 부모 문서에서 키를 받아 들어오는 길에서는 포커스가 아직 캔버스에 있다.
-	 * 안쪽 엘리먼트에 focus()만 하면 되는 경우가 대부분이지만, 프레임 자체를
-	 * 먼저 깨워두는 편이 확실하다.
-	 */
-	function grabFocus() {
-		window.focus();
-	}
-
-	return {
-		send,
-		on,
-		onKey,
-		grabFocus,
-		store,
-		/** 게임 화면의 키 입력을 받을 수 있는가 (부모와 같은 출처인가) */
-		canReadKeys: win !== null,
-	};
-})();
-
+const Parent = function() {
+ const store = function() {
+  if (!HostWindow) return {};
+  if (!HostWindow.__mafiaWidget) HostWindow.__mafiaWidget = {};
+  return HostWindow.__mafiaWidget;
+ }();
+ function send(message) {
+  window.parent.postMessage(message, "*");
+ }
+ function on(handlers) {
+  window.addEventListener("message", function(event) {
+   const data = event && event.data;
+   if (!data) return;
+   if (data.layout) applyLayout(data.layout);
+   const handler = handlers[data.type];
+   if (handler) handler(data);
+  });
+ }
+ function applyLayout(layout) {
+  const message = {
+   type: "WidgetRearrange",
+   anchor: layout.anchor,
+   width: layout.width,
+   height: layout.height
+  };
+  if (layout.top) message.top = layout.top;
+  if (layout.zIndex) message.zIndex = layout.zIndex;
+  send(message);
+ }
+ function editable(el) {
+  if (!el || !el.tagName) return false;
+  const tag = String(el.tagName).toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return el.isContentEditable === true;
+ }
+ function onKey(handler) {
+  if (!HostWindow) return function() {};
+  function off() {
+   HostWindow.removeEventListener("keydown", listener, true);
+   window.removeEventListener("pagehide", off);
+  }
+  function listener(event) {
+   const frame = window.frameElement;
+   if (frame && frame.isConnected === false) {
+    off();
+    return;
+   }
+   if (editable(event.target)) return;
+   if (event.altKey || event.ctrlKey || event.metaKey) return;
+   handler(event);
+  }
+  HostWindow.addEventListener("keydown", listener, true);
+  window.addEventListener("pagehide", off);
+  return off;
+ }
+ function grabFocus() {
+  window.focus();
+ }
+ function releaseFocus() {
+  window.parent.focus();
+ }
+ return {
+  send: send,
+  on: on,
+  onKey: onKey,
+  grabFocus: grabFocus,
+  releaseFocus: releaseFocus,
+  store: store,
+  canReadKeys: HostWindow !== null
+ };
+}();
 </script>
 		<script>
-			let myId = null;
-			let iAmReady = false;
-			const config = { min: 4, max: 8, kickVotes: 3 };
-			let counts = {};
+let myId = null;
 
-			/* ---------- 방 목록 ---------- */
-			/*
-			 * 진행 중인 방은 이제 눌린다. 예전에는 disabled였는데, 한 판이
-			 * 5~15분이라 늦게 온 사람은 방 목록 전체가 회색인 화면을 보고
-			 * 나가버렸다. 지금은 같은 버튼이 관전으로 들어가는 문이다.
-			 *
-			 * 문구를 "관전 N"으로 바꿔 클릭하면 무슨 일이 일어나는지 버튼
-			 * 안에서 알려준다 — "진행 중"만 남기면 눌러도 되는지 알 수 없다.
-			 */
-			function roomHtml(num) {
-				const info = counts[num] || { count: 0, started: false, watching: 0 };
-				const full = info.count >= config.max;
-				const state = info.started
-					? `관전 ${info.watching || 0}`
-					: full
-						? "가득 참"
-						: `${info.count}/${config.max}`;
+let iAmReady = false;
 
-				return html`<button
+const config = {
+ min: 4,
+ max: 12,
+ kickVotes: 3
+};
+
+let counts = {};
+
+function roomHtml(num) {
+ const info = counts[num] || {
+  count: 0,
+  started: false,
+  watching: 0
+ };
+ const full = info.count >= config.max;
+ const state = info.started ? `관전 ${info.watching || 0}` : full ? "가득 참" : `${info.count}/${config.max}`;
+ return html`<button
 					type="button"
 					class="room${info.started ? " playing" : full ? " full" : ""}"
 					data-num="${num}"
@@ -1515,28 +226,25 @@ const Parent = (function () {
 				>
 					<span>${num}번 방</span><span class="cnt">${state}</span>
 				</button>`;
-			}
+}
 
-			function paintRooms() {
-				const nums = Object.keys(counts).sort((a, b) => Number(a) - Number(b));
-				qs("#rooms").innerHTML = html`${nums.map(roomHtml)}`;
-			}
+function paintRooms() {
+ const nums = Object.keys(counts).sort((a, b) => Number(a) - Number(b));
+ qs("#rooms").innerHTML = html`${nums.map(roomHtml)}`;
+}
 
-			qs("#rooms").addEventListener("click", event => {
-				const el = event.target.closest(".room");
-				if (!el || el.disabled) return;
-				Parent.send({ type: "join", roomNum: Number(el.dataset.num) });
-			});
+qs("#rooms").addEventListener("click", event => {
+ const el = event.target.closest(".room");
+ if (!el || el.disabled) return;
+ Parent.send({
+  type: "join",
+  roomNum: Number(el.dataset.num)
+ });
+});
 
-			/* ---------- 좌석 목록 ---------- */
-			function seatHtml(seat, i) {
-				const mine = seat.id === myId;
-
-				// 강퇴는 필요 표수를 함께 보여준다. 몇 표가 남았는지 모르면
-				// 누를지 말지 판단할 수 없다
-				const kick = mine
-					? ""
-					: html`<button
+function seatHtml(seat, i) {
+ const mine = seat.id === myId;
+ const kick = mine ? "" : html`<button
 							type="button"
 							class="btn ghost kick${seat.kickCount > 0 ? " voted" : ""}"
 							data-id="${seat.id}"
@@ -1544,89 +252,81 @@ const Parent = (function () {
 						>
 							강퇴 ${seat.kickCount}/${config.kickVotes}
 						</button>`;
-
-				// .grow 안의 두 span은 한 줄로 둔다. 사이의 공백이 화면에 그대로
-				// 나오는 자리라, 줄을 나누면 들여쓰기가 이름 뒤에 붙는다
-				return html`<div class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}" role="listitem">
+ return html`<div class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}" role="listitem">
 					<span class="idx">${i + 1}</span>
 					<span class="grow ellip"><span class="nm">${seat.name}${mine ? " (나)" : ""}</span> <span class="meta">${seat.rank} · ${seat.runCount}판</span></span>
 					<span class="state">${seat.ready ? "준비" : "대기"}</span>
 					${kick}
 				</div>`;
-			}
+}
 
-			function paintSeats(list) {
-				qs("#seats").innerHTML = html`${list.map(seatHtml)}`;
+function paintSeats(list) {
+ qs("#seats").innerHTML = html`${list.map(seatHtml)}`;
+ const readyCount = list.filter(seat => seat.ready).length;
+ iAmReady = list.some(seat => seat.id === myId && seat.ready);
+ const ready = qs("#ready");
+ ready.textContent = iAmReady ? "준비 취소" : "준비";
+ ready.classList.toggle("primary", !iAmReady);
+ ready.classList.toggle("ok", iAmReady);
+ qs("#sub").textContent = `${list.length}명 · 준비 ${readyCount}명`;
+ qs("#note").textContent = list.length < config.min ? `${config.min - list.length}명 더 모이면 시작할 수 있습니다.` : readyCount < list.length ? `${list.length - readyCount}명이 아직 준비하지 않았습니다.` : "곧 시작합니다.";
+}
 
-				const readyCount = list.filter(seat => seat.ready).length;
-				iAmReady = list.some(seat => seat.id === myId && seat.ready);
+qs("#seats").addEventListener("click", event => {
+ const el = event.target.closest(".kick");
+ if (!el) return;
+ Parent.send({
+  type: "kick",
+  id: el.dataset.id
+ });
+});
 
-				const ready = qs("#ready");
-				ready.textContent = iAmReady ? "준비 취소" : "준비";
-				ready.classList.toggle("primary", !iAmReady);
-				ready.classList.toggle("ok", iAmReady);
+qs("#ready").addEventListener("click", () => {
+ Parent.send({
+  type: iAmReady ? "cancle-ready" : "ready"
+ });
+});
 
-				qs("#sub").textContent = `${list.length}명 · 준비 ${readyCount}명`;
+qs("#quit").addEventListener("click", () => {
+ Parent.send({
+  type: "quit"
+ });
+});
 
-				// 왜 시작하지 않는지 항상 한 줄로 말해준다
-				qs("#note").textContent =
-					list.length < config.min
-						? `${config.min - list.length}명 더 모이면 시작할 수 있습니다.`
-						: readyCount < list.length
-							? `${list.length - readyCount}명이 아직 준비하지 않았습니다.`
-							: "곧 시작합니다.";
-			}
+qs("#book").addEventListener("click", () => {
+ Parent.send({
+  type: "book"
+ });
+});
 
-			qs("#seats").addEventListener("click", event => {
-				const el = event.target.closest(".kick");
-				if (!el) return;
-				Parent.send({ type: "kick", id: el.dataset.id });
-			});
+function showRooms(inRoom) {
+ qs("#rooms").classList.toggle("hidden", inRoom);
+ qs("#seats").classList.toggle("hidden", !inRoom);
+ qs("#foot").classList.toggle("hidden", !inRoom);
+ qs("#heading").textContent = inRoom ? "대기실" : "방 선택";
+ if (!inRoom) {
+  qs("#sub").textContent = "";
+  qs("#note").textContent = "참가할 방을 고르세요.";
+ }
+}
 
-			qs("#ready").addEventListener("click", () => {
-				Parent.send({ type: iAmReady ? "cancle-ready" : "ready" });
-			});
-
-			qs("#quit").addEventListener("click", () => {
-				Parent.send({ type: "quit" });
-			});
-
-			qs("#book").addEventListener("click", () => {
-				Parent.send({ type: "book" });
-			});
-
-			/* ---------- 화면 전환 ---------- */
-			function showRooms(inRoom) {
-				qs("#rooms").classList.toggle("hidden", inRoom);
-				qs("#seats").classList.toggle("hidden", !inRoom);
-				qs("#foot").classList.toggle("hidden", !inRoom);
-				qs("#heading").textContent = inRoom ? "대기실" : "방 선택";
-				if (!inRoom) {
-					qs("#sub").textContent = "";
-					qs("#note").textContent = "참가할 방을 고르세요.";
-				}
-			}
-
-			Parent.on({
-				setID(data) {
-					myId = data.id;
-					if (data.minPlayers) config.min = data.minPlayers;
-					if (data.maxPlayers) config.max = data.maxPlayers;
-					if (data.kickVotes) config.kickVotes = data.kickVotes;
-				},
-
-				init(data) {
-					const list = Array.isArray(data.data) ? data.data : [];
-					showRooms(list.length > 0);
-					if (list.length > 0) paintSeats(list);
-					else paintRooms();
-				},
-
-				updatePlayerCount(data) {
-					counts = data.data || {};
-					if (!qs("#rooms").classList.contains("hidden")) paintRooms();
-				},
-			});
-		</script>
+Parent.on({
+ setID(data) {
+  myId = data.id;
+  if (data.minPlayers) config.min = data.minPlayers;
+  if (data.maxPlayers) config.max = data.maxPlayers;
+ },
+ init(data) {
+  const list = Array.isArray(data.data) ? data.data : [];
+  if (data.kickVotes) config.kickVotes = data.kickVotes;
+  showRooms(list.length > 0);
+  if (list.length > 0) paintSeats(list); else paintRooms();
+ },
+ updatePlayerCount(data) {
+  counts = data.data || {};
+  if (!qs("#rooms").classList.contains("hidden")) paintRooms();
+ }
+});
+</script>
 	</body>
 </html>

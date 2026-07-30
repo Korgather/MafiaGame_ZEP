@@ -16,6 +16,7 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import { ADMIN_EXP_GRANT, ADMIN_ROLE_LEVEL } from "../constants/GameConfig.ts";
+import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { seatAt } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
@@ -30,8 +31,8 @@ import { awardExp } from "./Rewards.ts";
  * 타입에 적혀 있다.
  */
 export interface ChatVoice {
-	/** 이 사람에게만 보이는 안내 */
-	tell(player: ScriptPlayer, text: string): void;
+	/** 이 사람에게만 보이는 안내. rows를 주면 text가 그 표의 제목이 된다 */
+	tell(player: ScriptPlayer, text: string, rows?: MessageRow[]): void;
 	/** 한 사람에게만 닿는 발언을 만든다 */
 	whisper(from: ScriptPlayer, to: ScriptPlayer, body: string): void;
 	/** 지금 귓속말을 보낼 수 있는 상황인가 */
@@ -64,7 +65,7 @@ const COMMANDS: { [name: string]: ChatCommand } = {
 		admin: false,
 		args: "",
 		help: "쓸 수 있는 명령어를 봅니다",
-		run: (voice, player) => voice.tell(player, helpText(player)),
+		run: (voice, player) => voice.tell(player, "📖 채팅 명령어", helpRows(player)),
 	},
 	/*
 	 * 도감을 채팅으로도 여는 이유는, 게임이 시작되면 대기실 위젯(📖 버튼이
@@ -116,15 +117,16 @@ const COMMANDS: { [name: string]: ChatCommand } = {
 	},
 };
 
-function helpText(player: ScriptPlayer): string {
-	const lines = ["📖 채팅 명령어"];
+/** 명령어 이름과 설명을 두 열로. 이름 길이가 제각각이라 한 줄로 이으면 눈이 못 훑는다 */
+function helpRows(player: ScriptPlayer): MessageRow[] {
+	const rows: MessageRow[] = [];
 	for (const name in COMMANDS) {
 		if (!Object.prototype.hasOwnProperty.call(COMMANDS, name)) continue;
 		const command = COMMANDS[name];
 		if (command.admin && player.role < ADMIN_ROLE_LEVEL) continue;
-		lines.push(`${name}${command.args ? ` ${command.args}` : ""} - ${command.help}`);
+		rows.push({ label: `${name}${command.args ? ` ${command.args}` : ""}`, value: command.help });
 	}
-	return lines.join("\n");
+	return rows;
 }
 
 /**
@@ -178,8 +180,7 @@ function resolveTarget(voice: ChatVoice, sender: ScriptPlayer, token: string): S
 
 	const matches: ScriptPlayer[] = [];
 	for (const player of ScriptApp.players) {
-		// 게임 중에는 표시 이름에 "(유령)"이 붙는다. 원래 닉네임으로도 찾게 한다
-		if (player.name === token || tagOf(player).originalName === token) matches.push(player);
+		if (player.name === token) matches.push(player);
 	}
 	if (matches.length === 0) {
 		voice.tell(sender, `"${token}"을(를) 찾지 못했습니다.`);
@@ -262,7 +263,7 @@ function block(voice: ChatVoice, sender: ScriptPlayer, rest: string): void {
 	const target = resolveTarget(voice, sender, rest);
 	if (!target) return;
 	const tag = tagOf(sender);
-	tag.blocked[target.id] = tagOf(target).originalName;
+	tag.blocked[target.id] = target.name;
 	voice.tell(sender, `🚫 ${target.name} 님의 발언을 가립니다. (/차단해제 로 풉니다)`);
 }
 
@@ -327,16 +328,16 @@ function report(voice: ChatVoice, sender: ScriptPlayer, rest: string): void {
 	tag.reported[target.id] = true;
 
 	const where = locate(target.id);
-	const line =
-		`🚨 신고 — ${target.name}` +
-		`\n신고한 사람: ${sender.name}` +
-		`\n위치: ${where ? `${where.room.num}번 방` : "대기실 밖"}` +
-		`\n사유: ${reason || "(적지 않음)"}`;
+	const rows: MessageRow[] = [
+		{ label: "신고한 사람", value: sender.name },
+		{ label: "위치", value: where ? `${where.room.num}번 방` : "대기실 밖" },
+		{ label: "사유", value: reason || "(적지 않음)" },
+	];
 
 	let delivered = 0;
 	for (const player of ScriptApp.players) {
 		if (player.role < ADMIN_ROLE_LEVEL) continue;
-		voice.tell(player, line);
+		voice.tell(player, `🚨 신고 — ${target.name}`, rows);
 		delivered++;
 	}
 	voice.tell(

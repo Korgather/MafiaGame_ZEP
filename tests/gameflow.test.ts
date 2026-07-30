@@ -14,15 +14,19 @@ import { ACTION_RATE, MIN_PLAYERS, TIMING } from "../src/constants/GameConfig.ts
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import {
 	cardWidget,
+	chatLines,
 	chatSaw,
 	connect,
+	cutWidget,
 	disconnect,
 	findMainWidget,
 	finishPhase,
 	hasCard,
+	hasCut,
 	joinRoom,
 	mainWidget,
 	playerOf,
+	reconnect,
 	resetWorld,
 	room,
 	seatOf,
@@ -42,13 +46,13 @@ import {
 beforeEach(() => resetWorld());
 
 /** 맵 위 대기실 스폰 구역 안에 서 있는가 */
-function inLobbyArea(pos: { x: number; y: number }): boolean {
+function inLobbyArea(pos: { tileX: number; tileY: number }): boolean {
 	const area = LOBBY_SPAWN_AREA;
 	return (
-		pos.x >= area.x &&
-		pos.x < area.x + area.width &&
-		pos.y >= area.y &&
-		pos.y < area.y + area.height
+		pos.tileX >= area.x &&
+		pos.tileX < area.x + area.width &&
+		pos.tileY >= area.y &&
+		pos.tileY < area.y + area.height
 	);
 }
 
@@ -98,11 +102,26 @@ describe("대기실 → 게임 시작", () => {
 		// 인원수와 무관하게 성립하는 것만 본다. 어떤 능력자가 들어오는지는
 		// 밸런스 상수가 정하고 그건 domain 테스트의 몫이다
 		assert.equal(seatsWithRole(target, Role.MAFIA).length, 1);
-		assert.equal(seatsWithRole(target, Role.DOCTOR).length, 1);
+		// 정보 직업은 최소 한 명. 의사냐 경찰이냐를 여기서 못 박으면 위 주석과
+		// 어긋난다 — 최소 인원 판은 시민 자리가 셋뿐이라 둘 다 들어갈 수 없고,
+		// 어느 쪽이 남는지는 매 판 달라진다(domain 테스트의 몫)
+		const info =
+			seatsWithRole(target, Role.DOCTOR).length + seatsWithRole(target, Role.POLICE).length;
+		assert.ok(info >= 1, "정보 직업이 하나도 배분되지 않았습니다");
 
 		for (const player of players) {
 			assert.equal(seatOf(player).alive, true);
-			assert.match(player.title, /번 참가자$/);
+			/*
+			 * 이름표는 두 줄이다 — 참가 번호와 닉네임(Stage.applyNameplate).
+			 *
+			 * 둘째 줄까지 보는 이유: ZEP이 닉네임을 그려주지 않는다
+			 * (index.ts의 showName = false). 이름표를 쓰는 곳이 번호만 넣고
+			 * 끝내면 화면에서 그 사람의 이름이 사라지고, 그건 눈으로만 보이는
+			 * 종류의 고장이라 여기서 세지 않으면 아무도 모른다.
+			 */
+			const [badge, nick] = player.title.split("\n");
+			assert.match(badge, /^\d+ 번 참가자$/);
+			assert.equal(nick, player.name);
 		}
 	});
 
@@ -237,13 +256,18 @@ describe("밤 단계", () => {
 
 		// 밤과 아침은 같은 파일이다. 어느 쪽인지는 payload의 phase가 정한다
 		assert.equal(widget.fileName, WidgetFile.PHASE);
-		const payload = widget.last();
+		// 마지막 메시지가 아니라 "열릴 때 받은 것"을 본다. 단계 화면은 열린 뒤에도
+		// 진행률 같은 갱신을 계속 받으므로 last()로 잡으면 무엇이 잡힐지 그때그때 다르다
+		const payload = widget.lastOfType("init");
 		assert.ok(payload, "밤 화면이 payload 없이 열렸습니다");
 		// payload가 없으면 위젯의 타이머와 인원수가 초기 HTML 상태로 멈춘다
 		assert.equal(payload.phase, "night");
 		assert.equal(payload.total, MIN_PLAYERS);
 		assert.equal(payload.aliveCount, MIN_PLAYERS);
-		assert.equal(payload.timer, TIMING.NIGHT);
+		// TIMING.NIGHT가 아니라 방의 시계와 맞춘다. 단계 앞에 전환 컷이 붙으면서
+		// 단계 길이가 상수보다 길어졌고, 화면이 봐야 하는 것은 늘어난 쪽이다
+		assert.equal(payload.timer, target.phaseTimer);
+		assert.ok(payload.timer > TIMING.NIGHT, "컷이 단계 시간을 늘리지 않았습니다");
 		// 직업 칩은 모든 화면에 실린다. 자기 능력을 확인할 곳이 여기뿐이다
 		assert.equal(payload.role, "정치인");
 	});
@@ -257,7 +281,9 @@ describe("밤 단계", () => {
 		const widget = mainWidget(playerOf(mafia));
 
 		assert.equal(widget.fileName, WidgetFile.ROLE_ACTION);
-		const payload = widget.last();
+		// 지목 화면은 열리자마자 진행률(progress)을 한 줄 더 받는다. 여는 payload는
+		// init 하나뿐이므로 그것을 집어서 본다
+		const payload = widget.lastOfType("init");
 		assert.ok(payload);
 		assert.equal(payload.myNum, mafia.index);
 		// 번호만 보내던 시절에는 화면에 1~8만 있고 이름이 없었다. 이제 이름이 온다
@@ -607,6 +633,26 @@ describe("승패와 대기실 복귀", () => {
 			chatSaw(survivor, "전원의 직업"),
 			"종료 시 직업 공개가 없습니다"
 		);
+		/*
+		 * 표는 문자열이 아니라 구조로 내려간다.
+		 *
+		 * 문자열로 이어 붙이던 동안에는 마피아였는지 시민이었는지 색으로
+		 * 가를 방법이 없었다 — 판이 끝난 순간 가장 먼저 보고 싶은 것이
+		 * 그건데도. 다시 join("\n")으로 돌아가면 여기서 걸린다.
+		 */
+		const reveal = chatLines(survivor).filter(line => line.text === "🔎 전원의 직업")[0];
+		assert.ok(reveal, "직업 공개 줄을 찾지 못했습니다");
+		assert.equal(reveal.rows.length, MIN_PLAYERS);
+		assert.equal(
+			reveal.rows.filter(row => row.tone === Team.MAFIA).length,
+			1,
+			"표에 팀 색이 실려 있지 않습니다"
+		);
+		// 처형당한 마피아는 흐리게 그려진다. 죽었다고 표에서 지우지는 않는다
+		assert.deepEqual(
+			reveal.rows.filter(row => row.dim).map(row => row.tone),
+			[Team.MAFIA]
+		);
 		// ZEP 기본 채팅으로는 한 글자도 나가지 않는다. 이 게임의 모든 문장은
 		// 채팅 위젯을 지난다 — 여기가 무너지면 밤 채팅 격리도 함께 무너진다.
 		assert.equal(
@@ -668,7 +714,7 @@ describe("승패와 대기실 복귀", () => {
 		for (const player of players) {
 			assert.ok(
 				inLobbyArea(player),
-				`${player.name} 님이 방금 끝난 방 좌석(${player.x}, ${player.y})에 그대로 서 있습니다`
+				`${player.name} 님이 방금 끝난 방 좌석(${player.tileX}, ${player.tileY})에 그대로 서 있습니다`
 			);
 		}
 	});
@@ -698,5 +744,135 @@ describe("승패와 대기실 복귀", () => {
 		assert.equal(result.winner, Team.MAFIA);
 		// 왜 끝났는지가 화면에 남는다. 예전에는 그림 한 장뿐이라 이유가 없었다
 		assert.ok((result.reason as string).length > 0, "승리 이유가 비어 있습니다");
+	});
+});
+
+/**
+ * 단계와 단계 사이를 덮는 전환 컷.
+ *
+ * 배선 테스트다. "무엇을 읽히는가"(문구)가 아니라 "컷이 단계 시계와 같이
+ * 도는가"를 본다 — 컷이 phaseTimer를 늘려 놓고 제때 걷히지 않으면 화면이
+ * 잠긴 채로 다음 단계가 시작되고, 그 어긋남은 문구를 아무리 고쳐도 안 낫는다.
+ */
+describe("전환 컷", () => {
+	it("게임이 시작되면 전원의 화면을 덮고, 단계가 그만큼 길어진다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+
+		assert.equal(target.phase, GamePhase.ROLE_REVEAL);
+		assert.ok(
+			target.phaseTimer > TIMING.ROLE_REVEAL,
+			"컷을 걸었는데 단계 시간이 그대로입니다"
+		);
+
+		for (const seat of target.seats) {
+			const player = playerOf(seat);
+			const payload = cutWidget(player).lastOfType("init");
+			assert.ok(payload, `${seat.name}의 컷이 payload 없이 열렸습니다`);
+			// ms가 없으면 위젯이 기본값 3초로 제 속도를 잡고, 서버가 걷는
+			// 순간과 어긋나 마지막 줄이 뜨기도 전에 화면이 사라진다
+			assert.equal(payload.ms, Math.round((target.phaseTimer - TIMING.ROLE_REVEAL) * 1000));
+			assert.equal(payload.tone, "neutral");
+		}
+	});
+
+	it("시간이 다 되면 컷만 걷히고 단계 화면은 남는다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		const player = playerOf(target.seats[0]);
+		const cutLength = target.phaseTimer - TIMING.ROLE_REVEAL;
+
+		tick(cutLength + 0.001);
+
+		assert.equal(hasCut(player), false, "시간이 지났는데 컷이 남아 있습니다");
+		assert.equal(target.phase, GamePhase.ROLE_REVEAL, "컷이 단계까지 끝냈습니다");
+		// 컷은 겹쳐 뜬 네 번째 위젯 자리다. 걷힐 때 자기 것만 닫아야 하고,
+		// 밑에 깔린 화면(직업 공개는 카드 슬롯을 쓴다)은 그대로 남아야 한다
+		assert.equal(hasCard(player), true, "컷이 걷히면서 밑의 화면까지 닫혔습니다");
+	});
+
+	it("처형 결과가 다음 밤 컷의 첫 줄로 이어진다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		for (const seat of target.seats) {
+			if (seat.index === victim.index) continue;
+			vote(playerOf(seat), victim.index);
+		}
+		finishPhase(target); // → VOTE_RESULT (처형)
+		finishPhase(target); // → NIGHT
+
+		assert.equal(target.phase, GamePhase.NIGHT);
+		const payload = cutWidget(playerOf(target.seats[0])).lastOfType("init");
+		assert.ok(payload, "밤 컷이 payload 없이 열렸습니다");
+		assert.equal(payload.tone, "night");
+		const lines = payload.lines as string[];
+		// 처형은 자기 컷을 갖지 않는다. 개표 화면이 이미 7초를 쓴 뒤라
+		// 같은 소식을 한 번 더 기다리게 하는 대신 밤 컷의 첫 줄로 얹는다
+		assert.ok(
+			lines.length > 0 && lines[0].indexOf(victim.name) >= 0,
+			`처형 결과가 밤 컷에 실리지 않았습니다: ${JSON.stringify(lines)}`
+		);
+	});
+});
+
+/**
+ * 밤 진행률.
+ *
+ * 낮의 개표 진행률과 같은 배선인데 밤은 서로가 보이지 않아서, 숫자가 틀리면
+ * 아무도 눈치채지 못한 채 "아직 안 끝났나 보다" 하고 남은 시간을 흘려보낸다.
+ */
+describe("밤 진행률", () => {
+	it("차례가 있는 사람만 세고, 지목이 확정되면 방 전원의 숫자가 오른다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const doctor = seatsWithRole(target, Role.DOCTOR)[0];
+		const citizen = seatsWithRole(target, Role.CITIZEN)[0];
+
+		// 마피아·의사·경찰 셋만 밤에 할 일이 있다. 시민은 분모에도 없다 —
+		// 넣으면 절대 다 차지 않는 막대가 되어 "누가 뭉개고 있다"로 읽힌다
+		const before = mainWidget(playerOf(mafia)).lastOfType("progress");
+		assert.ok(before, "밤 화면이 진행률 없이 열렸습니다");
+		assert.equal(before.total, MIN_PLAYERS - 1);
+		assert.equal(before.acted, 0);
+
+		send(playerOf(mafia), { type: "select", num: citizen.index });
+
+		// 지목한 본인 화면만 바뀌면 나머지는 여전히 0을 보고 기다린다
+		const after = mainWidget(playerOf(doctor)).lastOfType("progress");
+		assert.ok(after, "지목 뒤 진행률이 전파되지 않았습니다");
+		assert.equal(after.acted, 1);
+		assert.equal(after.total, MIN_PLAYERS - 1);
+	});
+
+	/**
+	 * 분모는 접속 상태를 따라 움직인다. 그런데 그 값을 다시 계산하는 계기가
+	 * "누가 행동했을 때"뿐이면, 한 명이 끊긴 순간 남은 전원의 막대가 영원히
+	 * 덜 찬 채로 멈춘다 — 분모에서 빼는 처리를 해두고도 결과는 같아진다.
+	 */
+	it("사람이 나가고 돌아오면 남은 사람의 분모도 따라 움직인다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const away = playerOf(seatsWithRole(target, Role.POLICE)[0]);
+
+		disconnect(away);
+		const shrunk = mainWidget(playerOf(mafia)).lastOfType("progress");
+		assert.ok(shrunk, "이탈이 남은 사람의 진행률에 전파되지 않았습니다");
+		assert.equal(shrunk.total, MIN_PLAYERS - 2, "끊긴 사람이 분모에 남아 막대가 끝까지 차지 않습니다");
+
+		reconnect(away);
+		const restored = mainWidget(playerOf(mafia)).lastOfType("progress");
+		assert.ok(restored);
+		assert.equal(restored.total, MIN_PLAYERS - 1, "돌아온 사람이 분모로 복귀하지 않았습니다");
 	});
 });

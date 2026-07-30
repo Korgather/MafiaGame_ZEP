@@ -14,11 +14,12 @@ import type { Room, Seat, Team as TeamType } from "../types/Game.types.ts";
 import { GamePhase, Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { TIMING } from "../constants/GameConfig.ts";
-import { roleName } from "../domain/Roles.ts";
+import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
 import { revealViews } from "../entities/Room.ts";
 import { forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
+import { playCut } from "./Cut.ts";
 import { settleMatch } from "./Rewards.ts";
 import { clearSilhouettes } from "./Stage.ts";
 import { closeCard, openGameOver } from "./Widgets.ts";
@@ -42,10 +43,18 @@ export function finish(room: Room, winner: TeamType): void {
 
 	clearSilhouettes(room);
 	playSound(room, winner === Team.MAFIA ? Sound.MAFIA_WIN : Sound.CITIZEN_WIN);
-	Chat.announce(room, roster(room));
+	Chat.announce(room, "🔎 전원의 직업", roster(room));
 	// 방 밖에도 한 줄 흘린다. 로비에 선 사람이 어느 방이 곧 비는지 알 수 있는
 	// 유일한 단서이고, 전체 채팅 탭이 잡담만으로 채워지지 않게 하는 것도 겸한다.
 	Chat.worldNotice(`🏁 ${room.num}번 방 — ${winner === Team.MAFIA ? "마피아" : "시민"} 승리`);
+
+	// 컷이 phaseTimer를 늘린다. 아래 openWinView가 그 값을 화면에 싣는다
+	playCut(
+		room,
+		winner === Team.MAFIA ? "mafia" : "citizen",
+		winner === Team.MAFIA ? "🔪 마피아 승리" : "🕊️ 시민 승리",
+		closingLines(room, winner)
+	);
 
 	forEachPlayer(room, (player, seat) => {
 		openWinView(room, player, seat);
@@ -55,6 +64,24 @@ export function finish(room: Room, winner: TeamType): void {
 
 	// 판이 끝나면 마피아·유령 채널의 비밀이 풀린다 — 전원이 방 채팅으로 모인다
 	Chat.refreshRoom(room);
+}
+
+/**
+ * 승리 컷에 실을 줄들 — "마지막에 무슨 일이 있었고, 그래서 왜 끝났는가".
+ *
+ * 판이 끝나는 길은 둘뿐이고 둘은 겹치지 않는다. 처형으로 끝나면
+ * beginVoteResult가 voteRecord.message를 채운 직후이고(outcomeMessage는
+ * 빈 문자열을 돌려주지 않는다), 밤에 끝나면 resolveNight이 nightReport를
+ * 새로 채운 직후다 — 그리고 beginNight의 resetRound가 voteRecord를 지운다.
+ * 그래서 둘 중 채워진 쪽 하나만 고르면 마지막 장면이 정확히 한 번 나온다.
+ *
+ * slice()가 필요한 이유는 아래 push다. 원본을 그대로 받으면 room.nightReport에
+ * 승리 사유가 눌러붙고, 그 배열은 낮 화면(openDayView의 deaths)도 함께 본다.
+ */
+function closingLines(room: Room, winner: TeamType): string[] {
+	const lines = room.voteRecord.message ? [room.voteRecord.message] : room.nightReport.slice();
+	lines.push(winReason(winner));
+	return lines;
 }
 
 /** 왜 끝났는가. 승리 조건을 화면에 한 줄로 설명한다 */
@@ -93,13 +120,17 @@ export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void 
  *
  * 기존에는 dead()가 죽는 순간 tag.role을 ""로 지워서 이 화면을 만들 수 없었다.
  * 좌석이 역할을 끝까지 들고 있게 되면서 가능해진 기능이다.
+ *
+ * 종료 위젯과 같은 revealViews를 쓴다. 좌석을 여기서 다시 정렬해 문자열로
+ * 빚던 동안에는 같은 표가 두 곳에서 따로 만들어졌고, 실제로 갈라져 있었다 —
+ * 위젯은 구조를 받아 팀 색을 칠했는데 채팅은 문자열이라 전부 한 색이었다.
  */
-function roster(room: Room): string {
-	const lines: string[] = ["🔎 전원의 직업"];
-	const ordered = room.seats.slice().sort((a, b) => a.index - b.index);
-	for (const seat of ordered) {
-		const mark = seat.alive ? "" : " ☠️";
-		lines.push(`${seat.index}. ${seat.name} - ${roleName(seat.role)}${mark}`);
-	}
-	return lines.join("\n");
+function roster(room: Room): MessageRow[] {
+	return revealViews(room).map(view => ({
+		// ☠️는 dim과 겹쳐 보이지만 색에 기대지 않는 유일한 표시다
+		label: `${view.num}. ${view.name}${view.alive ? "" : " ☠️"}`,
+		value: view.role,
+		tone: view.team,
+		dim: !view.alive,
+	}));
 }

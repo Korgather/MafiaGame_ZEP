@@ -103,6 +103,23 @@ export interface RoleDef {
 	 * 한쪽만 고치고 끝낼 위험이 상시로 존재한다.
 	 */
 	readonly voteWeight?: number;
+	/**
+	 * 마피아 채팅에 있는 사람을 찾아내면 그 편으로 넘어가는가 (스파이).
+	 *
+	 * 이 한 줄이 스파이라는 직업의 전부다 — 진영이 바뀌고, 그 보상으로 능력도
+	 * 소모되지 않는다. 그런데 그 규칙은 여기가 아니라 NightResolution의
+	 * INSPECT_ROLE 가지에 조건 없이 박혀 있었다. 즉 "정확한 직업을 알아낸다"는
+	 * 행동 자체가 배신을 뜻했다.
+	 *
+	 * 문제는 행동과 규칙이 1:1이 아니라는 것이다. 직업을 그대로 읽는 능력은
+	 * 스파이만의 것이 아니어도 된다(점쟁이·해커·기자의 사전조사 같은 것들).
+	 * 그런 직업을 추가하면 그 사람도 마피아를 찾은 순간 조용히 마피아가 된다 —
+	 * 컴파일도 테스트도 통과하면서. 배신은 행동의 성질이 아니라 직업의 성질이다.
+	 *
+	 * 반대로 여기에 Role.SPY를 직접 비교하는 길도 있었지만, 그건 이 파일이
+	 * 없애려고 만들어진 바로 그 형태다(직업 이름으로 분기하는 코드).
+	 */
+	readonly defectsToMafia?: boolean;
 	/** 능력을 게임 전체에서 한 번만 쓸 수 있는가 (자경단원·기자) */
 	readonly oncePerGame?: boolean;
 	/** 같은 진영을 죽이면 시전자도 함께 죽는가 (자경단원) */
@@ -201,6 +218,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// 마피아에 합류한 뒤에는 MAFIA_CHAT으로 바뀐다 (NightService에서 판단)
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
+		defectsToMafia: true,
 		// 자경단원과 같은 이유다. 첫 밤 조사는 추리가 아니라 주사위인데,
 		// 그 주사위가 맞으면 진영이 옮겨가 마진이 2 줄고(마피아 +1, 시민 -1)
 		// 4~7명 판은 아무도 한 마디 하기 전에 아침에 끝났다.
@@ -309,7 +327,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightAction: NightActionKind.ATTACK,
 		nightChat: null,
 		nightSprite: null,
-		nightAttackSprite: null,
+		nightAttackSprite: "claw",
 		nightPrompt: "물어 죽일 대상을 선택하세요.",
 		nightNotice: LONE_MAFIA_TEAM,
 		immuneToVote: false,

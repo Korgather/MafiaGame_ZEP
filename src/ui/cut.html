@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>전환</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 단계 전환 컷.
+			 *
+			 * 다른 위젯과 규칙이 둘 다르다.
+			 *
+			 * 1. .panel을 쓰지 않는다. panel은 "화면 한쪽에 놓인 판"의 문법이고
+			 *    (테두리·둥근 모서리·그림자) 이 위젯은 화면 그 자체다. 테두리가
+			 *    보이는 순간 "덮었다"가 아니라 "큰 창이 떴다"로 읽힌다.
+			 *
+			 * 2. 시간 진행을 JS 타이머로 만들지 않는다. 서버가 payload에 실어 준
+			 *    ms 하나에서 모든 지연을 비율로 계산해 CSS animation-delay로 넘긴다.
+			 *    setInterval로 한 줄씩 붙이면 프레임이 밀릴 때 서버가 컷을 걷는
+			 *    순간까지 마지막 줄이 안 뜰 수 있고, 무엇보다 "언제 무엇이 뜨는가"가
+			 *    두 곳(여기와 Cut.ts)에 나뉜다. 여기서는 ms를 나눠 쓰기만 한다.
+			 */
+			.cut {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 100%;
+				height: 100%;
+				padding: var(--s5);
+				text-align: center;
+				/* 진영·시간대별 색. 아래 톤 클래스가 덮어쓴다 */
+				--ink-cut: var(--accent);
+				background: linear-gradient(160deg, rgba(32, 26, 25, 0.94) 0%, rgba(20, 16, 15, 0.97) 100%);
+			}
+
+			/*
+			 * 톤. 배경을 완전 불투명으로 하지 않는 이유는 맵이 희미하게 비쳐야
+			 * "게임이 잠깐 멈춘 것"이지 "다른 화면으로 넘어간 것"이 아니기 때문이다.
+			 */
+			.cut.night {
+				--ink-cut: #9db4ee;
+				background: linear-gradient(160deg, rgba(27, 35, 64, 0.94) 0%, rgba(13, 16, 32, 0.97) 100%);
+			}
+			.cut.day {
+				--ink-cut: var(--accent);
+				background: linear-gradient(160deg, rgba(64, 51, 27, 0.94) 0%, rgba(26, 20, 16, 0.97) 100%);
+			}
+			.cut.mafia {
+				--ink-cut: var(--mafia);
+				background: linear-gradient(160deg, rgba(109, 36, 36, 0.94) 0%, rgba(24, 12, 12, 0.97) 100%);
+			}
+			.cut.citizen {
+				--ink-cut: var(--citizen);
+				background: linear-gradient(160deg, rgba(36, 71, 95, 0.94) 0%, rgba(11, 18, 24, 0.97) 100%);
+			}
+
+			.band {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: var(--s3);
+				max-width: 640px;
+			}
+
+			.title {
+				font-size: var(--t-2xl);
+				font-weight: 800;
+				line-height: 1.2;
+				letter-spacing: -0.02em;
+				color: var(--ink-cut);
+				text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+				word-break: keep-all;
+				animation: rise 420ms var(--ease) 80ms both;
+			}
+
+			.lines {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s2);
+			}
+
+			/*
+			 * 한 줄씩 떠오른다. 지연은 서버가 준 길이에서 계산해 style로 박는다 —
+			 * 줄 수가 몇이든 마지막 줄이 컷이 걷히기 전에 뜬다.
+			 */
+			.lines span {
+				font-size: var(--t-lg);
+				color: var(--ink);
+				word-break: keep-all;
+				animation: rise 420ms var(--ease) both;
+			}
+
+			@keyframes rise {
+				from {
+					opacity: 0;
+					transform: translateY(10px);
+				}
+			}
+
+			/*
+			 * 남은 시간. 숫자를 읽게 하지 않는다 — 읽어서 할 일이 없는 시간이고,
+			 * 다만 "곧 끝난다"는 것만 보이면 멈춘 화면으로 오해하지 않는다.
+			 */
+			.clock {
+				width: 96px;
+				height: 2px;
+				border-radius: 99px;
+				background: rgba(255, 255, 255, 0.14);
+				overflow: hidden;
+			}
+
+			.clock i {
+				display: block;
+				width: 100%;
+				height: 100%;
+				background: var(--ink-cut);
+				transform-origin: left center;
+				animation: drain linear both;
+			}
+
+			@keyframes drain {
+				to {
+					transform: scaleX(0);
+				}
+			}
+
+			@keyframes veil {
+				from {
+					opacity: 0;
+				}
+			}
+
+			@keyframes fade {
+				to {
+					opacity: 0;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="cut" id="cut" role="status" aria-live="polite">
+			<div class="band">
+				<h1 class="title" id="title"></h1>
+				<div class="lines" id="lines"></div>
+				<div class="clock" aria-hidden="true"><i id="clockbar"></i></div>
+			</div>
+		</div>
+
+		<!--@shared-->
+		<script>
+			/*
+			 * 컷 길이(ms) 안에서 각 구간이 차지하는 비율.
+			 *
+			 * 초 단위 상수를 여기에 또 두지 않는 것이 요점이다. Cut.ts의 LEAD/STEP/TAIL이
+			 * 바뀌거나 상한(MAX)에 걸려 길이가 줄어도, 비율로 나누면 줄이 잘리지 않는다.
+			 */
+			const HEAD = 0.18;
+			const BODY = 0.62;
+			/** 화면이 걷히기 직전에 흐려지는 시간(ms) */
+			const OUT = 300;
+
+			Parent.on({
+				init(data) {
+					const ms = Math.max(1000, Number(data.ms) || 3000);
+					const lines = Array.isArray(data.lines) ? data.lines : [];
+					const cut = qs("#cut");
+
+					cut.classList.add(data.tone || "neutral");
+					// 나타남과 사라짐을 한 줄에 싣는다. 걷는 것은 서버(Cut.ts의 advanceCut)라
+					// 여기서는 그 순간에 맞춰 흐려지기만 하면 된다
+					cut.style.animation =
+						"veil 260ms var(--ease), fade " +
+						OUT +
+						"ms var(--ease) " +
+						Math.max(0, ms - OUT) +
+						"ms both";
+
+					qs("#title").textContent = data.title || "";
+					qs("#lines").innerHTML = html`${lines.map(
+						(line, i) =>
+							html`<span style="animation-delay:${Math.round(
+								ms * (HEAD + (BODY * i) / lines.length)
+							)}ms"
+								>${line}</span
+							>`
+					)}`;
+					qs("#clockbar").style.animationDuration = ms + "ms";
+				},
+			});
+		</script>
+	</body>
+</html>

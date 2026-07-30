@@ -16,13 +16,17 @@ import { ACTION_RATE, CHAT_RATE } from "../constants/GameConfig.ts";
 
 export function tagOf(player: ScriptPlayer): PlayerTag {
 	const existing = player.tag as PlayerTag | undefined | null;
-	if (existing && typeof existing === "object" && "originalName" in existing) {
+	// chatRate로 알아본다. 없어서는 안 되는 필드 아무거나 하나면 되는데,
+	// 선택적(?)이거나 언젠가 지울 만한 필드를 쓰면 그날 tag가 조용히 초기화된다
+	if (existing && typeof existing === "object" && "chatRate" in existing) {
 		return existing;
 	}
 	const created: PlayerTag = {
 		widget: null,
 		mainBox: null,
 		cardWidget: null,
+		cutWidget: null,
+		profileWidget: null,
 		guideSeen: false,
 		chatWidget: null,
 		/*
@@ -41,13 +45,12 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 		actionRate: newBucket(ACTION_RATE, Time.getUtcTime()),
 		blocked: {},
 		reported: {},
-		originalName: player.name,
 	};
 	player.tag = created;
 	return created;
 }
 
-/** 위젯 3종을 모두 닫는다. 방을 떠나거나 접속이 끊길 때 쓴다 */
+/** 위젯 5종을 모두 닫는다. 방을 떠나거나 접속이 끊길 때 쓴다 */
 export function destroyWidgets(player: ScriptPlayer): void {
 	const tag = tagOf(player);
 	if (tag.widget) {
@@ -57,6 +60,14 @@ export function destroyWidgets(player: ScriptPlayer): void {
 	if (tag.cardWidget) {
 		tag.cardWidget.destroy();
 		tag.cardWidget = null;
+	}
+	if (tag.cutWidget) {
+		tag.cutWidget.destroy();
+		tag.cutWidget = null;
+	}
+	if (tag.profileWidget) {
+		tag.profileWidget.destroy();
+		tag.profileWidget = null;
 	}
 	if (tag.chatWidget) {
 		tag.chatWidget.destroy();

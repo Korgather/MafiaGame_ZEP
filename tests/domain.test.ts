@@ -12,8 +12,10 @@ import { describe, it } from "node:test";
 
 import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
-import { buildRoleDeck } from "../src/domain/RoleAssignment.ts";
+import { buildRoleDeck, mafiaCount } from "../src/domain/RoleAssignment.ts";
 import {
+	hasNightTurn,
+	nightActionBlockedReason,
 	NightOutcome,
 	resolveNightCasualties,
 	resolveNightSelect,
@@ -25,7 +27,14 @@ import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
 import { cardForRole, GUIDE_CARDS, roleBook } from "../src/domain/Guide.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { newBucket, spend } from "../src/domain/RateLimit.ts";
-import { MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import {
+	MAX_PLAYERS,
+	MIN_PLAIN_CITIZENS,
+	MIN_PLAYERS,
+	MIN_SPECIAL_CITIZENS,
+	ROOM_COUNT,
+} from "../src/constants/GameConfig.ts";
+import { isInsideRoom, seatPosition } from "../src/constants/RoomLayout.ts";
 
 function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
 	return {
@@ -57,47 +66,222 @@ function teamCount(deck: Role[], team: Team): number {
 	return deck.filter(role => ROLE_DEFS[role].team === team).length;
 }
 
+/**
+ * 지원하는 모든 인원수. 4..8을 손으로 적어둔 루프가 여섯 개 있었고,
+ * MAX_PLAYERS를 8에서 12로 올릴 때 그 여섯 개가 전부 8에 머물러 있었다 —
+ * 늘어난 인원수는 아무 테스트도 통과하지 않은 채 배포됐을 수 있었다.
+ */
+const EVERY_COUNT: number[] = [];
+for (let count = MIN_PLAYERS; count <= MAX_PLAYERS; count++) EVERY_COUNT.push(count);
+
+/**
+ * isInsideRoom이 참인 사각형. 좌석에서 사방으로 걸어 나가며 알아낸다.
+ *
+ * 상자를 만드는 값(ROOM_BOX_MARGIN, 좌석 경계)은 RoomLayout 안에 있고 밖으로
+ * 내보내지 않는다 — 계산이 한 곳에만 있어야 하기 때문이다. 그래서 테스트도
+ * 그 값을 다시 적지 않고 판정 함수에게 직접 물어본다. 상자 계산식을 바꿔도
+ * 이 검사는 그대로 유효하다.
+ *
+ * 200칸에서 멈추는 것은 무한 루프 방지다. 판정이 늘 참이 되는 버그가 나면
+ * 상자가 서로 겹쳐서 아래 검사가 잡는다.
+ */
+function roomBox(roomNum: number): {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+} {
+	const seatOne = seatPosition(roomNum, 1);
+	assert.ok(seatOne, `${roomNum}번 방에 1번 자리가 없다`);
+	const { x, y } = seatOne;
+	const reach = (stepX: number, stepY: number): number => {
+		let steps = 0;
+		while (steps < 200 && isInsideRoom(roomNum, x + stepX * (steps + 1), y + stepY * (steps + 1))) {
+			steps++;
+		}
+		return steps;
+	};
+	return {
+		minX: x - reach(-1, 0),
+		maxX: x + reach(1, 0),
+		minY: y - reach(0, -1),
+		maxY: y + reach(0, 1),
+	};
+}
+
 describe("RoleAssignment", () => {
 	it("인원수만큼 직업을 배분한다", () => {
-		for (let count = 4; count <= 8; count++) {
+		for (const count of EVERY_COUNT) {
 			assert.equal(buildRoleDeck(count).length, count);
 		}
 	});
 
-	it("4명은 마피아 진영 1, 8명은 2", () => {
-		const rng = () => 0; // 결정적으로: shuffle이 순서만 바꾸고 구성은 유지한다
+	it("마피아 진영 인원이 mafiaCount와 정확히 같다", () => {
 		// 직업이 아니라 진영으로 센다. 두 번째 마피아 자리는 건달이나 짐승인간이
 		// 뽑힐 수 있고, 그래도 마피아 진영이 둘이라는 사실은 달라지지 않는다.
-		assert.equal(teamCount(buildRoleDeck(4, rng), Team.MAFIA), 1);
-		assert.equal(teamCount(buildRoleDeck(8, rng), Team.MAFIA), 2);
-	});
-
-	it("마피아 리더는 항상 한 명 들어간다", () => {
-		// 마피아 채팅을 여는 직업이 하나도 없는 판이 나오면 안 된다
-		for (let count = 4; count <= 8; count++) {
-			const deck = buildRoleDeck(count, () => 0);
-			assert.equal(deck.filter(role => role === Role.MAFIA).length, 1, `${count}명`);
+		//
+		// "4명은 1, 8명은 2"만 보던 시절에는 두 숫자가 맞는지만 알 수 있었다.
+		// 지금 보는 것은 배분이 mafiaCount의 약속을 지키는가다 — 풀이 인원을
+		// 다 공급하지 못하면 draw가 조용히 덜 뽑고 남은 자리가 시민으로 채워져
+		// 마피아가 약속보다 적은 판이 나온다. 정원을 더 올릴 때 여기서 걸린다.
+		for (const count of EVERY_COUNT) {
+			for (let trial = 0; trial < 50; trial++) {
+				assert.equal(
+					teamCount(buildRoleDeck(count), Team.MAFIA),
+					mafiaCount(count),
+					`${count}명`,
+				);
+			}
 		}
 	});
 
-	it("능력자를 다 채우고 남은 자리는 시민", () => {
-		const deck = buildRoleDeck(10, () => 0);
-		assert.equal(deck.filter(role => role === Role.CITIZEN).length, 3);
+	it("인원이 늘수록 마피아가 줄지는 않는다", () => {
+		// 비율에서 반올림하므로 문턱이 어디인지는 상수가 아니라 계산이 정한다.
+		// 그 계산이 뒤집히지 않는다는 것만 못 박는다 — 4~5명 1, 6~9명 2, 10명부터 3.
+		for (const count of EVERY_COUNT) {
+			assert.ok(mafiaCount(count) >= mafiaCount(count - 1), `${count}명에서 줄었다`);
+			assert.ok(mafiaCount(count) < count / 2, `${count}명에서 마피아가 절반 이상이다`);
+		}
 	});
 
-	it("직업은 중복되지 않는다", () => {
-		// 풀에서 뽑기 때문에 같은 특수 직업이 두 번 나오면 안 된다.
-		// 평범한 시민만 여럿일 수 있다.
-		const deck = buildRoleDeck(8, () => 0).filter(role => role !== Role.CITIZEN);
-		assert.equal(new Set(deck).size, deck.length);
+	it("마피아 채팅을 여는 직업이 최소 한 명 들어간다", () => {
+		// 이 테스트는 원래 "정확히 한 명"을 봤고, rng를 () => 0으로 고정해 두어
+		// 통과했다. 실제로는 MAFIA_POOL에 Role.MAFIA가 다시 들어 있어서
+		// (능력 없는 공범도 마피아 자리의 한 갈래다) 둘이 나오는 판이 있다.
+		// 지켜야 하는 것은 "정확히 하나"가 아니라 "하나도 없는 판은 없다"다 —
+		// 마피아 채팅을 여는 직업이 0이면 마피아가 밤에 아무것도 못 한다.
+		for (const count of EVERY_COUNT) {
+			for (let trial = 0; trial < 50; trial++) {
+				const deck = buildRoleDeck(count);
+				assert.ok(deck.includes(Role.MAFIA), `${count}명 [${deck.join(", ")}]`);
+			}
+		}
 	});
 
-	it("의사와 경찰은 항상 들어간다", () => {
-		// 정보도 방어도 없는 판은 시민이 이길 방법이 없다
-		for (let count = 4; count <= 8; count++) {
-			const deck = buildRoleDeck(count, () => 0);
-			assert.ok(deck.includes(Role.DOCTOR), `${count}명에 의사가 없다`);
-			assert.ok(deck.includes(Role.POLICE), `${count}명에 경찰이 없다`);
+	it("평범한 시민이 최소 한 명은 있다", () => {
+		// 4명 판은 마피아·의사·경찰이 확정이라 남는 자리가 하나였고, 비율
+		// 0.5의 반올림이 그 하나까지 능력자로 채워서 평범한 시민이 0명이었다.
+		// 전원이 "나는 무엇을 할 수 있다"를 말할 수 있는 판에서는 마피아가
+		// 숨을 곳이 없다 — 비율이 뜻한 것과 정반대의 결과였다.
+		for (const count of EVERY_COUNT) {
+			for (let trial = 0; trial < 50; trial++) {
+				const deck = buildRoleDeck(count);
+				assert.ok(
+					deck.filter(role => role === Role.CITIZEN).length >= MIN_PLAIN_CITIZENS,
+					`${count}명 [${deck.join(", ")}]`,
+				);
+			}
+		}
+	});
+
+	it("능력이 있는 직업은 중복되지 않는다", () => {
+		// 풀에서 중복 없이 뽑기 때문에 같은 능력이 두 벌 나오면 안 된다.
+		// 의사가 둘이면 밤마다 두 명이 살아나고, 경찰이 둘이면 정보가 두 배다.
+		//
+		// 여럿일 수 있는 둘은 능력이 없는 직업이다 — 평범한 시민과, 밀담에서
+		// 표적만 고르는 공범(Role.MAFIA). 이 둘은 인원이 늘어난 자리를 채우는
+		// 몫이라 개수가 인원에 따라 변한다.
+		const MAY_REPEAT: Role[] = [Role.CITIZEN, Role.MAFIA];
+		for (const count of EVERY_COUNT) {
+			for (let trial = 0; trial < 50; trial++) {
+				const deck = buildRoleDeck(count).filter(role => !MAY_REPEAT.includes(role));
+				assert.equal(new Set(deck).size, deck.length, `${count}명 [${deck.join(", ")}]`);
+			}
+		}
+	});
+
+	it("정보 직업은 최소 하나, 자리가 되면 의사와 경찰 둘 다 들어간다", () => {
+		// 정보도 방어도 없는 판은 시민이 이길 방법이 없다.
+		//
+		// 4명 판만 예외다. 시민 자리가 셋뿐이라 평범한 시민 1 + 추첨 능력자 1을
+		// 남기면 정보 직업 자리가 하나다. 셋 중 무엇을 포기할지의 문제이고,
+		// 정보원이 하나여도 토론은 근거를 갖는 반면 나머지 둘이 비면 판의
+		// 성격 자체가 사라지므로 여기를 줄였다. 어느 쪽이 남는지는 판마다 다르다.
+		for (const count of EVERY_COUNT) {
+			for (let trial = 0; trial < 50; trial++) {
+				const deck = buildRoleDeck(count);
+				const info = deck.filter(role => role === Role.DOCTOR || role === Role.POLICE);
+				if (count - mafiaCount(count) - MIN_PLAIN_CITIZENS - MIN_SPECIAL_CITIZENS >= 2) {
+					assert.ok(deck.includes(Role.DOCTOR), `${count}명에 의사가 없다`);
+					assert.ok(deck.includes(Role.POLICE), `${count}명에 경찰이 없다`);
+				} else {
+					assert.equal(info.length, 1, `${count}명 [${deck.join(", ")}]`);
+				}
+			}
+		}
+	});
+
+	it("정보 직업이 하나로 잘릴 때 남는 쪽이 고정되지 않는다", () => {
+		// 앞에서부터 자르면(slice) 4명 판에 경찰이 영원히 나오지 않는다.
+		// 직업을 12개 만들어 두고 최소 인원 판에서는 그중 하나가 사장되는 셈이다.
+		const survivors = new Set<Role>();
+		for (let trial = 0; trial < 200; trial++) {
+			for (const role of buildRoleDeck(MIN_PLAYERS)) {
+				if (role === Role.DOCTOR || role === Role.POLICE) survivors.add(role);
+			}
+		}
+		assert.equal(survivors.size, 2, `${MIN_PLAYERS}명 판에 ${[...survivors].join(", ")}만 나온다`);
+	});
+
+	it("모든 참가 번호가 앉을 자리를 갖는다", () => {
+		// 좌석 좌표는 8개짜리 배열이고 정원만 12로 올린 적이 있다. 그때
+		// seatPosition이 null을 돌려주고 Stage.seatPlayer가 배치를 조용히
+		// 건너뛰어서, 게임은 시작되는데 9번째부터는 방 밖에 서 있었다.
+		for (let roomNum = 1; roomNum <= ROOM_COUNT; roomNum++) {
+			for (let index = 1; index <= MAX_PLAYERS; index++) {
+				assert.ok(seatPosition(roomNum, index), `${roomNum}번 방 ${index}번 자리가 없다`);
+			}
+		}
+	});
+
+	it("좌석은 서로 겹치지 않는다", () => {
+		// 두 사람이 같은 타일에 서면 한 명은 상대에게 가려 보이지 않는다.
+		const taken = new Set<string>();
+		for (let index = 1; index <= MAX_PLAYERS; index++) {
+			const at = seatPosition(1, index);
+			const key = `${at?.x},${at?.y}`;
+			assert.ok(!taken.has(key), `${index}번 자리가 ${key}에서 겹친다`);
+			taken.add(key);
+		}
+	});
+
+	it("모든 좌석은 자기 방 상자 안이다", () => {
+		// 상자가 좌석보다 좁으면 앉아 있는 사람이 "방 밖"으로 판정되고
+		// (Stage.inOwnRoomArea) 방 채팅 말풍선이 통째로 사라진다.
+		// 오류도 로그도 남지 않아서, 눈으로 보기 전에는 아무도 모른다.
+		for (let roomNum = 1; roomNum <= ROOM_COUNT; roomNum++) {
+			for (let index = 1; index <= MAX_PLAYERS; index++) {
+				const at = seatPosition(roomNum, index);
+				assert.ok(at);
+				assert.ok(
+					isInsideRoom(roomNum, at.x, at.y),
+					`${roomNum}번 방 ${index}번 자리(${at.x}, ${at.y})가 상자 밖이다`
+				);
+			}
+		}
+	});
+
+	it("방 상자는 서로 겹치지 않는다", () => {
+		/*
+		 * 상자는 "이 좌표를 어느 방으로 볼 것인가"를 정한다(isInsideRoom).
+		 * 두 방의 상자가 겹치면 그 칸에 선 사람은 두 방 어느 쪽의 방 채팅이든
+		 * 말풍선으로 내보낼 수 있게 되고, 자기 방이 아닌 방 사람들 화면에
+		 * 남의 토론이 뜬다.
+		 *
+		 * ROOM_BOX_MARGIN을 키우거나 ROOM_ORIGINS를 옮길 때 조용히 무너지는
+		 * 조건이다 — 상자 계산이 파일 안에 갇혀 있어 컴파일러가 잡아주지 않는다.
+		 */
+		for (let a = 1; a <= ROOM_COUNT; a++) {
+			for (let b = a + 1; b <= ROOM_COUNT; b++) {
+				const one = roomBox(a);
+				const other = roomBox(b);
+				const overlaps =
+					one.minX <= other.maxX &&
+					other.minX <= one.maxX &&
+					one.minY <= other.maxY &&
+					other.minY <= one.maxY;
+				assert.ok(!overlaps, `${a}번 방과 ${b}번 방의 상자가 겹친다`);
+			}
 		}
 	});
 
@@ -388,6 +572,30 @@ describe("NightResolution - 정산", () => {
 		assert.equal(soldier.armored, true, "방탄이 헛되이 소모됐다");
 	});
 
+	/*
+	 * 밤 진행률의 분모("3명 중 1명")는 밤이 시작될 때 정해져야 한다.
+	 * 지목하는 순간 그 사람이 분모에서도 빠지면 1/3이 아니라 0/2가 되고,
+	 * 막대가 앞으로 가는 대신 제자리이거나 뒤로 간다.
+	 */
+	it("차례 판정은 이번 밤에 이미 썼는지를 보지 않는다", () => {
+		const doctor = seat(1, Role.DOCTOR, { usedSkill: true });
+		assert.equal(hasNightTurn(doctor, 1), true);
+		assert.equal(nightActionBlockedReason(doctor, 1), "이미 대상을 선택했습니다.");
+	});
+
+	it("1회성 능력자는 쓴 그 밤까지만 차례에 남는다", () => {
+		// 자경단원은 쏘는 순간 usedSkill·skillSpent가 함께 켜진다. 둘을 구분하지
+		// 않으면 쏜 사람이 그 밤의 분모에서 사라진다
+		const tonight = seat(1, Role.VIGILANTE, { usedSkill: true, skillSpent: true });
+		assert.equal(hasNightTurn(tonight, 1), true);
+		assert.equal(nightActionBlockedReason(tonight, 1), "이미 대상을 선택했습니다.");
+
+		// 다음 밤에는 usedSkill이 초기화되고(resetRound) 차례 자체가 없어진다
+		const later = seat(1, Role.VIGILANTE, { skillSpent: true });
+		assert.equal(hasNightTurn(later, 2), false);
+		assert.match(nightActionBlockedReason(later, 2)!, /게임당 한 번/);
+	});
+
 	it("자경단원이 시민을 죽이면 자신도 죽는다", () => {
 		const vigilante = seat(1, Role.VIGILANTE);
 		const casualties = resolveNightCasualties([
@@ -528,6 +736,20 @@ describe("ROLE_DEFS", () => {
 		// 위젯은 이름만 보여준다. 겹치면 플레이어가 구분할 방법이 없다
 		const names = roles.map(role => ROLE_DEFS[role].displayName);
 		assert.equal(new Set(names).size, names.length);
+	});
+
+	it("배신하는 직업은 시민으로 시작해 마피아 채팅에 들어간다", () => {
+		// defectsToMafia는 "찾아내면 그 편이 된다"는 규칙이다. 마피아로 시작하면
+		// 옮길 진영이 없고, 옮긴 뒤 낄 채팅이 없으면 합류가 화면에 나타나지 않는다.
+		// needsPriorDay가 필수인 이유는 밸런스다 — 첫 밤 배신은 승패 마진을 2
+		// 깎아(마피아 +1, 시민 -1) 최소 인원 판을 첫 아침 전에 끝냈다.
+		for (const role of roles) {
+			const def = ROLE_DEFS[role];
+			if (!def.defectsToMafia) continue;
+			assert.equal(def.team, Team.CITIZEN, `${role}은 이미 마피아인데 배신한다`);
+			assert.equal(def.nightChat, ChatChannel.MAFIA, `${role}이 합류해도 낄 채팅이 없다`);
+			assert.ok(def.needsPriorDay, `${role}이 첫 밤에 진영을 옮길 수 있다`);
+		}
 	});
 
 	it("마피아 팀인데 채팅이 없는 직업은 혼자라는 안내를 받는다", () => {

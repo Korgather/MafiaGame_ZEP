@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>프로필</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 프로필 창 — 맵에서 사람을 클릭하면 뜬다.
+			 *
+			 * ZEP 기본 프로필 창(showProfileOnUnitClick)을 끄고 이것으로 갈아탔다.
+			 * 기본 창은 ZEP 계정을 말하는데, 마피아 게임에서 남을 클릭하는 사람이
+			 * 알고 싶은 것은 "이 사람이 몇 판 해봤고 판을 자주 깨는가"다.
+			 *
+			 * 화면에 없는 것: 직업·진영. 이 창은 클릭 한 번으로 열리므로 여기에
+			 * 직업이 실리면 게임이 끝난다. payload에 그 칸 자체가 없다
+			 * (Widgets.ProfilePayload) — 위젯이 실수로 그릴 수 있는 것을
+			 * 서버가 애초에 보내지 않는 쪽이 안전하다.
+			 *
+			 * 전적을 표로 만드는 규칙도 여기 없다. 라벨과 값의 목록을 그대로
+			 * 받아 줄로 찍는다(Profile.statsOf가 무엇이 전적인지 안다).
+			 */
+
+			/* ---------- 아바타 + 이름 ---------- */
+			.who {
+				display: flex;
+				align-items: center;
+				gap: var(--s3);
+				flex: 0 0 auto;
+			}
+
+			/*
+			 * 구운 아바타(baked-avartar-images)는 얼굴이 가운데 오는 그림이라
+			 * 원형으로 잘라도 머리가 잘리지 않는다. cover로 채우는 이유는
+			 * contain으로 두면 그림 비율에 따라 원 안에 빈 띠가 생기기 때문이다.
+			 */
+			.face {
+				display: grid;
+				place-items: center;
+				flex: 0 0 auto;
+				width: 64px;
+				height: 64px;
+				font-size: var(--t-2xl);
+				line-height: 1;
+				background: var(--surface-2);
+				border: 2px solid var(--line);
+				border-radius: 50%;
+				overflow: hidden;
+			}
+
+			.face img {
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+			}
+
+			.nick {
+				font-size: var(--t-lg);
+				font-weight: 800;
+				letter-spacing: -0.01em;
+			}
+
+			/* ---------- 전적 ---------- */
+			.stats {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s1);
+			}
+
+			/*
+			 * 왼쪽에 이름, 오른쪽에 값. 채팅의 표(.msg.card .row)와 같은 문법인데
+			 * 그쪽을 그대로 쓰지 않은 이유는 저것이 말풍선 안에서 사는 줄이라
+			 * 글씨가 한 단 작고 배경이 없다는 것이다 — 이 화면에서는 전적이
+			 * 곁가지가 아니라 본문이다.
+			 */
+			.stat {
+				display: flex;
+				align-items: baseline;
+				justify-content: space-between;
+				gap: var(--s3);
+				padding: var(--s2) var(--s3);
+				background: var(--surface-2);
+				border-radius: var(--r1);
+			}
+
+			.stat .k {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+			}
+
+			/* 게스트 안내처럼 값이 문장인 경우가 있어 줄바꿈을 허용한다 */
+			.stat .v {
+				font-size: var(--t-sm);
+				font-weight: 700;
+				text-align: right;
+				word-break: keep-all;
+				font-variant-numeric: tabular-nums;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel">
+			<div class="hd">
+				<div class="hd-title grow"><span id="heading">프로필</span></div>
+				<span class="hd-sub" id="where"></span>
+			</div>
+
+			<div class="body">
+				<div class="who">
+					<!-- 그림은 장식이다. 닉네임이 바로 옆에 글자로 있다 -->
+					<div class="face" aria-hidden="true">
+						<span id="glyph">🙂</span>
+						<img class="hidden" id="photo" alt="" />
+					</div>
+					<div class="grow">
+						<div class="nick ellip" id="nick"></div>
+						<span class="chip" id="rank"></span>
+					</div>
+				</div>
+
+				<div class="stats scroll" id="stats"></div>
+			</div>
+
+			<div class="foot">
+				<button class="btn ghost grow" id="close" type="button">닫기</button>
+			</div>
+		</div>
+
+		<!--@shared-->
+		<script>
+			/**
+			 * 아바타 그림을 건다. 빈 문자열이면 글리프로 대신한다.
+			 *
+			 * 두 가지 이유로 그림이 없을 수 있다 — 서버가 avatarFileName을 못 읽은
+			 * 경우(비공개 API다)와, 파일명은 왔지만 그 그림이 CDN에 없는 경우다.
+			 * 둘째는 onerror로만 알 수 있고, 그대로 두면 깨진 이미지 칸이 남는다.
+			 */
+			function showFace(url) {
+				const on = url.length > 0;
+				const photo = qs("#photo");
+				photo.classList.toggle("hidden", !on);
+				qs("#glyph").classList.toggle("hidden", on);
+				if (!on) return;
+				photo.onerror = () => showFace("");
+				photo.src = url;
+			}
+
+			qs("#close").addEventListener("click", () => {
+				Parent.send({ type: "close" });
+			});
+
+			Parent.on({
+				init(data) {
+					// 자기 자신을 클릭하는 일이 실제로 흔하다(아바타가 겹쳐 있을 때).
+					// 머리말이 갈리지 않으면 남의 전적을 자기 것으로 읽는다
+					qs("#heading").textContent = data.self ? "내 프로필" : "프로필";
+					qs("#where").textContent = data.where || "";
+					qs("#nick").textContent = data.name || "";
+					qs("#rank").textContent = data.rank || "";
+					showFace(data.avatar || "");
+
+					const stats = data.stats || [];
+					let out = "";
+					for (let i = 0; i < stats.length; i++) {
+						out += html`<div class="stat">
+							<span class="k">${stats[i].label}</span>
+							<span class="v">${stats[i].value}</span>
+						</div>`;
+					}
+					qs("#stats").innerHTML = out;
+				},
+			});
+		</script>
+	</body>
+</html>

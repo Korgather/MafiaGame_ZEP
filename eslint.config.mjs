@@ -49,6 +49,17 @@ export default [
 					message:
 						"ZEP(Jint) API에 undefined를 인자로 넘기면 오버로드를 찾지 못합니다. 인자를 아예 생략하도록 호출을 분기하세요.",
 				},
+				// 위젯 메시지는 클라이언트에서 온다. 핸들러가 던지면 예외가 ZEP
+				// 이벤트 콜백을 타고 올라가 그 프레임이 통째로 사라진다 — 조작된
+				// 메시지 하나로 방 8개를 함께 세울 수 있다는 뜻이다.
+				// Widgets.bindMessage가 등록 지점에서 격리와 관측을 한 번에 붙이므로,
+				// 새 위젯을 붙이는 사람이 그 관문을 기억하지 않아도 되게 막는다.
+				{
+					selector:
+						"CallExpression[callee.object.property.name='onMessage'][callee.property.name='Add']",
+					message:
+						"widget.onMessage.Add를 직접 부르지 마세요. Widgets.bindMessage(widget, scope, handler)를 쓰면 예외 격리와 스태프 알림이 함께 붙습니다.",
+					},
 			],
 
 			// ZEP(Jint) 런타임에 존재하지 않는 전역. 원본 코드가 실제로

@@ -8,22 +8,57 @@
  * sendMessage를 호출했다.
  */
 import type { ScriptPlayer, ScriptWidget, WidgetAlign } from "zep-script";
+import type { CutTone, Seat, Team } from "../types/Game.types.ts";
 import type {
 	CardView,
 	ChatChannelView,
 	LobbySeatView,
+	ProfileStat,
 	RevealView,
-	Seat,
 	SeatView,
-	Team,
 	WidgetLayout,
-} from "../types/Game.types.ts";
+} from "../types/Widget.types.ts";
 import { roleName } from "../domain/Roles.ts";
+import type { ZepAudience } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { WidgetBox } from "../constants/Assets.ts";
-import { MAIN_TIGHT, MobileWidth, TopNudge, WidgetFile, WidgetSize } from "../constants/Assets.ts";
-import { KICK, MAX_PLAYERS, MIN_PLAYERS } from "../constants/GameConfig.ts";
+import {
+	MAIN_TIGHT,
+	MobileWidth,
+	OVERLAY_Z,
+	TopNudge,
+	WidgetFile,
+	WidgetSize,
+} from "../constants/Assets.ts";
+import { MAX_PLAYERS, MIN_PLAYERS } from "../constants/GameConfig.ts";
+import { kickVotesNeeded } from "../entities/Room.ts";
+import { guard } from "../infrastructure/Fault.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
+
+/**
+ * 위젯 메시지 핸들러를 등록한다. `.onMessage.Add`를 직접 부르는 곳은 여기뿐이다.
+ *
+ * 왜 관문을 하나 두는가: 위젯은 클라이언트에서 도는 코드라 서버가 보낸 적
+ * 없는 값이 올 수 있고, 핸들러가 던지면 그 예외는 ZEP 이벤트 콜백을 타고
+ * 위로 올라간다. 한 사람의 조작된 메시지 하나가 그 프레임 전체를 세우는
+ * 셈이라, 여섯 개 핸들러가 각자 방어하는 대신 등록 지점에서 한 번 감싼다.
+ *
+ * eslint의 no-restricted-syntax가 이 파일 밖에서 `.onMessage.Add`를 막는다.
+ * 새 위젯을 붙이는 사람이 이 관문을 기억하지 않아도 되게 하기 위해서다 —
+ * 규칙을 문서에 적어두는 것과 컴파일 단계에서 막는 것은 다른 일이다.
+ */
+export function bindMessage(
+	widget: ScriptWidget,
+	scope: string,
+	handler: (sender: ScriptPlayer, data: unknown) => void,
+): void {
+	// 관문 자체는 등록해야 한다. 파일 단위로 규칙을 끄면 같은 규칙에 들어 있는
+	// undefined 인자 검사까지 함께 꺼지므로 이 한 줄만 예외로 둔다.
+	// eslint-disable-next-line no-restricted-syntax
+	widget.onMessage.Add((sender, data) => {
+		guard(`위젯 ${scope}`, () => handler(sender, data));
+	});
+}
 
 /** 화면 위쪽 고정 위젯의 정렬. 모바일은 가로 폭이 좁아 중앙 상단을 쓴다 */
 function topAlign(player: ScriptPlayer): "top" | "topright" {
@@ -53,6 +88,13 @@ function layoutOf(
 	size: WidgetBox,
 	tight: boolean
 ): WidgetLayout {
+	// 덮는 위젯은 기기도 채팅 상태도 보지 않는다. 화면 전체가 곧 크기다.
+	// 이 분기가 여기 있는 이유는 "크기를 정하는 곳은 하나"라는 이 함수의
+	// 약속 때문이다 — 부르는 쪽에서 layout을 손수 지으면 그 약속이 깨진다.
+	if (size.fill) {
+		return { anchor: align, width: "100%", height: "100%", zIndex: OVERLAY_Z };
+	}
+
 	const mobile = player.isMobile;
 	const tablet = mobile && player.isTablet;
 	const percent = size.mobile ? Math.round(size.mobile * (tight ? MAIN_TIGHT : 1)) : 0;
@@ -332,6 +374,56 @@ export interface ChatPayload {
 	focus: ChatFocus;
 }
 
+/**
+ * 단계 전환 컷.
+ *
+ * 카드와 같은 겹치는 위젯이지만 자리는 따로다(tag.cutWidget). 한 자리를
+ * 나눠 쓰면 "밤이 되는 컷이 도는 동안 직업 도감을 열어 둔 사람"에서 둘 중
+ * 하나가 조용히 사라진다 — 어느 쪽이 사라져도 잘못이다.
+ */
+export interface CutPayload {
+	type: "init";
+	title: string;
+	/** 한 줄씩 차례로 떠오른다. 비어 있으면 제목만 */
+	lines: string[];
+	tone: CutTone;
+	/**
+	 * 연출 길이(ms).
+	 *
+	 * 위젯이 스스로 정하지 않는다. 컷을 닫는 것은 서버(Cut.ts의 advanceCut)라
+	 * 양쪽이 각자 계산하면 어긋난 만큼 빈 화면이 남거나 마지막 줄이 잘린다.
+	 */
+	ms: number;
+}
+
+/**
+ * 사람을 클릭했을 때 뜨는 프로필 창.
+ *
+ * 직업·진영은 절대 들어가지 않는다. 이 창은 "남을 클릭한다"로 열리므로
+ * 여기에 직업이 실리면 게임이 끝난다. 그래서 payload에 role 자리를 아예
+ * 두지 않았다 — 나중에 누가 실수로 채울 수 있는 칸을 만들지 않는 것이
+ * 주석으로 금지하는 것보다 확실하다.
+ */
+export interface ProfilePayload {
+	type: "init";
+	name: string;
+	/** 등급 한 줄 (Rewards.rankOf) */
+	rank: string;
+	/**
+	 * 아바타 이미지 URL. 빈 문자열이면 위젯이 글리프로 대신한다.
+	 *
+	 * 위젯이 아니라 서버가 URL을 조립한다. 외부 호스트 문자열이 위젯 HTML에
+	 * 있으면 빌드가 막는다(tools/build-widgets.js의 EXTERNAL) — 위젯이 스스로
+	 * 어딘가로 요청을 보내기 시작하는 것을 그 검사가 지키고 있다.
+	 */
+	avatar: string;
+	/** 지금 어디에 있는가. "3번 방 (진행 중)" / "대기실" */
+	where: string;
+	stats: ProfileStat[];
+	/** 자기 자신을 클릭했는가. 머리말이 갈린다 */
+	self: boolean;
+}
+
 /** 채널 목록·빠른 메시지만 다시 보낸다. 단계가 바뀌거나 죽었을 때 */
 export interface ChatChannelsPayload {
 	type: "channels";
@@ -347,6 +439,28 @@ export interface ChatLinePayload {
 	channels: ChatChannelView[];
 }
 
+/**
+ * 방금 한 말을 ZEP 기본 채팅으로도 내보내라는 지시. 보낸 사람에게만 간다.
+ *
+ * 말풍선은 말한 사람의 클라이언트가 자기 아바타 위에 띄우는 것이라, 서버가
+ * 대신 띄워줄 수 없다. 그래서 발언은 서버까지 갔다가 허가와 함께 되돌아온다.
+ *
+ * 위젯이 보내는 김에 바로 띄우면 왕복 한 번을 아낄 수 있지만, 그러면 발언
+ * 권한을 아는 곳이 서버와 위젯 둘이 된다. 둘이 어긋나는 순간(밤이 되기
+ * 직전, 협박당한 직후, 죽은 직후)에 서버가 버린 말이 말풍선으로는 뜬다.
+ */
+export interface ChatSayPayload {
+	type: "say";
+	text: string;
+	/**
+	 * 이 말이 닿아도 되는 범위. 위젯이 그대로 chatAreaType으로 쓴다.
+	 *
+	 * 필수 필드인 것이 중요하다. 기본값을 두면 청중을 정하는 것을 잊은 호출이
+	 * 조용히 맵 전체로 나간다 — 방 채팅에는 그것이 곧 사고다. 판단은 전부
+	 * ChatChannel의 zepAudienceFor 안에 있고 여기는 그 답을 옮기는 자리다.
+	 */
+	area: ZepAudience;
+}
 
 /**
  * 이미 열려 있는 메인 위젯을 갱신한다. 없으면 조용히 넘어간다.
@@ -375,6 +489,22 @@ export function closeCard(player: ScriptPlayer): void {
 	}
 }
 
+export function closeCut(player: ScriptPlayer): void {
+	const tag = tagOf(player);
+	if (tag.cutWidget) {
+		tag.cutWidget.destroy();
+		tag.cutWidget = null;
+	}
+}
+
+export function closeProfile(player: ScriptPlayer): void {
+	const tag = tagOf(player);
+	if (tag.profileWidget) {
+		tag.profileWidget.destroy();
+		tag.profileWidget = null;
+	}
+}
+
 export function closeChat(player: ScriptPlayer): void {
 	const tag = tagOf(player);
 	if (tag.chatWidget) {
@@ -386,7 +516,7 @@ export function closeChat(player: ScriptPlayer): void {
 /** 이미 열려 있는 채팅창에 메시지를 보낸다. 닫혀 있으면 조용히 넘어간다 */
 export function updateChat(
 	player: ScriptPlayer,
-	payload: ChatChannelsPayload | ChatLinePayload
+	payload: ChatChannelsPayload | ChatLinePayload | ChatSayPayload
 ): void {
 	const widget = tagOf(player).chatWidget;
 	if (widget) widget.sendMessage(payload);
@@ -395,10 +525,12 @@ export function updateChat(
 /**
  * 대기실 위젯을 열고 tag.widget에 물린다.
  *
- * 최소·최대 인원과 강퇴 필요 표수를 함께 보낸다. 기존 위젯은 이 값들을
- * 몰라서 "왜 시작하지 않는지", "강퇴에 몇 표가 더 필요한지"를 화면에
- * 쓸 수 없었다. HTML에 4/8/3을 다시 적는 대신 서버가 알려준다 —
- * GameConfig를 바꾸면 화면도 따라 바뀐다.
+ * 최소·최대 인원을 함께 보낸다. 기존 위젯은 이 값들을 몰라서 "왜 시작하지
+ * 않는지"를 화면에 쓸 수 없었다. HTML에 4/12를 다시 적는 대신 서버가
+ * 알려준다 — GameConfig를 바꾸면 화면도 따라 바뀐다.
+ *
+ * 강퇴 필요 표수는 여기서 보내지 않는다. 지금 인원에 따라 달라지는 값이고
+ * 이 시점에는 아직 방이 없다. 좌석 목록과 같은 메시지(pushLobby)에 실린다.
  */
 export function openLobby(player: ScriptPlayer): ScriptWidget {
 	// 방 선택 크기로 연다. 방 안이었다면 곧바로 오는 pushLobby가 늘려준다
@@ -407,7 +539,6 @@ export function openLobby(player: ScriptPlayer): ScriptWidget {
 		id: player.id,
 		minPlayers: MIN_PLAYERS,
 		maxPlayers: MAX_PLAYERS,
-		kickVotes: KICK.VOTES_REQUIRED,
 	});
 }
 
@@ -418,6 +549,10 @@ export function openLobby(player: ScriptPlayer): ScriptWidget {
  * 두 화면을 그리는데 크기는 하나뿐이라, 방 버튼 8개만 있는 화면도
  * 좌석 8줄짜리 높이를 차지한 채 아래 절반이 비어 있었다.
  * 어느 화면인지는 목록이 비었는지로 정해지므로 보내는 쪽이 곧 아는 쪽이다.
+ *
+ * 강퇴 필요 표수도 같이 보낸다. 인원에 따라 변하는 값이라 한 번 보내고 마는
+ * setID에 실을 수 없고, 좌석이 늘거나 줄면 이 메시지가 어차피 다시 오므로
+ * 화면의 "강퇴 2/3"이 항상 판정과 같은 수를 가리킨다.
  */
 export function pushLobby(player: ScriptPlayer, seats: LobbySeatView[]): void {
 	const tag = tagOf(player);
@@ -428,6 +563,7 @@ export function pushLobby(player: ScriptPlayer, seats: LobbySeatView[]): void {
 	tag.widget.sendMessage({
 		type: "init",
 		data: seats,
+		kickVotes: kickVotesNeeded(seats.length),
 		layout: layoutOf(player, align, size, player.isMobile && tag.chatOpen),
 	});
 }
@@ -502,5 +638,50 @@ export function openCard(player: ScriptPlayer, payload: CardPayload): ScriptWidg
 		false
 	);
 	tagOf(player).cardWidget = widget;
+	return widget;
+}
+
+/**
+ * 단계 전환 컷을 연다. 화면을 통째로 덮는 유일한 위젯이다.
+ *
+ * 메인 위젯을 대신하지 않고 그 위에 뜬다. 대신하게 만들면 컷이 끝날 때
+ * 좌석에게는 단계 화면을, 관전자에게는 관전 화면을 각각 다시 열어 줘야 하고
+ * (관전 화면은 여는 함수가 private이라 재바인딩 경로도 없다), 그 재개
+ * 경로가 컷을 하나 추가할 때마다 늘어난다. 겹쳐 두면 끝은 destroy 한 번이다.
+ */
+export function openCut(player: ScriptPlayer, payload: CutPayload): ScriptWidget {
+	closeCut(player);
+	// align은 덮는 위젯에서 뜻이 없지만(layoutOf가 100%로 덮어쓴다)
+	// showWidget이 첫 프레임을 그릴 자리로 쓴다
+	const widget = open(player, WidgetFile.CUT, "middle", WidgetSize.CUT, payload, false);
+	tagOf(player).cutWidget = widget;
+	return widget;
+}
+
+/**
+ * 프로필 창을 연다.
+ *
+ * 먼저 닫는 것이 핵심이다. 이 창은 "클릭"으로 열리므로 사람이 마음대로
+ * 연타할 수 있는 유일한 위젯인데, 닫지 않고 또 열면 위젯 핸들만 갈리고
+ * 이전 위젯은 화면에 남는다 — onMessage 핸들러도 함께 쌓여서 닫기 한 번에
+ * 여러 번 반응한다. 열기 전에 닫으면 그 상태가 구조적으로 생기지 않는다.
+ *
+ * 카드와 자리를 나눠 쓰지 않는다(PlayerTag.profileWidget). 직업 카드를 읽는
+ * 중에 옆 사람을 잘못 눌러 카드가 사라지는 쪽이 더 나쁘다.
+ *
+ * 자리는 카드의 반대편이다. 둘이 함께 떠 있을 수 있는데(도감 + 프로필)
+ * 같은 쪽에 두면 뒤엣것이 완전히 가려진다.
+ */
+export function openProfile(player: ScriptPlayer, payload: ProfilePayload): ScriptWidget {
+	closeProfile(player);
+	const widget = open(
+		player,
+		WidgetFile.PROFILE,
+		player.isMobile ? "middle" : "middleleft",
+		WidgetSize.PROFILE,
+		payload,
+		false
+	);
+	tagOf(player).profileWidget = widget;
 	return widget;
 }

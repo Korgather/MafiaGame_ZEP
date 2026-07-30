@@ -17,9 +17,9 @@ import { Team } from "../types/Game.types.ts";
 import { CONSOLATION_EXP } from "../domain/Progression.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
-import { tagOf } from "../infrastructure/PlayerTag.ts";
 import * as Chat from "./ChatService.ts";
 import { awardExp } from "./Rewards.ts";
+import { applyNameplate } from "./Stage.ts";
 
 export const DeathCause = {
 	/** 낮 투표 처형 */
@@ -88,10 +88,7 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
  * 사망은 좌석 상태만 바꾸고 화면 판단은 하지 않는다.
  */
 function becomeGhost(room: Room, player: ScriptPlayer, seat: Seat): void {
-	const tag = tagOf(player);
-
-	player.title = "유령";
-	player.name = `${tag.originalName}(유령)`;
+	applyNameplate(player, seat);
 	player.sprite = sprite("ghost");
 	player.moveSpeed = 80;
 	player.hidden = false;

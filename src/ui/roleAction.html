@@ -31,6 +31,29 @@
 			.body .grid {
 				align-content: center;
 			}
+
+			/*
+			 * 지목이 확정된 순간.
+			 *
+			 * 테두리 색만 바뀌면 "눌리긴 한 건가"가 남는다 — 서버 왕복이 끼어
+			 * 있어서 누른 시점과 표시가 바뀌는 시점이 붙어 있지 않기 때문이다.
+			 * 한 번 튀어 오르면 그 사이가 메워진다.
+			 */
+			.tile.picked {
+				animation: confirm 320ms var(--ease);
+			}
+
+			@keyframes confirm {
+				40% {
+					transform: scale(1.06);
+				}
+			}
+
+			/* 고르고 난 격자. 고른 타일만 남기고 나머지는 물러난다 */
+			.grid.locked .tile:not(.picked) {
+				opacity: 0.45;
+				filter: grayscale(1);
+			}
 		</style>
 	</head>
 	<body>
@@ -40,8 +63,11 @@
 					<span class="chip" id="myrole">직업</span>
 					<span class="hd-sub ellip" id="prompt"></span>
 				</div>
+				<span class="chip" id="tally"></span>
 				<div class="timer" id="timer"></div>
 			</div>
+
+			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
 
 			<div class="body" id="body">
 				<div class="grid scroll" id="grid" role="group" aria-label="지목 대상"></div>
@@ -95,9 +121,27 @@
 					canPick = seats.length > 0;
 					qs("#grid").innerHTML = html`${seats.map(tile)}`;
 					qs("#grid").classList.toggle("hidden", !canPick);
+					qs("#grid").classList.remove("locked");
 
 					qs("#note").textContent = data.note || "";
 					if (data.timer) startTimer(qs("#timer"), data.timer);
+				},
+
+				/*
+				 * 몇 명이 지목을 마쳤는가. 인원수만 싣는다 — 누가 무엇을 골랐는지가
+				 * 한 글자라도 새면 밤이 밤이 아니게 된다.
+				 *
+				 * 낮의 개표 진행률과 같은 값을 하는데 밤에 더 급하다. 낮에는 채팅이
+				 * 돌아서 아직 안 한 사람이 티가 나지만, 밤에는 아무 신호가 없어
+				 * 전원이 끝난 뒤에도 남은 시간을 끝까지 앉아서 기다렸다.
+				 */
+				progress(data) {
+					const done = Number(data.acted) || 0;
+					const total = Number(data.total) || 0;
+					qs("#progress").style.width = (total > 0 ? (done / total) * 100 : 0) + "%";
+					const tally = qs("#tally");
+					tally.textContent = total > 0 ? `${done}/${total}` : "";
+					tally.setAttribute("aria-label", `${total}명 중 ${done}명 지목 완료`);
 				},
 
 				// 서버가 지목을 받아들였을 때만 표시가 바뀐다. 기존에는 누른 즉시
@@ -110,7 +154,10 @@
 						el.classList.toggle("picked", isPick);
 						if (!isPick) el.disabled = true;
 					}
-					qs("#note").textContent = `${picked}번을 지목했습니다.`;
+					// 격자 전체를 물린다. 비활성 타일만으로는 "내 차례가 끝났다"가
+					// 아니라 "왜 안 눌리지"로 읽힌다
+					qs("#grid").classList.add("locked");
+					qs("#note").textContent = `✔ ${picked}번을 지목했습니다.`;
 				},
 			});
 		</script>

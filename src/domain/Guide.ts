@@ -15,7 +15,7 @@
  * 실제 능력과 어긋나는 일이 생기지 않는다. 설명이 곧 명세다.
  */
 import { Role, Team } from "../types/Game.types.ts";
-import type { CardView } from "../types/Game.types.ts";
+import type { CardView } from "../types/Widget.types.ts";
 import { ROLE_DEFS } from "./Roles.ts";
 
 /**

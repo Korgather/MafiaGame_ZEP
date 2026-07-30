@@ -17,17 +17,16 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { Seat } from "../types/Game.types.ts";
-import { TIMING } from "../constants/GameConfig.ts";
 import { GUIDE_CARDS, cardForRole, roleBook } from "../domain/Guide.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { messageType } from "../types/Widget.types.ts";
 import type { CardPayload } from "./Widgets.ts";
-import { closeCard, openCard } from "./Widgets.ts";
+import { bindMessage, closeCard, openCard } from "./Widgets.ts";
 
 /** 카드를 열고 조작을 받는다. 세 화면이 같은 규칙을 쓰도록 여기만 위젯을 만진다 */
 function show(player: ScriptPlayer, payload: CardPayload): void {
-	openCard(player, payload).onMessage.Add(handleMessage);
+	bindMessage(openCard(player, payload), "card", handleMessage);
 }
 
 function handleMessage(player: ScriptPlayer, data: unknown): void {
@@ -48,13 +47,19 @@ function handleMessage(player: ScriptPlayer, data: unknown): void {
  *
  * 남은 시간 막대를 함께 보낸다 — 카드가 곧 사라진다는 것을 모르면
  * 다 읽기 전에 화면이 바뀌고, 그다음 밤 화면에서 자기 능력을 다시 찾는다.
+ *
+ * 그 시간을 인자로 받는다. 전에는 TIMING.ROLE_REVEAL을 여기서 직접 읽었는데,
+ * 그러면 "이 단계의 길이"와 "화면에 그리는 길이"가 두 곳에서 따로 정해진다.
+ * 실제로 두 가지가 어긋났다 — 공개 도중 재접속하면 남은 5초짜리 단계 위에
+ * 9초를 처음부터 세는 막대가 떴고, 앞에 전환 컷이 붙으면서 단계가 길어지자
+ * 정상 경로에서도 어긋나게 됐다. 남은 시간을 아는 것은 방(room.phaseTimer)뿐이다.
  */
-export function showRoleReveal(player: ScriptPlayer, seat: Seat): void {
+export function showRoleReveal(player: ScriptPlayer, seat: Seat, timer: number): void {
 	show(player, {
 		type: "init",
 		cards: [cardForRole(seat.role)],
 		nav: "none",
-		timer: TIMING.ROLE_REVEAL,
+		timer,
 		bookLink: false,
 	});
 }

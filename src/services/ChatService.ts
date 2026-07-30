@@ -15,6 +15,8 @@
  *   ChatChannel    - 청중이 누구인가 (값)
  *   ChatPermission - 어떤 상황에서 읽고 쓸 수 있는가 (순수 함수 표)
  *   ChatMessage    - 한 줄이 무엇을 담는가 (값 객체)
+ *   ChatFilter     - 걸러야 할 말인가 (순수 함수)
+ *   QuickPhrases   - 지금 내밀 만한 문구는 무엇인가 (순수 함수 + 문구 표)
  *   ChatService    - 만들고 저장하고 배달한다 (여기)
  *   ChatCommands   - "/"로 시작하는 줄을 해석한다 (ChatVoice로만 여기와 닿는다)
  *   chat.html      - 그린다. 직업도 단계도 모른다
@@ -28,7 +30,7 @@
  *   명령어   - ChatCommands의 COMMANDS 표에 한 줄
  *
  * 남은 확장 지점:
- *   이모지·스티커 - 지금은 quickFor()의 빠른 문구가 그 자리를 맡고 있다.
+ *   이모지·스티커 - 지금은 QuickPhrases의 빠른 문구가 그 자리를 맡고 있다.
  *                   그림을 붙이려면 위젯에 격자 하나와 MessageKind 하나,
  *                   그리고 에셋 배포 경로가 함께 필요하다.
  *
@@ -36,9 +38,8 @@
  * API가 없어서, 우리가 쓰지 않을 뿐 화면에서 없앨 수는 없다.
  */
 import type { ScriptPlayer, ScriptWidget } from "zep-script";
-import type { ChatChannelView, PlayerTag, Room } from "../types/Game.types.ts";
-import { GamePhase } from "../types/Game.types.ts";
-import type { ChatMessage, MessageDraft } from "../domain/chat/ChatMessage.ts";
+import type { PlayerTag, Room } from "../types/Game.types.ts";
+import type { ChatMessage, MessageDraft, MessageRow } from "../domain/chat/ChatMessage.ts";
 import {
 	addressedTo,
 	buildMessage,
@@ -46,7 +47,8 @@ import {
 	MessageKind,
 } from "../domain/chat/ChatMessage.ts";
 import { maskProfanity } from "../domain/chat/ChatFilter.ts";
-import { ChatChannel, channelDef, toChannel } from "../domain/chat/ChatChannel.ts";
+import { ChatChannel, channelDef, toChannel, zepAudienceFor } from "../domain/chat/ChatChannel.ts";
+import { quickFor } from "../domain/chat/QuickPhrases.ts";
 import type { ChatContext } from "../domain/chat/ChatPermission.ts";
 import {
 	accessOf,
@@ -59,12 +61,14 @@ import { spend } from "../domain/RateLimit.ts";
 import { locate, locateSpectator } from "../entities/RoomRegistry.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { CHAT_RATE } from "../constants/GameConfig.ts";
+import type { ChatChannelView } from "../types/Widget.types.ts";
 import { asText, field, MAX_CHAT_LENGTH, messageType } from "../types/Widget.types.ts";
 import { forEachAudience, label } from "./Broadcast.ts";
+import { inOwnRoomArea } from "./Stage.ts";
 import type { ChatVoice } from "./ChatCommands.ts";
 import { runCommand } from "./ChatCommands.ts";
 import type { ChatFocus } from "./Widgets.ts";
-import { openChat, squeezeMain, updateChat } from "./Widgets.ts";
+import { bindMessage, openChat, squeezeMain, updateChat } from "./Widgets.ts";
 
 /** 방이 기억하는 줄 수. 한 판이 길어야 밤낮 10턴이라 이 정도면 전부 남는다 */
 const ROOM_LOG_LIMIT = 120;
@@ -222,32 +226,6 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 	});
 }
 
-/**
- * 지금 상황에서 한 번에 보낼 만한 말.
- *
- * 서버가 고르는 이유는 위젯을 단계·직업으로부터 떼어놓기 위해서다.
- * 밤에 마피아에게 "이 사람 칩시다"를 내미는 판단이 위젯에 있으면
- * chat.html이 마피아가 무엇인지 알아야 한다.
- */
-const QUICK_WORLD: string[] = ["안녕하세요", "같이 하실 분?", "ㅋㅋㅋ"];
-const QUICK_LOBBY: string[] = ["준비 완료", "잠깐만요", "한 명만 더!"];
-const QUICK_DAY: string[] = ["투표해주세요", "저는 시민입니다", "의심됩니다", "정보 있어요"];
-const QUICK_VOTE: string[] = ["투표했습니다", "기권합니다", "다시 생각해보죠"];
-const QUICK_MAFIA: string[] = ["이 사람 칩시다", "오늘은 넘기죠", "제가 갈게요"];
-const QUICK_GHOST: string[] = ["누가 죽였는지 봤어요", "억울합니다", "잘 싸웠습니다"];
-const QUICK_NONE: string[] = [];
-
-function quickFor(ctx: ChatContext): string[] {
-	if (!ctx.seated) return QUICK_WORLD;
-	if (!ctx.alive) return QUICK_GHOST;
-	// 밤에 마피아가 아니면 말할 곳 자체가 없다 — 칩을 띄우면 눌러도 아무 일이 없다
-	if (ctx.phase === GamePhase.NIGHT) return ctx.mafiaChat ? QUICK_MAFIA : QUICK_NONE;
-	if (ctx.phase === GamePhase.LOBBY) return QUICK_LOBBY;
-	if (ctx.phase === GamePhase.VOTE || ctx.phase === GamePhase.VOTE_RESULT) return QUICK_VOTE;
-	if (ctx.phase === GamePhase.DAY) return QUICK_DAY;
-	return QUICK_WORLD;
-}
-
 // ────────────────────────────────────────────────────────────── 배달
 
 function deliverTo(player: ScriptPlayer, message: ChatMessage): void {
@@ -293,9 +271,11 @@ export function say(room: Room, text: string): void {
  * say와 나눈 이유는 "게임 이벤트 로그"를 따로 뽑기 위해서다. 안내와 사건이
  * 같은 종류였다면 나중에 이벤트만 모아 보여주려 할 때 문자열을 파싱하는
  * 수밖에 없다. 지금은 kind로 거르면 된다.
+ *
+ * rows를 주면 text는 본문이 아니라 그 표의 제목이 된다 (MessageRow 참고).
  */
-export function announce(room: Room, text: string): void {
-	post(room, { channel: ChatChannel.ROOM, kind: MessageKind.EVENT, text });
+export function announce(room: Room, text: string, rows?: MessageRow[]): void {
+	post(room, { channel: ChatChannel.ROOM, kind: MessageKind.EVENT, text, rows });
 }
 
 /** 마피아·유령처럼 특정 채널 안에서만 보이는 안내 */
@@ -314,21 +294,37 @@ export function worldNotice(text: string): void {
 }
 
 /**
- * 한 사람에게만 보이는 안내.
+ * 이 사람 앞으로만 가는 줄을 어느 탭에 놓을지 정한다.
  *
- * 지금 보고 있는 탭에 띄운다. 밤에 마피아 탭을 보고 있는데 개인 안내가
- * 방 탭에 쌓이면 읽으라고 보낸 문장을 못 읽는다. 귓속말도 같은 경로다 —
- * to를 상대 id로 바꾸기만 하면 된다.
+ * 지금 보고 있는 탭이 기본이다. 밤에 마피아 탭을 보고 있는데 개인 안내가
+ * 방 탭에 쌓이면 읽으라고 보낸 문장을 못 읽는다 — 안 읽음 표시만 뜨고
+ * 정작 글은 눈앞에 없는 상태가 된다. 지금 탭을 읽을 권한이 없으면
+ * (관전자가 마피아 탭을 켜둔 채 좌석을 잃은 경우 등) 누구에게나 열려 있는
+ * 전체로 물러선다.
+ *
+ * 방을 함께 돌려주는 이유: GLOBAL이 아닌 채널은 post가 방을 알아야 배달한다.
+ * 채널과 방은 따로 고르면 어긋날 수 있는 한 쌍이라 한자리에서 정한다.
+ * 어긋나지 않는 근거는 권한 표에 있다 — GLOBAL 아닌 채널은 전부
+ * `!ctx.seated`에서 막히므로, 읽을 수 있다면 좌석이 있고 방도 있다.
  */
-export function tell(player: ScriptPlayer, text: string): void {
+function personalTarget(player: ScriptPlayer): { room: Room | null; channel: ChatChannel } {
 	const found = locate(player.id);
 	const tag = tagOf(player);
 	const ctx = contextOf(player.id);
-	const channel = accessOf(ctx, tag.chatChannel).read ? tag.chatChannel : ChatChannel.GLOBAL;
-	post(found ? found.room : null, {
-		channel,
+	return {
+		room: found ? found.room : null,
+		channel: accessOf(ctx, tag.chatChannel).read ? tag.chatChannel : ChatChannel.GLOBAL,
+	};
+}
+
+/** 한 사람에게만 보이는 안내 */
+export function tell(player: ScriptPlayer, text: string, rows?: MessageRow[]): void {
+	const target = personalTarget(player);
+	post(target.room, {
+		channel: target.channel,
 		kind: MessageKind.SYSTEM,
 		text,
+		rows,
 		to: player.id,
 	});
 }
@@ -403,7 +399,7 @@ export function refreshRoom(room: Room): void {
 // ────────────────────────────────────────────────────────────── 위젯이 보내오는 것
 
 function bind(widget: ScriptWidget): void {
-	widget.onMessage.Add((sender, data) => {
+	bindMessage(widget, "chat", (sender, data) => {
 		const type = messageType(data);
 		if (type === "send") submit(sender, data);
 		else if (type === "channel") switchChannel(sender, data);
@@ -460,7 +456,8 @@ function submit(sender: ScriptPlayer, data: unknown): void {
 	if (!accessOf(ctx, channel).write) return;
 
 	const found = locate(sender.id);
-	const reveals = channelDef(channel).revealsRole;
+	const def = channelDef(channel);
+	const reveals = def.revealsRole;
 	post(found ? found.room : null, {
 		channel,
 		kind: MessageKind.USER,
@@ -471,6 +468,23 @@ function submit(sender: ScriptPlayer, data: unknown): void {
 		team: reveals && found ? found.seat.team : "",
 		text,
 	});
+
+	/*
+	 * ZEP 기본 채팅에도 같은 말을 내보낸다 — 아바타 위 말풍선.
+	 *
+	 * 위 accessOf 관문을 지난 뒤라야 한다. 여기가 관문보다 앞에 있으면
+	 * 서버가 버린 발언이 말풍선으로만 뜨고, 죽은 사람이 낮에 말하게 된다.
+	 *
+	 * 실제로 쏘는 것은 보낸 사람의 클라이언트다(native-chat.js의 NativeChat.say).
+	 * 말풍선은 자기 아바타 위에만 띄울 수 있어서 서버가 대신 못 한다.
+	 * 못 쏘는 환경(교차 출처, 클라이언트 내부 구조 변경)에서는 조용히
+	 * 아무 일도 일어나지 않는다 — 채팅 자체는 이미 위에서 배달됐다.
+	 *
+	 * 청중을 고르는 판단은 전부 zepAudienceFor 안에 있다. 여기서는 그 답을
+	 * 그대로 위젯에 넘긴다 — null이면 아무것도 보내지 않는 것이 곧 침묵이다.
+	 */
+	const area = zepAudienceFor(channel, found ? inOwnRoomArea(found.room, sender) : false);
+	if (area) updateChat(sender, { type: "say", text, area });
 }
 
 function switchChannel(sender: ScriptPlayer, data: unknown): void {
@@ -528,8 +542,14 @@ function whisperTo(from: ScriptPlayer, to: ScriptPlayer, body: string): void {
 	// USER로 보내는 것이 핵심이다. 받은 사람이 이 줄을 그대로 /차단·/신고의
 	// 대상으로 삼을 수 있어야 한다 — SYSTEM으로 보내면 senderId가 비어
 	// 귓속말만 아무 제재도 받지 않는 통로가 된다.
-	post(null, {
-		channel: ChatChannel.GLOBAL,
+	//
+	// 놓을 자리는 tell과 같은 personalTarget이 정한다. 여기서 GLOBAL로 못박으면
+	// 방 탭을 보던 사람은 안 읽음 표시만 받고 정작 귓속말은 못 본다. 보내는 쪽
+	// 사본(아래 tell)은 눈앞에 뜨는데 받는 쪽만 안 뜨는, 두 사람이 서로 다른
+	// 화면을 보는 상태가 된다.
+	const target = personalTarget(to);
+	post(target.room, {
+		channel: target.channel,
 		kind: MessageKind.USER,
 		senderId: from.id,
 		name: from.name,

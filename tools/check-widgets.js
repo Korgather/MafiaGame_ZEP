@@ -271,7 +271,132 @@ function makeDocument(source, report) {
 	return doc;
 }
 
-function checkWidget(name) {
+/**
+ * 부모 창(ZEP 클라이언트)의 webpack 내부를 흉내낸다.
+ *
+ * native-chat.js는 공개 API가 없어 클라이언트 번들 안을 뒤져
+ * GameConnection을 찾는다. 그 탐색은 못 찾으면 조용히 접도록 만들어져 있다 —
+ * 말풍선은 덤이고 채팅 자체는 서버로 배달되니까. 대신 깨져도 예외도 로그도
+ * 남지 않아서, 여기서 세지 않으면 기능이 통째로 사라진 것을 아무도 모른다.
+ *
+ * 진짜와 같은 함정을 심는다. 읽는 순간 던지는 export와, 서명이 반쯤 맞는
+ * 가짜다. 둘 다 실제 클라이언트의 성질이다 — GameConnection.send와 instance는
+ * getter이고 연결이 없으면 읽는 즉시 던진다. 그래서 탐색은 값을 읽지 않고
+ * 이름만으로 서명을 확인해야 하고, 하나가 던졌다고 탐색 전체를 포기해도
+ * 안 된다. 함정을 진짜보다 앞에 둔 이유다.
+ *
+ * @param {Array<{type: string, payload: unknown}>} spoken 나간 패킷을 적어 둘 곳
+ * @param {string[]} executed 탐색이 실행시킨, 실행되면 안 되는 모듈들
+ * @param {"cache"|"factories"} mode 런타임이 내주는 길.
+ *   "cache"는 require.c가 있는 빌드(dev), "factories"는 없는 빌드(프로덕션).
+ *   실제로 프로덕션에서 .c가 없어 기능이 조용히 죽었다.
+ */
+function fakeZepClient(spoken, executed, mode) {
+	/*
+	 * 모듈 팩토리들. 클래스 본문이 팩토리 안에 있어야 한다 — 탐색은 팩토리
+	 * 소스에서 서명 이름을 찾아 후보를 좁히므로, 밖에 두면 진짜 번들과 달리
+	 * 소스에 이름이 없어서 사전 필터가 검사되지 않는다.
+	 */
+	const factories = {
+		/*
+		 * 서명과 상관없는 모듈. 소스에 isMigrating이 없으니 탐색이 이 모듈을
+		 * 실행해서는 안 된다 — 아직 실행되지 않은 남의 모듈을 임의로 돌리는
+		 * 것은 부작용이고, 말풍선이 덤이라는 원칙에 어긋난다.
+		 */
+		"1": function irrelevant() {
+			executed.push("1");
+			return { plain: {} };
+		},
+
+		/*
+		 * 서명 이름을 소스에 갖고 있지만 GameConnection은 아닌 모듈.
+		 * PlayLostConnection이 실제로 이렇다 — isMigrating만 읽는다.
+		 * 사전 필터는 통과하므로 여기서 멈추면 안 된다.
+		 */
+		"2": function reader() {
+			class NotConnection {
+				static get instance() {
+					throw new Error("연결이 없습니다");
+				}
+				static get send() {
+					throw new Error("연결이 없습니다");
+				}
+			}
+			NotConnection.isMigrating = false;
+			return { NotConnection, plain: {} };
+		},
+
+		/** 진짜 */
+		"3": function real() {
+			class GameConnection {
+				static get instance() {
+					return {};
+				}
+				static get send() {
+					return (type, payload) => spoken.push({ type, payload });
+				}
+				static connect() {}
+			}
+			GameConnection.isMigrating = false;
+			return { GameConnection };
+		},
+	};
+
+	/** 이미 만들어진 모듈들. require.c에 담기는 것 */
+	const instances = {};
+	const req = id => {
+		if (!(id in instances)) instances[id] = { exports: factories[id]() };
+		return instances[id].exports;
+	};
+	req.m = factories;
+	if (mode === "cache") {
+		// 살아 있는 클라이언트라면 GameConnection은 이미 만들어져 있다.
+		// 1번은 청크만 받고 아직 실행되지 않은 모듈로 남겨 둔다.
+		req("2");
+		req("3");
+		req.c = instances;
+	}
+
+	/*
+	 * 런타임이 아직 붙지 않은 청크 큐. push가 그냥 Array.prototype.push라
+	 * 런타임 콜백이 불리지 않는다. 첫 후보에서 멈추면 이런 빌드에서 실패한다.
+	 */
+	const bare = [];
+
+	const live = [];
+	live.push = chunk => {
+		const ids = chunk && chunk[0];
+		/*
+		 * webpack은 chunkIds.some(id => installedChunks[id] !== 0)이 참일 때만
+		 * 런타임 콜백을 부른다. 빈 배열의 some()은 항상 거짓이라, 청크 ID를
+		 * 비우면 예외도 경고도 없이 아무 일도 일어나지 않는다.
+		 */
+		if (!Array.isArray(ids) || ids.length === 0) return 0;
+		const done = chunk[2];
+		if (typeof done === "function") done(req);
+		return 0;
+	};
+
+	/*
+	 * 전역 이름을 일부러 다르게 준다.
+	 *
+	 * 첫 구현이 webpackChunkzep을 박아 뒀다가 프로덕션(webpackChunk_N_E)에서
+	 * 못 찾았다. 이름은 빌드 설정에서 나오는 값이라 규칙이 아니다 — 검사기가
+	 * 실제 이름을 그대로 쓰면 그 의존이 되살아나도 아무도 모른다.
+	 */
+	return { webpackChunkNothingHere: bare, webpackChunkSomeOtherName: live };
+}
+
+/**
+ * @param {string} name 검사할 위젯 파일 이름
+ * @param {"cache"|"factories"|"none"} client 부모 창에 심어 둘 환경.
+ *   "cache"는 require.c가 있는 빌드, "factories"는 없는 빌드(프로덕션),
+ *   "none"은 클라이언트 내부를 아예 못 찾는 경우다. 셋 다 실제로 일어나고
+ *   지나가는 코드가 서로 다르다. "none"이 실제 스페이스 대부분인데 —
+ *   위젯 iframe은 동일 출처 허용을 켜지 않으면 부모를 못 읽는다 — 그 길이
+ *   조용히 성공해야 채팅창 자체가 멈추지 않는다.
+ */
+function checkWidget(name, client) {
 	const source = fs.readFileSync(path.join(RES, name), "utf8");
 	const problems = [];
 	const report = message => problems.push(message);
@@ -280,6 +405,10 @@ function checkWidget(name) {
 	const listeners = [];
 	/** 부모 문서(게임 화면)에 걸린 keydown 핸들러들 */
 	const parentKeys = [];
+	/** 위젯이 ZEP 클라이언트로 쏜 패킷들 */
+	const spoken = [];
+	/** 탐색이 실행시킨, 실행되면 안 되는 모듈들 */
+	const executed = [];
 	let timerSeq = 0;
 
 	/*
@@ -294,10 +423,16 @@ function checkWidget(name) {
 		parent: {
 			postMessage() {},
 			document: { readyState: "complete" },
+			// 포커스를 게임 화면으로 되돌리는 길(Parent.releaseFocus). 진짜
+			// 부모 창에는 당연히 있는 함수라 흉내에도 있어야 한다 — 빠뜨리면
+			// "예외 없이 지나가는가"를 보는 이 검사기가 흉내의 구멍을
+			// 위젯의 버그로 보고한다
+			focus() {},
 			addEventListener(type, handler) {
 				if (type === "keydown") parentKeys.push(handler);
 			},
 			removeEventListener() {},
+			...(client === "none" ? {} : fakeZepClient(spoken, executed, client)),
 		},
 		screen: { width: 1280 },
 		// iframe이 살아 있는 상태. bridge.js가 죽은 프레임을 걸러내는 데 쓴다
@@ -355,9 +490,12 @@ function checkWidget(name) {
 		report("Parent.onKey를 불렀는데 부모 문서에 keydown이 걸리지 않았습니다");
 	}
 
+	/** 장면이 "이 줄을 말풍선으로 내보내라"고 지시한 내용들 */
+	const asked = [];
 	for (const scene of SCENES) {
 		if (scene.file !== name) continue;
 		for (const message of scene.messages) {
+			if (message.type === "say") asked.push(message);
 			for (const handler of listeners) {
 				try {
 					handler({ data: { ...message, isMobile: false } });
@@ -366,6 +504,57 @@ function checkWidget(name) {
 				}
 			}
 		}
+
+		/*
+		 * 장면이 "화면에 이런 것이 몇 개 있어야 한다"고 적어둔 것 (scene.expect).
+		 *
+		 * 지금까지 이 검사기가 본 것은 "예외 없이 그려졌는가"뿐이었다. 그래서
+		 * 어떤 줄이 어떤 모습으로 나가는지는 아무도 지키지 않았다 — 귓속말이
+		 * 잡담과 같은 글씨로 나가던 것이 정확히 그 틈이다. 눈에만 보이는 차이는
+		 * 눈을 뗀 순간 사라진다.
+		 *
+		 * 색이나 크기까지 보지는 않는다. 그건 theme.css의 몫이고 여기서 흉내내면
+		 * 시트를 두 벌 관리하게 된다. 대신 "그 모습을 고르는 갈림길을 지났는가"를
+		 * class 하나로 확인한다. 갈림길이 사라지면 개수가 어긋나 걸린다.
+		 */
+		for (const selector of Object.keys(scene.expect || {})) {
+			const want = scene.expect[selector];
+			const found = document.querySelectorAll(selector).length;
+			if (found !== want) {
+				report(`[${scene.label}] ${selector} ${want}개를 기대했는데 ${found}개입니다`);
+			}
+		}
+	}
+
+	/*
+	 * 지시한 만큼, 지시한 내용 그대로, 지시한 청중에게 나갔는가.
+	 *
+	 * 위젯은 무엇을 말할지도 누구에게 말할지도 스스로 정하지 않는다 — 판정은
+	 * 서버(ChatService)에만 있고, 여기 한 줄이 그 약속을 지킨다. 위젯이 한
+	 * 글자라도 보태거나 빼면, 청중을 바꿔치우면 걸린다.
+	 *
+	 * 청중이 없는 지시(area 없음)는 want에서 빠진다. 즉 "아무것도 나가지
+	 * 않아야 한다"가 기댓값이다 — 위젯이 기본값으로 메꾸면 이 자리에 패킷
+	 * 하나가 더 나와 걸린다.
+	 */
+	if (asked.length > 0 && client !== "none") {
+		const want = asked
+			.filter(say => say.area)
+			.map(say => ({
+				type: "Z_NET_CHAT_MESSAGE_REQUEST",
+				payload: { message: say.text, chatAreaType: say.area },
+			}));
+		if (JSON.stringify(spoken) !== JSON.stringify(want)) {
+			report(`말풍선 패킷이 다릅니다\n    나간 것:   ${JSON.stringify(spoken)}\n    나가야 할 것: ${JSON.stringify(want)}`);
+		}
+	}
+
+	// 찾다가 남의 모듈을 실행시키지 않았는가. 팩토리 등록부에는 청크만 받고
+	// 아직 실행되지 않은 모듈이 섞여 있고, require(id)는 그런 모듈을 그 자리에서
+	// 돌린다. 사전 필터 없이 전부 부르면 살아 있는 게임 화면에서 무슨 일이
+	// 벌어질지 알 수 없다.
+	if (executed.length > 0) {
+		report(`탐색이 관계없는 모듈을 실행했습니다: ${executed.join(", ")}`);
 	}
 
 	// 장면을 다 넣은 뒤에 눌러본다. 빈 화면에서 누르는 것과 탭·줄이 다
@@ -446,7 +635,12 @@ function check() {
 		// 장면이 없는 위젯은 로드까지만 확인된다. 조용히 넘어가면
 		// "검사했다"는 말이 반쪽이 되므로 소리 내어 알린다.
 		if (!covered.has(name)) problems.push(`${name}: widget-scenes.js에 장면이 없습니다`);
-		problems.push(...checkWidget(name));
+		// 세 환경을 모두 걷는다. 지나가는 코드가 서로 다르고 전부 실제로
+		// 일어난다 — 빌드에 따라 require.c가 있기도 없기도 하고, 스페이스
+		// 설정에 따라 부모 창을 아예 못 읽기도 한다.
+		for (const client of ["cache", "factories", "none"]) {
+			problems.push(...checkWidget(name, client).map(p => `${p} [${client}]`));
+		}
 	}
 
 	if (problems.length > 0) {

@@ -1,8 +1,16 @@
 /**
- * 게임 도메인 타입.
+ * 게임 도메인 타입. 판이 도는 동안의 상태가 전부 여기 있다.
  *
  * 이 파일은 ZEP API에 의존하지 않는다 (ScriptWidget 참조는 PlayerTag 한 곳뿐).
  * 덕분에 도메인 로직을 Node에서 그대로 테스트할 수 있다.
+ *
+ * 여기 없는 것:
+ *   Widget.types.ts       - 위젯에 그려 보낼 모양(*View, WidgetLayout)
+ *   PlayerStorage.ts      - 판이 끝나도 남는 전적
+ * 둘 다 이 파일에 있었다. 셋을 갈라 둔 기준은 수명이다 — 판과 함께 사라지는
+ * 것(여기), 화면에 한 번 실려 나가고 마는 것, 저장소에 영구히 남는 것.
+ * 수명이 다른 값이 한 파일에 있으면 "이 필드를 지워도 되는가"가 파일을
+ * 봐서는 답이 안 나오는 질문이 된다.
  */
 import type { ScriptWidget, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
@@ -156,6 +164,36 @@ export interface VoteRecord {
 	message: string;
 }
 
+/**
+ * 컷의 색조. 위젯이 배경과 글자색을 고르는 데만 쓴다.
+ *
+ * 단계 이름(GamePhase)을 그대로 보내지 않는 이유는 둘이 1:1이 아니기
+ * 때문이다 — 처형 컷은 VOTE_RESULT가 아니라 다음 밤에 얹히고, 승리 컷은
+ * 이긴 진영에 따라 색이 갈린다. 단계를 보내면 위젯이 그 규칙을 알아야 한다.
+ */
+export type CutTone = "neutral" | "night" | "day" | "mafia" | "citizen";
+
+/**
+ * 지금 도는 중인 단계 전환 컷.
+ *
+ * 방 하나에 하나뿐이다. 컷은 단계가 바뀌는 순간에만 시작되고 다음 전환까지
+ * 반드시 끝나므로 줄을 설 일이 없다 — 큐를 두면 "언제 비워지는가"라는
+ * 상태가 하나 더 생기는데 그 값을 볼 사람이 없다.
+ *
+ * 방이 들고 있는 이유는 재접속이다. 컷은 사람마다 뜨는 위젯이지만 "지금
+ * 무엇이 도는 중인가"는 방의 사실이라, 도중에 들어온 사람에게도 남은 만큼을
+ * 그대로 보여줄 수 있다(GameFlow.showPhaseView).
+ */
+export interface ActiveCut {
+	readonly title: string;
+	readonly lines: string[];
+	readonly tone: CutTone;
+	/** 전체 길이(초). 남은 시간이 아니라 위젯에 실어 보낼 원래 길이 */
+	readonly length: number;
+	/** 남은 시간(초) */
+	timer: number;
+}
+
 /** 게임 방 하나 */
 export interface Room {
 	readonly num: number;
@@ -235,30 +273,17 @@ export interface Room {
 	 * 길이는 CHAT_LOG_LIMIT으로 제한한다 (오래된 것부터 버린다).
 	 */
 	chatLog: ChatMessage[];
+	/** 지금 도는 중인 전환 컷. 없으면 null */
+	cut: ActiveCut | null;
 }
 
 /**
  * 플레이어 접속에 종속된 상태.
  *
  * 게임 상태(역할/생존/투표)는 전부 Seat으로 옮겼다.
- * 여기에는 이 접속에서만 의미가 있는 것 — 위젯 핸들과 원래 닉네임 — 만 남긴다.
+ * 여기에는 이 접속에서만 의미가 있는 것 — 위젯 핸들과 읽음·차단 기록 — 만 남긴다.
  * 기존에는 21개 필드가 tag.data와 tag에 경계 없이 섞여 있었다.
  */
-/**
- * ZEP 클라이언트에게 "이 위젯을 이 상자에 담아라"라고 말하는 값.
- *
- * 서버가 정해서 payload에 실어 보내면 bridge.js가 WidgetRearrange로 넘긴다.
- * 길이는 CSS 문자열이라 "96%"와 "320px"이 한 자리에 들어간다 — 데스크톱은
- * 픽셀, 모바일은 화면 대비 %를 쓰기 때문에 이 유연함이 필요하다.
- */
-export interface WidgetLayout {
-	anchor: string;
-	width: string;
-	height: string;
-	/** 상단바 보정. 위쪽에 붙는 위젯에만 있다 */
-	top?: string;
-}
-
 export interface PlayerTag {
 	/** 대기실/단계별 메인 위젯 */
 	widget: ScriptWidget | null;
@@ -277,6 +302,22 @@ export interface PlayerTag {
 	 * 지목 화면을 가리는 일이 구조적으로 없다.
 	 */
 	cardWidget: ScriptWidget | null;
+	/**
+	 * 단계 전환 컷 위젯.
+	 *
+	 * 카드와 자리를 나눠 쓰지 않는다. 둘 다 겹쳐 뜨는 위젯이지만 여는 주체가
+	 * 다르다 — 카드는 사람이 열고(도감·안내) 컷은 방이 연다. 한 자리를 쓰면
+	 * 컷이 도는 동안 도감을 펼친 사람에게서 둘 중 하나가 조용히 사라진다.
+	 */
+	cutWidget: ScriptWidget | null;
+	/**
+	 * 프로필 창 위젯 (남을 클릭했을 때 뜨는 창).
+	 *
+	 * 여는 주체가 또 다르다 — 카드는 사람이 자기 화면에 열고, 컷은 방이 열고,
+	 * 이건 "남을 클릭했다"는 한 번의 행동이 연다. 카드 자리를 나눠 쓰면
+	 * 직업 카드를 읽는 중에 옆 사람을 잘못 눌러 카드가 사라진다.
+	 */
+	profileWidget: ScriptWidget | null;
 	/**
 	 * 이번 접속에서 첫 안내를 이미 봤는가.
 	 *
@@ -337,92 +378,4 @@ export interface PlayerTag {
 	 * 신고 기능이 그대로 도배 도구가 된다.
 	 */
 	reported: { [playerId: string]: boolean };
-	/** 게임 중 이름을 바꾸므로 원래 닉네임을 보관한다 */
-	originalName: string;
-}
-
-/**
- * 대기실 목록에 그려지는 한 줄. lobby.html이 읽는 필드와 1:1이다.
- * 위젯에 room 객체를 통째로 넘기던 것을 이 DTO로 좁혔다.
- */
-export interface LobbySeatView {
-	id: string;
-	name: string;
-	/** 이미 완성된 표시 문자열. 위젯은 그대로 찍기만 한다 */
-	rank: string;
-	runCount: number;
-	ready: boolean;
-	kickCount: number;
-}
-
-/**
- * 게임 중 "사람 하나"를 그리는 데 필요한 것. 밤 지목과 투표가 같이 쓴다.
- *
- * 기존에는 두 화면이 number[] (참가 번호만)를 받아 번호 버튼을 그렸다.
- * 8명이 도는 판에서 화면에는 1~8만 있고 이름이 없어서, 방금 누가 무슨
- * 말을 했는지와 몇 번인지를 사람이 머릿속에서 이어야 했다. 밤에 사람을
- * 잘못 지목하는 가장 흔한 원인이었다.
- */
-export interface SeatView {
-	num: number;
-	name: string;
-	alive: boolean;
-	/** 같은 마피아 팀인가 (마피아 위젯에서만 채워진다) */
-	ally?: boolean;
-	/** 개표 화면의 득표수 */
-	votes?: number;
-}
-
-/**
- * 채팅창의 탭 하나.
- *
- * 위젯은 채널의 규칙을 모른다. "지금 이 탭이 있고, 쓸 수 있고, 안 읽은
- * 것이 N개"라는 결과만 받는다. 밤에 마피아 탭이 생기는 이유도, 죽으면
- * 방 탭에 자물쇠가 걸리는 이유도 서버 쪽 표(ChatPermission)에만 있다.
- */
-export interface ChatChannelView {
-	id: string;
-	label: string;
-	glyph: string;
-	/** 이 탭에 글을 쓸 수 있는가. false면 입력창이 잠긴다 */
-	write: boolean;
-	/** 미확인 메시지 수 */
-	unread: number;
-	placeholder: string;
-}
-
-/**
- * 카드 한 장. 직업 공개·첫 안내·직업 도감이 전부 이 모양으로 그려진다.
- *
- * 셋을 각자 다른 위젯으로 만들지 않은 이유는 셋의 화면이 같기 때문이다 —
- * 글리프 하나, 제목 한 줄, 설명 한 문단, 덧붙임 한 문단. 다른 것은
- * "몇 장인가"와 "장을 어떻게 넘기는가"뿐이고, 그건 CardPayload.nav가 정한다.
- */
-export interface CardView {
-	glyph: string;
-	title: string;
-	/** null이면 진영 칩을 숨긴다 (규칙 안내 카드에는 진영이 없다) */
-	team: Team | null;
-	body: string;
-	note: string;
-}
-
-/** 종료 화면의 직업 공개 한 줄 */
-export interface RevealView {
-	num: number;
-	name: string;
-	role: string;
-	team: Team;
-	alive: boolean;
-}
-
-/** 플레이어 스토리지에 저장되는 전적 */
-export interface PlayerStorage {
-	exp: number;
-	playCount?: number;
-	runCount?: number;
-	mafiaWin?: number;
-	mafiaLose?: number;
-	citizenWin?: number;
-	citizenLose?: number;
 }

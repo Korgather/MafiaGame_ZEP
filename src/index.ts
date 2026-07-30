@@ -12,37 +12,63 @@
  */
 import { MapTrigger } from "./constants/Assets.ts";
 import { locate } from "./entities/RoomRegistry.ts";
-import { destroyWidgets, tagOf } from "./infrastructure/PlayerTag.ts";
+import { guard } from "./infrastructure/Fault.ts";
+import { destroyWidgets } from "./infrastructure/PlayerTag.ts";
 import { label } from "./services/Broadcast.ts";
 import { showGuide } from "./services/Cards.ts";
 import * as Ccu from "./services/Ccu.ts";
 import * as Chat from "./services/ChatService.ts";
 import * as GameFlow from "./services/GameFlow.ts";
 import { enterLobby, handleDisconnect } from "./services/Lobby.ts";
-import { refreshTitle } from "./services/Rewards.ts";
+import { showProfile } from "./services/Profile.ts";
 import {
+	auditRoomAreas,
 	resetPlayerAppearance,
 	restoreAppearance,
 	seatPlayer,
 	spawnInLobby,
 } from "./services/Stage.ts";
 
-ScriptApp.onStart.Add(() => {
+/*
+ * 모든 핸들러가 guard를 지난다. 이 파일이 예외가 ZEP 런타임으로 새어 나가는
+ * 마지막 경계이기 때문이다 — 여기서 놓치면 그 프레임(또는 그 접속)이 통째로
+ * 사라지고, 남는 것은 아무도 보지 않는 ZEP 서버 로그 한 줄뿐이다.
+ *
+ * 핸들러마다 따로 감싸는 이유는 복구 단위가 다르기 때문이다. 접속 처리가
+ * 실패한 것은 그 사람 한 명의 문제이고, tick이 실패한 것은 방 하나의
+ * 문제다(GameFlow.tick이 방 단위로 다시 격리한다). 한 번에 묶어 감싸면
+ * 어느 쪽이 무너졌는지 알림에서 구분되지 않는다.
+ */
+ScriptApp.onStart.Add(() => guard("시작", () => {
 	ScriptApp.enableFreeView = false;
+	/*
+	 * ZEP이 그려주는 두 가지를 끄고 이 게임이 직접 그린다.
+	 *
+	 * showName: 닉네임은 이름표(Stage.applyNameplate)의 둘째 줄로 옮겼다.
+	 *   ZEP의 닉네임 줄은 우리가 손댈 수 없는 자리에 고정돼 있어서, 그 위에
+	 *   title이 겹치면 머리 위 글자가 세 줄까지 쌓였다. 한 곳에서 두 줄을
+	 *   조립하는 편이 무엇이 보일지 예측 가능하다.
+	 *
+	 * showProfileOnUnitClick: 기본 프로필 창은 ZEP 계정 정보를 보여준다.
+	 *   이 게임에서 남을 클릭하는 사람이 궁금한 것은 그게 아니라 "몇 판 했고
+	 *   중도 이탈이 얼마나 되는 사람인가"다. 대신 Profile.ts의 창을 띄운다.
+	 */
+	ScriptApp.showName = false;
+	ScriptApp.showProfileOnUnitClick = false;
 	ScriptApp.sendUpdated();
-});
+	// 맵과 코드 사이의 계약은 컴파일러가 못 잡는다. 맵이 떠 있는 첫 순간에
+	// 한 번 훑어 스태프에게 알린다 (Stage.auditRoomAreas)
+	auditRoomAreas();
+}));
 
-ScriptApp.onJoinPlayer.Add(player => {
+ScriptApp.onJoinPlayer.Add(player => guard("접속", () => {
 	Ccu.schedule();
 
-	// 게임 중 이름을 바꾸므로 접속 시점의 닉네임을 보관한다
-	tagOf(player).originalName = player.name;
-
+	// 이름표를 판 밖 모습(등급 + 닉네임)으로 세운다
 	resetPlayerAppearance(player);
 	player.attackType = 2;
 	player.attackParam1 = 2;
 	player.attackParam2 = 3;
-	refreshTitle(player);
 
 	if (player.isMobile) {
 		player.displayRatio = 0.7;
@@ -64,41 +90,60 @@ ScriptApp.onJoinPlayer.Add(player => {
 		seatPlayer(found.room, player, found.seat);
 		restoreAppearance(found.room, player, found.seat);
 		GameFlow.showPhaseView(found.room, player, found.seat);
+		// 돌아온 사람이 분모에 다시 들어갔다. 남은 사람들 화면의 숫자도 같이
+		// 늘려주지 않으면 그들은 "다 냈는데 왜 안 넘어가지"를 겪는다.
+		GameFlow.refreshProgress(found.room);
 		label(player, "진행 중이던 게임에 다시 참가했습니다.");
 		return;
 	}
 
 	spawnInLobby(player);
 	enterLobby(player);
-});
+}));
 
-ScriptApp.onLeavePlayer.Add(player => {
+ScriptApp.onLeavePlayer.Add(player => guard("이탈", () => {
+	// 어느 방이었는지는 먼저 잡아둔다. 대기실에서 나간 경우 handleDisconnect가
+	// 좌석을 지워버려 뒤에서는 찾을 수 없다.
+	const found = locate(player.id);
 	handleDisconnect(player);
+	// 한 명이 빠지면 진행률의 분모가 남은 전원에게서 함께 줄어든다.
+	if (found) GameFlow.refreshProgress(found.room);
 	// 마지막 한 명이 나갔으면 0명을 즉시 보고한다. 디바운스를 기다릴
 	// 이벤트가 더 이상 발생하지 않기 때문이다.
 	if (ScriptApp.playerCount <= 1) Ccu.reportNow();
 	else Ccu.schedule();
-});
+}));
 
-ScriptApp.onDestroy.Add(() => {
+ScriptApp.onDestroy.Add(() => guard("종료", () => {
 	for (const player of ScriptApp.players) {
 		destroyWidgets(player);
 		resetPlayerAppearance(player);
 	}
 	Chat.resetGlobalLog();
-});
+}));
 
 // ScriptApp.onSay는 더 이상 쓰지 않는다. ZEP 기본 채팅창에 무엇을 치든
 // 이 게임은 반응하지 않는다 — 운영자 명령을 포함한 모든 입력은 채팅 위젯의
 // COMMANDS 표를 지난다. 기본 채팅창 자체를 숨기는 API는 0.16.5에 없다.
 
+// 둘을 따로 감싼다. CCU 보고(네트워크)가 실패해도 게임은 계속 흘러야 하고,
+// 게임이 멈춰도 접속자 수 보고는 계속돼야 한다 — 서로의 실패에 볼모가 될
+// 이유가 없는 두 일이 같은 콜백에 있을 뿐이다.
 ScriptApp.onUpdate.Add(dt => {
-	Ccu.tick(dt);
-	GameFlow.tick(dt);
+	guard("CCU 보고", () => Ccu.tick(dt));
+	guard("진행", () => GameFlow.tick(dt));
 });
 
 // 대기실 안내판. 규칙을 잊었거나 첫 안내를 넘긴 사람이 다시 읽는 통로다.
 // x·y·tileID는 어느 판인지가 아니라 어느 칸인지라 여기서는 쓸 일이 없다.
-ScriptApp.onObjectTouched.Add((player, _x, _y, _tileID, obj) => {
+ScriptApp.onObjectTouched.Add((player, _x, _y, _tileID, obj) => guard("오브젝트 접촉", () => {
 	if (obj.param1 === MapTrigger.GUIDE_BOARD) showGuide(player);
-});
+}));
+
+// 사람을 클릭하면 이 게임의 프로필 창이 열린다(ZEP 기본 창은 onStart에서 껐다).
+// target이 비어 오는 경우를 막는 이유는 이 값이 ZEP 런타임에서 오는 것이고,
+// 여기서 터지면 클릭한 사람의 프레임이 통째로 사라지기 때문이다.
+ScriptApp.onUnitClicked.Add((clicker, target) => guard("프로필", () => {
+	if (!clicker || !target) return;
+	showProfile(clicker, target);
+}));

@@ -15,7 +15,8 @@ import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import type { Room, Seat } from "../src/types/Game.types.ts";
 import { GamePhase, Role } from "../src/types/Game.types.ts";
-import { CHAT_RATE, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { CHAT_RATE, MAX_PLAYERS, MIN_PLAYERS, ROOM_COUNT } from "../src/constants/GameConfig.ts";
+import { isInsideRoom, seatPosition } from "../src/constants/RoomLayout.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { maskProfanity } from "../src/domain/chat/ChatFilter.ts";
 import { MessageKind } from "../src/domain/chat/ChatMessage.ts";
@@ -26,6 +27,7 @@ import {
 	preferredChannel,
 	readableChannels,
 } from "../src/domain/chat/ChatPermission.ts";
+import { auditRoomAreas } from "../src/services/Stage.ts";
 import type { FakePlayer } from "./helpers/Harness.ts";
 import {
 	activeChannel,
@@ -33,10 +35,12 @@ import {
 	chatChannels,
 	chatLines,
 	chatSaw,
+	clearTile,
 	connect,
 	disconnect,
 	finishPhase,
 	joinRoom,
+	paintPrivateArea,
 	playerOf,
 	reconnect,
 	resetWorld,
@@ -44,10 +48,13 @@ import {
 	seatsWithRole,
 	send,
 	sendChat,
+	spokenAloud,
+	standAt,
 	startGame,
 	startPlainGame,
 	switchChannel,
 	tick,
+	world,
 } from "./helpers/Harness.ts";
 
 beforeEach(() => resetWorld());
@@ -300,6 +307,234 @@ describe("채널 격리", () => {
 		// 듣는 것은 여전히 자유다
 		chat(outside, "구경 중입니다");
 		assert.ok(chatSaw(players[0], "구경 중입니다"));
+	});
+});
+
+/*
+ * 말풍선은 이 게임의 채널 규칙 바깥으로 나가는 유일한 출구다.
+ *
+ * 다른 배달 경로는 전부 deliverTo의 accessOf가 사람마다 다시 판정하지만,
+ * 말풍선은 ZEP이 띄우므로 한 번 나가면 누가 보는지를 이 게임이 통제하지
+ * 못한다. 그래서 "무엇이 어느 청중에게 나가는가"를 여기서 못 박아 둔다.
+ *
+ * 청중은 두 가지뿐이다(ChatChannel의 ZepAudience).
+ *   PUBLIC_AREA  — 맵 전체. 전체 채팅만 이 자리에 온다.
+ *   PRIVATE_AREA — 말한 사람이 서 있는 프라이빗 영역. 방 채팅이 이 자리다.
+ *
+ * PRIVATE_AREA는 조건부다. ZEP은 어느 영역에도 없는 사람들을 0번 영역
+ * 하나로 묶어 서로 들리게 하므로, 영역 밖에서 PRIVATE_AREA로 말하면 맵
+ * 전체에 외친 것과 다름없다. 그래서 텍스트만 비교하는 검사는 절반만 지킨
+ * 것이다 — 아래 검사들이 area까지 함께 보는 이유가 그것이다.
+ */
+describe("ZEP 기본 채팅으로 내보내기", () => {
+	it("전체 채팅은 맵 전체 청중으로 나간다", () => {
+		const player = connect("가");
+		joinRoom(player, 1);
+
+		chat(player, "같이 하실 분", ChatChannel.GLOBAL);
+
+		assert.deepEqual(spokenAloud(player), [{ text: "같이 하실 분", area: "PUBLIC_AREA" }]);
+	});
+
+	it("낮 토론은 자기 방 영역 청중으로 나간다", () => {
+		const { target, doctor } = nightGame();
+		paintPrivateArea(target.num);
+		finishPhase(target); // NIGHT → DAY
+
+		chat(doctor, "3번이 수상해요", ChatChannel.ROOM);
+
+		assert.ok(chatSaw(doctor, "3번이 수상해요"), "토론 자체는 방 화면에 떠야 합니다");
+		assert.deepEqual(spokenAloud(doctor), [
+			{ text: "3번이 수상해요", area: "PRIVATE_AREA" },
+		]);
+	});
+
+	/*
+	 * 아래 세 가지가 이 파일에서 가장 미끄러운 자리다.
+	 *
+	 * 영역을 칠하는 것은 ZEP 에디터에서 손으로 하는 일이라 코드가 확인할 수
+	 * 없다(ROOM_ORIGINS 주석). 못 지켜졌을 때 말풍선을 포기하는 것과 그냥
+	 * 쏘는 것의 차이는 화면에서 티가 나지 않는다 — 옆 방 사람 눈에만 남의 방
+	 * 토론이 뜬다. 그래서 어긋난 세 경로를 각각 검사로 박아 둔다.
+	 */
+	it("영역을 칠하지 않은 방에서는 말풍선을 포기한다", () => {
+		const { target, doctor } = nightGame();
+		finishPhase(target); // NIGHT → DAY, 좌석에 앉은 상태
+
+		chat(doctor, "3번이 수상해요", ChatChannel.ROOM);
+
+		assert.ok(chatSaw(doctor, "3번이 수상해요"), "토론 자체는 방 화면에 떠야 합니다");
+		assert.deepEqual(spokenAloud(doctor), [], "영역 없이 쏘면 0번 영역 전원에게 들린다");
+	});
+
+	it("방 안이라도 영역 밖 타일에서는 말풍선을 포기한다", () => {
+		const { target, doctor } = nightGame();
+		paintPrivateArea(target.num);
+		finishPhase(target);
+		// 좌석 사이·문간처럼 칠하지 않은 칸. 맵에 칠한 영역이 상자보다 좁을 때
+		// 생기는 틈이고, 상자만 보고 판정하면 이 자리가 그대로 새는 구멍이 된다.
+		const seat = seatPosition(target.num, 1);
+		assert.ok(seat);
+		standAt(doctor, seat.x, seat.y + 1);
+		assert.ok(
+			isInsideRoom(target.num, doctor.tileX, doctor.tileY),
+			"상자 밖으로 나가버리면 이 검사는 타일 판정을 확인하지 못합니다"
+		);
+
+		chat(doctor, "3번이 수상해요", ChatChannel.ROOM);
+
+		assert.deepEqual(spokenAloud(doctor), [], "영역 밖에서 방 채팅이 나갔습니다");
+	});
+
+	it("옆 방 영역으로 걸어가도 그 방으로 말이 가지 않는다", () => {
+		const { target, doctor } = nightGame();
+		paintPrivateArea(2); // 이 사람의 방은 1번이다
+		finishPhase(target);
+		const elsewhere = seatPosition(2, 1);
+		assert.ok(elsewhere);
+		standAt(doctor, elsewhere.x, elsewhere.y);
+
+		chat(doctor, "3번이 수상해요", ChatChannel.ROOM);
+
+		assert.deepEqual(spokenAloud(doctor), [], "1번 방의 토론이 2번 방 영역에 뜹니다");
+	});
+
+	it("대기 중 방 채팅은 말풍선으로 나가지 않는다", () => {
+		/*
+		 * 방에 들어가는 것은 명단에 이름을 올리는 것이고, 몸은 게임이 시작할
+		 * 때까지 대기실에 서 있다(seatPlayer는 첫 밤에만 부른다). 대기실은
+		 * 8개 방의 사람이 전부 모여 있는 곳이라 여기서 방 채팅이 새면
+		 * 방을 나눈 의미가 없어진다.
+		 */
+		const player = connect("가");
+		joinRoom(player, 1);
+		paintPrivateArea(1);
+
+		chat(player, "빨리 시작해요", ChatChannel.ROOM);
+
+		assert.ok(chatSaw(player, "빨리 시작해요"), "대기 중 방 채팅 자체는 열려 있어야 합니다");
+		assert.deepEqual(spokenAloud(player), [], "대기실에서 방 채팅이 새어 나갔습니다");
+	});
+
+	it("말풍선 지시는 말한 사람에게만 간다", () => {
+		// 남의 클라이언트가 대신 띄우면 그 사람 아바타 위에 남의 말이 뜬다.
+		const a = connect("가");
+		const b = connect("나");
+		joinRoom(a, 1);
+		joinRoom(b, 1);
+
+		chat(a, "안녕하세요", ChatChannel.GLOBAL);
+
+		assert.deepEqual(spokenAloud(a), [{ text: "안녕하세요", area: "PUBLIC_AREA" }]);
+		assert.deepEqual(spokenAloud(b), [], "남의 말이 다른 사람 아바타로 나갔습니다");
+	});
+
+	it("밤 밀담은 말풍선으로 나가지 않는다", () => {
+		const { mafia } = nightGame();
+
+		chat(mafia, "3번 칩시다");
+
+		assert.equal(activeChannel(mafia), ChatChannel.MAFIA);
+		assert.ok(chatSaw(mafia, "3번 칩시다"), "밀담 자체는 마피아 화면에 떠야 합니다");
+		assert.deepEqual(spokenAloud(mafia), [], "밀담이 방 전체에 외쳐졌습니다");
+	});
+
+	it("유령의 말은 말풍선으로 나가지 않는다", () => {
+		const { target, mafia, victim } = nightGame();
+		send(mafia, { type: "select", num: victim.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+		const ghost = playerOf(victim);
+
+		chat(ghost, "죽인 건 1번입니다");
+
+		assert.ok(chatSaw(ghost, "죽인 건 1번입니다"));
+		assert.deepEqual(spokenAloud(ghost), [], "죽은 사람이 산 사람 앞에서 말했습니다");
+	});
+
+	it("서버가 버린 발언은 말풍선도 뜨지 않는다", () => {
+		// 조작된 클라이언트가 게임 중에 전체 채팅을 보내는 경로. 배달이 막히는
+		// 것과 말풍선이 막히는 것은 같은 관문이어야 한다 — 둘이 갈리면 죽은
+		// 사람과 밤의 시민이 화면에는 안 뜨는 말을 아바타 위로 외친다.
+		const { victim } = nightGame();
+		const citizen = playerOf(victim);
+
+		sendChat(citizen, { type: "send", channel: ChatChannel.GLOBAL, text: "마피아는 1번" });
+
+		assert.ok(!chatSaw(citizen, "마피아는 1번"), "서버가 버렸어야 할 발언이 배달됐습니다");
+		assert.deepEqual(spokenAloud(citizen), []);
+	});
+
+	it("명령어는 말풍선으로 나가지 않는다", () => {
+		const player = connect("가");
+		joinRoom(player, 1);
+
+		chat(player, "/도움말", ChatChannel.GLOBAL);
+
+		assert.deepEqual(spokenAloud(player), [], "명령어가 그대로 외쳐졌습니다");
+	});
+
+	it("가려진 욕설은 가려진 채로 나간다", () => {
+		// 필터를 통과한 원문이 말풍선으로 새면 필터가 반쪽이 된다.
+		const player = connect("가");
+		joinRoom(player, 1);
+		const raw = "시발 뭐야";
+
+		chat(player, raw, ChatChannel.GLOBAL);
+
+		const said = spokenAloud(player);
+		assert.equal(said.length, 1);
+		assert.equal(said[0].text, maskProfanity(raw));
+		assert.notEqual(said[0].text, raw, "필터가 아무것도 가리지 못했다면 이 검사는 의미가 없습니다");
+	});
+});
+
+/*
+ * 맵과 코드 사이의 계약을 맵 쪽에서 확인한다.
+ *
+ * 위 검사들은 전부 "영역이 칠해져 있다면"을 전제로 한다. 정작 칠하는 일은
+ * 사람이 ZEP 에디터에서 하고, 빠뜨려도 코드는 조용히 말풍선만 포기한다 —
+ * 설계상 그게 맞지만, 아무도 모르는 채로 계속 도는 것은 맞지 않다.
+ */
+describe("맵 자가 점검", () => {
+	it("영역이 없는 방을 스태프에게 알린다", () => {
+		paintPrivateArea(1);
+		paintPrivateArea(3);
+
+		assert.deepEqual(
+			auditRoomAreas(),
+			[2, 4, 5, 6, 7, 8],
+			"칠하지 않은 방을 찾지 못했습니다"
+		);
+		assert.equal(world.staffSays.length, 1, "스태프에게 알리지 않았습니다");
+		assert.match(world.staffSays[0], /2, 4, 5, 6, 7, 8번/);
+	});
+
+	it("좌석 한 칸만 빠져도 그 방을 짚는다", () => {
+		// 부분적으로 칠한 방이 가장 찾기 어렵다. 열한 명은 멀쩡히 말풍선이
+		// 뜨고 한 명만 안 뜨므로, 그 한 명이 신고하지 않으면 아무도 모른다.
+		for (let roomNum = 1; roomNum <= ROOM_COUNT; roomNum++) paintPrivateArea(roomNum);
+		const hole = seatPosition(5, MAX_PLAYERS);
+		assert.ok(hole);
+		clearTile(hole.x, hole.y);
+
+		assert.deepEqual(auditRoomAreas(), [5]);
+	});
+
+	it("맵이 뜰 때 저절로 점검한다", () => {
+		// 점검 함수가 있어도 아무도 부르지 않으면 없는 것과 같다.
+		// index.ts의 배선까지 확인하는 것이 이 검사의 전부다.
+		world.hooks.start.emit();
+
+		assert.equal(world.staffSays.length, 1, "시작할 때 맵을 훑지 않았습니다");
+	});
+
+	it("다 칠했으면 아무 말도 하지 않는다", () => {
+		for (let roomNum = 1; roomNum <= ROOM_COUNT; roomNum++) paintPrivateArea(roomNum);
+
+		assert.deepEqual(auditRoomAreas(), []);
+		// 이상 없을 때 조용한 것이 중요하다. 매번 한 줄씩 나오면 스태프 채팅에서
+		// 진짜 사고 알림(Fault.guard)이 그 사이에 묻힌다.
+		assert.deepEqual(world.staffSays, []);
 	});
 });
 
@@ -642,6 +877,23 @@ describe("귓속말", () => {
 		assert.equal(chatSaw(players[1], "마피아 누구야"), false);
 	});
 
+	it("받는 사람이 보고 있는 탭에 뜬다", () => {
+		// 전체 탭으로 못박아 두면 방 탭을 보던 사람은 안 읽음 표시만 받는다.
+		// 보내는 쪽 사본은 눈앞에 뜨는데 받는 쪽만 안 뜨는, 두 사람이 서로
+		// 다른 화면을 보는 상태가 된다.
+		const sender = connect("가");
+		const target = connect("나");
+		joinRoom(target, 1);
+		switchChannel(target, ChatChannel.ROOM);
+
+		chat(sender, "/귓속말 나 여기 봐");
+
+		assert.ok(
+			chatLines(target, ChatChannel.ROOM).some(line => line.text.indexOf("여기 봐") >= 0),
+			"귓속말이 보고 있지 않은 탭으로 갔습니다"
+		);
+	});
+
 	it("없는 사람을 부르면 알려준다", () => {
 		const sender = connect("가");
 
@@ -712,7 +964,7 @@ describe("신고", () => {
 
 		chat(reporter, "/신고 무례한사람 계속 도배합니다");
 
-		assert.ok(chatSaw(admin, "신고한 사람: 신고자"));
+		assert.ok(chatSaw(admin, "신고한 사람 신고자"));
 		assert.ok(chatSaw(admin, "계속 도배합니다"));
 		assert.ok(chatSaw(reporter, "운영자 1명에게 전달"));
 		assert.equal(chatSaw(rude, "신고"), false, "신고당한 사실이 당사자에게 알려졌습니다");
