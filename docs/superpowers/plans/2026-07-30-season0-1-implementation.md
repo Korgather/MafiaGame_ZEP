@@ -19,7 +19,7 @@
 - **`src/` 안에서 네이티브 `Map` / `Set` 금지.** 평범한 객체와 배열을 쓴다.
 - **ZEP API 인자로 `undefined`를 넘기지 않는다.** 값이 없으면 그 인자를 빼고 호출하는 오버로드를 쓴다.
 - **`sort`의 안정성을 신뢰하지 않는다.** 순서가 중요하면 명시적으로 만든다.
-- 이 코드베이스는 `??` / `?.`를 **일부러** 쓰지 않는다 (근거: `src/services/Voting.ts:157-164`의 주석). 새 코드도 쓰지 않는다.
+- **`src/` 안에서는** `??` / `?.`를 **일부러** 쓰지 않는다 (근거: `src/services/Voting.ts:157-164`의 주석). `src/`에 실제로 한 곳도 없다. 새 `src/` 코드도 쓰지 않는다. **테스트는 예외다** — `tests/domain.test.ts`가 이미 `?.`를 자유롭게 쓰고(`:242`, `:420`, `:462` 등) Jint가 아니라 Node에서 돌기 때문이다. 이 계획의 테스트 코드도 그 관행을 따른다.
 - 소스에는 항상 `ScriptApp` / `ScriptMap`을 쓴다. `@zep.us/babel-plugin-zep-script`가 빌드 때 `App.*`로 바꾼다.
 
 **계층 의존 방향(단방향):** `services` → `domain` / `entities` / `infrastructure`, `domain` → `types` / `constants`. `domain`은 ZEP-free다. `entities` → `domain` 임포트는 이미 있는 관행이다 (`src/entities/Room.ts:17`).
@@ -34,7 +34,7 @@ npm run verify
 
 `verify` = `type-check && lint && check:zep && test && check:ui`. **`type-check`·`lint`·`test`는 `.html`과 `tools/`를 보지 않는다** — `src/ui/*.html`과 `tools/widget-scenes.js`의 실수를 잡는 그물은 `check:ui`뿐이다 (Task 9에서 결정적으로 중요하다).
 
-**테스트 관례:** `node:assert/strict`, `node:test`의 `describe`/`it`. 도메인 테스트는 `tests/domain.test.ts:39-62`의 `seat(index, role, overrides)` 팩토리와 `EVERY_COUNT`(4..12) 루프를 따른다. 통합 테스트는 `tests/helpers/Harness.ts`의 `startGame(playerCount, roomNum, roles?)` 등을 쓴다.
+**테스트 관례:** `node:assert/strict`, `node:test`의 `describe`/`it`. 도메인 테스트는 `seat(index, role, overrides)` 팩토리와 `EVERY_COUNT`(4..12) 루프를 따른다. 팩토리는 지금 `tests/domain.test.ts:39-62`에 있고 **Task 4가 `tests/helpers/seat.ts`로 옮긴다** — Task 5 이후의 새 테스트 파일은 거기서 임포트한다. 통합 테스트는 `tests/helpers/Harness.ts`의 `startGame(playerCount, roomNum, roles?)` 등을 쓴다.
 
 **배포 가정 (스펙 §1.4):** 각 슬라이스는 `res/main.js` 하나를 다시 올리는 것으로 배포된다. `Room`·`Seat`는 전부 메모리에 있고 영속화 경로가 없으므로(`Ccu.ts`의 `httpPostJson`이 유일한 외부 통신) **재배포 = 진행 중인 판 전멸**로 가정한다. 배포 창은 방이 빌 때다. 최소 7회 배포하며, **롤백도 배포다**. Task 8의 필드 타입 변경에 마이그레이션은 필요 없다. **첫 배포(Task 1) 때 한 번 관찰할 것: 재배포가 정말 방 상태를 초기화하는지.**
 
@@ -71,7 +71,7 @@ npm run verify
 
 20. **쪽지는 지목 하나로 끝나지 않는다.** 대상과 문구 두 가지를 받아야 하므로 밤 위젯의 계약이 하나 늘어난다(서버→위젯 `phrases`, 위젯→서버 `phrase`). 스펙 §S5는 "쪽지 문구 선택 UI"라고만 적었다. 문구는 `NightIntent`를 넓히지 않고 `Seat.noteText`로 나른다 — `putIntent`가 `{actor, target}`을 통째로 교체하므로 거기에 세 번째 필드를 넣으면 대상을 바꿀 때마다 문구가 사라진다.
 
-21. **`maxUses` 도입도 개명이 아니다.** `skillSpent`는 `src`에 5곳(`NightResolution.ts:80,82`·`Room.ts:66,89,244`·`Game.types.ts:150`·`Night.ts:260`), 테스트에 4곳(`domain.test.ts:57,589,594`)이 있고, Task 4와 Task 6이 만드는 `tests/night-pipeline.test.ts`·`tests/roles-season1.test.ts`의 좌석 팩토리에도 각각 한 줄씩 들어간다. 좌석 팩토리는 **셋 다** 고쳐야 한다.
+21. **`maxUses` 도입도 개명이 아니다.** `skillSpent`는 `src`에 5곳(`NightResolution.ts:80,82`·`Room.ts:66,89,244`·`Game.types.ts:150`·`Night.ts:260`), 테스트에 4곳(`domain.test.ts:57,589,594`)이 있다. **좌석 팩토리는 Task 4가 `tests/helpers/seat.ts` 한 곳으로 모으므로 필드 변경은 거기 한 줄이다** — Task 4·6·10이 만드는 새 테스트 파일들과 기존 `domain.test.ts`가 모두 그 헬퍼를 임포트한다.
 
 22. **Task 9의 `SILENCE` 제거 목록에 `NightPipeline.apply`가 빠져 있다.** 스펙 §S6 커밋 1의 삭제 표는 `Roles.ts`만 적었으나, Task 4가 `apply`에 `case NightActionKind.SILENCE: target.silenced = true;` 갈래를 만들어 두었다. `Seat.silenced`가 사라지면 그 갈래도 함께 사라진다.
 23. **S6의 커밋 2/3 경계를 옮긴다.** 스펙은 "커밋 2 = `BLOCK` 추가 / 커밋 3 = 건달 재정의 + 덱 복귀"로 나눴으나, 커밋 2만으로는 검증할 수 있는 동작이 하나도 없다 — `BLOCK`을 쓰는 직업이 없으므로 테스트가 존재할 수 없는 커밋이다. 태스크의 정의가 "혼자서 테스트되는 산출물"이므로 경계를 한 칸 옮긴다. **Task 10 = 차단이 실제로 막는가**(`NightActionKind.BLOCK`·`Seat.blocked`·파이프라인 전파 + 건달을 `BLOCK`으로 재정의), **Task 11 = 건달이 게임에 존재하는가**(양쪽 통보 + 덱 복귀 + 배타·최소 인원). 커밋은 여전히 세 개이고 삭제(Task 9)와 추가가 섞이지 않는다는 스펙의 진짜 요구도 그대로다.
@@ -90,6 +90,7 @@ npm run verify
 | `tests/night-pipeline.test.ts` | 클릭 순서 무관·step 배치·reveals 배달 | 4, 5, 9 |
 | `tests/roles-season1.test.ts` | 사기꾼·점쟁이·시민 쪽지 | 6, 7, 8 |
 | `tests/night-block.test.ts` | `BLOCK` step과 건달 | 10, 11 |
+| `tests/helpers/seat.ts` | 도메인 테스트용 좌석 팩토리 한 벌. `Seat`이 바뀌면 여기만 고친다 | 4, 8, 9, 10 |
 
 **고치는 파일 (주된 책임 변화만)**
 
@@ -1696,16 +1697,19 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `src/domain/NightPipeline.ts`
+- Create: `tests/helpers/seat.ts` (좌석 팩토리 공용화)
 - Test: `tests/night-pipeline.test.ts` (신규)
 - Modify: `src/domain/Roles.ts:33-47`(옆에 `NightStep` 추가), `:49-153`(`RoleDef.nightStep`), `:159-351`(12개 항목 전부)
 - Modify: `src/domain/NightResolution.ts:98-181`
 - Modify: `src/types/Game.types.ts` (`Room.nightIntents`)
 - Modify: `src/entities/Room.ts:24-46`, `:249-260`
 - Modify: `src/services/Night.ts:22-28`, `:230-271`, `:296-330`
-- Modify: `tests/domain.test.ts:16-22`, `:457-540`
+- Modify: `tests/domain.test.ts:16-22`, `:39-62`(팩토리를 헬퍼로 이전), `:457-540`
 
 **Interfaces:**
 - Consumes: Task 2의 `isPeacefulNight(nightNumber, playerCount, peacefulUpTo)`와 `Room.ruleSet`.
+- Produces (테스트 쪽):
+  - `seat(index: number, role: Role, overrides?: Partial<Seat>): Seat` — `tests/helpers/seat.ts`. Task 6·10의 새 테스트 파일이 이걸 쓴다. `Seat`이 바뀌면 여기만 고친다.
 - Produces:
   - `NightStep` — `src/domain/Roles.ts`. 상수 객체 + 동명 타입 (`NightActionKind`과 같은 형태).
   - `RoleDef.nightStep: NightStep` — 필수 필드.
@@ -1717,30 +1721,24 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   - `recordNightIntent(actor: Seat, target: Seat): NightSelectResult | null` — `src/domain/NightResolution.ts`. `resolveNightSelect`를 대신한다. **대상을 변형하지 않는다.**
   - `Room.nightIntents: NightIntent[]`
 
-- [ ] **Step 1: 파이프라인 실패 테스트를 쓴다**
+- [ ] **Step 1: 좌석 팩토리를 공용 헬퍼로 옮긴다**
 
-`tests/night-pipeline.test.ts`를 새로 만든다. 좌석 팩토리는 `tests/domain.test.ts:39-62`와 같은 모양으로 이 파일에도 한 벌 둔다 — 이 저장소의 테스트는 헬퍼를 공유하지 않고 파일마다 자기 팩토리를 갖는다.
+이 슬라이스부터 좌석 팩토리를 쓰는 테스트 파일이 넷이 된다(`domain` · `night-pipeline` · Task 6의 `roles-season1` · Task 10의 `night-block`). `Seat`은 이 계획에서만 세 번 바뀌므로(Task 8의 `skillSpent` → `skillUsed`, Task 9의 `silenced` 삭제, Task 10의 `blocked` 추가) 사본이 넷이면 그때마다 네 곳을 함께 고쳐야 한다. 한 군데로 모은다.
+
+`tests/helpers/seat.ts`를 새로 만든다. `tests/helpers/`에는 이미 `Harness.ts`와 `FakeZep.ts`가 있고, `npm test`의 글롭은 `tests/**/*.test.ts`라 이 파일은 테스트로 실행되지 않는다.
 
 ```ts
 /**
- * 밤 파이프라인 테스트.
+ * 도메인 테스트용 좌석 팩토리.
  *
- * 이 파일이 지키는 것은 하나다: 밤의 결과가 클릭 순서에 의존하지 않는다.
- * 지금은 의사가 늦게 눌러도 결과가 같지만 그건 resolveNightCasualties가
- * 밤 끝에 한 번만 보기 때문이지 순서를 정했기 때문이 아니다.
- * 차단(BLOCK)이 들어오면 그 우연이 깨진다.
+ * Seat의 모양이 바뀌면 여기 한 곳만 고치면 된다. 파일마다 사본을 두면
+ * 필드 하나를 더할 때마다 네 곳이 함께 밀린다.
  */
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { Role } from "../../src/types/Game.types.ts";
+import type { Seat } from "../../src/types/Game.types.ts";
+import { ROLE_DEFS } from "../../src/domain/Roles.ts";
 
-import { Role } from "../src/types/Game.types.ts";
-import type { Seat } from "../src/types/Game.types.ts";
-import { NightStep, ROLE_DEFS } from "../src/domain/Roles.ts";
-import { NightOutcome } from "../src/domain/NightResolution.ts";
-import type { NightIntent } from "../src/domain/NightPipeline.ts";
-import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
-
-function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
+export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
 	return {
 		playerId: `p${index}`,
 		index,
@@ -1764,6 +1762,48 @@ function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
 		...overrides,
 	};
 }
+```
+
+`tests/domain.test.ts`에서 `:39-62`의 함수를 통째로 지우고 임포트로 바꾼다. `:37`의 `isInsideRoom` 임포트 아래에 붙인다.
+
+```ts
+import { isInsideRoom, seatPosition } from "../src/constants/RoomLayout.ts";
+import { seat } from "./helpers/seat.ts";
+```
+
+`Role`·`Seat`·`ROLE_DEFS` 임포트는 그대로 둔다 — 세 개 모두 이 파일의 다른 곳에서 쓰인다(`ROLE_DEFS`는 `teamCount`가, `Seat`은 `Partial<Seat>` 오버라이드가). `type-check`가 `noUnusedLocals`로 잡으므로 잘못 지우면 바로 드러난다.
+
+- [ ] **Step 2: 헬퍼 이전이 무해한지 확인한다**
+
+```bash
+npm test
+```
+
+Expected: PASS, 이전과 같은 개수. 팩토리를 옮기기만 했으므로 단정은 하나도 바뀌지 않는다. 여기서 빨간불이 나면 임포트 경로(`./helpers/seat.ts`) 문제다.
+
+- [ ] **Step 3: 파이프라인 실패 테스트를 쓴다**
+
+`tests/night-pipeline.test.ts`를 새로 만든다. 좌석 팩토리는 방금 만든 헬퍼에서 가져온다.
+
+```ts
+/**
+ * 밤 파이프라인 테스트.
+ *
+ * 이 파일이 지키는 것은 하나다: 밤의 결과가 클릭 순서에 의존하지 않는다.
+ * 지금은 의사가 늦게 눌러도 결과가 같지만 그건 resolveNightCasualties가
+ * 밤 끝에 한 번만 보기 때문이지 순서를 정했기 때문이 아니다.
+ * 차단(BLOCK)이 들어오면 그 우연이 깨진다.
+ */
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { Role } from "../src/types/Game.types.ts";
+import type { Seat } from "../src/types/Game.types.ts";
+import { NightStep, ROLE_DEFS } from "../src/domain/Roles.ts";
+import { NightOutcome } from "../src/domain/NightResolution.ts";
+import type { NightIntent } from "../src/domain/NightPipeline.ts";
+import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
+import { seat } from "./helpers/seat.ts";
 
 /** 밤을 한 번 돌린다. intents는 클릭 순서대로 준다 */
 function night(seats: Seat[], clicks: Array<[number, number]>, skipAttacks = false) {
@@ -1878,7 +1918,7 @@ describe("putIntent", () => {
 });
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [ ] **Step 4: 실패를 확인한다**
 
 ```bash
 npm test
@@ -1886,7 +1926,7 @@ npm test
 
 Expected: FAIL — `src/domain/NightPipeline.ts`가 없다.
 
-- [ ] **Step 3: `NightStep`을 `Roles.ts`에 넣는다**
+- [ ] **Step 5: `NightStep`을 `Roles.ts`에 넣는다**
 
 `src/domain/Roles.ts`의 `NightActionKind` 블록(`:33-47`) 바로 아래에 붙인다. **파이프라인 파일이 아니라 여기다** — 보정 사항 14번.
 
@@ -1922,7 +1962,7 @@ export const NightStep = {
 export type NightStep = (typeof NightStep)[keyof typeof NightStep];
 ```
 
-- [ ] **Step 4: `RoleDef`에 `nightStep`을 필수로 더한다**
+- [ ] **Step 6: `RoleDef`에 `nightStep`을 필수로 더한다**
 
 `src/domain/Roles.ts`의 `nightAction` 선언(`:67-68`) 바로 아래.
 
@@ -1937,7 +1977,7 @@ export type NightStep = (typeof NightStep)[keyof typeof NightStep];
 	readonly nightStep: NightStep;
 ```
 
-- [ ] **Step 5: 12개 항목에 `nightStep`을 적는다**
+- [ ] **Step 7: 12개 항목에 `nightStep`을 적는다**
 
 각 항목의 `nightAction` 줄 바로 아래에 넣는다. 능력이 없는 직업은 전부 `AFTER`다.
 
@@ -1966,7 +2006,7 @@ export type NightStep = (typeof NightStep)[keyof typeof NightStep];
 
 `Record<Role, RoleDef>` 덕분에 하나라도 빠뜨리면 `type-check`가 잡는다.
 
-- [ ] **Step 6: `NightPipeline.ts`를 만든다**
+- [ ] **Step 8: `NightPipeline.ts`를 만든다**
 
 ```ts
 /**
@@ -2136,7 +2176,7 @@ export function resolveNightIntents(
 }
 ```
 
-- [ ] **Step 7: `recordNightIntent`로 축소한다**
+- [ ] **Step 9: `recordNightIntent`로 축소한다**
 
 `src/domain/NightResolution.ts:98-181`을 통째로 바꾼다. **대상을 변형하는 네 줄이 사라진다** — 그 일은 이제 파이프라인이 한다. 남는 것은 시전자에게 보일 라벨·소리·소모 여부다.
 
@@ -2244,7 +2284,7 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
  */
 ```
 
-- [ ] **Step 8: `tests/domain.test.ts`를 맞춘다**
+- [ ] **Step 10: `tests/domain.test.ts`를 맞춘다**
 
 임포트(`:16-22`)에서 `resolveNightSelect`를 `recordNightIntent`로 바꾸고, `describe("NightResolution")`(`:457-540`) 안을 아래와 같이 고친다. **대상 변형을 단언하던 여섯 곳이 사라진다** — 같은 단언이 `tests/night-pipeline.test.ts`에 이미 있다.
 
@@ -2277,7 +2317,7 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 	});
 ```
 
-- [ ] **Step 9: `Room.nightIntents`를 만든다**
+- [ ] **Step 11: `Room.nightIntents`를 만든다**
 
 `src/types/Game.types.ts`의 `Room` 인터페이스에 넣는다. `nightReport` 바로 아래가 자연스럽다. 임포트는 **`import type`** 이다 — 보정 사항 11번과 같은 이유로 런타임 순환이 생기지 않는다.
 
@@ -2299,7 +2339,7 @@ export function resetRound(room: Room): void {
 	room.nightIntents = [];
 ```
 
-- [ ] **Step 10: 클릭 핸들러가 intent를 남기게 한다**
+- [ ] **Step 12: 클릭 핸들러가 intent를 남기게 한다**
 
 `src/services/Night.ts:255-266`. 결과 처리 순서는 그대로 두고 `putIntent` 한 줄만 끼운다.
 
@@ -2328,7 +2368,7 @@ import { putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
 
 `resolveNightCasualties`는 이제 `Night.ts`가 직접 부르지 않는다 — 파이프라인이 부른다. 임포트에서 뺀다(`noUnusedLocals`가 안 빼면 잡는다).
 
-- [ ] **Step 11: `resolveNight`가 파이프라인을 부르게 한다**
+- [ ] **Step 13: `resolveNight`가 파이프라인을 부르게 한다**
 
 `src/services/Night.ts:296-302`. Task 1이 넣은 조기 반환 가드가 여기서 **사라진다** — 같은 일을 `skipAttacks`가 구조적으로 한다. 아래 `switch` 이하와 `publishScoops(room)`는 그대로 둔다.
 
@@ -2353,7 +2393,7 @@ export function resolveNight(room: Room): void {
 	if (casualties.length === 0) report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
 ```
 
-- [ ] **Step 12: 전체 검증**
+- [ ] **Step 14: 전체 검증**
 
 ```bash
 npm run verify
@@ -2361,7 +2401,7 @@ npm run verify
 
 Expected: 전부 통과. **`tests/gameflow.test.ts`·`tests/isolation.test.ts`·`tests/reconnect.test.ts`가 한 줄도 안 바뀐 채로 통과해야 한다** — 이 슬라이스의 합격 기준이다. 이들이 깨지면 구조 이동에서 관측 동작이 바뀐 것이므로, Task 5로 넘어가지 말고 여기서 잡는다.
 
-- [ ] **Step 13: 커밋**
+- [ ] **Step 15: 커밋**
 
 ```bash
 git add src/domain/NightPipeline.ts src/domain/Roles.ts src/domain/NightResolution.ts src/types/Game.types.ts src/entities/Room.ts src/services/Night.ts tests/night-pipeline.test.ts tests/domain.test.ts
@@ -2808,31 +2848,7 @@ import type { Seat } from "../src/types/Game.types.ts";
 import { ROLE_DEFS } from "../src/domain/Roles.ts";
 import type { NightIntent, NightSettlement } from "../src/domain/NightPipeline.ts";
 import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
-
-function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
-	return {
-		playerId: `p${index}`,
-		index,
-		name: `p${index}`,
-		rank: "Lv.1",
-		role,
-		team: ROLE_DEFS[role].team,
-		alive: true,
-		ready: false,
-		votedFor: 0,
-		voteCount: 0,
-		healed: false,
-		attackedBy: [],
-		armored: ROLE_DEFS[role].survivesFirstAttack === true,
-		silenced: false,
-		scooped: false,
-		usedSkill: false,
-		skillSpent: false,
-		kickedBy: [],
-		connected: true,
-		...overrides,
-	};
-}
+import { seat } from "./helpers/seat.ts";
 
 function night(seats: Seat[], clicks: Array<[number, number]>): NightSettlement {
 	const intents: NightIntent[] = [];
@@ -3420,7 +3436,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `src/domain/chat/QuickPhrases.ts` (`QUICK_NOTE`)
 - Modify: `src/services/Night.ts` (`bindNightWidget`, `nightProgress`)
 - Modify: `src/ui/roleAction.html`, `tools/widget-scenes.js`
-- Test: `tests/roles-season1.test.ts`, `tests/domain.test.ts`, `tests/night-pipeline.test.ts`
+- Test: `tests/roles-season1.test.ts`, `tests/domain.test.ts`, `tests/night-pipeline.test.ts`, `tests/helpers/seat.ts`(필드 이름 변경)
 
 **Interfaces:**
 - Consumes: Task 4의 `putIntent`·`NightLedger`, Task 5의 `NightReveal`·`deliverNightReveals`, Task 7의 `firstNightOnly`.
@@ -4042,15 +4058,9 @@ function chooseNotePhrase(
 				note: "능력을 쓸 수 있는 횟수를 다 썼습니다. 이번 밤은 지켜보세요.",
 ```
 
-- [ ] **Step 15: 좌석 팩토리 셋과 기존 테스트를 맞춘다**
+- [ ] **Step 15: 좌석 팩토리와 기존 테스트를 맞춘다**
 
-`skillSpent: false,` → `skillUsed: 0,` + `noteText: "",` 를 좌석 팩토리 **셋 전부**에 적용한다.
-
-| 파일 | 줄 |
-| --- | --- |
-| `tests/domain.test.ts` | `:57` |
-| `tests/night-pipeline.test.ts` | Task 4가 만든 팩토리 |
-| `tests/roles-season1.test.ts` | Task 6이 만든 팩토리 |
+`tests/helpers/seat.ts`(Task 4)에서 `skillSpent: false,`를 `skillUsed: 0,` + `noteText: "",`로 바꾼다. **한 곳이면 된다** — `domain`·`night-pipeline`·`roles-season1` 세 테스트 파일이 모두 이 헬퍼를 임포트한다.
 
 `tests/domain.test.ts:586-597`의 1회성 능력 테스트를 고친다.
 
@@ -4133,7 +4143,7 @@ UI 두 파일과 `widget-scenes.js`를 빠뜨려도 앞의 셋은 전부 초록�
 - Modify: `src/ui/chat.html:274`
 - Modify: `tools/widget-scenes.js:342`, `:344-353`
 - Delete tests: `tests/domain.test.ts` 협박 즉시 반영, `tests/gameflow.test.ts:534-569`, `tests/chat.test.ts:795-854`
-- Modify tests: 좌석·컨텍스트 팩토리 4곳, `tests/night-pipeline.test.ts`의 건달 step 단정
+- Modify tests: `tests/helpers/seat.ts`와 `tests/chat.test.ts`의 `ctx()` 팩토리, `tests/night-pipeline.test.ts`의 건달 step 단정
 
 **Interfaces:**
 - Consumes: Task 8까지의 전부.
@@ -4454,15 +4464,13 @@ Task 10이 만드는 `Seat.blocked`와 **이름만 같고 관계가 없다** —
 	});
 ```
 
-- [ ] **Step 12: 팩토리 넷에서 지운다**
+- [ ] **Step 12: 팩토리 둘에서 지운다**
 
 `silenced: false,` 한 줄씩이다.
 
 | 파일 | 무엇 |
 | --- | --- |
-| `tests/domain.test.ts:54` | 좌석 팩토리 |
-| `tests/night-pipeline.test.ts` | 좌석 팩토리 (Task 4) |
-| `tests/roles-season1.test.ts` | 좌석 팩토리 (Task 6) |
+| `tests/helpers/seat.ts` | 좌석 팩토리 (Task 4에서 공용화했다. 세 테스트 파일이 여기를 본다) |
 | `tests/chat.test.ts:72` | `ctx()` 컨텍스트 팩토리 |
 
 `tests/chat.test.ts`의 `:167`·`:173`·`:183`은 `ctx({ silenced: true })`를 쓰는
@@ -4536,6 +4544,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `src/domain/Roles.ts:42-43`(`NightActionKind`), `RoleDef`, THUG 정의
 - Modify: `src/types/Game.types.ts` (`Seat.blocked`)
 - Modify: `src/entities/Room.ts:48-70`(`createSeat`) · `:81-97`(`assignRole`) · `:249-260`(`resetRound`)
+- Modify: `tests/helpers/seat.ts` (`blocked: false`)
 - Modify: `src/domain/NightPipeline.ts` (`apply`의 `BLOCK` 갈래, 루프 가드)
 - Modify: `src/domain/NightResolution.ts` (`recordNightIntent` 머리 + `BLOCK` 갈래)
 - Modify: `src/services/Widgets.ts:318-327` (`NightActionPayload.noSelf`)
@@ -4571,37 +4580,11 @@ import assert from "node:assert/strict";
 
 import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
-import { POLITICIAN_VOTE_WEIGHT } from "../src/constants/GameConfig.ts";
 import { ROLE_DEFS } from "../src/domain/Roles.ts";
 import { NightOutcome, recordNightIntent } from "../src/domain/NightResolution.ts";
 import type { NightIntent, NightReveal } from "../src/domain/NightPipeline.ts";
 import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
-
-function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
-	return {
-		playerId: `p${index}`,
-		index,
-		name: `p${index}`,
-		rank: "Lv.1",
-		role,
-		team: ROLE_DEFS[role].team,
-		alive: true,
-		ready: false,
-		votedFor: 0,
-		voteCount: 0,
-		healed: false,
-		attackedBy: [],
-		armored: ROLE_DEFS[role].survivesFirstAttack === true,
-		blocked: false,
-		scooped: false,
-		usedSkill: false,
-		skillUsed: 0,
-		noteText: "",
-		kickedBy: [],
-		connected: true,
-		...overrides,
-	};
-}
+import { seat } from "./helpers/seat.ts";
 
 /** 밤을 한 번 돌린다. clicks는 누른 순서대로 준다 */
 function night(seats: Seat[], clicks: Array<[number, number]>, skipAttacks = false) {
@@ -4700,15 +4683,16 @@ describe("차단 — 닿지 않는 것", () => {
 		assert.equal(seats[1].armored, false);
 	});
 
-	it("차단된 정치인의 투표 가중치는 그대로다", () => {
-		// voteWeight는 RoleDef의 값이라 좌석 상태가 아니다. 지금은 차단이
-		// 닿을 표면이 없다는 뜻이고, 이 테스트는 그 사실을 못으로 박는다 —
-		// 언젠가 이 값을 Seat으로 옮기고 싶어지면 여기가 먼저 그 결정을
-		// 마주하게 한다
+	it("정치인은 차단당해도 좌석 상태가 멀쩡하다", () => {
+		// 스펙 엣지케이스 #20. voteWeight는 RoleDef의 값이라 좌석 상태가 아니고,
+		// Voting.ts의 voteWeight()도 서비스 내부 private이라 도메인에서 부를 수
+		// 없다. 즉 차단이 닿을 표면이 없다 — 여기서 단언할 수 있는 것은
+		// "차단은 걸렸고, 정치인 쪽에서 사라진 것이 없다"까지다.
+		// 언젠가 voteWeight를 Seat으로 옮기면 이 테스트가 그 결정을 마주한다
 		const seats = [seat(1, Role.THUG), seat(2, Role.POLITICIAN)];
 		night(seats, [[1, 2]]);
 		assert.equal(seats[1].blocked, true);
-		assert.equal(ROLE_DEFS[Role.POLITICIAN].voteWeight, POLITICIAN_VOTE_WEIGHT);
+		assert.equal(seats[1].alive, true);
 	});
 
 	it("차단끼리는 서로를 막지 않는다", () => {
@@ -4851,6 +4835,16 @@ Step 14에서 확인한다.
 루프에서 `seat.silenced = false;`를 지웠고, 같은 수명(하룻밤)을 가진 값
 셋(`healed`·`attackedBy`·`scooped`)이 바로 위아래에 있다. 리뷰어는 셋과 같은
 블록에 있는지만 보면 된다.
+
+`tests/helpers/seat.ts`에도 한 줄 넣는다. Task 9가 `silenced: false,`를 지운
+자리다. 이 줄이 없으면 `Seat`이 필수 필드를 잃어 `type-check`가 네 테스트
+파일을 전부 거부한다.
+
+```ts
+		armored: ROLE_DEFS[role].survivesFirstAttack === true,
+		blocked: false,
+		scooped: false,
+```
 
 - [ ] **Step 7: 파이프라인이 차단을 전파한다**
 
