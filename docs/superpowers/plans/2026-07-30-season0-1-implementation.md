@@ -481,7 +481,9 @@ export function resolveNight(room: Room): void {
 	// 시민은 의사가 막은 줄 안다. 양쪽 다 없는 정보를 추리에 넣게 된다.
 	// 시민 팀에게도 같은 줄을 보낸다 — 숨길 규칙이 아니다
 	if (isPeacefulNight(room.turnCount + 1, room.total)) {
-		Chat.say(room, "🌙 **첫 밤에는 아무도 죽지 않습니다.** 팀을 확인하고 대상을 익혀 두세요.");
+		// 채팅 위젯은 마크다운을 렌더하지 않는다 (chat.html의 bubble()이 html
+		// 태그 함수로 이스케이프한다). 강조 표시를 넣으면 별표가 글자 그대로 보인다
+		Chat.say(room, "🌙 첫 밤에는 아무도 죽지 않습니다. 팀을 확인하고 대상을 익혀 두세요.");
 	}
 ```
 

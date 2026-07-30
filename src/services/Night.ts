@@ -112,7 +112,7 @@ export function beginNight(room: Room): void {
 	// 시민은 의사가 막은 줄 안다. 양쪽 다 없는 정보를 추리에 넣게 된다.
 	// 시민 팀에게도 같은 줄을 보낸다 — 숨길 규칙이 아니다
 	if (isPeacefulNight(room.turnCount + 1, room.total)) {
-		Chat.say(room, "🌙 **첫 밤에는 아무도 죽지 않습니다.** 팀을 확인하고 대상을 익혀 두세요.");
+		Chat.say(room, "🌙 첫 밤에는 아무도 죽지 않습니다. 팀을 확인하고 대상을 익혀 두세요.");
 	}
 
 	// 컷이 phaseTimer를 늘린다. 아래 openNightView가 그 값을 화면에 싣는다
