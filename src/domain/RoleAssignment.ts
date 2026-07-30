@@ -8,7 +8,7 @@
 import { Role } from "../types/Game.types.ts";
 import {
 	CITIZENS_PER_NIGHT_KILL,
-	MAFIA_RATIO,
+	MAFIA_TEAM_SIZE,
 	MIN_PLAIN_CITIZENS,
 	MIN_SPECIAL_CITIZENS,
 	SPECIAL_CITIZEN_RATIO,
@@ -24,18 +24,17 @@ const MAFIA_LEAD: Role = Role.MAFIA;
 /**
  * 두 번째 마피아 진영 자리에 뽑히는 후보.
  *
- * 셋 다 마피아 팀이지만 하는 일이 다르다 — 둘째 마피아는 같이 죽일 사람을
- * 고르고, 건달은 투표를 막고, 짐승인간은 혼자 따로 문다. 판마다 달라져야
- * 시민이 "마피아 팀에 누가 있는지"를 다시 추리한다. Role.MAFIA가 풀에 다시
- * 들어 있는 것은 그래서다 — 아무 능력 없는 공범도 한 갈래다.
+ * 둘 다 마피아 팀이지만 하는 일이 다르다 — 둘째 마피아는 같이 죽일 사람을
+ * 고르고, 짐승인간은 혼자 따로 문다. 판마다 달라져야 시민이 "마피아 팀에
+ * 누가 있는지"를 다시 추리한다. Role.MAFIA가 풀에 다시 들어 있는 것은
+ * 그래서다 — 아무 능력 없는 공범도 한 갈래다.
  *
  * 다만 밤 사망자 예산(CITIZENS_PER_NIGHT_KILL)을 넘는 후보는 그 판에서
- * 걸러진다. 조건은 인원수가 아니라 시민 자리 수(citizenSlots)이므로 정원이
- * 아니라 마피아 수와 함께 움직인다 — 짐승인간은 시민 자리가 8이 되는
- * 11명부터 뽑힌다. 10명은 마피아가 셋으로 늘어 시민 자리가 7뿐이라
- * 아직 걸러진다.
+ * 걸러진다. 조건은 인원수가 아니라 시민 자리 수(citizenSlots)이므로 마피아
+ * 수와 함께 움직인다 — 인원표에서 10인 판이 마피아 2명이 되면서 시민 자리가
+ * 8이 되었고, 짐승인간은 그 10인부터 뽑힌다.
  */
-const MAFIA_POOL: readonly Role[] = [Role.MAFIA, Role.THUG, Role.BEAST];
+const MAFIA_POOL: readonly Role[] = [Role.MAFIA, Role.BEAST];
 
 /**
  * 시민이 이길 수단. 이 둘이 빠진 판은 시민에게 정보가 아예 없어서
@@ -65,16 +64,14 @@ export function shuffle<T>(array: T[], rng: () => number = Math.random): T[] {
 }
 
 /**
- * 인원수에 따른 마피아 진영 인원.
+ * 그 인원 판의 마피아 진영 인원. 표를 그대로 읽는다.
  *
- * 문턱을 세지 않고 비율에서 반올림한다. 정원이 바뀌어도 여기는 그대로다 —
- * 문턱 상수를 쓰던 시절에는 정원을 올릴 때마다 상수를 하나씩 더 달아야 했다.
- *
- * 1인 하한이 필요한 이유는 3명 이하 판이다. 비율만 쓰면 0명이 되어
- * 마피아 없는 게임이 시작된다.
+ * 정원 밖(테스트가 정원 + 2까지 부른다)은 마지막 칸으로 자른다. 표를 벗어난
+ * 인원에 답이 없는 것보다, 가장 큰 판과 같게 다루는 편이 안전하다.
  */
 export function mafiaCount(playerCount: number): number {
-	return Math.max(1, Math.round(playerCount * MAFIA_RATIO));
+	const last = MAFIA_TEAM_SIZE.length - 1;
+	return MAFIA_TEAM_SIZE[playerCount > last ? last : playerCount];
 }
 
 /**

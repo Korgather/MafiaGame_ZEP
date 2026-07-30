@@ -21,6 +21,7 @@ import { inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import {
 	hasNightTurn,
+	isPeacefulNight,
 	nightActionBlockedReason,
 	NightOutcome,
 	resolveNightCasualties,
@@ -107,6 +108,12 @@ export function beginNight(room: Room): void {
 	// 밤에는 방 채팅이 잠기지만 읽기는 열려 있다. 이 한 줄이 없으면 채팅
 	// 기록만 봤을 때 아침과 아침 사이가 비어 무슨 일이 있었는지 알 수 없다
 	Chat.say(room, `🌙 ${room.turnCount + 1}번째 밤이 되었습니다.`);
+	// 첫 밤 무사를 알리지 않으면 마피아는 자기 지목이 실패했다고 믿고,
+	// 시민은 의사가 막은 줄 안다. 양쪽 다 없는 정보를 추리에 넣게 된다.
+	// 시민 팀에게도 같은 줄을 보낸다 — 숨길 규칙이 아니다
+	if (isPeacefulNight(room.turnCount + 1, room.total)) {
+		Chat.say(room, "🌙 **첫 밤에는 아무도 죽지 않습니다.** 팀을 확인하고 대상을 익혀 두세요.");
+	}
 
 	// 컷이 phaseTimer를 늘린다. 아래 openNightView가 그 값을 화면에 싣는다
 	playCut(room, "night", `🌙 ${room.turnCount + 1}번째 밤`, verdict ? [verdict] : []);
@@ -297,6 +304,15 @@ export function resolveNight(room: Room): void {
 	room.turnCount++;
 	// 아침 화면이 읽을 밤 기록. kill()이 사망 한 줄씩 채워 넣는다
 	room.nightReport = [];
+
+	// 첫 밤 무사는 사망 정산보다 앞이다. resolveNightCasualties는 공격받은
+	// 좌석의 방탄을 소모하므로, 뒤에 두면 군인이 죽지도 않은 채 방탄만 잃는다.
+	// attackedBy는 그대로 남지만 다음 밤 시작의 resetRound가 비운다.
+	if (isPeacefulNight(room.turnCount, room.total)) {
+		report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
+		publishScoops(room);
+		return;
+	}
 
 	const casualties = resolveNightCasualties(room.seats);
 	if (casualties.length === 0) report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");

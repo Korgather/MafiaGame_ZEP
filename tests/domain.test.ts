@@ -487,11 +487,12 @@ describe("NightResolution", () => {
 		assert.equal(resolveNightSelect(seat(1, Role.BEAST), seat(2, Role.CITIZEN))?.roomSound, undefined);
 	});
 
-	it("경찰은 짐승인간을 잡지 못하고 건달은 잡는다", () => {
-		// 판정 기준은 진영도 직업도 아니라 appearsAsMafia다
+	it("경찰은 짐승인간도 건달도 마피아로 보지 못한다", () => {
+		// 짐승인간은 위장해서 안 잡히고, 건달은 애초에 시민이라 잡을 것이 없다.
+		// 경찰이 "마피아입니다"를 듣는 상대는 진짜 마피아 진영뿐이어야 한다
 		const police = seat(1, Role.POLICE);
-		assert.match(resolveNightSelect(police, seat(2, Role.THUG))!.label, /마피아입니다/);
-		assert.match(resolveNightSelect(police, seat(3, Role.BEAST))!.label, /마피아가 아닙니다/);
+		assert.match(resolveNightSelect(police, seat(2, Role.BEAST))!.label, /마피아가 아닙니다/);
+		assert.match(resolveNightSelect(police, seat(3, Role.THUG))!.label, /마피아가 아닙니다/);
 		assert.match(resolveNightSelect(police, seat(4, Role.MAFIA))!.label, /마피아입니다/);
 	});
 
@@ -530,10 +531,10 @@ describe("NightResolution", () => {
 	});
 
 	it("스파이가 건달을 찾아도 합류하지 않는다", () => {
-		// 건달은 마피아 팀이지만 채팅에 없다. 합류시키면 대화 상대가 없는
-		// 빈 채팅창이 열리고, 스파이는 능력만 아낀 채 아무것도 얻지 못한다.
+		// 건달은 시민이다. 스파이가 합류할 마피아 진영이 아니다
 		const spy = seat(1, Role.SPY);
 		const result = resolveNightSelect(spy, seat(2, Role.THUG));
+		assert.notEqual(result?.joinedMafia, true);
 		assert.equal(spy.team, Team.CITIZEN);
 		assert.equal(result?.consumed, true);
 	});

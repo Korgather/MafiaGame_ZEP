@@ -298,10 +298,27 @@ describe("밤 단계", () => {
 		);
 	});
 
+	/**
+	 * 사망이 걸린 밤 테스트는 둘째 밤에서 본다.
+	 *
+	 * 4인 판의 첫 밤에는 아무도 죽지 않는다(FIRST_NIGHT_PEACEFUL_UP_TO).
+	 * 첫 밤에서 보면 "죽었다"도 "살렸다"도 같은 결과가 나와서, 의사 테스트는
+	 * 의사가 아무 일도 하지 않아도 통과한다.
+	 */
+	function reachSecondNight(): ReturnType<typeof room> {
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+		finishPhase(target); // → NIGHT (둘째 밤)
+		assert.equal(target.phase, GamePhase.NIGHT);
+		return target;
+	}
+
 	it("마피아가 지목한 대상이 아침에 죽는다", () => {
 		startPlainGame(MIN_PLAYERS);
-		const target = room(1);
-		finishPhase(target);
+		const target = reachSecondNight();
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
@@ -317,8 +334,7 @@ describe("밤 단계", () => {
 
 	it("의사가 치료한 대상은 죽지 않는다", () => {
 		startPlainGame(MIN_PLAYERS);
-		const target = room(1);
-		finishPhase(target);
+		const target = reachSecondNight();
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const doctor = seatsWithRole(target, Role.DOCTOR)[0];
@@ -389,6 +405,41 @@ describe("밤 단계", () => {
 			[vigilante.index],
 			"둘째 밤의 사살이 좌석에 반영되지 않았습니다"
 		);
+	});
+
+	it("6인 판의 첫 밤에는 아무도 죽지 않는다", () => {
+		const players = startPlainGame(6);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		send(playerOf(mafia), { type: "select", num: victim.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		assert.equal(target.seats.filter(seat => !seat.alive).length, 0);
+		assert.ok(chatSaw(players[0], "아무도 죽지 않았습니다"));
+	});
+
+	it("첫 밤 무사여도 군인의 방탄은 남는다", () => {
+		startGame(6, 1, [
+			Role.MAFIA,
+			Role.DOCTOR,
+			Role.POLICE,
+			Role.SOLDIER,
+			Role.CITIZEN,
+			Role.CITIZEN,
+		]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const soldier = seatsWithRole(target, Role.SOLDIER)[0];
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		send(playerOf(mafia), { type: "select", num: soldier.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		// 방탄을 소모했다면 군인은 다음 밤에 그냥 죽는다
+		assert.equal(soldier.armored, true);
 	});
 
 	it("밤이 아닌 때 온 지목은 무시한다", () => {
@@ -516,7 +567,12 @@ describe("투표", () => {
 	it("죽은 사람은 투표할 수 없다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
-		finishPhase(target); // NIGHT
+		// 첫 밤에는 아무도 죽지 않으므로 유령은 둘째 밤에 나온다
+		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+		finishPhase(target); // → NIGHT (둘째 밤)
 
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
@@ -524,6 +580,7 @@ describe("투표", () => {
 
 		finishPhase(target); // → DAY (victim 사망)
 		finishPhase(target); // → VOTE
+		assert.equal(victim.alive, false, "지목 대상이 죽지 않았습니다");
 
 		const ghost = playerOf(victim);
 		vote(ghost, mafia.index);
@@ -538,7 +595,7 @@ describe("투표", () => {
 	 * 투표 시간 내내 "아직 안 낸 사람이 있다"가 떠 있다) 한 번에 본다.
 	 */
 	it("협박당한 사람은 화면이 잠기고 표도 진행률도 집계되지 않는다", () => {
-		// 마피아 진영 2(마피아·건달) < 시민 진영 3이라 시작하자마자 끝나지 않는다
+		// 마피아 1 < 시민 4(건달 포함)라 시작하자마자 끝나지 않는다
 		startGame(5, 1, [Role.THUG, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
 		const target = room(1);
 		finishPhase(target); // ROLE_REVEAL → NIGHT

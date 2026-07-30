@@ -40,6 +40,18 @@ export function finish(room: Room, winner: TeamType): void {
 	room.phaseTimer = TIMING.GAME_OVER;
 	room.tickTockPlayed = true;
 	room.winner = winner;
+	// 판 요약을 외부로 내보내는 자리다. 시즌 1은 계측 없이 출하했다 —
+	// 받는 쪽이 없는데 보내면 데이터가 버려지고, 대신 보낸다는 사실만 남아
+	// "계측이 있다"고 오해된다.
+	//
+	// 붙일 때 필요한 것:
+	//  - 경로: Ccu.ts의 httpPostJson과 같은 엔드포인트를 쓸 수 있다. 그쪽은
+	//    collection: "CCU"로 쓰고 있으므로 collection만 바꾸면 된다. 다만 그
+	//    DB가 다른 collection을 받는지, 받은 것을 읽을 방법이 있는지는
+	//    확인되지 않았다.
+	//  - 내용: winner, room.seats.length, room.turnCount, 모드 id
+	//  - 집계 대상: 참가 6인 이상만. 4~5인은 구성표가 다른 연습 판이다.
+	//    (연습 판 격리는 docs/superpowers/specs/2026-07-30-season0-1-execution-design.md D8)
 
 	clearSilhouettes(room);
 	playSound(room, winner === Team.MAFIA ? Sound.MAFIA_WIN : Sound.CITIZEN_WIN);

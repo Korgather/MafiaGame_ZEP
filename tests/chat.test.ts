@@ -118,6 +118,24 @@ function nightGame(): {
 	};
 }
 
+/**
+ * 밤에 서 있는 판을 둘째 밤까지 끌고 가 victim을 실제로 죽인다.
+ * 돌아온 시점은 낮이고 victim은 유령이다.
+ *
+ * 8인 이하 판의 첫 밤에는 아무도 죽지 않는다(FIRST_NIGHT_PEACEFUL_UP_TO).
+ * 그래서 "죽은 뒤"를 보는 테스트가 첫 밤에 지목하면, 단언이 산 사람을
+ * 상대로 돌아 조용히 통과한다 — 채널이 유령으로 옮겨갔는지 같은 것은
+ * 애초에 아무것도 옮겨가지 않았으므로 검사할 대상이 없다.
+ */
+function killOnSecondNight(target: Room, mafia: FakePlayer, victim: Seat): void {
+	finishPhase(target); // 첫 밤(무사) → DAY
+	finishPhase(target); // → VOTE
+	finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+	finishPhase(target); // → NIGHT (둘째 밤)
+	send(mafia, { type: "select", num: victim.index });
+	finishPhase(target); // → 정산 → DAY
+}
+
 describe("채널 권한 표", () => {
 	it("밤의 시민은 어느 채널로도 말할 수 없다", () => {
 		// 이 판정이 무너지면 밤이 만드는 정보 비대칭이 통째로 사라진다.
@@ -234,8 +252,7 @@ describe("채널 격리", () => {
 		const { target, mafia, doctor, victim } = nightGame();
 		const ghost = playerOf(victim);
 
-		send(mafia, { type: "select", num: victim.index });
-		finishPhase(target); // NIGHT → 정산 → DAY
+		killOnSecondNight(target, mafia, victim);
 
 		assert.equal(victim.alive, false, "지목 대상이 죽지 않았습니다");
 		assert.equal(activeChannel(ghost), ChatChannel.GHOST, "죽으면 탭이 유령으로 옮겨가야 합니다");
@@ -252,8 +269,8 @@ describe("채널 격리", () => {
 		const { target, mafia, doctor, victim } = nightGame();
 		const ghost = playerOf(victim);
 
-		send(mafia, { type: "select", num: victim.index });
-		finishPhase(target); // → DAY
+		killOnSecondNight(target, mafia, victim);
+		assert.equal(victim.alive, false, "지목 대상이 죽지 않았습니다");
 
 		chat(doctor, "저는 의사입니다", ChatChannel.ROOM);
 
@@ -269,11 +286,10 @@ describe("채널 격리", () => {
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 
 		finishPhase(target); // ROLE_REVEAL → NIGHT
-		send(mafia, { type: "select", num: victim.index });
-		finishPhase(target); // → DAY
+		killOnSecondNight(target, mafia, victim); // 둘째 밤에 죽고 낮으로 나온다
 		finishPhase(target); // → VOTE
 		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
-		finishPhase(target); // → NIGHT
+		finishPhase(target); // → NIGHT (셋째 밤)
 
 		assert.equal(target.phase, GamePhase.NIGHT);
 		assert.equal(victim.alive, false, "지목 대상이 죽지 않았습니다");
@@ -615,8 +631,7 @@ describe("알림과 기록", () => {
 		// 문자열을 파싱하지 않아도 된다.
 		const { target, mafia, doctor, victim } = nightGame();
 
-		send(mafia, { type: "select", num: victim.index });
-		finishPhase(target); // → DAY
+		killOnSecondNight(target, mafia, victim);
 
 		const events = chatLines(doctor).filter(line => line.kind === MessageKind.EVENT);
 		assert.ok(events.length > 0, "사건 기록이 하나도 없습니다");
@@ -629,6 +644,9 @@ describe("알림과 기록", () => {
 		// 남는지, 그리고 그것들이 사건 목록을 오염시키지 않는지 함께 본다.
 		const { target, mafia, doctor, victim } = nightGame();
 
+		// 첫 밤이라 지목해도 아무도 죽지 않는다. 그 "무사" 보고가 사건으로
+		// 남으므로 사건 목록은 비지 않는다 — 둘째 밤까지 끌고 가면 개표를
+		// 한 번 지나게 되고, 처형 무산 보고가 아래 규칙에 걸린다
 		send(mafia, { type: "select", num: victim.index });
 		finishPhase(target); // → DAY
 		finishPhase(target); // → VOTE
@@ -655,6 +673,12 @@ describe("알림과 기록", () => {
 		const outside = connect("바깥사람");
 		const { target, mafia } = nightGame();
 		const mafiaSeat = seatsWithRole(target, Role.MAFIA)[0];
+
+		// 첫 밤은 무사히 지나간다. 결착은 둘째 밤부터 세야 맞는다
+		finishPhase(target); // 첫 밤(무사) → DAY
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT
+		finishPhase(target); // → NIGHT (둘째 밤)
 
 		// 마피아가 시민을 계속 줄이면 결국 인원이 같아진다
 		for (const seat of target.seats.filter(s => s !== mafiaSeat).slice(0, 2)) {

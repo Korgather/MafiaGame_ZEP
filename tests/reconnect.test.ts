@@ -239,7 +239,13 @@ describe("재접속", () => {
 	it("죽은 채로 돌아오면 유령 이름표와 밤 화면을 받는다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
-		finishPhase(target); // → NIGHT
+		// 첫 밤에는 아무도 죽지 않는다(FIRST_NIGHT_PEACEFUL_UP_TO).
+		// 유령이 되어 돌아오는 상황은 둘째 밤부터 만들어진다
+		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+		finishPhase(target); // → NIGHT (둘째 밤)
 
 		// 마피아가 평범한 시민을 지목해 아침에 죽인다
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];

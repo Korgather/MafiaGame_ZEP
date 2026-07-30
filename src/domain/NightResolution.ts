@@ -14,6 +14,7 @@
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
+import { FIRST_NIGHT_PEACEFUL_UP_TO } from "../constants/GameConfig.ts";
 import { inMafiaChat, NightActionKind, roleDef, roleName } from "./Roles.ts";
 
 export interface NightSelectResult {
@@ -257,4 +258,18 @@ function hasCasualty(casualties: readonly NightCasualty[], seat: Seat): boolean 
 		if (casualty.seat === seat) return true;
 	}
 	return false;
+}
+
+/**
+ * 이번 밤이 "아무도 죽지 않는 밤"인가.
+ *
+ * nightNumber는 정산이 끝난 뒤의 밤 번호다(첫 밤이 1). 호출부가 turnCount를
+ * 올린 다음에 묻는다.
+ *
+ * 작은 판에서 첫 밤 사망은 정보가 아니라 손실이다 — 죽은 사람은 한 마디도
+ * 못 했으므로 남은 사람이 그 사람에 대해 아는 것이 없고, 추리가 시작되기
+ * 전에 인원만 줄어든다.
+ */
+export function isPeacefulNight(nightNumber: number, playerCount: number): boolean {
+	return nightNumber === 1 && playerCount <= FIRST_NIGHT_PEACEFUL_UP_TO;
 }
