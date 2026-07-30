@@ -1,5 +1,5 @@
 /**
- * 단계 전환 컷 — 화면을 덮고 "지금 무슨 일이 일어났는가"를 한 번 말한다.
+ * 단계 전환 컷 — 화면을 덮고 "지금 무슨 일이 일어났는가"를 장면 순서대로 말한다.
  *
  * 왜 필요한가
  * -----------
@@ -25,6 +25,7 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { CutTone, Room } from "../types/Game.types.ts";
+import { CUT_ART, type CutScene } from "../constants/VisualAssets.ts";
 import { forEachAudience } from "./Broadcast.ts";
 import { closeCut, openCut } from "./Widgets.ts";
 
@@ -48,8 +49,28 @@ function lengthOf(lineCount: number): number {
 	return raw > MAX ? MAX : raw;
 }
 
+export interface CutSpec {
+	readonly scene: CutScene;
+	readonly tone: CutTone;
+	readonly title: string;
+	readonly lines: readonly string[];
+}
+
+function activeCut(spec: CutSpec) {
+	const length = lengthOf(spec.lines.length);
+	return {
+		scene: spec.scene,
+		title: spec.title,
+		lines: spec.lines.slice(),
+		tone: spec.tone,
+		length,
+		timer: length,
+	};
+}
+
 /**
- * 컷을 시작한다. 단계를 여는 함수가 화면을 열기 **직전**에 부른다.
+ * 한 단계에서 이어질 컷들을 시작한다. 단계를 여는 함수가 화면을 열기
+ * **직전**에 부른다.
  *
  * phaseTimer를 컷 길이만큼 늘리는 것이 이 함수의 두 번째 일이다.
  * 늘리지 않으면 연출이 그 단계의 시간을 먹는다 — 밤 22초 중 3초가 컷이면
@@ -60,13 +81,23 @@ function lengthOf(lineCount: number): number {
  * 부르는 순서가 중요하다. 여기서 phaseTimer가 늘어난 뒤에 단계 화면을 열어야
  * 화면의 남은 시간과 서버의 남은 시간이 같다.
  */
-export function playCut(room: Room, tone: CutTone, title: string, lines: string[]): void {
-	const length = lengthOf(lines.length);
-	// 배열을 복사한다. nightReport처럼 살아 있는 배열이 그대로 들어오면
-	// 컷이 도는 동안 내용이 바뀔 수 있고, 그러면 재접속한 사람만 다른 것을 본다
-	room.cut = { title, lines: lines.slice(), tone, length, timer: length };
-	room.phaseTimer += length;
+export function playCuts(room: Room, specs: readonly CutSpec[]): void {
+	if (specs.length === 0) return;
+	const cuts = specs.map(activeCut);
+	room.cut = cuts[0];
+	room.cutQueue = cuts.slice(1);
+	room.phaseTimer += cuts.reduce((sum, cut) => sum + cut.length, 0);
 	forEachAudience(room, player => showCut(room, player));
+}
+
+export function playCut(
+	room: Room,
+	scene: CutScene,
+	tone: CutTone,
+	title: string,
+	lines: readonly string[]
+): void {
+	playCuts(room, [{ scene, tone, title, lines }]);
 }
 
 /**
@@ -82,6 +113,8 @@ export function showCut(room: Room, player: ScriptPlayer): void {
 	if (!cut) return;
 	openCut(player, {
 		type: "init",
+		scene: cut.scene,
+		art: CUT_ART[cut.scene].file,
 		title: cut.title,
 		lines: cut.lines,
 		tone: cut.tone,
@@ -89,13 +122,21 @@ export function showCut(room: Room, player: ScriptPlayer): void {
 	});
 }
 
-/** 매 프레임. 시간이 다 되면 방 전원의 컷을 걷는다 */
+/** 매 프레임. 현재 컷이 끝나면 다음 컷을 열고, 마지막이면 전원의 컷을 걷는다 */
 export function advanceCut(room: Room, dt: number): void {
-	const cut = room.cut;
-	if (!cut) return;
-	cut.timer -= dt;
-	if (cut.timer > 0) return;
-	// 상태를 먼저 지운다. 닫는 도중에 예외가 나도 컷이 영원히 남지 않는다
-	room.cut = null;
-	forEachAudience(room, closeCut);
+	let remaining = dt;
+	while (room.cut) {
+		room.cut.timer -= remaining;
+		if (room.cut.timer > 0) return;
+		remaining = -room.cut.timer;
+
+		const next = room.cutQueue.shift() || null;
+		room.cut = next;
+		if (!next) {
+			forEachAudience(room, closeCut);
+			return;
+		}
+		forEachAudience(room, player => showCut(room, player));
+		if (remaining <= 0) return;
+	}
 }

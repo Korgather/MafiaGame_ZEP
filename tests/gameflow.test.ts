@@ -287,6 +287,7 @@ describe("밤 단계", () => {
 		const payload = widget.lastOfType("init");
 		assert.ok(payload);
 		assert.equal(payload.myNum, mafia.index);
+		assert.equal(payload.art, "art_ability_attack.png");
 		// 번호만 보내던 시절에는 화면에 1~8만 있고 이름이 없었다. 이제 이름이 온다
 		const seats = payload.seats as Array<{ num: number; name: string }>;
 		assert.deepEqual(
@@ -680,6 +681,7 @@ describe("승패와 대기실 복귀", () => {
 
 		finishPhase(target); // VOTE_RESULT → 승패 판정
 		assert.equal(target.phase, GamePhase.GAME_OVER);
+		assert.equal(target.cut?.scene, "citizen-win");
 
 		// 승리 화면과 전원 직업 공개.
 		// 진영별로 파일이 따로 있던 시절에는 파일명이 곧 승자였다. 이제
@@ -798,6 +800,7 @@ describe("승패와 대기실 복귀", () => {
 		}
 
 		assert.equal(target.phase, GamePhase.GAME_OVER);
+		assert.equal(target.cut?.scene, "mafia-win");
 		const mafiaSeat = target.seats.filter(seat => seat.role === Role.MAFIA)[0];
 		assert.equal(mafiaSeat.team, Team.MAFIA);
 		const over = mainWidget(playerOf(mafiaSeat));
@@ -805,6 +808,9 @@ describe("승패와 대기실 복귀", () => {
 		const result = over.lastOfType("init");
 		assert.ok(result, "종료 화면이 payload 없이 열렸습니다");
 		assert.equal(result.winner, Team.MAFIA);
+		for (const player of result.players as Array<{ icon: string }>) {
+			assert.match(player.icon, /^art_role_[a-z]+\.png$/);
+		}
 		// 왜 끝났는지가 화면에 남는다. 예전에는 그림 한 장뿐이라 이유가 없었다
 		assert.ok((result.reason as string).length > 0, "승리 이유가 비어 있습니다");
 	});
@@ -834,9 +840,13 @@ describe("전환 컷", () => {
 			assert.ok(payload, `${seat.name}의 컷이 payload 없이 열렸습니다`);
 			// ms가 없으면 위젯이 기본값 3초로 제 속도를 잡고, 서버가 걷는
 			// 순간과 어긋나 마지막 줄이 뜨기도 전에 화면이 사라진다
-			assert.equal(payload.ms, Math.round((target.phaseTimer - TIMING.ROLE_REVEAL) * 1000));
+			assert.equal(payload.scene, "game-start");
+			assert.equal(payload.art, "art_cut_game_start.png");
+			assert.equal(payload.ms, Math.round((target.cut?.length || 0) * 1000));
 			assert.equal(payload.tone, "neutral");
 		}
+		assert.equal(target.cutQueue.length, 1, "직업 공개 컷이 게임 시작 뒤에 줄 서지 않았습니다");
+		assert.equal(target.cutQueue[0].scene, "role-reveal");
 	});
 
 	it("시간이 다 되면 컷만 걷히고 단계 화면은 남는다", () => {
@@ -854,7 +864,7 @@ describe("전환 컷", () => {
 		assert.equal(hasCard(player), true, "컷이 걷히면서 밑의 화면까지 닫혔습니다");
 	});
 
-	it("처형 결과가 다음 밤 컷의 첫 줄로 이어진다", () => {
+	it("처형 결과를 보여준 뒤 밤 시작 컷으로 이어진다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // ROLE_REVEAL → NIGHT
@@ -872,14 +882,66 @@ describe("전환 컷", () => {
 		assert.equal(target.phase, GamePhase.NIGHT);
 		const payload = cutWidget(playerOf(target.seats[0])).lastOfType("init");
 		assert.ok(payload, "밤 컷이 payload 없이 열렸습니다");
-		assert.equal(payload.tone, "night");
+		assert.equal(payload.scene, "execution");
+		assert.equal(payload.art, "art_cut_execution.png");
+		assert.equal(payload.tone, "mafia");
 		const lines = payload.lines as string[];
-		// 처형은 자기 컷을 갖지 않는다. 개표 화면이 이미 7초를 쓴 뒤라
-		// 같은 소식을 한 번 더 기다리게 하는 대신 밤 컷의 첫 줄로 얹는다
 		assert.ok(
 			lines.length > 0 && lines[0].indexOf(victim.name) >= 0,
-			`처형 결과가 밤 컷에 실리지 않았습니다: ${JSON.stringify(lines)}`
+			`처형 결과가 처형 컷에 실리지 않았습니다: ${JSON.stringify(lines)}`
 		);
+
+		tick(Number(payload.ms) / 1000 + 0.001);
+		const night = cutWidget(playerOf(target.seats[0])).lastOfType("init");
+		assert.ok(night, "처형 뒤 밤 시작 컷이 열리지 않았습니다");
+		assert.equal(night.scene, "night-start");
+		assert.equal(night.art, "art_cut_night_start.png");
+		assert.equal(night.tone, "night");
+	});
+
+	it("밤 결과 뒤에 낮 시작과 토론 시작 컷이 순서대로 이어진다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // NIGHT → DAY
+
+		assert.equal(target.phase, GamePhase.DAY);
+		assert.equal(target.cut?.scene, "night-result");
+		assert.deepEqual(
+			target.cutQueue.map(cut => cut.scene),
+			["day-start", "discussion-start"]
+		);
+
+		const player = playerOf(target.seats[0]);
+		const nightResult = cutWidget(player).lastOfType("init");
+		assert.ok(nightResult, "밤 결과 컷이 payload 없이 열렸습니다");
+		assert.equal(nightResult.art, "art_cut_night_result.png");
+
+		tick(Number(nightResult.ms) / 1000 + 0.001);
+		const dayStart = cutWidget(player).lastOfType("init");
+		assert.ok(dayStart, "낮 시작 컷이 열리지 않았습니다");
+		assert.equal(dayStart.scene, "day-start");
+		assert.equal(dayStart.art, "art_cut_day_start.png");
+
+		tick(Number(dayStart.ms) / 1000 + 0.001);
+		const discussion = cutWidget(player).lastOfType("init");
+		assert.ok(discussion, "토론 시작 컷이 열리지 않았습니다");
+		assert.equal(discussion.scene, "discussion-start");
+		assert.equal(discussion.art, "art_cut_discussion_start.png");
+	});
+
+	it("투표 단계는 전용 투표 시작 컷을 연다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // NIGHT → DAY
+		finishPhase(target); // DAY → VOTE
+
+		assert.equal(target.phase, GamePhase.VOTE);
+		assert.equal(target.cut?.scene, "vote-start");
+		const payload = cutWidget(playerOf(target.seats[0])).lastOfType("init");
+		assert.ok(payload, "투표 시작 컷이 payload 없이 열렸습니다");
+		assert.equal(payload.art, "art_cut_vote_start.png");
 	});
 });
 

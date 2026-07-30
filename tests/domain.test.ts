@@ -728,6 +728,7 @@ describe("ROLE_DEFS", () => {
 			const def = ROLE_DEFS[role];
 			assert.ok(def.displayName, `${role}에 displayName이 없다`);
 			assert.ok(def.glyph, `${role}에 glyph가 없다`);
+			assert.match(def.icon, /^art_role_[a-z]+\.png$/, `${role}에 프로덕션 아이콘이 없다`);
 			assert.ok(def.ability, `${role}에 ability가 없다`);
 			assert.ok(def.tip, `${role}에 tip이 없다`);
 		}
@@ -783,6 +784,7 @@ describe("Guide", () => {
 		// 카드는 글리프·제목·본문·덧붙임 네 칸을 그린다. 비면 빈 칸이 보인다
 		for (const card of roleBook().concat(GUIDE_CARDS.slice())) {
 			assert.ok(card.glyph, `${card.title}에 glyph가 없다`);
+			assert.match(card.image, /^art_(?:role|icon)_[a-z]+\.png$/, `${card.title}에 이미지가 없다`);
 			assert.ok(card.title, "제목이 없는 카드가 있다");
 			assert.ok(card.body, `${card.title}에 본문이 없다`);
 			assert.ok(card.note, `${card.title}에 덧붙임이 없다`);
@@ -795,6 +797,7 @@ describe("Guide", () => {
 		const card = cardForRole(Role.MAFIA);
 		const def = ROLE_DEFS[Role.MAFIA];
 		assert.equal(card.title, def.displayName);
+		assert.equal(card.image, def.icon);
 		assert.equal(card.body, def.ability);
 		assert.equal(card.note, def.tip);
 	});

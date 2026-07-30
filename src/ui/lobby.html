@@ -140,10 +140,20 @@
 				flex-direction: column;
 				gap: var(--s1);
 			}
+
+			.panel.title {
+				background-image: linear-gradient(rgba(20, 16, 15, 0.7), rgba(20, 16, 15, 0.94)),
+					url("art_bg_title.png");
+			}
+
+			.panel.lobby {
+				background-image: linear-gradient(rgba(20, 16, 15, 0.72), rgba(20, 16, 15, 0.94)),
+					url("art_bg_lobby.png");
+			}
 		</style>
 	</head>
 	<body>
-		<div class="panel">
+		<div class="panel title" id="panel">
 			<div class="hd">
 				<div class="hd-title grow">
 					<span id="heading">방 선택</span>
@@ -156,7 +166,7 @@
 					있는 버튼을 지목 화면에 두지 않기 위해서다.
 				-->
 				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
-					📖
+					<img class="ui-icon" src="art_icon_player.png" alt="" />
 				</button>
 			</div>
 
@@ -168,8 +178,8 @@
 			<p class="note" id="note" role="status" aria-live="polite"></p>
 
 			<div class="foot hidden" id="foot">
-				<button class="btn ghost" id="quit" type="button">나가기</button>
-				<button class="btn primary grow" id="ready" type="button">준비</button>
+				<button class="btn ghost" id="quit" type="button"><img class="ui-icon" src="art_icon_exit.png" alt="" />나가기</button>
+				<button class="btn primary grow" id="ready" type="button"><img class="ui-icon" id="readyIcon" src="art_icon_confirm.png" alt="" /><span id="readyText">준비</span></button>
 			</div>
 		</div>
 
@@ -259,7 +269,8 @@
 				iAmReady = list.some(seat => seat.id === myId && seat.ready);
 
 				const ready = qs("#ready");
-				ready.textContent = iAmReady ? "준비 취소" : "준비";
+				qs("#readyText").textContent = iAmReady ? "준비 취소" : "준비";
+				qs("#readyIcon").src = iAmReady ? "art_icon_cancel.png" : "art_icon_confirm.png";
 				ready.classList.toggle("primary", !iAmReady);
 				ready.classList.toggle("ok", iAmReady);
 
@@ -294,6 +305,8 @@
 
 			/* ---------- 화면 전환 ---------- */
 			function showRooms(inRoom) {
+				qs("#panel").classList.toggle("title", !inRoom);
+				qs("#panel").classList.toggle("lobby", inRoom);
 				qs("#rooms").classList.toggle("hidden", inRoom);
 				qs("#seats").classList.toggle("hidden", !inRoom);
 				qs("#foot").classList.toggle("hidden", !inRoom);

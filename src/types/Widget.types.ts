@@ -152,6 +152,8 @@ export interface ChatChannelView {
  */
 export interface CardView {
 	glyph: string;
+	/** `res`에 있는 프로덕션 일러스트 파일명 */
+	image: string;
 	title: string;
 	/** null이면 진영 칩을 숨긴다 (규칙 안내 카드에는 진영이 없다) */
 	team: Team | null;
@@ -164,6 +166,8 @@ export interface RevealView {
 	num: number;
 	name: string;
 	role: string;
+	/** 종료 화면에서 함께 공개하는 직업 아이콘 */
+	icon: string;
 	team: Team;
 	alive: boolean;
 }

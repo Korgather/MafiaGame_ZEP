@@ -75,6 +75,7 @@
 		<div class="panel vote">
 			<div class="hd">
 				<div class="hd-title grow">
+					<img class="ui-icon" src="art_icon_vote.png" alt="" />
 					<span id="heading">투표</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
@@ -119,6 +120,7 @@
 					${flag(!seat.alive, "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}"
 				>
+					<img class="ui-icon" src="${seat.alive ? "art_icon_alive.png" : "art_icon_dead.png"}" alt="" />
 					<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
 				</button>`;
 			}

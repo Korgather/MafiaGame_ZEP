@@ -100,6 +100,21 @@
 				text-align: right;
 			}
 
+			.panel.result {
+				--panel-frame: url("art_ui_victory_frame.png");
+				--panel-slice: 93 66 56 64 fill;
+				--panel-pad: 24px 20px 20px;
+				background-image: linear-gradient(rgba(20, 16, 15, 0.78), rgba(20, 16, 15, 0.94)),
+					url("art_bg_result.png");
+			}
+
+			.rev .role-icon {
+				flex: 0 0 auto;
+				width: 34px;
+				height: 34px;
+				object-fit: contain;
+			}
+
 			.rev .job {
 				flex: 0 0 auto;
 				font-weight: 700;
@@ -113,7 +128,7 @@
 		</style>
 	</head>
 	<body>
-		<div class="panel">
+		<div class="panel result">
 			<div class="hd">
 				<div class="hd-title grow"><span id="heading">결과</span></div>
 				<div class="timer" id="timer"></div>
@@ -142,6 +157,7 @@
 					style="animation-delay:${i * 60}ms"
 				>
 					<span class="seat">${p.num}</span>
+					<img class="role-icon" src="${p.icon || ""}" alt="" />
 					<span class="grow ellip">${p.name || ""}</span>
 					<span class="job">${p.role || ""}</span>
 					<span class="hd-sub">${p.alive ? "생존" : "사망"}</span>

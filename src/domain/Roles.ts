@@ -17,6 +17,7 @@ import { Role, Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import type { SpriteKey } from "../constants/Assets.ts";
 import { POLITICIAN_VOTE_WEIGHT } from "../constants/GameConfig.ts";
+import { ABILITY_ART, ROLE_ICONS } from "../constants/VisualAssets.ts";
 import { ChatChannel } from "./chat/ChatChannel.ts";
 import type { NightChannel } from "./chat/ChatChannel.ts";
 
@@ -60,6 +61,8 @@ export interface RoleDef {
 	 * 그림을 되살리고 싶으면 여기에 cardImage 한 줄을 추가하면 된다.
 	 */
 	readonly glyph: string;
+	/** 직업 카드와 종료 공개에 쓰는 로컬 프로덕션 아이콘 */
+	readonly icon: string;
 	/** 카드에 적는 능력 한 줄. "나는 무엇을 할 수 있는가" */
 	readonly ability: string;
 	/** 카드에 적는 요령 한 줄. "그래서 어떻게 이기는가" */
@@ -161,6 +164,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "마피아",
 		team: Team.MAFIA,
 		glyph: "🔪",
+		icon: ROLE_ICONS[Role.MAFIA].file,
 		ability: "밤마다 한 명을 처형합니다.",
 		tip: "낮에는 시민인 척하세요. 마피아 수가 시민 수와 같아지면 이깁니다.",
 		nightAction: NightActionKind.ATTACK,
@@ -177,6 +181,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "의사",
 		team: Team.CITIZEN,
 		glyph: "💉",
+		icon: ROLE_ICONS[Role.DOCTOR].file,
 		ability: "밤마다 한 명을 마피아의 공격에서 지킵니다.",
 		tip: "정체를 밝히면 다음 밤에 죽습니다. 조용히 지키세요.",
 		nightAction: NightActionKind.HEAL,
@@ -191,6 +196,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "경찰",
 		team: Team.CITIZEN,
 		glyph: "🔍",
+		icon: ROLE_ICONS[Role.POLICE].file,
 		ability: "밤마다 한 명이 마피아인지 조사합니다.",
 		tip: "찾아냈다면 낮에 설득하세요. 다만 밝히는 순간 표적이 됩니다.",
 		nightAction: NightActionKind.INSPECT_TEAM,
@@ -205,6 +211,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "스파이",
 		team: Team.CITIZEN,
 		glyph: "🕵️",
+		icon: ROLE_ICONS[Role.SPY].file,
 		ability: "둘째 밤부터, 밤마다 한 명의 정확한 직업을 알아냅니다.",
 		// 예전 문구는 "당신은 시민 팀입니다. 얻은 정보를 시민에게 흘리세요"였다.
 		// 규칙과 정반대였다 — 합류하면 team이 MAFIA로 바뀌므로, 시키는 대로
@@ -228,6 +235,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "영매",
 		team: Team.CITIZEN,
 		glyph: "🔮",
+		icon: ROLE_ICONS[Role.SHAMAN].file,
 		ability: "밤마다 죽은 사람들과 대화합니다.",
 		tip: "죽은 사람은 자기를 죽인 쪽을 압니다. 그 말을 낮에 전하세요.",
 		nightAction: null,
@@ -242,6 +250,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "정치인",
 		team: Team.CITIZEN,
 		glyph: "🎖️",
+		icon: ROLE_ICONS[Role.POLITICIAN].file,
 		ability: "투표로 처형되지 않고, 당신의 표는 2표로 계산됩니다.",
 		tip: "처형되지 않으니 앞에 나서서 토론을 이끄세요.",
 		nightAction: null,
@@ -257,6 +266,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "자경단원",
 		team: Team.CITIZEN,
 		glyph: "🔫",
+		icon: ROLE_ICONS[Role.VIGILANTE].file,
 		ability: "둘째 밤부터, 게임에 딱 한 번 한 명을 사살합니다.",
 		tip: "낮의 이야기를 듣고 쏘세요. 시민을 쏘면 책임을 지고 당신도 죽습니다.",
 		nightAction: NightActionKind.ATTACK,
@@ -274,6 +284,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "군인",
 		team: Team.CITIZEN,
 		glyph: "🪖",
+		icon: ROLE_ICONS[Role.SOLDIER].file,
 		ability: "밤에 받는 첫 공격을 한 번 버팁니다.",
 		tip: "한 번은 버팁니다. 살아남았다면 그날 밤 누군가 당신을 노렸다는 뜻입니다.",
 		nightAction: null,
@@ -289,6 +300,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "건달",
 		team: Team.CITIZEN,
 		glyph: "🥊",
+		icon: ROLE_ICONS[Role.THUG].file,
 		ability: "밤마다 한 명을 협박해 다음 낮 발언과 투표를 막습니다.",
 		tip: "시민 편입니다. 확정 시민을 막으면 헛턴이니 밤에 움직이는 사람을 찾으세요.",
 		nightAction: NightActionKind.SILENCE,
@@ -303,6 +315,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "기자",
 		team: Team.CITIZEN,
 		glyph: "📰",
+		icon: ROLE_ICONS[Role.REPORTER].file,
 		ability: "게임에 딱 한 번, 취재한 사람의 직업을 다음 아침 모두에게 공개합니다.",
 		tip: "한 번뿐입니다. 의견이 갈려 아무도 확신하지 못할 때 터뜨리세요.",
 		nightAction: NightActionKind.SCOOP,
@@ -318,6 +331,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "짐승인간",
 		team: Team.MAFIA,
 		glyph: "🐺",
+		icon: ROLE_ICONS[Role.BEAST].file,
 		ability: "밤마다 한 명을 물어 죽입니다. 경찰 조사에는 시민으로 나옵니다.",
 		// 전에는 "마피아와 같은 사람을 물면 한 명만 죽습니다"였다. 사실이긴 해도
 		// 겹치는 쪽이 손해라 아무도 따를 이유가 없는 조언이었고, 대화 수단도 없어
@@ -337,6 +351,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "시민",
 		team: Team.CITIZEN,
 		glyph: "🧑",
+		icon: ROLE_ICONS[Role.CITIZEN].file,
 		ability: "특별한 능력은 없습니다.",
 		tip: "당신의 무기는 투표입니다. 낮 토론을 잘 듣고 판단하세요.",
 		nightAction: null,
@@ -348,6 +363,25 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		immuneToVote: false,
 	},
 };
+
+/** 밤 행동 종류를 자기 화면에 노출해도 안전한 추상 연출로 바꾼다. */
+export function abilityArtFor(action: NightActionKind | null): string {
+	switch (action) {
+		case NightActionKind.ATTACK:
+			return ABILITY_ART.attack.file;
+		case NightActionKind.HEAL:
+			return ABILITY_ART.heal.file;
+		case NightActionKind.INSPECT_TEAM:
+		case NightActionKind.INSPECT_ROLE:
+			return ABILITY_ART.investigate.file;
+		case NightActionKind.SILENCE:
+			return ABILITY_ART.silence.file;
+		case NightActionKind.SCOOP:
+			return ABILITY_ART.scoop.file;
+		default:
+			return "";
+	}
+}
 
 export function roleDef(role: Role): RoleDef {
 	return ROLE_DEFS[role];

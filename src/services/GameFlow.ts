@@ -28,7 +28,7 @@ import { guard } from "../infrastructure/Fault.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import { showRoleReveal } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
-import { advanceCut, playCut, showCut } from "./Cut.ts";
+import { advanceCut, playCuts, showCut } from "./Cut.ts";
 import { broadcastRoomCounts, enterLobby, refreshSpectators, seatSpectators } from "./Lobby.ts";
 import { beginNight, broadcastNightProgress, openNightView, resolveNight } from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
@@ -131,7 +131,7 @@ function advanceGame(room: Room, dt: number): void {
 	}
 
 	room.phaseTimer -= dt;
-	// 컷은 단계 안에서 산다. 단계 시간을 컷 길이만큼 늘려 두었으므로(playCut)
+	// 컷은 단계 안에서 산다. 단계 시간을 전체 컷 길이만큼 늘려 두었으므로(playCuts)
 	// 같은 dt로 함께 줄이면 컷이 걷히는 시점과 단계가 끝나는 시점이 서로 밀리지 않는다.
 	advanceCut(room, dt);
 
@@ -272,9 +272,22 @@ function beginGame(room: Room): void {
 		assignRole(room.seats[i], i + 1, deck[i]);
 	}
 
-	// 컷을 먼저 건다. playCut이 phaseTimer를 컷 길이만큼 늘리므로, 아래에서
+	// 컷을 먼저 건다. playCuts가 phaseTimer를 전체 컷 길이만큼 늘리므로, 아래에서
 	// 카드에 실어 보내는 남은 시간이 늘어난 값이어야 서버와 화면이 같은 시계를 본다.
-	playCut(room, "neutral", "🎭 게임 시작", [`${room.total}명이 참가합니다.`]);
+	playCuts(room, [
+		{
+			scene: "game-start",
+			tone: "neutral",
+			title: "게임 시작",
+			lines: [`${room.total}명이 참가합니다.`],
+		},
+		{
+			scene: "role-reveal",
+			tone: "neutral",
+			title: "직업 공개",
+			lines: ["봉인된 카드를 확인하세요."],
+		},
+	]);
 
 	forEachPlayer(room, (player, seat) => {
 		countPlay(player);
@@ -328,7 +341,7 @@ export function returnToLobby(room: Room): void {
 		if (!player) continue;
 		closeCard(player);
 		// 컷이 도는 중에 방이 끝날 수 있다 — 인원 부족(advanceGame)과 사고 복구
-		// (recover)가 그 경로다. resetRoom은 room.cut만 지우므로 화면은 여기서 걷는다.
+		// (recover)가 그 경로다. resetRoom은 컷 상태만 지우므로 화면은 여기서 걷는다.
 		closeCut(player);
 		// 이름표를 판 밖 모습으로 되돌린다. 이 안에서 등급을 다시 계산하므로
 		// 방금 올라간 레벨이 여기서 반영된다(Outcome이 먼저 정산을 끝냈다).

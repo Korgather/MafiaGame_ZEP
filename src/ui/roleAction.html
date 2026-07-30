@@ -32,6 +32,42 @@
 				align-content: center;
 			}
 
+			.ability-art {
+				--ability-border: clamp(10px, 3vh, 18px);
+				position: relative;
+				isolation: isolate;
+				display: grid;
+				place-items: center;
+				flex: 0 0 auto;
+				height: clamp(64px, 23vh, 132px);
+				width: auto;
+				max-width: 100%;
+				aspect-ratio: 4 / 3;
+				margin: 0 auto;
+				padding: var(--ability-border);
+				background: linear-gradient(160deg, rgba(20, 16, 15, 0.74), rgba(20, 16, 15, 0.9));
+			}
+
+			.ability-art::before {
+				content: "";
+				position: absolute;
+				inset: 0;
+				z-index: -1;
+				border: var(--ability-border) solid transparent;
+				border-image-source: url("art_ui_ability_frame.png");
+				border-image-slice: 52 59 47 59 fill;
+				border-image-width: var(--ability-border);
+				border-image-repeat: stretch;
+				pointer-events: none;
+			}
+
+			.ability-art img {
+				width: 100%;
+				aspect-ratio: 16 / 9;
+				object-fit: contain;
+				border-radius: var(--r2);
+			}
+
 			/*
 			 * 지목이 확정된 순간.
 			 *
@@ -68,6 +104,7 @@
 			</div>
 
 			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
+			<div class="ability-art" id="abilityStage"><img id="abilityArt" alt="" /></div>
 
 			<div class="body" id="body">
 				<div class="grid scroll" id="grid" role="group" aria-label="지목 대상"></div>
@@ -116,6 +153,9 @@
 					role.textContent = data.role || "";
 					role.classList.add(data.team === "mafia" ? "mafia" : "citizen");
 					qs("#prompt").textContent = data.prompt || "";
+					const art = qs("#abilityArt");
+					art.src = data.art || "";
+					qs("#abilityStage").classList.toggle("hidden", !data.art);
 
 					const seats = Array.isArray(data.seats) ? data.seats : [];
 					canPick = seats.length > 0;

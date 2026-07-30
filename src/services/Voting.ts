@@ -23,7 +23,7 @@ import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
-import { playCut } from "./Cut.ts";
+import { playCut, playCuts } from "./Cut.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { beginDayStage } from "./Stage.ts";
 import { bindMessage, identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
@@ -61,7 +61,26 @@ export function beginDay(room: Room): void {
 	 * 조용한 밤이면 lines가 비어 제목만 도는 짧은 컷이 된다 — 그것도
 	 * 정보다("아무도 죽지 않았다").
 	 */
-	playCut(room, "day", `🌞 ${room.turnCount}번째 아침`, room.nightReport);
+	playCuts(room, [
+		{
+			scene: "night-result",
+			tone: "night",
+			title: "밤의 결과",
+			lines: room.nightReport,
+		},
+		{
+			scene: "day-start",
+			tone: "day",
+			title: `${room.turnCount}번째 낮`,
+			lines: [],
+		},
+		{
+			scene: "discussion-start",
+			tone: "day",
+			title: "토론 시작",
+			lines: ["단서를 나누고 의심되는 사람을 찾으세요."],
+		},
+	]);
 
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 
@@ -112,6 +131,7 @@ export function beginVote(room: Room): void {
 	}
 
 	playSound(room, Sound.VOTE);
+	playCut(room, "vote-start", "neutral", "투표 시작", ["처형할 사람을 고르세요."]);
 	centerLabel(room, "투표가 시작되었습니다.");
 	// 중앙 라벨은 몇 초 뒤 사라진다. 늦게 화면을 본 사람과 재접속한 사람에게는
 	// 채팅 기록만 남으므로, 사라지는 안내는 항상 남는 안내와 짝을 이룬다

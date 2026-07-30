@@ -1,0 +1,63 @@
+{
+  "mode": "ralph",
+  "active": false,
+  "current_phase": "cancelled",
+  "phase": "verified-complete",
+  "completed_at": "2026-07-31T02:27:04.8805926+09:00",
+  "iteration": 2,
+  "maxIterations": 10,
+  "contextSnapshot": ".omx/context/mafia-art-overhaul-20260730T163020Z.md",
+  "prd": ".omx/plans/prd-mafia-art-overhaul.md",
+  "testSpec": ".omx/plans/test-spec-mafia-art-overhaul.md",
+  "artDirection": "Noir Dollhouse",
+  "completed": [
+    "context-intake",
+    "repository-baseline-check",
+    "code-derived-role-inventory",
+    "art-direction",
+    "prd",
+    "test-spec",
+    "regression-tests",
+    "asset-generation",
+    "asset-integration",
+    "widget-previews",
+    "full-verification",
+    "architect-review",
+    "deslop",
+    "post-deslop-verification",
+    "state-cleanup"
+  ],
+  "pending": [],
+  "assetCount": 62,
+  "previewScenes": 38,
+  "archive": "MafiaGame_ZEP.zepapp.zip",
+  "visualVerdict": {
+    "status": "PASS",
+    "reviewedFamilies": [
+      "role-icons",
+      "game-icons",
+      "cutscenes",
+      "backgrounds",
+      "ability-art",
+      "ui-frames"
+    ],
+    "checks": [
+      "no-green-chroma-residue",
+      "transparent-frame-centers",
+      "small-size-role-readability",
+      "consistent-noir-dollhouse-style",
+      "no-visible-text-or-watermark",
+      "cut-layer-readability"
+    ],
+    "screenshotLimitation": "Final prison/graveyard cut layering was source-reviewed against previously approved assets because a new local browser screenshot was unavailable."
+  },
+  "verification": {
+    "typeCheck": "PASS",
+    "lint": "PASS",
+    "zepApiCheck": "PASS (75 calls, no undefined arguments)",
+    "tests": "PASS (242/242)",
+    "widgetCheck": "PASS (9 widgets, 38 scenes)",
+    "webpack": "PASS",
+    "archive": "PASS"
+  }
+}

@@ -320,6 +320,8 @@ export interface NightActionPayload extends Identity {
 	myNum: number;
 	/** 무엇을 하라는 한 줄. 지목이 없으면 빈 문자열 */
 	prompt: string;
+	/** 자기 화면에만 보이는 능력 발동 일러스트 */
+	art: string;
 	/** 지목 대상. 비어 있으면 격자를 숨긴다 */
 	seats: SeatView[];
 	timer: number;
@@ -383,6 +385,8 @@ export interface ChatPayload {
  */
 export interface CutPayload {
 	type: "init";
+	scene: string;
+	art: string;
 	title: string;
 	/** 한 줄씩 차례로 떠오른다. 비어 있으면 제목만 */
 	lines: string[];

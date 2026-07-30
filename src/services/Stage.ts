@@ -135,9 +135,9 @@ function placeSilhouettes(room: Room): void {
 	for (const seat of room.seats) {
 		const position = seatPosition(room.num, seat.index);
 		if (!position) continue;
-		// 머리 위 한 칸에 실루엣, 발 밑에 빈 오브젝트(캐릭터 가림 방지)
+		// 머리 위 한 칸에 실루엣, 발 밑에 투명 마스크(기본 캐릭터 가림 방지)
 		ScriptMap.putObject(position.x, position.y - 1, sprite("silhouette"));
-		ScriptMap.putObject(position.x, position.y, sprite("blank"));
+		ScriptMap.putObject(position.x, position.y, sprite("nightMask"));
 		room.silhouettes.push([position.x, position.y - 1], [position.x, position.y]);
 	}
 }

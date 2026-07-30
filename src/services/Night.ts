@@ -17,7 +17,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { TIMING } from "../constants/GameConfig.ts";
-import { inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
+import { abilityArtFor, inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import {
 	hasNightTurn,
@@ -32,7 +32,7 @@ import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
-import { playCut } from "./Cut.ts";
+import { playCuts } from "./Cut.ts";
 import { DeathCause, kill } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { PhasePayload } from "./Widgets.ts";
@@ -102,10 +102,9 @@ export function beginNight(room: Room): void {
 	/*
 	 * 개표 결과를 resetRound가 지우기 전에 읽어 둔다.
 	 *
-	 * 처형에 컷을 따로 주지 않고 다음 밤 컷의 첫 줄로 얹는 이유: 투표 결과
-	 * 화면(VOTE_RESULT)이 이미 7초 동안 같은 사실을 보여주고 있다. 그 위에
-	 * 컷을 하나 더 끼우면 같은 소식을 두 번 보고 기다리는 시간만 늘어난다.
-	 * 반대로 밤 컷의 첫 줄이 되면 "그래서 밤이 됐다"는 인과가 한 화면에 남는다.
+	 * 처형은 다음 밤 시작과 같은 전환 묶음에서 먼저 보여준다. 투표 결과 화면이
+	 * 이미 사실을 설명하므로 처형 컷은 한 줄로 짧게 두고, 바로 밤 장면으로
+	 * 이어서 "처형 뒤 밤이 왔다"는 인과를 유지한다.
 	 *
 	 * 첫 밤에는 비어 있다(아직 투표가 없었다) — 그때는 제목만 도는 컷이 된다.
 	 */
@@ -125,7 +124,24 @@ export function beginNight(room: Room): void {
 	}
 
 	// 컷이 phaseTimer를 늘린다. 아래 openNightView가 그 값을 화면에 싣는다
-	playCut(room, "night", `🌙 ${room.turnCount + 1}번째 밤`, verdict ? [verdict] : []);
+	playCuts(room, [
+		...(verdict
+			? [
+					{
+						scene: "execution" as const,
+						tone: "mafia" as const,
+						title: "처형",
+						lines: [verdict],
+					},
+				]
+			: []),
+		{
+			scene: "night-start",
+			tone: "night",
+			title: `${room.turnCount + 1}번째 밤`,
+			lines: [],
+		},
+	]);
 
 	forEachPlayer(room, (player, seat) => {
 		closeCard(player);
@@ -171,6 +187,7 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		myNum: seat.index,
 		...identityOf(seat),
 		prompt: def.nightPrompt || "",
+		art: abilityArtFor(def.nightAction),
 		seats: seatViews(room, inMafiaChat(seat) ? seat.team : undefined),
 		timer: room.phaseTimer,
 		note: def.nightNotice,

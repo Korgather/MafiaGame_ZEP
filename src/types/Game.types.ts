@@ -16,6 +16,7 @@ import type { ScriptWidget, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { Bucket } from "../domain/RateLimit.ts";
+import type { CutScene } from "../constants/VisualAssets.ts";
 
 /**
  * 게임 진행 단계.
@@ -176,15 +177,17 @@ export type CutTone = "neutral" | "night" | "day" | "mafia" | "citizen";
 /**
  * 지금 도는 중인 단계 전환 컷.
  *
- * 방 하나에 하나뿐이다. 컷은 단계가 바뀌는 순간에만 시작되고 다음 전환까지
- * 반드시 끝나므로 줄을 설 일이 없다 — 큐를 두면 "언제 비워지는가"라는
- * 상태가 하나 더 생기는데 그 값을 볼 사람이 없다.
+ * 화면에 떠 있는 컷은 방 하나에 하나뿐이다. 다만 게임 시작→직업 공개처럼
+ * 같은 단계 안에서 서로 다른 장면을 차례로 보여줘야 하므로 뒤따를 컷은
+ * Room.cutQueue에 줄을 선다. 현재 컷이 끝나는 순간 advanceCut이 다음 컷을
+ * 꺼내고, 마지막 컷까지 끝나면 큐와 화면이 함께 비워진다.
  *
  * 방이 들고 있는 이유는 재접속이다. 컷은 사람마다 뜨는 위젯이지만 "지금
  * 무엇이 도는 중인가"는 방의 사실이라, 도중에 들어온 사람에게도 남은 만큼을
  * 그대로 보여줄 수 있다(GameFlow.showPhaseView).
  */
 export interface ActiveCut {
+	readonly scene: CutScene;
 	readonly title: string;
 	readonly lines: string[];
 	readonly tone: CutTone;
@@ -275,6 +278,8 @@ export interface Room {
 	chatLog: ChatMessage[];
 	/** 지금 도는 중인 전환 컷. 없으면 null */
 	cut: ActiveCut | null;
+	/** 현재 컷이 끝난 뒤 같은 단계 안에서 이어질 컷들 (앞에서부터 재생) */
+	cutQueue: ActiveCut[];
 }
 
 /**

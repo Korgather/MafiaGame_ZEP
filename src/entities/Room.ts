@@ -41,6 +41,7 @@ export function createRoom(num: number): Room {
 		silhouettes: [],
 		chatLog: [],
 		cut: null,
+		cutQueue: [],
 	};
 	return room;
 }
@@ -171,6 +172,7 @@ export function revealViews(room: Room): RevealView[] {
 			num: seat.index,
 			name: seat.name,
 			role: roleName(seat.role),
+			icon: roleDef(seat.role).icon,
 			team: seat.team,
 			alive: seat.alive,
 		}));
@@ -284,4 +286,5 @@ export function resetRoom(room: Room): void {
 	// 돌던 컷도 여기서 끊는다. 위젯은 나가는 사람마다 destroyWidgets가
 	// 닫으므로 남는 것은 이 상태 하나다
 	room.cut = null;
+	room.cutQueue = [];
 }

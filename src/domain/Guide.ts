@@ -16,6 +16,7 @@
  */
 import { Role, Team } from "../types/Game.types.ts";
 import type { CardView } from "../types/Widget.types.ts";
+import { GAME_ICONS } from "../constants/VisualAssets.ts";
 import { ROLE_DEFS } from "./Roles.ts";
 
 /**
@@ -32,6 +33,7 @@ import { ROLE_DEFS } from "./Roles.ts";
 export const GUIDE_CARDS: readonly CardView[] = [
 	{
 		glyph: "🎭",
+		image: GAME_ICONS.player.file,
 		title: "누가 마피아일까",
 		team: null,
 		body: "참가자 중 몇 명은 몰래 마피아입니다. 시민은 마피아를 모두 찾아내면 이기고, 마피아는 자기 수가 시민 수와 같아지면 이깁니다.",
@@ -39,6 +41,7 @@ export const GUIDE_CARDS: readonly CardView[] = [
 	},
 	{
 		glyph: "🌙",
+		image: GAME_ICONS.time.file,
 		title: "밤과 낮이 반복됩니다",
 		team: null,
 		body: "밤에는 능력이 있는 직업만 조용히 한 명을 지목합니다. 아침이 되면 밤에 일어난 일이 공개되고, 모두 모여 토론한 뒤 한 명을 투표로 처형합니다.",
@@ -46,6 +49,7 @@ export const GUIDE_CARDS: readonly CardView[] = [
 	},
 	{
 		glyph: "👀",
+		image: GAME_ICONS.confirm.file,
 		title: "화면 보는 법",
 		team: null,
 		body: "가운데 화면이 지금 무엇을 할 차례인지 알려줍니다. 사람 타일을 누르면 지목·투표가 되고, 오른쪽 위 링은 남은 시간입니다.",
@@ -58,6 +62,7 @@ export function cardForRole(role: Role): CardView {
 	const def = ROLE_DEFS[role];
 	return {
 		glyph: def.glyph,
+		image: def.icon,
 		title: def.displayName,
 		team: def.team,
 		body: def.ability,

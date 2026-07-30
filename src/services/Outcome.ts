@@ -63,8 +63,9 @@ export function finish(room: Room, winner: TeamType): void {
 	// 컷이 phaseTimer를 늘린다. 아래 openWinView가 그 값을 화면에 싣는다
 	playCut(
 		room,
+		winner === Team.MAFIA ? "mafia-win" : "citizen-win",
 		winner === Team.MAFIA ? "mafia" : "citizen",
-		winner === Team.MAFIA ? "🔪 마피아 승리" : "🕊️ 시민 승리",
+		winner === Team.MAFIA ? "마피아 승리" : "시민 승리",
 		closingLines(room, winner)
 	);
 

@@ -49,12 +49,12 @@ const SEATS = [
 ];
 
 const REVEAL = [
-	{ num: 1, name: "김철수", role: "시민", team: "citizen", alive: false },
-	{ num: 2, name: "이영희", role: "마피아", team: "mafia", alive: true },
-	{ num: 3, name: "박민수", role: "의사", team: "citizen", alive: false },
-	{ num: 4, name: "정수연", role: "경찰", team: "citizen", alive: true },
-	{ num: 5, name: "최지훈매우긴이름입니다", role: "스파이", team: "mafia", alive: true },
-	{ num: 6, name: "한가영", role: "영매", team: "citizen", alive: false },
+	{ num: 1, name: "김철수", role: "시민", icon: "art_role_citizen.png", team: "citizen", alive: false },
+	{ num: 2, name: "이영희", role: "마피아", icon: "art_role_mafia.png", team: "mafia", alive: true },
+	{ num: 3, name: "박민수", role: "의사", icon: "art_role_doctor.png", team: "citizen", alive: false },
+	{ num: 4, name: "정수연", role: "경찰", icon: "art_role_police.png", team: "citizen", alive: true },
+	{ num: 5, name: "최지훈매우긴이름입니다", role: "스파이", icon: "art_role_spy.png", team: "mafia", alive: true },
+	{ num: 6, name: "한가영", role: "영매", icon: "art_role_shaman.png", team: "citizen", alive: false },
 ];
 
 /**
@@ -243,6 +243,7 @@ const SCENES = [
 				team: "mafia",
 				alive: true,
 				prompt: "제거할 대상을 고르세요",
+				art: "art_ability_attack.png",
 				seats: SEATS,
 				timer: 22,
 				note: "🌙 동료와의 대화는 채팅창의 🔪 탭에서 합니다.",
@@ -262,6 +263,7 @@ const SCENES = [
 				team: "citizen",
 				alive: true,
 				prompt: "살릴 대상을 고르세요",
+				art: "art_ability_heal.png",
 				seats: SEATS,
 				timer: 22,
 				note: "밤마다 한 명을 지목해 마피아의 공격에서 살릴 수 있습니다.",
@@ -285,6 +287,7 @@ const SCENES = [
 				team: "citizen",
 				alive: true,
 				prompt: "처단할 대상을 고르세요 (게임당 한 번)",
+				art: "art_ability_attack.png",
 				seats: SEATS,
 				timer: 22,
 				note: "게임당 한 번, 한 명을 죽일 수 있습니다. 시민을 죽이면 자책하여 함께 죽습니다.",
@@ -324,6 +327,7 @@ const SCENES = [
 				team: "mafia",
 				alive: true,
 				prompt: "협박할 대상을 고르세요",
+				art: "art_ability_silence.png",
 				seats: SEATS,
 				timer: 22,
 				// 마피아 팀이지만 밀담 상대가 없다 — 채팅에 🔪 탭이 생기지 않는다
@@ -721,7 +725,7 @@ const SCENES = [
 		],
 	},
 	/*
-	 * 전환 컷 네 장면.
+	 * 전환 컷 전체 열 장면.
 	 *
 	 * ms는 Cut.ts의 lengthOf(LEAD 1.2 + STEP 0.8 × 줄 수 + TAIL 0.8, 상한 6초)가
 	 * 내는 값을 그대로 적는다. 위젯은 이 하나에서 모든 지연을 비율로 계산하므로
@@ -731,7 +735,49 @@ const SCENES = [
 		label: "컷 — 게임 시작 (제목만)",
 		file: "cut.html",
 		size: CUT_SIZE,
-		messages: [{ type: "init", title: "🎭 게임 시작", lines: [], tone: "neutral", ms: 2000 }],
+		messages: [
+			{
+				type: "init",
+				scene: "game-start",
+				art: "art_cut_game_start.png",
+				title: "게임 시작",
+				lines: [],
+				tone: "neutral",
+				ms: 2000,
+			},
+		],
+	},
+	{
+		label: "컷 — 직업 공개",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				scene: "role-reveal",
+				art: "art_cut_role_reveal.png",
+				title: "직업 공개",
+				lines: ["봉인된 카드를 확인하세요."],
+				tone: "neutral",
+				ms: 2800,
+			},
+		],
+	},
+	{
+		label: "컷 — 밤 시작",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				scene: "night-start",
+				art: "art_cut_night_start.png",
+				title: "두 번째 밤",
+				lines: [],
+				tone: "night",
+				ms: 2000,
+			},
+		],
 	},
 	{
 		label: "컷 — 밤 (앞선 처형 결과를 얹어서)",
@@ -740,9 +786,11 @@ const SCENES = [
 		messages: [
 			{
 				type: "init",
-				title: "🌙 2번째 밤",
+				scene: "execution",
+				art: "art_cut_execution.png",
+				title: "처형",
 				lines: ["🗳️ 5번 최지훈매우긴이름입니다 님이 처형되었습니다."],
-				tone: "night",
+				tone: "mafia",
 				ms: 2800,
 			},
 		],
@@ -754,7 +802,9 @@ const SCENES = [
 		messages: [
 			{
 				type: "init",
-				title: "🌞 2번째 아침",
+				scene: "night-result",
+				art: "art_cut_night_result.png",
+				title: "밤의 결과",
 				lines: [
 					"💀 3번 참가자3 님이 사망했습니다.",
 					"💊 7번 참가자7 님이 치료되었습니다.",
@@ -769,13 +819,79 @@ const SCENES = [
 		],
 	},
 	{
+		label: "컷 — 낮 시작",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				scene: "day-start",
+				art: "art_cut_day_start.png",
+				title: "두 번째 낮",
+				lines: [],
+				tone: "day",
+				ms: 2000,
+			},
+		],
+	},
+	{
+		label: "컷 — 토론 시작",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				scene: "discussion-start",
+				art: "art_cut_discussion_start.png",
+				title: "토론 시작",
+				lines: ["단서를 나누고 의심되는 사람을 찾으세요."],
+				tone: "day",
+				ms: 2800,
+			},
+		],
+	},
+	{
+		label: "컷 — 투표 시작",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				scene: "vote-start",
+				art: "art_cut_vote_start.png",
+				title: "투표 시작",
+				lines: ["처형할 사람을 고르세요."],
+				tone: "neutral",
+				ms: 2800,
+			},
+		],
+	},
+	{
+		label: "컷 — 시민 승리",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				scene: "citizen-win",
+				art: "art_cut_citizen_win.png",
+				title: "시민 승리",
+				lines: ["마피아가 모두 사라졌습니다."],
+				tone: "citizen",
+				ms: 2800,
+			},
+		],
+	},
+	{
 		label: "컷 — 마피아 승리",
 		file: "cut.html",
 		size: CUT_SIZE,
 		messages: [
 			{
 				type: "init",
-				title: "🔪 마피아 승리",
+				scene: "mafia-win",
+				art: "art_cut_mafia_win.png",
+				title: "마피아 승리",
 				lines: ["마피아 수가 시민 수와 같아졌습니다."],
 				tone: "mafia",
 				ms: 2800,

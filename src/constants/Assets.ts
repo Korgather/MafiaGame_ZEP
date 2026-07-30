@@ -234,7 +234,7 @@ export type SpriteKey =
 	| "bullet"
 	| "claw"
 	| "silhouette"
-	| "blank";
+	| "nightMask";
 
 /** 4방향 3프레임 걷기 (48x48 기본 캐릭터 시트) */
 function walk48(file: string): SpriteDef {
@@ -316,7 +316,8 @@ export const SPRITE_DEFS: Record<SpriteKey, SpriteDef> = {
 	 * 남아 있었다. tests/assets.test.ts가 이제 이런 어긋남을 잡는다.
 	 */
 	silhouette: still("silhouette2.png", 32, 64, 0),
-	blank: still("blank.png", 32, 32, 0),
+	/** 실루엣 발밑의 기본 캐릭터를 가리는 완전 투명 런타임 마스크 */
+	nightMask: still("nightFloorMask.png", 32, 32, 0),
 };
 
 /** 라벨 색상 */

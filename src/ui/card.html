@@ -30,28 +30,36 @@
 			/* ---------- 카드 한 장 ---------- */
 			.card {
 				position: relative;
+				isolation: isolate;
 				display: flex;
 				flex-direction: column;
 				align-items: center;
 				justify-content: center;
 				gap: var(--s3);
-				flex: 1 1 auto;
-				min-height: 0;
+				flex: 0 1 auto;
+				height: 100%;
+				width: auto;
+				max-width: min(100%, 260px);
+				max-height: 100%;
+				aspect-ratio: 2 / 3;
+				margin: 0 auto;
 				padding: var(--s4);
 				text-align: center;
 				border-radius: var(--r3);
-				border: 2px solid var(--line);
-				background: radial-gradient(120% 80% at 50% 0%, var(--surface-2), var(--bg));
+				border: 0;
+				background-color: var(--surface);
+				background-image: url("art_ui_card_front.png");
+				background-position: center;
+				background-size: 100% 100%;
+				background-repeat: no-repeat;
 				animation: reveal 420ms var(--ease);
 			}
 
 			.card.mafia {
-				border-color: var(--mafia);
-				background: radial-gradient(120% 80% at 50% 0%, var(--mafia-dim), var(--bg));
+				box-shadow: 0 0 0 2px var(--mafia) inset;
 			}
 			.card.citizen {
-				border-color: var(--citizen);
-				background: radial-gradient(120% 80% at 50% 0%, var(--citizen-dim), var(--bg));
+				box-shadow: 0 0 0 2px var(--citizen) inset;
 			}
 
 			@keyframes reveal {
@@ -92,6 +100,13 @@
 				animation: rise 260ms var(--ease) 380ms both;
 			}
 
+			.btn.skip::before {
+				content: "";
+				width: 18px;
+				height: 18px;
+				background: url("art_icon_skip.png") center / contain no-repeat;
+			}
+
 			@keyframes rise {
 				from {
 					opacity: 0;
@@ -99,9 +114,73 @@
 				}
 			}
 
+			.card-art {
+				width: clamp(92px, 34vw, 148px);
+				height: clamp(92px, 34vw, 148px);
+				object-fit: contain;
+				filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.48));
+			}
+
+			.card.guide {
+				background: linear-gradient(rgba(20, 16, 15, 0.72), rgba(20, 16, 15, 0.88));
+				border: 26px solid transparent;
+				border-image-source: url("art_ui_tutorial_frame.png");
+				border-image-slice: 83 67 70 80 fill;
+				border-image-width: 26px;
+				border-image-repeat: stretch;
+			}
+
+			.card.solo::before {
+				content: "";
+				position: absolute;
+				inset: 0;
+				z-index: 5;
+				aspect-ratio: 2 / 3;
+				border-radius: inherit;
+				background: url("art_ui_card_back.png") center / 100% 100% no-repeat;
+				pointer-events: none;
+				animation: reveal-back 620ms var(--ease) forwards;
+			}
+
+			.card.solo::after {
+				content: "";
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				z-index: 6;
+				width: 84px;
+				height: 84px;
+				background: url("art_ui_loading_emblem.png") center / contain no-repeat;
+				filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.55));
+				pointer-events: none;
+				animation: reveal-emblem 620ms var(--ease) forwards;
+			}
+
+			@keyframes reveal-back {
+				0%, 44% { opacity: 1; }
+				70%, 100% { opacity: 0; }
+			}
+
+			@keyframes reveal-emblem {
+				0% { opacity: 0; transform: translate(-50%, -50%) scale(0.72) rotate(-12deg); }
+				18%, 44% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); }
+				70%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.08) rotate(8deg); }
+			}
+
 			.glyph {
+				display: none;
 				font-size: var(--t-2xl);
 				line-height: 1;
+			}
+
+			.card-art.hidden + .glyph {
+				display: block;
+			}
+
+			.tile-art {
+				width: 44px;
+				height: 44px;
+				object-fit: contain;
 			}
 
 			.role {
@@ -220,6 +299,7 @@
 
 				<!-- 카드 한 장 -->
 				<div class="card" id="card" role="status" aria-live="polite">
+					<img class="card-art" id="art" alt="" />
 					<div class="glyph" id="glyph" aria-hidden="true">🎭</div>
 					<div>
 						<div class="role" id="role"></div>
@@ -282,7 +362,7 @@
 						data-i="${i}"
 						aria-label="${card.title} 설명 보기"
 					>
-						<span class="num" aria-hidden="true">${card.glyph}</span>
+						<img class="tile-art" src="${card.image || ""}" alt="" />
 						<span class="cap">${card.title}</span>
 					</button>`;
 				}
@@ -295,11 +375,16 @@
 				if (!card) return;
 
 				const face = qs("#card");
-				face.classList.remove("mafia", "citizen");
+				face.classList.remove("mafia", "citizen", "guide");
 				if (card.team) face.classList.add(card.team === "mafia" ? "mafia" : "citizen");
+				else face.classList.add("guide");
 				// 넘길 것이 없는 화면에서만 제대로 뒤집는다
 				face.classList.toggle("solo", nav === "none");
 
+				const art = qs("#art");
+				art.classList.toggle("hidden", !card.image);
+				art.src = card.image || "";
+				art.onerror = () => art.classList.add("hidden");
 				qs("#glyph").textContent = card.glyph || "🎭";
 				qs("#role").textContent = card.title || "";
 				qs("#ability").textContent = card.body || "";
@@ -333,6 +418,7 @@
 				flip("#close", true);
 
 				qs("#close").textContent = steps ? (last ? "시작하기" : "건너뛰기") : "닫기";
+				qs("#close").classList.toggle("skip", steps && !last);
 				qs("#close").classList.toggle("primary", steps && last);
 				qs("#close").classList.toggle("ghost", !(steps && last));
 			}
