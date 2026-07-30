@@ -20,7 +20,6 @@ import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { MIN_PLAYERS } from "../constants/GameConfig.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
 import { assignRole, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
@@ -104,7 +103,10 @@ function recover(room: Room): void {
  */
 function advanceLobby(room: Room, dt: number): void {
 	const ready = readyCount(room);
-	if (ready < MIN_PLAYERS || ready !== room.seats.length) {
+	// 하한은 방마다 다르다. 침묵전은 8인 전용이고, 그 값에 기대어
+	// firstNightPeacefulUpTo를 0으로 껐다 — 전역 상수(4)로 시작을 허락하면
+	// 4인 침묵전이 첫 밤부터 사람을 죽인다.
+	if (ready < room.ruleSet.minPlayers || ready !== room.seats.length) {
 		room.countdown = room.ruleSet.timing.START_COUNTDOWN;
 		room.lastCountdownLabel = -1;
 		return;

@@ -456,10 +456,11 @@ function submit(sender: ScriptPlayer, data: unknown): void {
 	const ctx = contextOf(sender.id);
 	// 조작된 클라이언트는 어떤 채널이든 보낼 수 있다. 서버가 마지막 관문이다 —
 	// 여기가 뚫리면 죽은 사람이 낮 채팅으로 범인을 불러 게임이 끝난다.
-	if (!accessOf(ctx, channel).write) return;
+	const access = accessOf(ctx, channel);
+	if (!access.write) return;
 	// 침묵전. 자유 입력이 막힌 채널에는 준비된 문구만 통과시킨다 —
 	// 위젯이 입력창을 감춰도 조작된 클라이언트는 아무 문자열이나 보낸다
-	if (!accessOf(ctx, channel).freeText && quickFor(ctx).indexOf(text) < 0) {
+	if (!access.freeText && quickFor(ctx).indexOf(text) < 0) {
 		label(sender, "🤐 준비된 문구만 보낼 수 있습니다.");
 		return;
 	}

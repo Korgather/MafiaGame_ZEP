@@ -148,7 +148,9 @@ export interface RuleSet {
 export const STANDARD_RULES: RuleSet = {
 	id: "standard",
 	displayName: "표준전",
-	summary: "기본 규칙. 6~12명, 5~10분",
+	// 하한은 6이 아니라 4다(아래 minPlayers). 이 문장이 방에 들어올 때마다
+	// 화면에 나가기 시작했으므로 틀린 수를 그대로 둘 수 없다
+	summary: "기본 규칙. 4~12명, 5~10분",
 	timing: {
 		START_COUNTDOWN: 10, ROLE_REVEAL: 9, NIGHT: 22,
 		DAY_PER_ALIVE: 10, DAY_MAX: 60, VOTE: 17, VOTE_RESULT: 7,

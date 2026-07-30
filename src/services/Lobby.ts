@@ -19,7 +19,7 @@ import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import type { LobbySeatView } from "../types/Widget.types.ts";
 import { GamePhase, Team } from "../types/Game.types.ts";
-import { ACTION_RATE, KICK, MAX_PLAYERS, MAX_SPECTATORS } from "../constants/GameConfig.ts";
+import { ACTION_RATE, KICK, MAX_SPECTATORS } from "../constants/GameConfig.ts";
 import { Sound } from "../constants/Assets.ts";
 import { isValidRoomNum } from "../constants/RoomLayout.ts";
 import { spend } from "../domain/RateLimit.ts";
@@ -209,7 +209,10 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 		spectate(player, room);
 		return;
 	}
-	if (room.seats.length >= MAX_PLAYERS) {
+	// 정원은 방마다 다르다. 속도전은 8명이 상한이고, 그 위로 올라가면
+	// firstNightPeacefulUpTo(8)를 넘겨 첫 밤에 사람이 죽기 시작한다 —
+	// "3분 단판"으로 초보를 받는 방에서 그것이 일어나면 안 된다.
+	if (room.seats.length >= room.ruleSet.maxPlayers) {
 		label(player, "방이 가득 찼습니다.");
 		return;
 	}
@@ -363,15 +366,16 @@ function stopSpectating(player: ScriptPlayer): void {
  * 방 선택 화면으로 돌려보내면, 그 사람은 다시 방을 고르는 사이에 이미 다음
  * 판 준비가 시작된 방을 보게 된다. 기다린 사람이 가장 늦게 앉는 구조다.
  *
- * 자리가 모자라면 앞에 온 사람부터 앉는다. 관전 정원이 좌석 정원보다 작으니
- * 지금 실제로 밀려나는 사람은 접속이 끊긴 사람뿐이다 — 아래 break는 그래서
- * 지금 도달하지 않지만, 두 정원의 관계가 뒤집혔을 때 좌석이 조용히 넘치는
- * 것을 막는 자리라 남겨둔다. 관계 자체는 spectate.test.ts가 지킨다.
+ * 자리가 모자라면 앞에 온 사람부터 앉는다. 관전 정원(8)이 어느 방의 좌석
+ * 정원보다도 크지 않으니 — 표준·침묵전은 12, 속도전은 8이다 — 지금 실제로
+ * 밀려나는 사람은 접속이 끊긴 사람뿐이다. 아래 break는 그래서 지금 도달하지
+ * 않지만, 두 정원의 관계가 뒤집혔을 때 좌석이 조용히 넘치는 것을 막는 자리라
+ * 남겨둔다. 관계 자체는 spectate.test.ts가 지킨다.
  */
 export function seatSpectators(room: Room, watchers: readonly Seat[]): string[] {
 	const seated: string[] = [];
 	for (const watcher of watchers) {
-		if (room.seats.length >= MAX_PLAYERS) break;
+		if (room.seats.length >= room.ruleSet.maxPlayers) break;
 		// 좌석의 connected 대신 지금 접속을 직접 확인한다. 관전자의 connected는
 		// 화면을 보낼 때만 내려가는 값이라 마지막 갱신 이후의 이탈을 모른다.
 		if (!ScriptApp.getPlayerByID(watcher.playerId)) continue;

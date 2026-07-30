@@ -62,7 +62,13 @@ export interface ChannelAccess {
 	readonly read: boolean;
 	readonly write: boolean;
 	/**
-	 * 쓸 수 없는 이유. 쓸 수 있으면 "".
+	 * 쓰기가 제한된 이유. 제한이 없으면 "".
+	 *
+	 * 원래는 "쓸 수 없는 이유"였고 write=true면 항상 빈 문자열이었다.
+	 * 침묵전(phrasesOnly)이 그 불변식을 깼다 — write=true인데 note가 차 있는
+	 * 첫 경우다. 이때의 제한은 쓰기 자체가 아니라 입력 수단에 걸려 있다.
+	 * 그래서 "말할 수 있는가"를 보려면 note가 비었는지가 아니라 write와
+	 * freeText를 함께 읽어야 한다(ChatService.channelViews가 그렇게 한다).
 	 *
 	 * 화면에 그대로 나가는 문장이다. 코드가 분기할 값이 아니므로 enum이
 	 * 아니라 문자열이다 — 이유가 하나 늘 때 타입·번역표·분기 세 곳을
@@ -93,6 +99,19 @@ function locked(note: string): ChannelAccess {
 function phrasesOnly(note: string): ChannelAccess {
 	return { read: true, write: true, note, freeText: false };
 }
+
+/**
+ * 침묵전이 좁히는 단계. 방 채팅에만 적용된다.
+ *
+ * 빼는 쪽이 아니라 넣는 쪽으로 적는다. 제외 목록으로 두면 단계가 하나 늘 때
+ * 아무도 이 파일을 열지 않아도 그 단계가 자동으로 좁혀진다 — 좁히는 것은
+ * 밸런스 결정이므로 결정한 자리에만 있어야 한다.
+ */
+const PHRASES_ONLY_PHASES: readonly GamePhase[] = [
+	GamePhase.DAY,
+	GamePhase.VOTE,
+	GamePhase.VOTE_RESULT,
+];
 
 /** 방 밖(월드 로비)에 서 있는 사람의 기본 상태 */
 export const LOOSE_CONTEXT: ChatContext = {
@@ -161,9 +180,26 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		// 밤에 전원이 자유롭게 말할 수 있으면 마피아가 밤에 무엇을 하든
 		// 의미가 없어진다 — 밤이 정보 비대칭을 만드는 유일한 시간이다.
 		if (ctx.phase === GamePhase.NIGHT) return locked("밤에는 방 채팅이 잠깁니다");
-		// 침묵전. 낮 토론만 좁힌다 — 위 GAME_OVER·NIGHT 분기를 지난 뒤라야
-		// 종료 후 복기와 밤 잠금이 원래대로 남는다
-		if (ctx.chatMode === "phrasesOnly") {
+		/*
+		 * 침묵전. 좁히는 단계는 낮·투표·개표 셋뿐이다.
+		 *
+		 * 여기까지 내려왔다는 것은 단계가 LOBBY·ROLE_REVEAL·DAY·VOTE·VOTE_RESULT
+		 * 중 하나라는 뜻이다(GAME_OVER와 NIGHT은 위에서 이미 돌아갔다). 그래서
+		 * 조건을 chatMode 하나로 두면 대기실과 직업 공개까지 함께 좁혀지는데,
+		 * 그 둘을 뺀 이유는 각각 다르다.
+		 *   - 대기실: 좁혀도 지키는 것이 없다. started가 false인 동안 전체 채널이
+		 *     OPEN이라(위 GLOBAL 분기) 기다리는 사람들은 거기서 그대로 떠든다.
+		 *     방 탭만 잠그는 것은 규칙이 아니라 불편이다.
+		 *   - 직업 공개: 이 단계의 빠른 문구는 quickFor에서 월드 문구로 떨어진다
+		 *     ("안녕하세요 / 같이 하실 분? / ㅋㅋㅋ"). 좁히면 판 한가운데에서
+		 *     쓸 수 있는 말이 로비 잡담뿐인 상태가 된다.
+		 * 남은 셋은 이 모드의 제약이 값을 갖는 자리(토론과 투표)이고, 셋 다 그
+		 * 상황에 맞는 문구셋이 준비되어 있다.
+		 *
+		 * 자리도 그대로 둔다 — 위 GAME_OVER·NIGHT 분기를 지난 뒤라야 종료 후
+		 * 복기와 밤 잠금이 표준전과 같게 남는다.
+		 */
+		if (ctx.chatMode === "phrasesOnly" && PHRASES_ONLY_PHASES.indexOf(ctx.phase) >= 0) {
 			return phrasesOnly("🤐 침묵전에서는 준비된 문구만 쓸 수 있습니다");
 		}
 		return OPEN;

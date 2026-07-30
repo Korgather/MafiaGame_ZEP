@@ -45,6 +45,14 @@ describe("표준전", () => {
 	it("첫 밤 무사 문턱이 8이다", () => {
 		assert.equal(STANDARD_RULES.firstNightPeacefulUpTo, 8);
 	});
+
+	it("한 줄 설명의 인원이 실제 정원과 같다", () => {
+		// 이 문장은 이제 방에 들어올 때마다 화면에 나간다(Lobby.join).
+		// 죽은 텍스트일 때는 6~12명이라고 적혀 있어도 아무도 못 봤지만,
+		// 지금은 4명으로 시작할 수 있는 방이 "6명부터"라고 말하는 셈이다
+		assert.equal(STANDARD_RULES.summary, "기본 규칙. 4~12명, 5~10분");
+		assert.equal(STANDARD_RULES.minPlayers, 4);
+	});
 });
 
 describe("속도전", () => {
@@ -128,6 +136,29 @@ describe("침묵전의 낮", () => {
 	it("표준전 낮은 자유 입력이 열려 있다", () => {
 		const freeDay = { ...silentDay, chatMode: "free" as const };
 		assert.equal(accessOf(freeDay, ChatChannel.ROOM).freeText, true);
+	});
+
+	it("대기실과 직업 공개는 침묵전에서도 자유 입력이다", () => {
+		// 대기실을 좁혀도 지키는 것이 없다 — started가 false인 동안 전체 탭이
+		// OPEN이라(ChatPermission의 GLOBAL 분기) 같은 사람들이 거기서 그대로
+		// 떠든다. 직업 공개는 더 나쁘다: quickFor가 월드 문구로 떨어져
+		// "안녕하세요 / 같이 하실 분? / ㅋㅋㅋ"만 남은 판 한가운데가 된다
+		const lobby = { ...silentDay, started: false, phase: GamePhase.LOBBY };
+		const reveal = { ...silentDay, phase: GamePhase.ROLE_REVEAL };
+		assert.equal(accessOf(lobby, ChatChannel.ROOM).freeText, true, "대기실");
+		assert.equal(accessOf(reveal, ChatChannel.ROOM).freeText, true, "직업 공개");
+		// 좁히기로 한 단계는 그대로 좁혀져 있어야 한다
+		assert.equal(accessOf(silentDay, ChatChannel.ROOM).freeText, false, "낮");
+	});
+
+	it("투표와 개표도 좁혀진 채로 남는다", () => {
+		// 침묵전의 제약이 값을 갖는 단계는 토론과 투표다. 이 둘은 각자
+		// 상황에 맞는 문구셋(QUICK_VOTE)이 있어 좁혀도 할 말이 남는다
+		for (const phase of [GamePhase.VOTE, GamePhase.VOTE_RESULT]) {
+			const access = accessOf({ ...silentDay, phase }, ChatChannel.ROOM);
+			assert.equal(access.freeText, false, phase);
+			assert.equal(access.write, true, phase);
+		}
 	});
 
 	it("마피아 밀담은 침묵전에서도 자유롭다", () => {

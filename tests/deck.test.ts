@@ -11,7 +11,7 @@ import { Role, Team } from "../src/types/Game.types.ts";
 import { buildRoleDeck, mafiaCount } from "../src/domain/RoleAssignment.ts";
 import { isPeacefulNight } from "../src/domain/NightResolution.ts";
 import { ROLE_DEFS } from "../src/domain/Roles.ts";
-import { STANDARD_RULES } from "../src/domain/RuleSet.ts";
+import { BLITZ_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import { MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 
 const EVERY_COUNT: number[] = [];
@@ -72,6 +72,27 @@ describe("덱 구성", () => {
 			const deck = buildRoleDeck(STANDARD_RULES.deck, count);
 			const mafia = deck.filter(role => ROLE_DEFS[role].team === Team.MAFIA).length;
 			assert.equal(mafia, mafiaCount(STANDARD_RULES.deck, count), `${count}인`);
+		}
+	});
+
+	it("속도전 덱도 표와 정확히 같고 다섯 직업만 나온다", () => {
+		/*
+		 * 위 표준전 단언과 같은 그물을 속도전에도 친다.
+		 *
+		 * 풀 길이가 곧 최대 추첨 수라 여유가 한 칸도 없다(RuleSet.ts의 경고).
+		 * 속도전은 mafiaPool이 [MAFIA] 하나, citizenPool이 [SOLDIER] 하나뿐이라
+		 * 표를 한 칸만 올려도 draw가 요청보다 적게 돌려주는데, 그러면 덱은
+		 * 마피아가 모자란 채로 조용히 나간다. 인원표만 보는 테스트로는 안 잡힌다.
+		 */
+		const ALLOWED: Role[] = [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.SOLDIER, Role.CITIZEN];
+		for (let count = BLITZ_RULES.minPlayers; count <= BLITZ_RULES.maxPlayers; count++) {
+			const deck = buildRoleDeck(BLITZ_RULES.deck, count);
+			assert.equal(deck.length, count, `${count}인 덱 길이`);
+			const mafia = deck.filter(role => ROLE_DEFS[role].team === Team.MAFIA).length;
+			assert.equal(mafia, BLITZ_RULES.deck.mafiaTeamSize[count], `${count}인`);
+			for (const role of deck) {
+				assert.ok(ALLOWED.indexOf(role) >= 0, `${count}인에 ${role}가 나왔습니다`);
+			}
 		}
 	});
 });

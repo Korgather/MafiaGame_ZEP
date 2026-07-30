@@ -10,8 +10,8 @@ import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
-import { ACTION_RATE, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
-import { STANDARD_RULES } from "../src/domain/RuleSet.ts";
+import { ACTION_RATE, MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import {
 	cardWidget,
@@ -21,6 +21,7 @@ import {
 	cutWidget,
 	disconnect,
 	findMainWidget,
+	findSeatOf,
 	finishPhase,
 	hasCard,
 	hasCut,
@@ -240,6 +241,73 @@ describe("대기실 → 게임 시작", () => {
 		tick(ACTION_RATE.REFILL_MS / 1000);
 		joinRoom(player, 1);
 		assert.equal(target.seats.length, 1, "기다렸는데도 풀리지 않았습니다");
+	});
+});
+
+describe("모드별 정원", () => {
+	/**
+	 * 정원은 이제 방마다 다르다. 전역 MIN_PLAYERS·MAX_PLAYERS는 맵에 깔린
+	 * 좌석 수(상한)로 남고, 실제로 몇 명이 앉고 몇 명부터 시작하는지는
+	 * 그 방의 룰셋이 정한다.
+	 */
+	function fill(roomNum: number, count: number, ready = false): void {
+		for (let i = 0; i < count; i++) {
+			const player = connect(`${roomNum}번방${i + 1}`);
+			joinRoom(player, roomNum);
+			if (ready) setReady(player);
+		}
+	}
+
+	it("속도전 방은 아홉 번째 사람을 앉히지 않는다", () => {
+		// 9인은 firstNightPeacefulUpTo(8)를 넘긴다 — 4~8인에서 지켜지던
+		// "첫 밤에는 아무도 죽지 않는다"가 9인부터 사라진다. 초보를 받으려고
+		// 만든 모드에서 첫 밤에 죽는 사람이 생긴다는 뜻이다
+		const target = room(6);
+		fill(6, BLITZ_RULES.maxPlayers);
+		assert.equal(target.seats.length, BLITZ_RULES.maxPlayers);
+
+		const late = connect("아홉번째");
+		joinRoom(late, 6);
+
+		assert.equal(target.seats.length, BLITZ_RULES.maxPlayers, "정원을 넘겨 앉았습니다");
+		assert.equal(findSeatOf(late), undefined);
+	});
+
+	it("침묵전 방은 여덟 명이 모이기 전에는 시작하지 않는다", () => {
+		// 침묵전은 firstNightPeacefulUpTo가 0이다. 4명이 시작하면 첫 밤부터
+		// 사람이 죽는데, 그것은 표준전이 일부러 막아 둔 것이다
+		const target = room(8);
+		fill(8, SILENCE_RULES.minPlayers - 1, true);
+
+		tick(SILENCE_RULES.timing.START_COUNTDOWN + 1);
+		assert.equal(target.started, false, "정원 미달인데 시작했습니다");
+
+		const eighth = connect("여덟번째");
+		joinRoom(eighth, 8);
+		setReady(eighth);
+		tick(SILENCE_RULES.timing.START_COUNTDOWN + 1);
+
+		assert.equal(target.started, true, "여덟 명이 모였는데 시작하지 않았습니다");
+	});
+
+	it("표준전 방의 정원은 전역 상수와 그대로 같다", () => {
+		// 1~5번 방은 이 슬라이스에서 한 톨도 바뀌면 안 된다. 좌석 배치가
+		// MAX_PLAYERS개로 깔려 있으므로, 이 동일성이 깨지면 정원이 좌석보다 커진다
+		assert.equal(STANDARD_RULES.minPlayers, MIN_PLAYERS);
+		assert.equal(STANDARD_RULES.maxPlayers, MAX_PLAYERS);
+	});
+
+	it("표준전 방은 열두 명까지 앉고 네 명이면 시작한다", () => {
+		const full = room(3);
+		fill(3, MAX_PLAYERS);
+		assert.equal(full.seats.length, MAX_PLAYERS);
+
+		const late = connect("열세번째");
+		joinRoom(late, 3);
+		assert.equal(full.seats.length, MAX_PLAYERS, "정원을 넘겨 앉았습니다");
+
+		startGame(MIN_PLAYERS, 2);
+		assert.equal(room(2).started, true, "네 명으로는 시작하지 못했습니다");
 	});
 });
 
