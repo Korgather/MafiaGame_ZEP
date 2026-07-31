@@ -2,10 +2,10 @@
  * 밤 파이프라인 테스트.
  *
  * 이 파일이 지키는 것은 둘이다.
- *   1. 밤의 결과가 클릭 순서에 의존하지 않는다. 지금은 의사가 늦게 눌러도
- *      결과가 같지만 그건 resolveNightCasualties가 밤 끝에 한 번만 보기
- *      때문이지 순서를 정했기 때문이 아니다. 차단(BLOCK)이 들어오면 그 우연이
- *      깨진다.
+ *   1. 밤의 결과가 클릭 순서에 의존하지 않는다. 의사가 늦게 눌러도 결과가
+ *      같은 것은 resolveNightCasualties가 밤 끝에 한 번만 보기 때문이지
+ *      순서를 정했기 때문이 아니다. 차단(BLOCK)이 들어오면서 그 우연은
+ *      깨졌다.
  *   2. 밤 능력이 **조용히** 빠지는 길이 없다. step을 순회 목록에서 빠뜨리거나
  *      능력 종류에 가지를 안 다는 실수는 에러도 실패도 내지 않고 그 능력을
  *      없던 것으로 만든다. 아래 「목록의 완전성」이 그 둘을 잡는다.
@@ -166,7 +166,7 @@ describe("밤 파이프라인 — step 배치", () => {
 		assert.ok(STEP_ORDER.indexOf(NightStep.AFTER) > STEP_ORDER.indexOf(NightStep.DEATH));
 
 		// 흔적 자체는 오늘 순서와 무관하다 — 정산이 scooped를 읽지 않기
-		// 때문이다. 순서가 결과를 실제로 가르는 것은 차단이 들어올 때다
+		// 때문이다. 순서가 결과를 실제로 가르는 것은 차단이 걸릴 때다
 		const seats = [seat(1, Role.REPORTER), seat(2, Role.MAFIA)];
 		night(seats, [[1, 2]]);
 		assert.equal(seats[1].scooped, true);
@@ -259,9 +259,9 @@ describe("밤 파이프라인 — 첫 밤 무사", () => {
 
 describe("putIntent", () => {
 	it("같은 좌석이 다시 지목하면 교체한다", () => {
-		// 스파이의 재지목 보너스가 사라져 지금은 여기까지 오는 경로가 없다.
-		// 그래도 못 박아 두는 것은 "이 좌석의 intent는 하나"에 조회가 기대기
-		// 때문이다 — 밀어 넣기만 하면 조회가 조용히 첫 지목을 답한다
+		// "이 좌석의 intent는 하나"에 조회가 기대기 때문에 못 박아 둔다 —
+		// 밀어 넣기만 하면 조회가 조용히 첫 지목을 답한다. 두 번째 지목이
+		// 오는 길은 실제로 있다: 쪽지의 첫 클릭은 usedSkill을 세우지 않는다
 		const intents: NightIntent[] = [];
 		putIntent(intents, 1, 5);
 		putIntent(intents, 2, 6);

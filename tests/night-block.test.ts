@@ -100,7 +100,7 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		const seats = [seat(1, Role.THUG), seat(2, Role.VIGILANTE), seat(3, Role.CITIZEN)];
 		night(seats, [[1, 2], [2, 3]]);
 		assert.equal(seats[2].alive, true);
-		// 이 단언이 Task 8의 "apply가 참을 돌려줄 때만 센다"를 지킨다
+		// 이 단언이 "apply가 참을 돌려줄 때만 센다"를 지킨다
 		assert.equal(seats[1].usesSpent, 0);
 	});
 
@@ -330,8 +330,9 @@ describe("건달 — 자기 자신은 고를 수 없다", () => {
 	});
 
 	it("다시 쓴 건달도 시민팀이다", () => {
-		// Task 1이 고친 진영을 정의를 통째로 다시 쓰면서 되돌리기 쉽다.
-		// Task 1의 테스트와 겹치지만, 겹치는 값이 아니라 겹치는 위험을 본다
+		// 건달을 시민팀으로 되돌린 결정은 정의를 통째로 다시 쓰면서 함께
+		// 되돌리기 쉽다. deck.test.ts의 단언과 값은 겹치지만, 겹치는 값이
+		// 아니라 겹치는 위험을 본다
 		assert.equal(ROLE_DEFS[Role.THUG].team, Team.CITIZEN);
 		assert.equal(ROLE_DEFS[Role.THUG].appearsAsMafia, undefined);
 	});
@@ -464,7 +465,7 @@ describe("차단 통보", () => {
 	it("건달이 뒤 좌석이어도 양쪽 통보가 그대로 간다", () => {
 		// 위 아홉은 전부 건달이 1번 좌석이다. 통보 루프가 좌석 순서를 도는
 		// 이상 그 배치만으로는 규칙이 순서에 기대고 있는지 알 수 없다 —
-		// Task 10에서 살아남은 변이의 원인이 정확히 그것이었다.
+		// 실제로 그 이유로 통보 루프의 변이가 한 번 살아남았다.
 		// 여기서는 막는 쪽이 배열 끝에 있고 막히는 쪽이 앞에 있다
 		const seats = [seat(1, Role.MAFIA), seat(2, Role.POLICE), seat(3, Role.THUG)];
 		const result = night(seats, [[3, 1], [1, 2], [2, 1]]);

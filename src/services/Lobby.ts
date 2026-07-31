@@ -118,7 +118,7 @@ function readRunCount(playerId: string): number {
 	return storage.playCount || 0;
 }
 
-/** 방 목록의 인원수. 위젯이 쓰는 두 값만 보낸다 */
+/** 방 목록의 인원수. 위젯이 한 줄을 그리는 데 쓰는 값만 보낸다 */
 export function pushRoomCounts(player: ScriptPlayer): void {
 	const widget = tagOf(player).widget;
 	if (widget) widget.sendMessage({ type: "updatePlayerCount", data: roomCounts() });

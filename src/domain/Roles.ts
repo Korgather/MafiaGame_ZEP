@@ -53,10 +53,10 @@ export type NightActionKind = (typeof NightActionKind)[keyof typeof NightActionK
 /**
  * 밤 정산에서 이 직업의 능력이 적용되는 시점.
  *
- * 지금까지 밤 능력은 클릭한 순서대로 대상을 바꿨다. 결과가 맞았던 것은
+ * 예전에는 밤 능력이 클릭한 순서대로 대상을 바꿨다. 결과가 맞았던 것은
  * resolveNightCasualties가 밤 끝에 한 번만 보기 때문이지 순서를 정했기
- * 때문이 아니다. 능력을 막는 능력(차단)이 들어오는 순간 그 우연이 깨진다 —
- * 막을 사람이 늦게 누르면 이미 지나간 능력을 막게 된다.
+ * 때문이 아니다. 능력을 막는 능력(차단)이 들어오면서 그 우연은 깨졌다 —
+ * 막을 사람이 늦게 누르면 이미 지나간 능력을 막게 됐다.
  *
  * 숫자 사이를 비워 둔 것은 나중에 끼우기 위해서다. 원문 기획의 SWAP(10)은
  * 대상을 바꿔치기하는 직업 전용이라 아직 넣지 않았다.
@@ -75,7 +75,7 @@ export const NightStep = {
 	DEATH: 50,
 	/** 조사 — 경찰·스파이·점쟁이 */
 	INSPECT: 60,
-	/** 사후 — 기자 특종·시민 쪽지·사기꾼 역알림 */
+	/** 사후 — 기자 특종·시민 쪽지·사기꾼 역알림·건달 차단 통보 */
 	AFTER: 70,
 } as const;
 export type NightStep = (typeof NightStep)[keyof typeof NightStep];
@@ -384,7 +384,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "건달",
 		team: Team.CITIZEN,
 		glyph: "🥊",
-		ability: "밤마다 한 명을 골라 그 사람의 밤 능력을 막습니다.",
+		ability: "밤마다 한 명의 밤 능력을 막고, 막을 것이 있었는지 알게 됩니다.",
 		tip: "확정 시민을 막으면 헛턴입니다. 밤에 움직일 것 같은 사람을 고르세요.",
 		nightAction: NightActionKind.BLOCK,
 		nightStep: NightStep.BLOCK,

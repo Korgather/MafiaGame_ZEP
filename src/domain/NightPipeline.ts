@@ -5,8 +5,8 @@
  * 건드리지 않는 동안에는 그래도 됐다 — healed도 attackedBy도 밤이 끝날 때
  * resolveNightCasualties가 한 번만 읽었기 때문이다.
  *
- * 능력을 막는 능력이 들어오면 그 전제가 무너진다. "막는다"는 다른 능력이
- * 적용되기 전에 서야 하는데, 클릭 시점 적용에서는 누가 먼저 눌렀는지가
+ * 능력을 막는 능력(차단)이 들어오면서 그 전제가 무너졌다. "막는다"는 다른
+ * 능력이 적용되기 전에 서야 하는데, 클릭 시점 적용에서는 누가 먼저 눌렀는지가
  * 그 순서를 정한다. 즉 밤의 결과가 손 빠르기로 갈린다.
  *
  * 그래서 클릭은 의도(intent)만 남기고, 적용은 밤이 끝날 때 정해진 순서로
@@ -82,8 +82,8 @@ const DECLARED_STEP_ORDER = [
  *
  * RoleDef.nightStep이 필수라 직업은 step을 반드시 적는다. 그런데 step 자체가
  * 순회 목록에서 빠지면 그 step의 직업은 아무 소리 없이 실행되지 않는다 —
- * 타입 에러도 런타임 에러도 실패하는 테스트도 없다. 능력을 막는 능력이
- * 들어올 때 "차단이 그냥 안 걸리는" 길이 여기다.
+ * 타입 에러도 런타임 에러도 실패하는 테스트도 없다. "차단이 그냥 안 걸리는"
+ * 길이 여기다.
  *
  * 전부 담고 있으면 Exclude가 never가 되어 이 타입은 평범한 배열 타입이 된다.
  * 하나라도 빠지면 never가 되고, 배열을 never에 대입할 수 없어 컴파일이 막힌다.
@@ -107,11 +107,10 @@ export const STEP_ORDER: StepOrderCoversEveryStep = DECLARED_STEP_ORDER;
 /**
  * 이 좌석의 지목을 기록한다. 같은 좌석이 다시 지목하면 교체한다.
  *
- * 지금은 교체가 실제로 일어나지 않는다 — 스파이의 재지목 보너스가 사라지면서
- * 한 밤에 두 번 지목하는 길이 없어졌고, 클릭 경로가 usedSkill로 두 번째를
- * 막는다. 그래도 교체로 두는 이유는 targetOf가 "한 좌석의 지목은 하나"에
- * 기대고 있어서다. 밀어 넣기만 하면 한 좌석에 intent가 둘이 되고, 조회가
- * 조용히 첫 지목을 답한다.
+ * 밀어 넣기만 하면 한 좌석에 intent가 둘이 되고, "한 좌석의 지목은 하나"에
+ * 기대는 targetOf가 조용히 첫 지목을 답한다. 두 번째 지목이 오는 길은 실제로
+ * 있다 — 쪽지의 첫 클릭은 consumed: false라 usedSkill이 서지 않고, 위젯은
+ * 문구 고르기로 넘어가며 격자를 감출 뿐이라 위조된 select가 다시 닿는다.
  */
 export function putIntent(intents: NightIntent[], actor: number, target: number): void {
 	for (let i = 0; i < intents.length; i++) {
@@ -265,7 +264,7 @@ function notifyBlocked(
  *
  * 돌려주는 값은 "능력을 실제로 썼는가"다. 사용 횟수를 이 값으로 센다 —
  * 지목했다는 사실만으로 세면 쪽지 문구를 안 고르고 나간 시민이 한 장을
- * 날린다. 막는 능력이 들어오면 이 값이 그대로 "막히면 안 닳는다"가 된다.
+ * 날린다. 이 값이 그대로 "막히면 안 닳는다"이기도 하다.
  *
  * default 가지를 두지 않는다. NightActionKind를 하나 늘리고 여기 가지를
  * 빠뜨리면 맨 아래 unhandled가 never가 아니게 되어 컴파일이 막힌다.
@@ -461,7 +460,7 @@ export function resolveNightIntents(
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
 			// 실제로 적용된 것만 센다. 지목만으로 세면 쪽지를 안 보낸 시민이
-			// 한 장을 날린다. 막는 능력이 들어오면 "막히면 안 닳는다"도 여기서 나온다
+			// 한 장을 날린다. "막히면 안 닳는다"도 여기서 나온다
 			if (apply(seat, target, ledger)) seat.usesSpent++;
 		}
 	}

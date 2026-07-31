@@ -316,8 +316,9 @@ export const SILENCE_RULES: RuleSet = {
 	summary: "정형 문구만. 말이 아니라 자리로 말한다",
 	timing: STANDARD_RULES.timing,
 	deck: STANDARD_RULES.deck,
-	// 8인 이상 전용이라 애초에 첫 밤 무사 조건에 걸리지 않는다.
-	// 0으로 명시해 "조건에 안 걸린다"와 "끄기로 했다"를 구분한다
+	// 하한이 8이고 판정이 playerCount <= peacefulUpTo(포함)이라, 표준전과 같은
+	// 8을 넣으면 모든 8인 판이 첫 밤 무사가 된다. 침묵전은 그것을 원하지 않아
+	// 0으로 끈다 — "조건에 안 걸린다"가 아니라 "끄기로 했다"는 표시다
 	firstNightPeacefulUpTo: 0,
 	minPlayers: 8,
 	maxPlayers: 12,

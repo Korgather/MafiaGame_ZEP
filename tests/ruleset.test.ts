@@ -102,7 +102,7 @@ describe("침묵전", () => {
 		assert.equal(SILENCE_RULES.firstNightPeacefulUpTo, 0);
 	});
 
-	it("채팅 방식만 표준전과 다르다", () => {
+	it("타이밍과 덱은 표준전과 같다", () => {
 		assert.equal(SILENCE_RULES.chatMode, "phrasesOnly");
 		assert.deepEqual(SILENCE_RULES.timing, STANDARD_RULES.timing);
 		assert.deepEqual(SILENCE_RULES.deck, STANDARD_RULES.deck);

@@ -164,8 +164,8 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 		case NightActionKind.INSPECT_TEAM:
 		case NightActionKind.INSPECT_ROLE:
 		case NightActionKind.INSPECT_ABILITY:
-			// 답은 여기서 내지 않는다. 막는 능력이 들어오면 막힌 경찰이 이미
-			// 답을 본 뒤가 되고, 그때 가서 되돌릴 방법이 없다.
+			// 답은 여기서 내지 않는다. 그러면 막힌 경찰이 이미 답을 본 뒤가
+			// 되고, 그때 가서 되돌릴 방법이 없다.
 			// 스파이도 마찬가지로 한 번만 지목한다 — 예전에는 마피아를 찾아내면
 			// consumed: false로 또 누를 수 있었는데, 그 "또 누를 수 있음" 자체가
 			// 답을 클릭 즉시 알려주는 신호였다.

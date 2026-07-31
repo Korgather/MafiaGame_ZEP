@@ -10,11 +10,14 @@ npm install
 
 | 명령                | 하는 일                                            |
 | ------------------- | -------------------------------------------------- |
-| `npm run build`     | `main.ts` → `res/main.js` 번들 생성 (`check:zep` 포함)|
+| `npm run verify`    | 아래 다섯 검사를 순서대로 (type-check → lint → check:zep → test → check:ui) |
 | `npm run type-check`| 타입 검사 (`tsc --noEmit`)                          |
+| `npm run lint`      | ESLint                                              |
 | `npm run check:zep` | ZEP API에 `undefined` 인자가 가는지 검사            |
 | `npm test`          | 도메인 로직 단위 테스트 (`node --test`, 빌드 불필요)|
-| `npm run lint`      | ESLint                                              |
+| `npm run build:ui`  | `src/ui/*.html` + `theme.css` → `res/*.html` 생성    |
+| `npm run check:ui`  | 위젯을 다시 만들고 장면 정의와 어긋나는지 검사      |
+| `npm run build`     | `verify` 후 `main.ts` → `res/main.js` 번들 생성      |
 | `npm run archive`   | 빌드 후 zip 패키징                                  |
 | `npm run deploy`    | 패키징 후 ZEP에 배포                                |
 
@@ -70,9 +73,14 @@ src/
   entities/              방 상태 모델과 레지스트리
   infrastructure/        player.storage / player.tag / 스프라이트 캐시 래퍼
   services/              ZEP API를 실제로 부르는 계층
+  ui/                    위젯 HTML 원본과 theme.css (여기를 고친다)
 tests/                   domain 단위 테스트
-res/                     위젯 HTML, 이미지, 사운드 (+ 빌드 산출물 main.js)
+tools/                   빌드·검사 스크립트 (Node에서만 돈다)
+res/                     이미지, 사운드 (+ 산출물 main.js와 위젯 HTML)
 ```
+
+`res/*.html`은 손으로 고치지 않는다. `src/ui/*.html`에 `theme.css`를 끼워 넣어
+`npm run build:ui`가 만들어 내는 산출물이고, 커밋에는 원본과 산출물이 같이 들어간다.
 
 의존 방향은 한 방향이다. `services` → `domain`/`entities`/`infrastructure`,
 `domain` → `types`/`constants`만. 순환 참조가 없다.
@@ -119,10 +127,14 @@ LOBBY → ROLE_REVEAL → NIGHT → DAY → VOTE → VOTE_RESULT → NIGHT ...
 1. `types/Game.types.ts`의 `Role`에 항목 추가
 2. `domain/Roles.ts`의 `ROLE_DEFS`에 정의 추가 — `Record<Role, RoleDef>`라서 빠뜨리면 컴파일이 실패한다
 3. `domain/RoleAssignment.ts`의 인원수별 배분표에 넣기
-4. `res/`에 직업 카드 위젯 HTML 추가
 
-밤 능력이 기존 4종(`HEAL` / `KILL` / `INSPECT_TEAM` / `INSPECT_ROLE`)에 없으면
-`NightActionKind`에 추가하고 `domain/NightResolution.ts`에서 처리한다.
+직업 카드는 `res/card.html` 하나가 전부를 그린다. 직업마다 위젯을 만들지 않는다.
+
+밤 능력이 기존 8종(`BLOCK` / `HEAL` / `ATTACK` / `INSPECT_TEAM` / `INSPECT_ROLE` /
+`INSPECT_ABILITY` / `SCOOP` / `NOTE`)에 없으면 `NightActionKind`에 추가하고
+`domain/NightPipeline.ts`의 `apply()`에 가지를 단다 — `default` 가지가 없어서
+빠뜨리면 컴파일이 막힌다. 새 능력이 기존 순서 사이에 끼어야 하면 `NightStep`도
+같이 손본다.
 
 ---
 
@@ -131,6 +143,8 @@ LOBBY → ROLE_REVEAL → NIGHT → DAY → VOTE → VOTE_RESULT → NIGHT ...
 ## 밤부터 시작하게 만들자
 
 ## 모드별 직업군
+
+> 초안이다. 정원이 12로 늘면서 실제 배분표는 `domain/RoleAssignment.ts`로 옮겨 갔다.
 
 - 4인 : 마피아1, 경찰1, 의사1, 특수직업(시민)1
 - 5인 : 마피아1 경찰1, 의사1, 특수직업(시민)1
@@ -153,7 +167,9 @@ LOBBY → ROLE_REVEAL → NIGHT → DAY → VOTE → VOTE_RESULT → NIGHT ...
   - 스파이, 밤마다 플레이어 한 명을 골라 그 사람의 직업을 알아낼 수 있다. 마피아일 경우 접선
   - 짐승인간, 자신이 마피아에게 처형 당하는 경우 또는 자신이 선택한 사람이 마피아에게 처형당할 경우 마피아와 접선, 접선 이후 죽일 수 있음
 
-> 정치인·영매·스파이는 구현 완료. 나머지는 미구현.
+> 여기 적힌 여덟 직업은 전부 구현됐고, 메모에 없던 사기꾼·점쟁이가 더 붙어 지금은 14종이다.
+> 세부 규칙은 밸런스를 거치며 원문과 달라졌다 — 예를 들어 건달은 "다음 날 투표 금지"가 아니라
+> 밤 능력을 막는 쪽으로 바뀌었다. 시행 중인 규칙은 `domain/Roles.ts`가 기준이다.
 
 ## 고민되는 부분
 
