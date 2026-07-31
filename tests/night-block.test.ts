@@ -5,13 +5,18 @@
  * 능력마다 흔적이 남는 자리가 다르다(healed·attackedBy·reveals·usesSpent).
  * 그래서 하나로 대표하지 않고 직업별로 한 번씩 확인한다. 대표 하나만
  * 두면 새 step이 생겼을 때 가드를 빠뜨린 것을 아무도 못 잡는다.
+ *
+ * 그런데 "직업별로 한 번씩"이 실제로 빠짐없는지는 산문이 보장해 주지 않는다 —
+ * 점쟁이(INSPECT_ABILITY)가 오래 빠져 있었고, 그동안 가드에서 그 종류만
+ * 예외로 빼는 변이가 살아남았다. 「차단 — 목록의 완전성」의 BLOCKED_BY_KIND가
+ * Record<NightActionKind, …>로 그 빠짐을 컴파일 단계에서 막는다.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
-import { ROLE_DEFS } from "../src/domain/Roles.ts";
+import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
 import { NightOutcome, recordNightIntent } from "../src/domain/NightResolution.ts";
 import type { NightIntent, NightReveal } from "../src/domain/NightPipeline.ts";
 import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
@@ -106,6 +111,38 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		assert.equal(seats[1].usesSpent, 0);
 	});
 
+	it("막힌 점쟁이는 점괘를 받지 못한다", () => {
+		// 대상을 사기꾼으로 두면 두 표면을 한 번에 본다 — 점쟁이가 받는 답과,
+		// 조사가 일어났을 때 대상에게 가는 역알림. 경찰 쪽과 같은 이유다:
+		// 한쪽만 막고 다른 쪽이 새면 그 한 줄이 곧 "점쟁이가 살아 있다"다
+		const seats = [seat(1, Role.THUG), seat(2, Role.SEER), seat(3, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 2], [2, 3]]);
+		// 점쟁이가 받는 것은 방해 통보 한 줄뿐이다. 점괘는 그 안에 없다
+		assert.equal(linesFor(result.reveals, 2), 1);
+		const line = lineFor(result.reveals, 2);
+		assert.ok(line.length > 0, "막힌 점쟁이에게 아무 줄도 오지 않았습니다");
+		assert.doesNotMatch(line, /직업 능력이 있습니다|직업 능력이 없습니다/);
+		assert.equal(linesFor(result.reveals, 3), 0);
+		assert.equal(seats[1].usesSpent, 0);
+	});
+
+	it("점쟁이가 앞 좌석이어도 점괘는 막힌다", () => {
+		// 위와 좌석 배치만 반대다. 점쟁이(INSPECT)와 건달(BLOCK)은 step이 달라
+		// 순회 순서를 STEP_ORDER가 정한다 — 좌석 배열의 앞뒤로는 갈리지 않아야
+		// 한다. 건달끼리의 두 테스트와 달리 여기서 뒤집는 것은 그 독립성을
+		// 못 박기 위해서다. 차단 판정이 step이 아니라 좌석 순회로 새는 변경이
+		// 오면 앞자리 점쟁이가 막히기 전에 점괘를 본다
+		const seats = [seat(1, Role.SEER), seat(2, Role.THUG), seat(3, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 3], [2, 1]]);
+		assert.equal(seats[0].blocked, true);
+		assert.equal(linesFor(result.reveals, 1), 1);
+		const line = lineFor(result.reveals, 1);
+		assert.ok(line.length > 0, "막힌 점쟁이에게 아무 줄도 오지 않았습니다");
+		assert.doesNotMatch(line, /직업 능력이 있습니다|직업 능력이 없습니다/);
+		assert.equal(linesFor(result.reveals, 3), 0);
+		assert.equal(seats[0].usesSpent, 0);
+	});
+
 	it("막힌 시민의 쪽지는 배달되지 않는다", () => {
 		const seats = [
 			seat(1, Role.THUG),
@@ -115,6 +152,57 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		const result = night(seats, [[1, 2], [2, 3]]);
 		assert.equal(linesFor(result.reveals, 3), 0);
 		assert.equal(seats[1].usesSpent, 0);
+	});
+});
+
+/**
+ * 능력 종류마다 막혔을 때를 확인할 시전자.
+ *
+ * Record<NightActionKind, …>라 종류를 하나 늘리면 여기에 줄을 넣기 전까지 이
+ * 파일이 컴파일되지 않는다. 위의 직업별 테스트는 손으로 적은 산문이라 하나를
+ * 빠뜨려도 아무것도 실패하지 않는다 — 실제로 점쟁이(INSPECT_ABILITY)가 그렇게
+ * 빠져 있었고, 그동안 가드에서 그 종류만 예외로 빼는 변이가 살아남았다.
+ * 표는 그 구멍을 컴파일 단계에서 닫는다.
+ *
+ * night-pipeline.test.ts의 TRACE_BY_KIND와 같은 수법이고, 저쪽이 막히지 않은
+ * 면을, 이쪽이 막힌 면을 맡는다.
+ */
+const BLOCKED_BY_KIND: Record<NightActionKind, { actor: Role; actorSetup?: Partial<Seat> }> = {
+	HEAL: { actor: Role.DOCTOR },
+	ATTACK: { actor: Role.MAFIA },
+	SCOOP: { actor: Role.REPORTER },
+	INSPECT_TEAM: { actor: Role.POLICE },
+	INSPECT_ROLE: { actor: Role.SPY },
+	INSPECT_ABILITY: { actor: Role.SEER },
+	// 문구를 심어 두지 않으면 apply가 첫 줄에서 돌아 나가 막든 안 막든 한 장도
+	// 닳지 않는다. 아래 대조군이 정확히 그 벙어리 행을 잡아낸다
+	NOTE: { actor: Role.CITIZEN, actorSetup: { noteText: "당신을 믿습니다" } },
+	// 차단만 예외다. 같은 step 안에는 순서가 없어서 막힌 건달의 차단도 성립한다
+	BLOCK: { actor: Role.THUG },
+};
+
+describe("차단 — 목록의 완전성", () => {
+	it("모든 밤 능력이 막히면 한 장도 닳지 않는다(차단만 예외)", () => {
+		for (const kind of Object.keys(BLOCKED_BY_KIND) as NightActionKind[]) {
+			const row = BLOCKED_BY_KIND[kind];
+			// 표가 실제 직업 정의와 어긋나면 아래 검사는 다른 능력을 보게 된다
+			assert.equal(ROLE_DEFS[row.actor].nightAction, kind);
+
+			// 대조군을 먼저 돌린다. 막지 않으면 한 장이 닳는다는 것을 같은
+			// 자리에서 보이지 않으면, 애초에 발동하지 않는 설정이 조용히
+			// 통과해 그 행이 아무것도 지키지 못한다
+			const free = [seat(1, Role.THUG), seat(2, row.actor, row.actorSetup), seat(3, Role.CITIZEN)];
+			night(free, [[2, 3]]);
+			assert.equal(free[1].usesSpent, 1, `${kind} — 막지 않았는데도 닳지 않는다`);
+
+			const seats = [seat(1, Role.THUG), seat(2, row.actor, row.actorSetup), seat(3, Role.CITIZEN)];
+			night(seats, [[1, 2], [2, 3]]);
+			assert.equal(seats[1].blocked, true, kind);
+			// 흔적이 남는 자리는 능력마다 다르지만(healed·attackedBy·reveals)
+			// 이 숫자는 전부 공유한다 — 「apply가 참을 돌려줄 때만 센다」가
+			// 곧 "막히면 안 닳는다"이기 때문이다. 그래서 표로 묶을 수 있다
+			assert.equal(seats[1].usesSpent, kind === NightActionKind.BLOCK ? 1 : 0, kind);
+		}
 	});
 });
 
