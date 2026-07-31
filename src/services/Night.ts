@@ -30,7 +30,7 @@ import { intentTarget, putIntent, resolveNightIntents } from "../domain/NightPip
 import { aliveSeats, participantLabel, resetRound, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
-import { forEachPlayer, label, playSound } from "./Broadcast.ts";
+import { forEachPlayer, label, playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { DeathCause, kill } from "./Death.ts";
@@ -289,7 +289,7 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (result.needsPhrase) {
 			widget.sendMessage({ type: "phrases", num: targetIndex, options: QUICK_NOTE });
 		}
-		if (result.privateSound) sender.playSound(result.privateSound);
+		if (result.privateSound) playSoundTo(sender, result.privateSound);
 		if (result.roomSound) playSound(room, result.roomSound);
 	});
 }
@@ -332,6 +332,10 @@ function chooseNotePhrase(
 	seat.usedSkill = true;
 
 	label(sender, `✉️ ${target}번에게 쪽지를 보냅니다.\n내일 아침에 도착합니다.`);
+	// 소리는 첫 클릭이 아니라 여기다. 쪽지만 지목을 두 번 받는데(대상 → 문구)
+	// 능력이 실제로 소모되는 것은 두 번째다. 첫 클릭에 소리를 붙이면 문구를
+	// 안 고르고 나간 사람도 보낸 소리를 듣는다
+	playSoundTo(sender, Sound.NOTE);
 	widget.sendMessage({ type: "selectResponse", num: target });
 }
 
@@ -439,7 +443,11 @@ function tellSeat(seat: Seat, message: string): void {
 export function deliverNightReveals(room: Room): void {
 	for (const reveal of room.nightReveals) {
 		const target = seatAt(room, reveal.seat);
-		if (target) tellSeat(target, reveal.line);
+		if (!target) continue;
+		tellSeat(target, reveal.line);
+		if (!reveal.sound) continue;
+		const player = ScriptApp.getPlayerByID(target.playerId);
+		if (player) playSoundTo(player, reveal.sound);
 	}
 	room.nightReveals = [];
 }

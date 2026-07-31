@@ -18,6 +18,7 @@
  */
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
+import { Sound } from "../constants/Assets.ts";
 import {
 	hasJobAbility,
 	inMafiaChat,
@@ -44,6 +45,14 @@ export interface NightIntent {
 export interface NightReveal {
 	readonly seat: number;
 	readonly line: string;
+	/**
+	 * 이 줄과 함께 본인에게만 들릴 소리. 없으면 조용히 간다.
+	 *
+	 * 아침에는 개인 통보가 여러 줄 한꺼번에 쏟아지고(조사 답, 쪽지, 차단),
+	 * 채팅으로 오기 때문에 토론이 시작되면 밀려 올라간다. 소리가 붙는 줄은
+	 * 놓치면 판단이 달라지는 것 하나뿐이다 — 지금은 차단이다.
+	 */
+	readonly sound?: string;
 }
 
 export interface NightSettlement {
@@ -255,6 +264,12 @@ function notifyBlocked(
 			seat: seat.index,
 			// 누가 막았는지는 없다. 알면 다음 낮에 건달을 찾아 처형한다
 			line: "🥊 어젯밤 누군가 당신을 방해해 능력이 무효가 되었습니다.",
+			// 막힌 사람만 소리를 받는다. 자기가 고른 대상에 능력이 닿았다고
+			// 믿은 채 낮을 시작하면 그 오해 위에서 추리가 굴러가고, 조사 답이
+			// 안 왔다는 사실만으로는 막힌 것인지 대상이 결백한 것인지 모른다.
+			// 건달 본인의 성공 통보(위 blocks 루프)에는 붙이지 않는다 —
+			// 막은 쪽은 자기가 무엇을 했는지 이미 안다
+			sound: Sound.BLOCKED,
 		});
 	}
 }

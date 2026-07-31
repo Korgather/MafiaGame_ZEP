@@ -5,21 +5,69 @@
  * 파일 이름을 바꾸면 어디가 깨지는지 알 수 없었다.
  */
 
+/**
+ * 효과음.
+ *
+ * 열여섯 개 전부 tools/make-sfx.py가 만든다 — 받아 온 음원이 아니다.
+ * 그 파일의 머리말에 이유가 적혀 있지만, 여기서 알아야 할 것은 하나다:
+ * **파일 사이의 크기 균형은 이미 맞춰져 있다.** 세 계층으로 구워져 있고
+ * (전원이 듣는 사건 -18dBFS / 개인 알림 -20.5 / 깔리는 소리 -23),
+ * 계층 안의 편차는 0.7dB를 넘지 않는다. 호출부가 볼륨을 따로 손볼 이유가
+ * 없다는 뜻이다. 전체를 키우거나 줄이려면 SFX_VOLUME 하나만 만지면 된다.
+ *
+ * 교체 전에는 열 개가 출처도 규격도 제각각이었다. 실측하면
+ * RMS가 -17.9에서 -25.7dBFS까지 8dB 흩어져 있었고, morningSound.wav는
+ * peak 1.000으로 이미 깎여 있었으며, gunSound.WAV는 8비트 11kHz 모노였다.
+ * 그리고 처형·밤사망·차단·쪽지·점쟁이·카드공개에는 소리가 아예 없었다.
+ */
 export const Sound = {
-	JOIN: "joinSound.mp3",
-	NIGHT: "nightSound.mp3",
-	MORNING: "morningSound.wav",
-	VOTE: "voteSound.wav",
-	TICK_TOCK: "tickTockSound.mp3",
-	/** 마피아가 대상을 지목했을 때 */
-	GUN: "gunSound.WAV",
+	/** 대기실 입장 */
+	JOIN: "sfx_join.mp3",
+	/** 직업 카드가 뒤집힐 때 */
+	REVEAL: "sfx_reveal.mp3",
+	NIGHT: "sfx_night.mp3",
+	MORNING: "sfx_morning.mp3",
+	VOTE: "sfx_vote.mp3",
+	TICK_TOCK: "sfx_tick.mp3",
+	/**
+	 * 마피아·짐승인간이 대상을 지목했을 때.
+	 *
+	 * 전에는 총성(gunSound.WAV)이었다. 품질도 문제였지만 더 큰 문제는
+	 * 톤이다 — 이 게임의 그림은 실루엣과 촛불이고, 실제 총성 한 방은
+	 * 추리가 아니라 액션으로 읽힌다. 지금은 쇳소리와 심장박동이다.
+	 */
+	STRIKE: "sfx_strike.mp3",
 	/** 의사가 대상을 지목했을 때 */
-	HEAL: "healSound.WAV",
-	/** 경찰·스파이가 조사했을 때 */
-	INVESTIGATE: "policeAttackSound.mp3",
-	CITIZEN_WIN: "citizenWinSound.mp3",
-	MAFIA_WIN: "mafiaWinSound.mp3",
+	HEAL: "sfx_heal.mp3",
+	/** 경찰·스파이가 진영을 조사했을 때 */
+	INVESTIGATE: "sfx_investigate.mp3",
+	/**
+	 * 점쟁이가 능력을 들여다봤을 때.
+	 *
+	 * 경찰의 조사음과 재료를 나눈 이유는 보는 것이 다르기 때문이다.
+	 * 같은 소리를 쓰면 밤마다 무엇을 확인했는지 소리로 구분되지 않는다.
+	 */
+	INSPECT: "sfx_inspect.mp3",
+	/** 건달에게 막혀 능력이 불발됐을 때 */
+	BLOCKED: "sfx_blocked.mp3",
+	/** 쪽지를 보냈을 때 */
+	NOTE: "sfx_note.mp3",
+	/** 낮 투표로 처형됐을 때 */
+	EXECUTE: "sfx_execute.mp3",
+	/** 밤사이 죽은 사람이 있을 때 */
+	DEATH: "sfx_death.mp3",
+	CITIZEN_WIN: "sfx_citizen_win.mp3",
+	MAFIA_WIN: "sfx_mafia_win.mp3",
 } as const;
+
+/**
+ * 효과음 공통 볼륨 (0~1, ScriptPlayer.playSound의 5번째 인자).
+ *
+ * 파일 사이의 균형이 아니라 게임 전체에서 효과음이 차지하는 자리를 정하는
+ * 값이다. 1.0은 ZEP이 낼 수 있는 최대라 맵 배경음과 발소리를 덮는다 —
+ * 효과음은 배경 위에 얹히는 것이지 배경을 밀어내는 것이 아니므로 조금 낮춘다.
+ */
+export const SFX_VOLUME = 0.8;
 
 /**
  * 위젯 HTML 파일명. 소스는 src/ui/, 산출물은 res/ (tools/build-widgets.js).

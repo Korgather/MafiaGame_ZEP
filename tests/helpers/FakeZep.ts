@@ -204,8 +204,14 @@ export class FakePlayer {
 		this.labels.push(args[0] as string);
 	}
 
+	/**
+	 * 상한이 3이 아니라 5인 이유는 ScriptPlayer.d.ts다 —
+	 * playSound(fileName, loop?, overlap?, key?, volume?)로 다섯 자리다.
+	 * 3으로 적혀 있던 동안은 아무도 key와 volume을 쓰지 않아 드러나지 않았고,
+	 * 볼륨을 주려던 첫 호출이 실제 런타임이 아니라 여기서 막혔다.
+	 */
 	playSound(...args: unknown[]): void {
-		checkCall("player.playSound", args, 1, 3);
+		checkCall("player.playSound", args, 1, 5);
 		this.sounds.push(args[0] as string);
 	}
 

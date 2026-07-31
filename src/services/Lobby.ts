@@ -39,7 +39,7 @@ import { allRooms, attachedRoom, getRoom, locate, locateSpectator } from "../ent
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
-import { centerLabel, forEachSpectator, label } from "./Broadcast.ts";
+import { centerLabel, forEachSpectator, label, playSoundTo } from "./Broadcast.ts";
 import { needsGuide, showBook, showGuide } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
 import { countAbandon, rankOf } from "./Rewards.ts";
@@ -232,7 +232,7 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 
 	const name = player.name;
 	room.seats.push(createSeat(player.id, name, rankOf(player)));
-	player.playSound(Sound.JOIN);
+	playSoundTo(player, Sound.JOIN);
 
 	// 방 탭이 생겼다는 것을 먼저 알린 뒤 입장 알림을 흘린다.
 	// 순서를 뒤집으면 본인만 자기 입장 알림을 못 본다 — 알림이 도착하는

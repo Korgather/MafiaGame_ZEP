@@ -14,7 +14,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { SPRITE_DEFS } from "../src/constants/Assets.ts";
+import { SFX_VOLUME, SPRITE_DEFS, Sound } from "../src/constants/Assets.ts";
 import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
 
 // import.meta는 tsconfig의 module: CommonJS에서 막힌다. 테스트는 npm이
@@ -85,5 +85,55 @@ describe("스프라이트 시트", () => {
 			if (def.nightAction !== NightActionKind.ATTACK) continue;
 			assert.ok(def.nightAttackSprite, `${role}: 공격 이펙트가 없습니다`);
 		}
+	});
+});
+
+/**
+ * MP3 프레임 싱크. 파일이 실제로 소리인지 확인한다.
+ *
+ * 확장자만 mp3인 0바이트 파일이나 텍스트가 여기서 걸린다. playSound는
+ * 없는 파일에도 깨진 파일에도 예외를 던지지 않고 그냥 소리가 나지 않으므로,
+ * 이름 하나를 잘못 적으면 게임 안에서 침묵으로만 드러난다.
+ *
+ * 지금 res의 mp3는 ID3 태그 없이 첫 프레임부터 시작하지만, 나중에 태그가
+ * 붙은 파일이 들어올 수도 있어 둘 다 받는다.
+ */
+function assertMp3(file: string): void {
+	const buf = readFileSync(join(RES, file));
+	assert.ok(buf.length > 1024, `${file}: 소리라기엔 너무 작습니다 (${buf.length}바이트)`);
+	const tagged = buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33;
+	const sync = buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0;
+	assert.ok(tagged || sync, `${file}: MP3 헤더가 아닙니다`);
+}
+
+describe("효과음", () => {
+	it("등록한 파일이 모두 res에 있다", () => {
+		for (const [key, file] of Object.entries(Sound)) {
+			assert.doesNotThrow(() => assertMp3(file), `${key}: ${file}`);
+		}
+	});
+
+	/**
+	 * 두 상황이 같은 파일을 쓰면 소리로는 구분되지 않는다.
+	 *
+	 * 실제로 점쟁이가 경찰의 조사음을 그대로 썼다. 답이 아침으로 밀린 뒤로는
+	 * 지목 순간의 소리가 "내가 무엇을 물었는가"를 기억할 유일한 단서라
+	 * 겹치면 밤마다 자기 행동을 잃어버린다. 재사용이 필요해지는 날은
+	 * 이 문장을 지우는 것이 아니라 왜 같아도 되는지를 여기 적는 날이다.
+	 */
+	it("서로 다른 상황이 같은 파일을 쓰지 않는다", () => {
+		const seen: Record<string, string> = {};
+		for (const [key, file] of Object.entries(Sound)) {
+			assert.equal(seen[file], undefined, `${key}가 ${seen[file]}와 ${file}을 함께 씁니다`);
+			seen[file] = key;
+		}
+	});
+
+	/**
+	 * ScriptPlayer.playSound의 볼륨은 0~1이다. 벗어난 값은 예외가 아니라
+	 * 잘리거나 무시되므로, 1.5를 적어 두고 "왜 안 커지지"를 찾게 된다.
+	 */
+	it("공통 볼륨이 ZEP이 받는 범위 안이다", () => {
+		assert.ok(SFX_VOLUME > 0 && SFX_VOLUME <= 1, `SFX_VOLUME이 0~1 밖입니다: ${SFX_VOLUME}`);
 	});
 });

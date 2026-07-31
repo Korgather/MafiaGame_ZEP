@@ -17,7 +17,9 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { Seat } from "../types/Game.types.ts";
+import { Sound } from "../constants/Assets.ts";
 import { GUIDE_CARDS, cardForRole, roleBook } from "../domain/Guide.ts";
+import { playSoundTo } from "./Broadcast.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { messageType } from "../types/Widget.types.ts";
@@ -55,6 +57,10 @@ function handleMessage(player: ScriptPlayer, data: unknown): void {
  * 정상 경로에서도 어긋나게 됐다. 남은 시간을 아는 것은 방(room.phaseTimer)뿐이다.
  */
 export function showRoleReveal(player: ScriptPlayer, seat: Seat, timer: number): void {
+	// 게임이 시작되는 순간 유일하게 나는 소리다. 전에는 카드가 조용히 떴고,
+	// 앞에 붙는 "🎭 게임 시작" 컷도 소리가 없어서 판이 열린 것을 화면으로만
+	// 알았다. 컷에 따로 소리를 더 얹지 않는 이유는 둘이 같은 순간이기 때문이다
+	playSoundTo(player, Sound.REVEAL);
 	show(player, {
 		type: "init",
 		cards: [cardForRole(seat.role)],

@@ -259,7 +259,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightNotice: MAFIA_CHAT,
 		immuneToVote: false,
 		appearsAsMafia: true,
-		attackSound: Sound.GUN,
+		attackSound: Sound.STRIKE,
 	},
 	DOCTOR: {
 		displayName: "의사",

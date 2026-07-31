@@ -16,7 +16,7 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
-import { LabelColor } from "../constants/Assets.ts";
+import { LabelColor, SFX_VOLUME } from "../constants/Assets.ts";
 
 /**
  * 방의 모든 좌석을 순회하며 접속 중인 플레이어에게만 콜백을 실행한다.
@@ -105,8 +105,34 @@ export function centerLabel(room: Room, message: string, durationMs = ROOM_LABEL
 	forEachPlayer(room, player => label(player, message, durationMs));
 }
 
-export function playSound(room: Room, fileName: string): void {
-	forEachPlayer(room, player => {
-		player.playSound(fileName);
+/**
+ * 방 전체가 함께 듣는 소리.
+ *
+ * forEachPlayer가 아니라 forEachAudience인 이유는 컷이다. 단계 전환 컷은
+ * 관전자에게도 뜨는데(Cut.ts의 forEachAudience) 소리는 좌석에게만 갔다.
+ * 관전자에게는 화면이 덮이고 글자가 지나가는 동안 아무 소리도 나지 않았다.
+ *
+ * 위 forEachAudience 주석이 경계하는 것은 "관전자가 직업 카드를 받고 밤에
+ * 지목 화면을 여는 것"인데, 이 통로로 나가는 소리는 밤·아침·투표·처형·
+ * 승패처럼 전부 이미 공개된 사건이라 새로 새는 정보가 없다.
+ */
+export function playSound(room: Room, sound: string): void {
+	forEachAudience(room, player => {
+		playSoundTo(player, sound);
 	});
+}
+
+/**
+ * 한 사람에게만 들리는 소리 — 밤 능력의 결과처럼 남이 알면 안 되는 것.
+ *
+ * 인자를 다섯 개 다 적는 이유는 Jint다. 인자 개수로 C# 오버로드를 고르므로
+ * 자리를 채우려 undefined를 넣으면 호출이 실패한다(label의 showCustomLabel
+ * 주석과 같은 함정). 볼륨 하나를 주려면 앞의 셋도 값이어야 한다.
+ *
+ * overlap을 켜고 key를 파일 이름으로 두면 서로 다른 소리는 겹쳐 나고 같은
+ * 소리만 다시 시작한다. 끄면 3.8초짜리 밤 앰비언스가 도는 동안 능력음
+ * 하나가 나는 순간 앰비언스가 끊긴다 — 밤이 시작되자마자 조용해진다.
+ */
+export function playSoundTo(player: ScriptPlayer, sound: string): void {
+	player.playSound(sound, false, true, sound, SFX_VOLUME);
 }

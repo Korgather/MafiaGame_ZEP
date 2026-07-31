@@ -177,7 +177,14 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 				// 안 나온다"는 안내이고, 바로 그 기대를 이번에 바꿨기 때문이다.
 				// 3초에 스쳐 지나가면 조사자는 오지 않을 답을 밤새 기다린다
 				labelDurationMs: REVEAL_MS,
-				privateSound: Sound.INVESTIGATE,
+				// 점쟁이만 소리가 다르다. 경찰·스파이와 같은 소리를 쓰면 밤마다
+				// 자기가 진영을 봤는지 능력을 봤는지가 소리로 구분되지 않는다.
+				// 답이 아침으로 밀린 지금은 지목 순간의 소리가 "무엇을 물었는가"를
+				// 기억할 유일한 단서다
+				privateSound:
+					def.nightAction === NightActionKind.INSPECT_ABILITY
+						? Sound.INSPECT
+						: Sound.INVESTIGATE,
 			};
 
 		case NightActionKind.SCOOP:

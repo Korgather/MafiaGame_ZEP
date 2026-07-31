@@ -14,10 +14,12 @@
 import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
+import { Sound } from "../constants/Assets.ts";
 import { CONSOLATION_EXP } from "../domain/Progression.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { participantLabel } from "../entities/Room.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
+import { playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { awardExp } from "./Rewards.ts";
 import { applyNameplate } from "./Stage.ts";
@@ -46,6 +48,11 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 	const player = ScriptApp.getPlayerByID(seat.playerId);
 	if (!player) return;
 
+	// 밤 사망은 죽은 본인만 듣는다. 방 전체에 내면 곧바로 이어지는 아침
+	// 소리와 겹치고, 한 밤에 둘이 죽으면 같은 소리가 두 번 난다.
+	// 처형이 방의 소리인 것과 반대다 — 그쪽은 개표 화면을 다 같이 보는 중이다.
+	if (cause === DeathCause.NIGHT_KILL) playSoundTo(player, Sound.DEATH);
+
 	// 처형당한 시민 진영에게는 위로 경험치. 전적은 건드리지 않는다.
 	// role !== MAFIA로 판정하면 짐승인간·사기꾼이 처형당할 때마다 위로금을 받는다.
 	if (cause === DeathCause.EXECUTION && seat.team !== Team.MAFIA) {
@@ -64,6 +71,9 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 		Chat.announce(room, `☠️ 이번 밤에 ${name}가 죽었습니다.`);
 		return;
 	}
+	// 개표 화면이 아직 떠 있고 처형된 칸이 흔들리는 중이다. 그 위에 소리를
+	// 얹어야 "표가 몰렸다"와 "그래서 죽었다"가 한 사건으로 읽힌다
+	playSound(room, Sound.EXECUTE);
 	// 시민이 알아야 하는 것은 직업이 아니라 "마피아를 줄였는가"다.
 	// 짐승인간·사기꾼을 처형하고도 "마피아가 아니었다"고 하면 시민이 오판한다.
 	Chat.announce(
