@@ -43,7 +43,15 @@ export interface Timing {
 	 * 다음 판을 시작하게 만드는 지점이다. 12줄을 읽을 시간을 준다.
 	 */
 	readonly GAME_OVER: number;
-	/** 남은 시간이 이 값 아래로 내려가면 째깍 사운드 재생(초) */
+	/**
+	 * 남은 시간이 이 값 아래로 내려가면 째깍 사운드 재생(초).
+	 *
+	 * res/sfx_tick.mp3의 째깍 배치 길이와 같아야 한다. 파일이 더 짧으면
+	 * 시계가 마감보다 먼저 멈춰서, 남은 시간을 알려 주라고 넣은 소리가
+	 * 정작 가장 급한 구간을 침묵으로 비운다(표준전이 9인데 파일이 3.6초여서
+	 * 마지막 5.4초가 그렇게 비어 있었다). 값을 바꾸면 tools/make-sfx.py의
+	 * s_tick도 함께 바꿔야 한다.
+	 */
 	readonly TICK_TOCK_AT: number;
 }
 
@@ -191,7 +199,7 @@ export const STANDARD_RULES: RuleSet = {
 	timing: {
 		START_COUNTDOWN: 10, ROLE_REVEAL: 9, NIGHT: 22,
 		DAY_PER_ALIVE: 10, DAY_MAX: 60, VOTE: 17, VOTE_RESULT: 7,
-		GAME_OVER: 16, TICK_TOCK_AT: 9,
+		GAME_OVER: 16, TICK_TOCK_AT: 5,
 	},
 	deck: {
 		mafiaTeamSize: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3],

@@ -21,6 +21,11 @@ import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { MAX_PLAYERS, ROOM_COUNT } from "../src/constants/GameConfig.ts";
 
 describe("표준전", () => {
+	/**
+	 * TICK_TOCK_AT만 이동 전(9)과 다르다. 째깍 소리 파일이 그보다 짧아서
+	 * 시계가 마감보다 먼저 멈췄기 때문에, 파일의 째깍 배치 길이(5초)에
+	 * 맞춰 내렸다 — 속도전은 원래 5였으므로 이제 둘이 같다.
+	 */
 	it("타이밍이 이동 전 값과 같다", () => {
 		assert.deepEqual(STANDARD_RULES.timing, {
 			START_COUNTDOWN: 10,
@@ -31,7 +36,7 @@ describe("표준전", () => {
 			VOTE: 17,
 			VOTE_RESULT: 7,
 			GAME_OVER: 16,
-			TICK_TOCK_AT: 9,
+			TICK_TOCK_AT: 5,
 		});
 	});
 
