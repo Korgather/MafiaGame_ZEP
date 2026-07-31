@@ -70,6 +70,8 @@ export const Role = {
 	REPORTER: "REPORTER",
 	/** 짐승인간 */
 	BEAST: "BEAST",
+	/** 사기꾼 */
+	CON_ARTIST: "CON_ARTIST",
 	CITIZEN: "CITIZEN",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];

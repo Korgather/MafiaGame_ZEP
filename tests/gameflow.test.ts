@@ -13,6 +13,7 @@ import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
 import { ACTION_RATE, MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
+import { roleBook } from "../src/domain/Guide.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
@@ -193,7 +194,9 @@ describe("대기실 → 게임 시작", () => {
 
 			const init = cardWidget(player).messages[0] as { nav: string; cards: unknown[] };
 			assert.equal(init.nav, "grid");
-			assert.equal(init.cards.length, 12);
+			// 장수를 숫자로 적지 않는다. 여기가 보는 것은 "도감이 통째로 갔는가"이지
+			// 도감이 몇 장인가가 아니다. 도감 자체의 완전성은 domain.test.ts가 본다
+			assert.equal(init.cards.length, roleBook().length);
 		});
 	});
 

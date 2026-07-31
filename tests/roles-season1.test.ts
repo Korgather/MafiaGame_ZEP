@@ -1,0 +1,93 @@
+/**
+ * 시즌 1에서 더해진 직업들.
+ *
+ * 직업마다 "이 직업이 무엇을 바꾸는가" 한 가지씩만 본다. 밤 정산의 순서와
+ * 배달은 tests/night-pipeline.test.ts가 이미 지키고 있으므로 여기서 또
+ * 확인하지 않는다.
+ */
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { Role, Team } from "../src/types/Game.types.ts";
+import type { Seat } from "../src/types/Game.types.ts";
+import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
+import { ROLE_DEFS } from "../src/domain/Roles.ts";
+import type { NightIntent, NightSettlement } from "../src/domain/NightPipeline.ts";
+import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
+import { seat } from "./helpers/seat.ts";
+
+function night(seats: Seat[], clicks: Array<[number, number]>): NightSettlement {
+	const intents: NightIntent[] = [];
+	for (const [actor, target] of clicks) putIntent(intents, actor, target);
+	return resolveNightIntents(seats, intents, { skipAttacks: false });
+}
+
+/** 그 좌석에게 간 줄. 없으면 빈 문자열 */
+function reveal(settlement: NightSettlement, index: number): string {
+	for (const item of settlement.reveals) {
+		if (item.seat === index) return item.line;
+	}
+	return "";
+}
+
+describe("사기꾼", () => {
+	it("마피아 팀이고 마피아 채팅에 들어간다", () => {
+		assert.equal(ROLE_DEFS[Role.CON_ARTIST].team, Team.MAFIA);
+		assert.equal(ROLE_DEFS[Role.CON_ARTIST].nightChat, ChatChannel.MAFIA);
+	});
+
+	it("밤에 고를 대상이 없다", () => {
+		assert.equal(ROLE_DEFS[Role.CON_ARTIST].nightAction, null);
+	});
+
+	it("경찰 조사에 마피아로 나오지 않는다", () => {
+		// 이 직업의 전부다. appearsAsMafia를 켜지 않는 것 하나로 성립한다
+		const seats = [seat(1, Role.POLICE), seat(2, Role.CON_ARTIST)];
+		assert.match(reveal(night(seats, [[1, 2]]), 1), /마피아가 아닙니다/);
+	});
+
+	it("스파이에게는 정체가 그대로 보이고 합류가 일어난다", () => {
+		// 위장은 팀 조사에만 통한다. 직업을 읽는 능력까지 속이면
+		// 스파이가 사기꾼을 만났을 때 아무 일도 일어나지 않는다
+		const seats = [seat(1, Role.SPY), seat(2, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 2]]);
+		assert.match(reveal(result, 1), /사기꾼/);
+		assert.deepEqual(result.defected, [1]);
+	});
+
+	it("조사당하면 다음 아침에 알게 된다", () => {
+		const seats = [seat(1, Role.POLICE), seat(2, Role.CON_ARTIST)];
+		assert.match(reveal(night(seats, [[1, 2]]), 2), /조사했습니다/);
+	});
+
+	it("누가 조사했는지는 알려주지 않는다", () => {
+		// 조사한 사람이 드러나면 이 알림은 경찰을 지목하는 능력이 된다
+		const seats = [seat(1, Role.POLICE), seat(2, Role.CON_ARTIST)];
+		const line = reveal(night(seats, [[1, 2]]), 2);
+		// 줄이 아예 없어도 doesNotMatch는 통과한다. 먼저 왔는지를 본다
+		assert.ok(line.length > 0, "알림 자체가 오지 않았다");
+		assert.doesNotMatch(line, /1번/);
+	});
+
+	it("여러 명이 조사해도 알림은 한 줄이다", () => {
+		// 줄 수가 곧 살아 있는 조사 직업의 수를 알려준다
+		const seats = [seat(1, Role.POLICE), seat(2, Role.SPY), seat(3, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 3], [2, 3]]);
+		// 두 조사가 실제로 돌았는지 먼저 본다. 하나가 조용히 빠지면 "한 줄"은
+		// 저절로 맞아 버려서 이 테스트가 아무것도 안 지키게 된다
+		assert.match(reveal(result, 1), /마피아가 아닙니다/);
+		assert.match(reveal(result, 2), /사기꾼/);
+		const mine = result.reveals.filter(item => item.seat === 3);
+		assert.equal(mine.length, 1);
+	});
+
+	it("아무도 조사하지 않으면 알림이 없다", () => {
+		const seats = [seat(1, Role.POLICE), seat(2, Role.CON_ARTIST), seat(3, Role.CITIZEN)];
+		assert.equal(reveal(night(seats, [[1, 3]]), 2), "");
+	});
+
+	it("다른 직업은 조사당해도 알림을 받지 않는다", () => {
+		const seats = [seat(1, Role.POLICE), seat(2, Role.CITIZEN)];
+		assert.equal(reveal(night(seats, [[1, 2]]), 2), "");
+	});
+});

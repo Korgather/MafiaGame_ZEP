@@ -133,6 +133,14 @@ export interface RoleDef {
 	 */
 	readonly appearsAsMafia?: boolean;
 	/**
+	 * 조사당한 사실을 다음 아침에 본인에게 알린다.
+	 *
+	 * 사기꾼의 위장은 "마피아가 아니다"라고 나오는 것까지다. 그 위장이
+	 * 통했는지 본인이 모르면 다음 날 무엇을 말해야 할지도 모른다.
+	 * 누가 조사했는지는 알려주지 않는다 — 그건 경찰을 지목하는 능력이 된다.
+	 */
+	readonly notifiesOnInspect?: boolean;
+	/**
 	 * 이 사람이 던지는 표의 무게. 없으면 1표.
 	 *
 	 * 짝인 immuneToVote는 처음부터 여기 있었는데 표의 무게만 Voting.ts에
@@ -381,6 +389,23 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		immuneToVote: false,
 		// 경찰에게 잡히지 않는 것이 이 직업의 존재 이유다. appearsAsMafia를 켜면
 		// 마피아가 셋인 판이 되고, 끄면 "찾을 수 없는 살인마"가 된다.
+	},
+	CON_ARTIST: {
+		displayName: "사기꾼",
+		team: Team.MAFIA,
+		glyph: "🎭",
+		ability: "경찰 조사에 시민으로 나옵니다. 조사당하면 다음 아침에 알게 됩니다.",
+		tip: "당당하게 조사를 요구하세요. 당신은 절대 마피아로 나오지 않습니다.",
+		nightAction: null,
+		nightStep: NightStep.AFTER,
+		nightChat: ChatChannel.MAFIA,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: null,
+		nightNotice: MAFIA_CHAT,
+		immuneToVote: false,
+		notifiesOnInspect: true,
+		// appearsAsMafia를 켜지 않는다 — 그것이 이 직업의 전부다
 	},
 	CITIZEN: {
 		displayName: "시민",

@@ -164,32 +164,49 @@ describe("마피아 리드 선정", () => {
 		}
 	});
 
-	it("11~12인 마피아 진영은 마피아 둘 + 짐승인간 하나로 고정된다", () => {
+	it("11~12인 마피아 진영은 마피아 둘 + 위장 직업 하나로 고정된다", () => {
 		/*
 		 * 오늘의 구성 그 자체다. 리드는 마피아 고정이고(단독 킬러 리드는 남는 두
-		 * 자리를 밀담 후보 하나로 못 채운다) 남는 두 자리를 후보 둘에서 둘 뽑으므로
-		 * 갈릴 여지가 없다. Task 6이 사기꾼을 넣으면 여기가 갈린다.
+		 * 자리를 밀담 후보 하나로 못 채운다), 남는 두 자리는 배타 그룹 때문에
+		 * 짐승인간·사기꾼 중 하나가 들어오는 순간 다른 하나가 빠져 언제나
+		 * 「위장 하나 + 마피아 하나」로 끝난다. 갈리는 것은 둘 중 누구냐뿐이다.
 		 *
-		 * 자리 수만 세는 테스트로 대신할 수 없다. mafiaPool의 여유가 한 칸도 없어서
-		 * (RuleSet.ts의 경고) 후보가 하나라도 줄면 남는 자리를 메움패가 채우는데,
-		 * 그러면 마피아 셋이 되어 자리 수는 그대로 3으로 맞다. 구성을 직접 못 박아야
-		 * 풀이 마른 것이 그 자리에서 걸린다.
+		 * 자리 수만 세는 테스트로 대신할 수 없다. 후보는 셋이 되었지만 배타가
+		 * 매 판 하나를 걷어내 실효 후보는 여전히 둘이고, 남는 자리도 여전히 둘이라
+		 * 여유가 한 칸도 없다(RuleSet.ts의 경고). 후보가 하나라도 더 줄면 남는
+		 * 자리를 메움패가 채우는데, 메움패는 마피아라 자리 수는 그대로 3으로 맞다.
+		 * 「마피아가 정확히 둘」을 못 박아야 풀이 마른 것이 그 자리에서 걸린다.
 		 */
 		for (let count = 11; count <= 12; count++) {
 			for (let seed = 1; seed <= 100; seed++) {
 				const deck = buildRoleDeck(DECK, count, rngFrom(seed));
-				assert.equal(
-					deck.filter(role => role === Role.MAFIA).length,
-					2,
-					`${count}인 seed ${seed} [${deck.join(", ")}]`
-				);
-				assert.equal(
-					deck.filter(role => role === Role.BEAST).length,
-					1,
-					`${count}인 seed ${seed} [${deck.join(", ")}]`
-				);
+				const where = `${count}인 seed ${seed} [${deck.join(", ")}]`;
+				assert.equal(deck.filter(role => role === Role.MAFIA).length, 2, where);
+				// 위장 직업은 정확히 하나다. 둘을 따로 세지 않고 합으로 세는 이유는
+				// 배타가 깨지면(둘이 함께 나오면) 합이 2가 되어 여기서 걸리기 때문이다
+				const disguised = deck.filter(
+					role => role === Role.BEAST || role === Role.CON_ARTIST
+				).length;
+				assert.equal(disguised, 1, where);
 			}
 		}
+	});
+
+	it("11~12인의 위장 직업은 짐승인간과 사기꾼 양쪽에서 나온다", () => {
+		// 위 테스트는 "위장이 하나"만 본다. 한쪽이 영영 안 나와도 통과하므로,
+		// 구성이 실제로 갈린다는 것은 따로 못 박는다 — 갈리지 않으면 11~12인은
+		// 매 판 같은 판이 되고 그것이 이 슬라이스가 푼 문제다
+		let beast = 0;
+		let conArtist = 0;
+		for (let count = 11; count <= 12; count++) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(DECK, count, rngFrom(seed));
+				if (deck.includes(Role.BEAST)) beast++;
+				if (deck.includes(Role.CON_ARTIST)) conArtist++;
+			}
+		}
+		assert.ok(beast > 0, "짐승인간이 한 번도 안 나왔다");
+		assert.ok(conArtist > 0, "사기꾼이 한 번도 안 나왔다");
 	});
 
 	it("리드 후보가 전부 걸러져도 마피아가 리드가 된다", () => {
@@ -220,27 +237,26 @@ describe("마피아 리드 선정", () => {
 
 	it("배타 라이벌 때문에 자리를 못 채우는 후보는 리드가 되지 않는다", () => {
 		/*
-		 * 합성 스펙. 사기꾼(Task 6)이 마피아 풀에 들어오면서 짐승인간과 배타로
-		 * 묶이는 상태를 미리 세운다 — 오늘 마피아 팀 직업은 둘뿐이라, 밀담에
-		 * 앉는 세 번째 직업 자리에는 스파이를 대역으로 세웠다(스파이는 진영이
-		 * 시민이지만 nightChat이 마피아라 단독 킬러가 아니다). 그래서 자리 수는
-		 * 진영이 아니라 "마피아 자리에서 온 직업"으로 센다.
+		 * 합성 스펙이지만 표준 규칙과 거의 같은 모양이다 — 짐승인간을 마피아 풀에서
+		 * 빼 리드 전용으로 만든 것만 다르다. 그러면 짐승인간이 리드가 아닌 경로로는
+		 * 아예 못 들어와서, 아래 단언이 잡는 것이 오직 리드 검사가 된다.
 		 *
 		 * 리드가 짐승인간이면 남은 두 자리는 밀담 후보에서만 오는데, 그 후보 중
-		 * 스파이는 짐승인간과 같은 그룹이라 함께 빠진다. 남는 것은 마피아 하나뿐
+		 * 사기꾼은 짐승인간과 같은 그룹이라 함께 빠진다. 남는 것은 마피아 하나뿐
 		 * 이라 두 자리를 못 채우고, 모자란 자리는 buildRoleDeck 끝의 while이
 		 * 시민으로 메운다 — 덱 길이는 맞으므로 인원표가 깨진 것을 아무도 모른다.
 		 *
 		 * 그래서 "채울 수 있는가"는 후보마다 다르다. 밀담 후보를 한 번 세는
 		 * 것으로는 어느 후보가 몇 명을 데려갈 수 있는지 구별할 수 없다.
+		 *
+		 * 세는 단위가 진영이 아니라 "마피아 자리에서 온 직업"인 것은 위 테스트와
+		 * 같은 이유다 — 시민 자리에서 뽑힌 직업이 숫자에 섞이면 안 된다.
 		 */
-		const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.SPY];
+		const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.CON_ARTIST];
 		const spec = {
 			...DECK,
-			mafiaPool: [Role.MAFIA, Role.SPY],
-			// 스파이가 시민 추첨으로도 들어오면 자리 수를 셀 수 없다
-			citizenPool: DECK.citizenPool.filter(role => role !== Role.SPY),
-			exclusiveGroups: [[Role.BEAST, Role.SPY]],
+			mafiaPool: [Role.MAFIA, Role.CON_ARTIST],
+			exclusiveGroups: [[Role.BEAST, Role.CON_ARTIST]],
 		};
 		for (const count of EVERY_COUNT) {
 			for (let seed = 1; seed <= 200; seed++) {
@@ -252,11 +268,46 @@ describe("마피아 리드 선정", () => {
 					`${count}인 seed ${seed} [${deck.join(", ")}]`
 				);
 				assert.ok(
-					!(deck.includes(Role.BEAST) && deck.includes(Role.SPY)),
+					!(deck.includes(Role.BEAST) && deck.includes(Role.CON_ARTIST)),
 					`${count}인 seed ${seed}: 배타 그룹이 함께 나왔다`
 				);
 			}
 		}
+	});
+});
+
+describe("사기꾼 배치", () => {
+	it("6인 이하에서는 나오지 않는다", () => {
+		for (let count = 4; count <= 6; count++) {
+			for (let seed = 1; seed <= 40; seed++) {
+				assert.ok(
+					!buildRoleDeck(DECK, count, rngFrom(seed)).includes(Role.CON_ARTIST),
+					`${count}인`
+				);
+			}
+		}
+	});
+
+	it("짐승인간과 함께 나오지 않는다", () => {
+		// 둘 다 경찰 조사를 흐리는 직업이다. 한 판에 겹치면 경찰이 얻는
+		// 정보가 사실상 없어진다
+		for (let count = 7; count <= 12; count++) {
+			for (let seed = 1; seed <= 60; seed++) {
+				const deck = buildRoleDeck(DECK, count, rngFrom(seed));
+				assert.ok(
+					!(deck.includes(Role.BEAST) && deck.includes(Role.CON_ARTIST)),
+					`${count}인 seed ${seed}`
+				);
+			}
+		}
+	});
+
+	it("7인 이상에서는 사기꾼이 나오는 판이 있다", () => {
+		let seen = 0;
+		for (let seed = 1; seed <= 200; seed++) {
+			if (buildRoleDeck(DECK, 9, rngFrom(seed)).includes(Role.CON_ARTIST)) seen++;
+		}
+		assert.ok(seen > 0, "9인 판에서 사기꾼이 한 번도 안 나왔다");
 	});
 });
 
@@ -433,14 +484,12 @@ describe("배타 그룹 (합성 스펙)", () => {
  * 아무리 정교하게 만들어도 이 모양들을 전부 앞에서 막을 수는 없으므로(검사 뒤에
  * 좁아지는 뽑기가 있는 한), 자리 수는 뽑기가 끝난 뒤에 못 박혀야 한다.
  *
- * 세는 단위가 "진영"이 아니라 "마피아 자리에서 온 직업"인 이유: 오늘 마피아 팀
- * 직업은 MAFIA·BEAST 둘뿐이라, 밀담에 앉는 세 번째 직업(Task 6의 사기꾼)이
- * 필요한 모양을 세우려면 대역이 있어야 한다. Role.SPY는 진영이 시민이지만
- * nightChat이 마피아라 buildRoleDeck이 보는 축(killsIndependently)에서는 사기꾼과
- * 같다. 시민 추첨으로 들어온 스파이가 숫자에 섞이지 않도록 citizenPool에서는 뺀다.
+ * 세는 단위가 "진영"이 아니라 "마피아 자리에서 온 직업"인 이유는, 시민 자리에서
+ * 뽑힌 직업이 숫자에 섞이면 뽑기가 모자란 것을 못 보기 때문이다. 자리가 모자라
+ * 시민으로 메워진 판도 진영으로 세면 티가 안 난다.
  */
 describe("마피아 자리 수 불변식 (합성 스펙)", () => {
-	const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.SPY];
+	const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.CON_ARTIST];
 
 	/** 마피아 풀에서 온 직업이 표와 같은 수만큼 있는가를 4~12인 × 시드로 훑는다 */
 	function assertSeatCount(spec: typeof DECK, label: string): void {
@@ -462,7 +511,7 @@ describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 		/*
 		 * 리드 검사가 통과시키는데 뽑기가 모자라는 첫 번째 모양.
 		 *
-		 * 짐승인간을 리드로 뽑아도 밀담 후보 둘(마피아·스파이)이 그대로 남는다 —
+		 * 짐승인간을 리드로 뽑아도 밀담 후보 둘(마피아·사기꾼)이 그대로 남는다 —
 		 * 어느 쪽도 짐승인간과 묶여 있지 않으니 크기 검사는 2 >= 2로 통과한다.
 		 * 그런데 그 둘이 서로 배타라, 하나를 뽑는 순간 다른 하나가 빠진다.
 		 * 11~12인(자리 셋)에서 마피아 자리가 둘로 끝난다.
@@ -471,9 +520,8 @@ describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 			{
 				...DECK,
 				leadPool: [Role.BEAST],
-				mafiaPool: [Role.MAFIA, Role.SPY],
-				citizenPool: NO_SPY,
-				exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+				mafiaPool: [Role.MAFIA, Role.CON_ARTIST],
+				exclusiveGroups: [[Role.MAFIA, Role.CON_ARTIST]],
 			},
 			"밀담 후보끼리 배타"
 		);
@@ -484,45 +532,38 @@ describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 		 * 두 번째 모양. 리드가 밀담 직업이면 사전 검사를 아예 하지 않는다 —
 		 * 밀담 리드가 여는 풀이 가장 넓어서 후보를 걸러 봐야 얻는 것이 없기
 		 * 때문이고, 그 판단 자체는 옳다. 다만 "가장 넓다"가 "충분하다"는 아니다.
-		 * 마피아를 리드로 뽑는 순간 같은 그룹의 스파이가 함께 빠져 풀이
+		 * 마피아를 리드로 뽑는 순간 같은 그룹의 사기꾼이 함께 빠져 풀이
 		 * [MAFIA] 하나로 줄고, 11~12인의 남은 두 자리를 하나로만 채운다.
 		 */
 		assertSeatCount(
 			{
 				...DECK,
 				leadPool: [Role.MAFIA],
-				mafiaPool: [Role.MAFIA, Role.SPY],
-				citizenPool: NO_SPY,
-				exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+				mafiaPool: [Role.MAFIA, Role.CON_ARTIST],
+				exclusiveGroups: [[Role.MAFIA, Role.CON_ARTIST]],
 			},
 			"밀담 리드가 라이벌 제거"
 		);
 	});
 
-	it("Task 6이 넣을 [짐승인간, 사기꾼] 모양에서도 자리가 다 찬다", () => {
+	it("표준 규칙에서도 자리가 다 찬다", () => {
 		/*
-		 * 사기꾼이 마피아 풀에 들어오고 짐승인간과 배타로 묶이는, 다음 슬라이스가
-		 * 실제로 만들 모양이다(사기꾼 대역은 스파이). 오늘 코드로도 통과한다 —
-		 * 후보가 셋이라 한 번의 중간 제외로는 자리가 모자라지 않기 때문이다.
-		 * 통과하는 채로 먼저 걸어 두는 이유는, Task 6이 풀을 손대다 이 여유를
-		 * 없애면(후보를 빼거나 그룹을 하나 더 묶으면) 그 자리에서 걸리게 하려는 것이다.
+		 * 여기까지는 전부 합성 스펙이었다. 사기꾼이 들어오면서 표준 규칙 자체가
+		 * "짐승인간과 사기꾼이 배타로 묶인 마피아 풀"이 되었으므로, 이제 실제로
+		 * 나가는 규칙을 같은 잣대에 건다.
+		 *
+		 * 표준 규칙은 이 블록이 겨눈 구멍에 닿지 않는다 — 배타가 하나를 걷어내도
+		 * 남는 후보 수가 남는 자리 수와 정확히 같기 때문이다(RuleSet.ts의 경고).
+		 * 여유가 없다는 뜻이므로, 풀이나 인원표를 한 칸이라도 건드리면 여기가 먼저
+		 * 걸린다. 위 합성 스펙들이 그때 무엇이 깨졌는지를 설명해 준다.
 		 */
-		assertSeatCount(
-			{
-				...DECK,
-				leadPool: [Role.MAFIA, Role.BEAST],
-				mafiaPool: [Role.MAFIA, Role.BEAST, Role.SPY],
-				citizenPool: NO_SPY,
-				exclusiveGroups: [[Role.BEAST, Role.SPY]],
-			},
-			"짐승인간+사기꾼"
-		);
+		assertSeatCount(DECK, "표준 규칙");
 	});
 
-	it("메운 뒤에도 마피아와 스파이가 한 덱에 있지 않다", () => {
+	it("메운 뒤에도 마피아와 사기꾼이 한 덱에 있지 않다", () => {
 		/*
 		 * 자리를 메우는 쪽이 규칙을 어기면 고친 것이 아니다. 위 첫 번째 스펙은
-		 * 마피아와 스파이가 배타이므로, 스파이가 뽑힌 판에 마피아를 메움패로
+		 * 마피아와 사기꾼이 배타이므로, 사기꾼이 뽑힌 판에 마피아를 메움패로
 		 * 밀어 넣으면 둘이 한 덱에 함께 있게 된다.
 		 *
 		 * 이름을 "메움패가 배타를 어기지 않는다"에서 바꿨다. 이 단언이 보는 것은
@@ -534,23 +575,22 @@ describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 		const spec = {
 			...DECK,
 			leadPool: [Role.BEAST],
-			mafiaPool: [Role.MAFIA, Role.SPY],
-			citizenPool: NO_SPY,
-			exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+			mafiaPool: [Role.MAFIA, Role.CON_ARTIST],
+			exclusiveGroups: [[Role.MAFIA, Role.CON_ARTIST]],
 		};
-		let spies = 0;
+		let conArtists = 0;
 		for (let count = 11; count <= 12; count++) {
 			for (let seed = 1; seed <= 200; seed++) {
 				const deck = buildRoleDeck(spec, count, rngFrom(seed));
-				if (deck.includes(Role.SPY)) spies++;
+				if (deck.includes(Role.CON_ARTIST)) conArtists++;
 				assert.ok(
-					!(deck.includes(Role.MAFIA) && deck.includes(Role.SPY)),
+					!(deck.includes(Role.MAFIA) && deck.includes(Role.CON_ARTIST)),
 					`${count}인 seed ${seed} [${deck.join(", ")}]`
 				);
 			}
 		}
-		// 스파이가 한 번도 안 뽑히면 위 단언이 공허하게 통과한다
-		assert.ok(spies > 0, "스파이가 한 번도 안 뽑혀 메움패 경로를 밟지 못했다");
+		// 사기꾼이 한 번도 안 뽑히면 위 단언이 공허하게 통과한다
+		assert.ok(conArtists > 0, "사기꾼이 한 번도 안 뽑혀 메움패 경로를 밟지 못했다");
 	});
 });
 

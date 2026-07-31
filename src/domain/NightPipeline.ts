@@ -139,6 +139,39 @@ function targetOf(
 	return null;
 }
 
+/** 이 밤에 쌓이는 것들. apply가 채우고 resolveNightIntents가 돌려준다 */
+interface NightLedger {
+	readonly reveals: NightReveal[];
+	readonly defected: number[];
+	/** 조사당한 좌석. 같은 좌석이 여러 번 들어올 수 있다 */
+	readonly inspected: number[];
+}
+
+/**
+ * 조사당한 사실을 본인에게 알린다. 사기꾼처럼 지목할 대상이 없는 직업은
+ * intent 루프에 걸리지 않으므로 여기서 따로 돈다.
+ *
+ * 한 좌석당 한 줄이다. 두 번 조사당했다고 두 줄이 가면 그 줄 수가 곧 살아
+ * 있는 조사 직업의 수를 알려준다. 그 보장은 inspected를 중복 없이 쌓아서가
+ * 아니라 좌석을 한 번씩만 도는 이 루프에서 나온다 — 쌓는 쪽에서 한 번 더
+ * 거르면 같은 규칙이 두 곳에 살고, 한쪽만 고치는 날 조용히 어긋난다.
+ */
+function notifyInspected(
+	seats: readonly Seat[],
+	wasAlive: readonly number[],
+	ledger: NightLedger
+): void {
+	for (const seat of seats) {
+		if (wasAlive.indexOf(seat.index) < 0) continue;
+		if (roleDef(seat.role).notifiesOnInspect !== true) continue;
+		if (ledger.inspected.indexOf(seat.index) < 0) continue;
+		ledger.reveals.push({
+			seat: seat.index,
+			line: "🎭 어젯밤 누군가 당신을 조사했습니다.",
+		});
+	}
+}
+
 /**
  * 이 능력이 대상에 남기는 흔적. 정산이 나중에 읽는다.
  *
@@ -151,7 +184,7 @@ function targetOf(
  * 반환 타입에 null이 있어 가지가 모자라면 "반환문이 없다"로 잡힌다. 이 함수는
  * void라 그 방법이 통하지 않으므로 switch 뒤의 never 대입으로 잡는다.
  */
-function apply(actor: Seat, target: Seat, reveals: NightReveal[], defected: number[]): void {
+function apply(actor: Seat, target: Seat, ledger: NightLedger): void {
 	const def = roleDef(actor.role);
 	const kind = def.nightAction;
 	// 지목할 것이 없는 직업은 애초에 intent를 남기지 못하므로 여기 오지 않는다.
@@ -174,9 +207,10 @@ function apply(actor: Seat, target: Seat, reveals: NightReveal[], defected: numb
 			return;
 
 		case NightActionKind.INSPECT_TEAM:
+			ledger.inspected.push(target.index);
 			// 대상이 방금 DEATH에서 죽었어도 답은 같다. 조사는 시체가 아니라
 			// 그 사람이 누구였는가를 묻는 것이다
-			reveals.push({
+			ledger.reveals.push({
 				seat: actor.index,
 				line: roleDef(target.role).appearsAsMafia
 					? `🔍 ${target.index}번 참가자는 마피아입니다!`
@@ -185,24 +219,24 @@ function apply(actor: Seat, target: Seat, reveals: NightReveal[], defected: numb
 			return;
 
 		case NightActionKind.INSPECT_ROLE:
+			ledger.inspected.push(target.index);
 			// 조건이 둘 곱해진 것이다. 넘어가는 직업인가(def)와, 찾아낸 사람이
 			// 마피아 채팅에 있는가(target). 뒤쪽이 "마피아 직업인가"가 아닌 이유는
 			// 대화 상대가 없는 짐승인간을 찾아낸 것으로 채팅이 열릴 수는
 			// 없기 때문이다. 앞쪽이 없으면 직업을 읽는 능력이 곧 배신이 된다.
 			if (def.defectsToMafia && inMafiaChat(target)) {
 				actor.team = Team.MAFIA;
-				defected.push(actor.index);
-				// 정확한 직업을 적는다. 지금은 대상이 마피아뿐이라 "마피아입니다"와
-				// 같지만, 사기꾼(Task 6)이 들어오면 갈린다 — 위장은 팀 조사에만
-				// 통해야 하고 직업을 읽는 능력까지 속이면 스파이가 사기꾼을
-				// 만났을 때 아무 일도 일어나지 않는다
-				reveals.push({
+				ledger.defected.push(actor.index);
+				// 정확한 직업을 적는다. 위장은 팀 조사에만 통해야 하고, 직업을
+				// 읽는 능력까지 속이면 스파이가 사기꾼을 만났을 때 아무 일도
+				// 일어나지 않는다
+				ledger.reveals.push({
 					seat: actor.index,
 					line: `🕵️ ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.\n마피아 팀에 합류했습니다.`,
 				});
 				return;
 			}
-			reveals.push({
+			ledger.reveals.push({
 				seat: actor.index,
 				line: `🔍 ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.`,
 			});
@@ -227,8 +261,7 @@ export function resolveNightIntents(
 	intents: readonly NightIntent[],
 	opts: { readonly skipAttacks: boolean }
 ): NightSettlement {
-	const reveals: NightReveal[] = [];
-	const defected: number[] = [];
+	const ledger: NightLedger = { reveals: [], defected: [], inspected: [] };
 	let casualties: NightCasualty[] = [];
 
 	/*
@@ -261,15 +294,17 @@ export function resolveNightIntents(
 			continue;
 		}
 		if (step === NightStep.ATTACK && opts.skipAttacks) continue;
+		// 지목 없이 일어나는 사후 처리. INSPECT가 이미 지나간 뒤다
+		if (step === NightStep.AFTER) notifyInspected(seats, wasAlive, ledger);
 
 		for (const seat of seats) {
 			if (wasAlive.indexOf(seat.index) < 0) continue;
 			if (roleDef(seat.role).nightStep !== step) continue;
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
-			apply(seat, target, reveals, defected);
+			apply(seat, target, ledger);
 		}
 	}
 
-	return { casualties, reveals, defected };
+	return { casualties, reveals: ledger.reveals, defected: ledger.defected };
 }
