@@ -133,6 +133,27 @@ describe("차단 — 닿지 않는 것", () => {
 		assert.equal(seats[1].alive, true);
 	});
 
+	it("막힌 사기꾼도 조사당했다는 통보는 그대로 받는다", () => {
+		// 스펙 전수표의 "사기꾼을 차단해도 아무 일도 없다" 행이다. 사기꾼은
+		// nightAction이 null이라 막을 능력 자체가 없고, 역알림은 밤에 쓰는
+		// 능력이 아니라 조사가 남긴 흔적을 아침에 읽어 주는 사후 통보다
+		// (NightPipeline의 notifyInspected). 규칙은 "막을 것이 없는 사람을
+		// 막아도 사후 통보는 간다"이다.
+		//
+		// 반대가 훨씬 자연스러워 보인다 — "막힌 사람은 아무 통보도 못 받는다".
+		// notifyInspected 순회에 if (seat.blocked) continue; 한 줄을 넣으면
+		// 이 파일을 포함한 다른 모든 테스트가 그대로 통과한다. 확인했다.
+		// 그 한 줄을 막는 것은 이 테스트뿐이다
+		const seats = [seat(1, Role.THUG), seat(2, Role.POLICE), seat(3, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 3], [2, 3]]);
+		assert.equal(seats[2].blocked, true);
+		// 문구보다 줄 수를 먼저 본다. 줄이 통째로 사라져도 문구 단언만으로는
+		// 빈 문자열이 조용히 지나간다
+		assert.equal(linesFor(result.reveals, 3), 1, "막힌 사기꾼에게 역알림이 오지 않았습니다");
+		const notice = result.reveals.filter(item => item.seat === 3)[0];
+		assert.match(notice.line, /조사했습니다/);
+	});
+
 	it("차단끼리는 서로를 막지 않는다", () => {
 		// step 20 안에는 순서가 없다. 건달 A가 건달 B에게 막혀도 A의 차단은
 		// 성립한다 — 아니면 누가 먼저 눌렀는지가 다시 밤을 가른다.
