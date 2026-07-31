@@ -221,11 +221,12 @@ export interface SpriteDef {
 	readonly file: string;
 	readonly width: number;
 	readonly height: number;
-	readonly frames: { left: number[]; right: number[]; up: number[]; down: number[] };
+	readonly frames: Record<string, number[]>;
 	readonly fps?: number;
 }
 
 export type SpriteKey =
+	| "basic"
 	| "mafia"
 	| "doctor"
 	| "police"
@@ -274,6 +275,22 @@ function still(file: string, width: number, height: number, frame: number): Spri
 }
 
 export const SPRITE_DEFS: Record<SpriteKey, SpriteDef> = {
+	basic: {
+		file: "character_basic.png",
+		width: 48,
+		height: 48,
+		frames: {
+			left_idle: [0, 1, 2, 3],
+			right_idle: [4, 5, 6, 7],
+			down_idle: [8, 9, 10, 11],
+			up_idle: [12, 13, 14, 15],
+			left: [16, 17, 18, 19, 20, 21, 22, 23],
+			right: [24, 25, 26, 27, 28, 29, 30, 31],
+			down: [32, 33, 34, 35, 36, 37, 38, 39],
+			up: [40, 41, 42, 43, 44, 45, 46, 47],
+		},
+		fps: 8,
+	},
 	mafia: walk48("mafiaSprite.png"),
 	doctor: walk48("doctorSprite.png"),
 	police: walk48("policeSprite.png"),

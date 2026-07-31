@@ -410,20 +410,21 @@ body {
  */
 .grid {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: var(--s2);
 	align-content: start;
 }
 
 @media (max-width: 340px) {
 	.grid {
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 }
 
 .tile {
 	position: relative;
 	display: flex;
+	min-width: 0;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
@@ -462,6 +463,7 @@ body {
 }
 
 .tile .cap {
+	width: 100%;
 	font-size: var(--t-xs);
 	font-weight: 500;
 	color: var(--ink-3);

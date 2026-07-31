@@ -11,11 +11,11 @@
  * 이 파일이 얇게 유지되는 한, 게임 로직은 ZEP 없이도 읽고 테스트할 수 있다.
  */
 import { MapTrigger } from "./constants/Assets.ts";
-import { locate } from "./entities/RoomRegistry.ts";
+import { attachedRoom, locate } from "./entities/RoomRegistry.ts";
 import { guard } from "./infrastructure/Fault.ts";
 import { destroyWidgets } from "./infrastructure/PlayerTag.ts";
 import { label } from "./services/Broadcast.ts";
-import { showGuide } from "./services/Cards.ts";
+import { showBook } from "./services/Cards.ts";
 import * as Ccu from "./services/Ccu.ts";
 import * as Chat from "./services/ChatService.ts";
 import * as GameFlow from "./services/GameFlow.ts";
@@ -42,18 +42,14 @@ import {
 ScriptApp.onStart.Add(() => guard("시작", () => {
 	ScriptApp.enableFreeView = false;
 	/*
-	 * ZEP이 그려주는 두 가지를 끄고 이 게임이 직접 그린다.
-	 *
-	 * showName: 닉네임은 이름표(Stage.applyNameplate)의 둘째 줄로 옮겼다.
-	 *   ZEP의 닉네임 줄은 우리가 손댈 수 없는 자리에 고정돼 있어서, 그 위에
-	 *   title이 겹치면 머리 위 글자가 세 줄까지 쌓였다. 한 곳에서 두 줄을
-	 *   조립하는 편이 무엇이 보일지 예측 가능하다.
+	 * showName은 그대로 둔다. 게임 중에는 player.name 자체를 참가 번호로
+	 * 바꾸고 title을 비우며, 대기실로 돌아갈 때 원래 닉네임을 복구한다.
 	 *
 	 * showProfileOnUnitClick: 기본 프로필 창은 ZEP 계정 정보를 보여준다.
 	 *   이 게임에서 남을 클릭하는 사람이 궁금한 것은 그게 아니라 "몇 판 했고
 	 *   중도 이탈이 얼마나 되는 사람인가"다. 대신 Profile.ts의 창을 띄운다.
 	 */
-	ScriptApp.showName = false;
+	// ScriptApp.showName = false;
 	ScriptApp.showProfileOnUnitClick = false;
 	ScriptApp.sendUpdated();
 	// 맵과 코드 사이의 계약은 컴파일러가 못 잡는다. 맵이 떠 있는 첫 순간에
@@ -86,7 +82,6 @@ ScriptApp.onJoinPlayer.Add(player => guard("접속", () => {
 	const found = locate(player.id);
 	if (found) {
 		found.seat.connected = true;
-		found.seat.name = player.name;
 		seatPlayer(found.room, player, found.seat);
 		restoreAppearance(found.room, player, found.seat);
 		GameFlow.showPhaseView(found.room, player, found.seat);
@@ -116,6 +111,8 @@ ScriptApp.onLeavePlayer.Add(player => guard("이탈", () => {
 
 ScriptApp.onDestroy.Add(() => guard("종료", () => {
 	for (const player of ScriptApp.players) {
+		const found = locate(player.id);
+		if (found?.room.started) player.name = found.seat.name;
 		destroyWidgets(player);
 		resetPlayerAppearance(player);
 	}
@@ -137,13 +134,14 @@ ScriptApp.onUpdate.Add(dt => {
 // 대기실 안내판. 규칙을 잊었거나 첫 안내를 넘긴 사람이 다시 읽는 통로다.
 // x·y·tileID는 어느 판인지가 아니라 어느 칸인지라 여기서는 쓸 일이 없다.
 ScriptApp.onObjectTouched.Add((player, _x, _y, _tileID, obj) => guard("오브젝트 접촉", () => {
-	if (obj.param1 === MapTrigger.GUIDE_BOARD) showGuide(player);
+	if (obj.param1 === MapTrigger.GUIDE_BOARD) showBook(player);
 }));
 
-// 사람을 클릭하면 이 게임의 프로필 창이 열린다(ZEP 기본 창은 onStart에서 껐다).
+// 대기실에서 사람을 클릭하면 이 게임의 프로필 창이 열린다(ZEP 기본 창은 onStart에서 껐다).
 // target이 비어 오는 경우를 막는 이유는 이 값이 ZEP 런타임에서 오는 것이고,
 // 여기서 터지면 클릭한 사람의 프레임이 통째로 사라지기 때문이다.
 ScriptApp.onUnitClicked.Add((clicker, target) => guard("프로필", () => {
 	if (!clicker || !target) return;
+	if (attachedRoom(clicker.id)?.started || attachedRoom(target.id)?.started) return;
 	showProfile(clicker, target);
 }));

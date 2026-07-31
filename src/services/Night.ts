@@ -27,7 +27,7 @@ import {
 	recordNightIntent,
 } from "../domain/NightResolution.ts";
 import { intentTarget, putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
-import { aliveSeats, resetRound, seatAt, seatViews } from "../entities/Room.ts";
+import { aliveSeats, participantLabel, resetRound, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { forEachPlayer, label, playSound } from "./Broadcast.ts";
@@ -453,6 +453,6 @@ export function deliverNightReveals(room: Room): void {
 function publishScoops(room: Room): void {
 	for (const seat of room.seats) {
 		if (!seat.scooped) continue;
-		report(room, `📰 특종: ${seat.index}번 ${seat.name} 님의 직업은 ${roleName(seat.role)}입니다.`);
+		report(room, `📰 특종: ${participantLabel(seat)}의 직업은 ${roleName(seat.role)}입니다.`);
 	}
 }

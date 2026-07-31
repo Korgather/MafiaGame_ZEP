@@ -29,6 +29,7 @@ import {
 	findSeat,
 	kickCount,
 	kickVotesNeeded,
+	participantLabel,
 	removeSeat,
 	removeSpectator,
 	toggleKick,
@@ -468,10 +469,10 @@ export function handleDisconnect(player: ScriptPlayer): void {
 	if (found.room.started) {
 		found.seat.connected = false;
 		countAbandon(player);
-		centerLabel(found.room, `${found.seat.name} 님의 접속이 끊겼습니다.`);
+		centerLabel(found.room, `${participantLabel(found.seat)}의 접속이 끊겼습니다.`);
 		// 라벨은 3초 뒤 사라진다. 판이 끝난 뒤 "저 사람 언제 나갔지"를
 		// 되짚을 수 있으려면 기록으로도 남아야 한다.
-		Chat.notice(found.room, `📴 ${found.seat.name} 님의 접속이 끊겼습니다.`);
+		Chat.notice(found.room, `📴 ${participantLabel(found.seat)}의 접속이 끊겼습니다.`);
 		return;
 	}
 	removeFromRoom(found.room, player.id, false);

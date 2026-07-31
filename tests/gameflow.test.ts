@@ -22,6 +22,7 @@ import {
 	chatChannels,
 	chatLines,
 	chatSaw,
+	clickUnit,
 	connect,
 	cutWidget,
 	disconnect,
@@ -30,6 +31,7 @@ import {
 	finishPhase,
 	hasCard,
 	hasCut,
+	hasProfile,
 	joinRoom,
 	mainWidget,
 	passPeacefulFirstNight,
@@ -65,6 +67,17 @@ function inLobbyArea(pos: { tileX: number; tileY: number }): boolean {
 }
 
 describe("대기실 → 게임 시작", () => {
+	it("프로필은 대기실에서만 열리고 게임 중에는 열리지 않는다", () => {
+		const lobbyClicker = connect("대기실 클릭자");
+		const lobbyTarget = connect("대기실 대상");
+		clickUnit(lobbyClicker, lobbyTarget);
+		assert.equal(hasProfile(lobbyClicker), true, "대기실 프로필이 열리지 않았습니다");
+
+		const players = startGame(MIN_PLAYERS);
+		clickUnit(players[0], players[1]);
+		assert.equal(hasProfile(players[0]), false, "게임 중 프로필이 열렸습니다");
+	});
+
 	it("접속하면 대기실 위젯이 열리고 payload에 크기가 함께 온다", () => {
 		const player = connect("모바일유저", { isMobile: true });
 		const widget = mainWidget(player);
@@ -118,18 +131,18 @@ describe("대기실 → 게임 시작", () => {
 		assert.ok(info >= 1, "정보 직업이 하나도 배분되지 않았습니다");
 
 		for (const player of players) {
-			assert.equal(seatOf(player).alive, true);
-			/*
-			 * 이름표는 두 줄이다 — 참가 번호와 닉네임(Stage.applyNameplate).
-			 *
-			 * 둘째 줄까지 보는 이유: ZEP이 닉네임을 그려주지 않는다
-			 * (index.ts의 showName = false). 이름표를 쓰는 곳이 번호만 넣고
-			 * 끝내면 화면에서 그 사람의 이름이 사라지고, 그건 눈으로만 보이는
-			 * 종류의 고장이라 여기서 세지 않으면 아무도 모른다.
-			 */
-			const [badge, nick] = player.title.split("\n");
-			assert.match(badge, /^\d+ 번 참가자$/);
-			assert.equal(nick, player.name);
+			const seat = seatOf(player);
+			assert.equal(seat.alive, true);
+			assert.equal(player.name, seat.name, "게임룸 이동 전에 참가 번호가 공개됐습니다");
+			assert.notEqual(player.title, "", "게임룸 이동 전에 title이 지워졌습니다");
+			assert.equal(player.sprite, null, "게임룸 이동 전에 기본 캐릭터로 변신했습니다");
+		}
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT: 전원이 게임룸 좌석으로 이동한다
+		for (const player of players) {
+			const seat = seatOf(player);
+			assert.equal(player.name, `${seat.index}번 참가자`);
+			assert.equal(player.title, "");
 		}
 	});
 
@@ -186,7 +199,7 @@ describe("대기실 → 게임 시작", () => {
 			touchObject(player, MapTrigger.GUIDE_BOARD);
 
 			const init = cardWidget(player).messages[0] as { nav: string };
-			assert.equal(init.nav, "steps");
+			assert.equal(init.nav, "grid");
 		});
 
 		it("대기실의 📖 버튼은 직업 도감을 연다", () => {
@@ -421,15 +434,15 @@ describe("밤 단계", () => {
 		const payload = widget.lastOfType("init");
 		assert.ok(payload);
 		assert.equal(payload.myNum, mafia.index);
-		// 번호만 보내던 시절에는 화면에 1~8만 있고 이름이 없었다. 이제 이름이 온다
+		// 실제 닉네임은 게임 UI로 보내지 않고 참가 번호만 공개한다.
 		const seats = payload.seats as Array<{ num: number; name: string }>;
 		assert.deepEqual(
 			seats.map(seat => seat.num),
 			[1, 2, 3, 4]
 		);
-		assert.ok(
-			seats.every(seat => seat.name.length > 0),
-			"지목 격자에 이름이 비어 있습니다"
+		assert.deepEqual(
+			seats.map(seat => seat.name),
+			["1번 참가자", "2번 참가자", "3번 참가자", "4번 참가자"]
 		);
 	});
 
@@ -610,10 +623,10 @@ describe("밤 단계", () => {
 		send(playerOf(reporter), { type: "select", num: scooped.index });
 		finishPhase(target); // NIGHT → 정산 → DAY
 
-		assert.ok(
-			target.nightReport.some(line => line.indexOf("특종") >= 0 && line.indexOf(scooped.name) >= 0),
-			`특종이 아침 기록에 없습니다: ${target.nightReport.join(" / ")}`
-		);
+		const scoop = target.nightReport.find(line => line.indexOf("특종") >= 0);
+		assert.ok(scoop, `특종이 아침 기록에 없습니다: ${target.nightReport.join(" / ")}`);
+		assert.ok(scoop.indexOf(`${scooped.index}번 참가자`) >= 0);
+		assert.equal(scoop.indexOf(scooped.name), -1);
 		assert.equal(scooped.alive, true, "첫 밤은 무사인데 누군가 죽었습니다");
 	});
 
@@ -649,18 +662,26 @@ describe("투표", () => {
 	it("최다 득표자가 처형된다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
+		const voteSeats = mainWidget(playerOf(target.seats[0])).lastOfType("init")?.seats as Array<{
+			num: number;
+			name: string;
+		}>;
+		assert.ok(voteSeats.every(seat => seat.name === `${seat.num}번 참가자`));
 
 		// 마피아를 처형하면 그 자리에서 판이 끝나 처형 자체를 보기 어렵다
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 		for (const seat of target.seats) {
 			if (seat.index === victim.index) continue;
 			vote(playerOf(seat), victim.index);
+			assert.equal(playerOf(seat).lastLabel(), `${victim.index}번 참가자에게 투표했습니다.`);
 		}
 
 		finishPhase(target); // VOTE → VOTE_RESULT (집계와 처형이 여기서 일어난다)
 
 		assert.equal(target.phase, GamePhase.VOTE_RESULT);
 		assert.equal(victim.alive, false);
+		assert.equal(target.voteRecord.message, `☠️ ${victim.index}번 참가자가 처형되었습니다.`);
+		assert.equal(target.voteRecord.message.indexOf(victim.name), -1);
 	});
 
 	/**
@@ -777,6 +798,10 @@ describe("투표", () => {
 		const voter = target.seats[1];
 		disconnect(playerOf(gone));
 		assert.equal(gone.connected, false, "이탈이 좌석에 반영되지 않았습니다");
+		assert.equal(
+			playerOf(voter).lastLabel(),
+			`${gone.index}번 참가자의 접속이 끊겼습니다.`
+		);
 
 		vote(playerOf(voter), target.seats[2].index);
 
@@ -821,7 +846,9 @@ describe("승패와 대기실 복귀", () => {
 		assert.ok(result, "종료 화면이 payload 없이 열렸습니다");
 		assert.equal(result.winner, Team.CITIZEN);
 		// 전원 직업 공개는 채팅이 아니라 화면에 남는다
-		assert.equal((result.players as unknown[]).length, MIN_PLAYERS);
+		const revealed = result.players as Array<{ num: number; name: string }>;
+		assert.equal(revealed.length, MIN_PLAYERS);
+		assert.ok(revealed.every(player => player.name === `${player.num}번 참가자`));
 		assert.ok(
 			chatSaw(survivor, "전원의 직업"),
 			"종료 시 직업 공개가 없습니다"
@@ -880,6 +907,7 @@ describe("승패와 대기실 복귀", () => {
 	it("게임이 끝나면 아바타도 대기실 구역으로 돌아온다", () => {
 		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
+		const originalNames = target.seats.map(seat => [seat.playerId, seat.name] as const);
 
 		finishPhase(target); // ROLE_REVEAL → NIGHT: 전원이 방 자리로 옮겨진다
 		assert.ok(
@@ -905,6 +933,7 @@ describe("승패와 대기실 복귀", () => {
 		assert.equal(target.phase, GamePhase.LOBBY);
 
 		for (const player of players) {
+			assert.equal(player.name, originalNames.find(([id]) => id === player.id)?.[1]);
 			assert.ok(
 				inLobbyArea(player),
 				`${player.name} 님이 방금 끝난 방 좌석(${player.tileX}, ${player.tileY})에 그대로 서 있습니다`
@@ -1008,7 +1037,7 @@ describe("전환 컷", () => {
 		// 처형은 자기 컷을 갖지 않는다. 개표 화면이 이미 7초를 쓴 뒤라
 		// 같은 소식을 한 번 더 기다리게 하는 대신 밤 컷의 첫 줄로 얹는다
 		assert.ok(
-			lines.length > 0 && lines[0].indexOf(victim.name) >= 0,
+			lines.length > 0 && lines[0].indexOf(`${victim.index}번 참가자`) >= 0,
 			`처형 결과가 밤 컷에 실리지 않았습니다: ${JSON.stringify(lines)}`
 		);
 	});
@@ -1313,6 +1342,14 @@ describe("밤에 알아낸 것의 배달", () => {
 
 		const answer = `🔍 ${accomplice.index}번 참가자는 마피아입니다!`;
 		assert.ok(chatSaw(playerOf(police), answer));
+		assert.ok(
+			chatLines(playerOf(police), ChatChannel.ROOM).some(line => line.text === answer),
+			"조사 결과가 방 탭에 오지 않았습니다"
+		);
+		assert.equal(
+			chatLines(playerOf(police), ChatChannel.GLOBAL).some(line => line.text === answer),
+			false
+		);
 
 		for (const seat of target.seats) {
 			if (seat === police) continue;

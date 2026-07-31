@@ -110,7 +110,7 @@
 			<div class="body">
 				<div class="who">
 					<!-- 그림은 장식이다. 닉네임이 바로 옆에 글자로 있다 -->
-					<div class="face" aria-hidden="true">
+					<div class="face" aria-hidden="true" style="cursor: pointer;" onclick="openAvatarNameEdit()">
 						<span id="glyph">🙂</span>
 						<img class="hidden" id="photo" alt="" />
 					</div>
@@ -150,6 +150,16 @@
 			qs("#close").addEventListener("click", () => {
 				Parent.send({ type: "close" });
 			});
+
+			function openAvatarNameEdit() {
+				Parent.send(
+					{
+						type: "ScriptAction:OPEN_Profile_Edit_Modal",
+						zepSystem: true,
+					},
+					"*"
+				);
+			}
 
 			Parent.on({
 				init(data) {

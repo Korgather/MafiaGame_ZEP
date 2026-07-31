@@ -144,6 +144,10 @@ export function aliveSeats(room: Room): Seat[] {
 	return room.seats.filter(seat => seat.alive);
 }
 
+export function participantLabel(seat: Pick<Seat, "index">): string {
+	return `${seat.index}번 참가자`;
+}
+
 /**
  * 게임 중 화면이 그리는 참가자 목록.
  *
@@ -161,7 +165,7 @@ export function seatViews(room: Room, allyTeam?: Team): SeatView[] {
 		.sort((a, b) => a.index - b.index)
 		.map(seat => ({
 			num: seat.index,
-			name: seat.name,
+			name: participantLabel(seat),
 			alive: seat.alive,
 			ally: allyTeam !== undefined && seat.alive && seat.team === allyTeam,
 			votes: seat.voteCount,
@@ -175,7 +179,7 @@ export function revealViews(room: Room): RevealView[] {
 		.sort((a, b) => a.index - b.index)
 		.map(seat => ({
 			num: seat.index,
-			name: seat.name,
+			name: participantLabel(seat),
 			role: roleName(seat.role),
 			team: seat.team,
 			alive: seat.alive,

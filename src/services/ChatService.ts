@@ -297,21 +297,21 @@ export function worldNotice(text: string): void {
  * 지금 보고 있는 탭이 기본이다. 밤에 마피아 탭을 보고 있는데 개인 안내가
  * 방 탭에 쌓이면 읽으라고 보낸 문장을 못 읽는다 — 안 읽음 표시만 뜨고
  * 정작 글은 눈앞에 없는 상태가 된다. 지금 탭을 읽을 권한이 없으면
- * (관전자가 마피아 탭을 켜둔 채 좌석을 잃은 경우 등) 누구에게나 열려 있는
- * 전체로 물러선다.
+ * (게임 시작으로 전체 탭이 사라진 경우 등) 지금 볼 수 있는 채널로 옮긴다.
  *
  * 방을 함께 돌려주는 이유: GLOBAL이 아닌 채널은 post가 방을 알아야 배달한다.
  * 채널과 방은 따로 고르면 어긋날 수 있는 한 쌍이라 한자리에서 정한다.
- * 어긋나지 않는 근거는 권한 표에 있다 — GLOBAL 아닌 채널은 전부
- * `!ctx.seated`에서 막히므로, 읽을 수 있다면 좌석이 있고 방도 있다.
+ * 좌석 없는 관전자도 ROOM을 읽으므로 방은 좌석과 관전석 양쪽에서 찾는다.
  */
 function personalTarget(player: ScriptPlayer): { room: Room | null; channel: ChatChannel } {
 	const found = locate(player.id);
 	const tag = tagOf(player);
 	const ctx = contextOf(player.id);
 	return {
-		room: found ? found.room : null,
-		channel: accessOf(ctx, tag.chatChannel).read ? tag.chatChannel : ChatChannel.GLOBAL,
+		room: found ? found.room : locateSpectator(player.id)?.room || null,
+		channel: accessOf(ctx, tag.chatChannel).read
+			? tag.chatChannel
+			: preferredChannel(ctx, tag.chatChannel),
 	};
 }
 

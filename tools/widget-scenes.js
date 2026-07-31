@@ -450,6 +450,17 @@ const SCENES = [
 		],
 	},
 	{
+		label: "투표 — 유령이 보는 잠긴 화면",
+		file: "vote.html",
+		size: [340, 380],
+		messages: [
+			{ type: "init", myNum: 3, seats: SEATS, timer: 17, picked: 0 },
+			{ type: "progress", voted: 2, alive: 5 },
+		],
+		// 유령은 한 자리도 누를 수 없다 — locked가 tile 전체를 disabled로 만든다
+		expect: { 'button[disabled=""]': SEATS.length },
+	},
+	{
 		label: "개표 — 처형 발생",
 		file: "vote.html",
 		size: [340, 380],
