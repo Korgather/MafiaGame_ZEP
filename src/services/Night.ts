@@ -16,8 +16,9 @@ import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { inMafiaChat, roleDef, roleName } from "../domain/Roles.ts";
+import { inMafiaChat, NightActionKind, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
+import { QUICK_NOTE } from "../domain/chat/QuickPhrases.ts";
 import {
 	hasNightTurn,
 	isPeacefulNight,
@@ -25,7 +26,7 @@ import {
 	NightOutcome,
 	recordNightIntent,
 } from "../domain/NightResolution.ts";
-import { putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
+import { intentTarget, putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
 import { aliveSeats, resetRound, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
@@ -186,6 +187,9 @@ function nightProgress(room: Room): { type: "progress"; acted: number; total: nu
 		// 그러면 "다 끝났다"를 알리려던 것이 "누군가 뭉개고 있다"로 읽힌다
 		if (!seat.alive || !seat.connected) continue;
 		if (!hasNightTurn(seat, room.turnCount)) continue;
+		// 쪽지는 보내도 되고 안 보내도 되는 능력이다. 분모에 넣으면 막대가
+		// 끝까지 안 차고, 그러면 아무 일 없는 밤이 "누가 뭉개고 있다"로 읽힌다
+		if (roleDef(seat.role).nightAction === NightActionKind.NOTE) continue;
 		total++;
 		if (seat.usedSkill) acted++;
 	}
@@ -232,16 +236,25 @@ function mafiaChatSize(room: Room): number {
  * 기존 핸들러는 위젯이 보낸 값을 검증하지 않았고, 밤이 아닌 시점에 온
  * select도 그대로 처리했다. 위젯은 클라이언트에서 도는 코드라
  * 조작된 메시지가 올 수 있다.
+ *
+ * 받는 종류가 둘이 됐다. select는 대상 지목이고, phrase는 쪽지의 두 번째
+ * 클릭이다. 밤·생존·좌석 확인은 둘이 똑같이 거쳐야 하므로 위에 모아 둔다.
  */
 function bindNightWidget(widget: ScriptWidget): void {
 	bindMessage(widget, "roleAction", (sender, data) => {
-		if (messageType(data) !== "select") return;
+		const kind = messageType(data);
+		if (kind !== "select" && kind !== "phrase") return;
 
 		const found = locate(sender.id);
 		if (!found) return;
 		const room = found.room;
 		const seat = found.seat;
 		if (room.phase !== GamePhase.NIGHT || !seat.alive) return;
+
+		if (kind === "phrase") {
+			chooseNotePhrase(room, seat, sender, widget, asInt(field(data, "index")));
+			return;
+		}
 
 		// 위젯을 잠그는 판정과 같은 함수다. 조작된 select가 와도 서버가
 		// 같은 근거로 거절하므로, 화면에서 격자가 사라진 상태와 서버가
@@ -251,7 +264,6 @@ function bindNightWidget(widget: ScriptWidget): void {
 			label(sender, blocked);
 			return;
 		}
-		const def = roleDef(seat.role);
 
 		const targetIndex = asInt(field(data, "num"));
 		if (targetIndex === null) return;
@@ -266,18 +278,49 @@ function bindNightWidget(widget: ScriptWidget): void {
 
 		if (result.consumed) {
 			seat.usedSkill = true;
-			if (def.oncePerGame) seat.skillSpent = true;
-			// 진행률의 분자는 usedSkill을 센다. 소모되지 않은 지목은 그 숫자를
-			// 움직이지 않으므로 방에 알릴 것도 없다. 지금 그런 갈래는 하나도
-			// 없지만(recordNightIntent가 전부 consumed: true다) 조건은 남겨둔다 —
-			// 없는 갈래를 세는 비용보다 생겼을 때 여기를 잊는 값이 크다
+			// 진행률의 분자는 usedSkill을 센다. 소모되지 않은 지목(쪽지의 첫
+			// 클릭)은 그 숫자를 움직이지 않으므로 방에 알릴 것도 없다
 			broadcastNightProgress(room);
 		}
 		label(sender, result.label, result.labelDurationMs);
 		if (result.confirmed) widget.sendMessage({ type: "selectResponse", num: targetIndex });
+		if (result.needsPhrase) {
+			widget.sendMessage({ type: "phrases", num: targetIndex, options: QUICK_NOTE });
+		}
 		if (result.privateSound) sender.playSound(result.privateSound);
 		if (result.roomSound) playSound(room, result.roomSound);
 	});
+}
+
+/**
+ * 쪽지의 두 번째 클릭. 대상은 서버가 이미 갖고 있고 문구 번호만 받는다.
+ *
+ * 대상을 위젯에서 다시 받으면 조작된 메시지 하나가 대상과 문구를 함께
+ * 정할 수 있게 된다 — 그러면 밤 위젯이 잠긴 뒤에도 대상을 바꿀 수 있다.
+ *
+ * 진행률은 알리지 않는다. 쪽지는 nightProgress의 분모에서 빠져 있어서
+ * 이 좌석의 usedSkill이 켜져도 acted와 total 어느 쪽도 움직이지 않는다 —
+ * 부르면 방금 보낸 것과 똑같은 숫자를 방 전원에게 한 번 더 보내는 일이 된다.
+ */
+function chooseNotePhrase(
+	room: Room,
+	seat: Seat,
+	sender: ScriptPlayer,
+	widget: ScriptWidget,
+	index: number | null
+): void {
+	if (index === null || index < 0 || index >= QUICK_NOTE.length) return;
+	// 첫 클릭은 usedSkill을 켜지 않는다(consumed: false). 켜져 있다면 이미
+	// 문구를 골랐다는 뜻이고, 두 번째 문구로 덮어쓸 수 있으면 한 번뿐인 능력이 아니다
+	if (seat.usedSkill) return;
+	const target = intentTarget(room.nightIntents, seat.index);
+	if (target === 0) return;
+
+	seat.noteText = QUICK_NOTE[index];
+	seat.usedSkill = true;
+
+	label(sender, `✉️ ${target}번에게 쪽지를 보냅니다.\n내일 아침에 도착합니다.`);
+	widget.sendMessage({ type: "selectResponse", num: target });
 }
 
 /**

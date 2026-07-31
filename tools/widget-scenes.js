@@ -294,6 +294,47 @@ const SCENES = [
 		],
 	},
 	{
+		label: "밤 지목 — 쪽지 문구 고르기(시민)",
+		file: "roleAction.html",
+		size: [360, 440],
+		messages: [
+			{
+				type: "init",
+				myNum: 3,
+				role: "시민",
+				team: "citizen",
+				alive: true,
+				prompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
+				seats: SEATS,
+				timer: 22,
+				note: "🌙 밤에는 채팅을 할 수 없습니다.",
+			},
+			// 두 번째 화면까지 걸어본다. 여기까지 오지 않으면 문구 목록을 그리는
+			// 길과 그것을 다시 치우는 길이 한 번도 실행되지 않는다
+			{
+				type: "phrases",
+				num: 5,
+				options: [
+					"당신을 믿습니다",
+					"당신이 의심됩니다",
+					"오늘은 조용히 계세요",
+					"내일 나서 주세요",
+					"저에게 투표하지 마세요",
+					"우리 편이라면 신호를 주세요",
+				],
+			},
+			{ type: "selectResponse", num: 5 },
+		],
+		// 예외가 없다는 것만으로는 문구 목록이 그려졌는지 알 수 없다. 마지막
+		// 문구의 버튼을 세면 여섯 개가 다 그려졌는지가 확인된다.
+		//
+		// 확정 표시(.picked)로는 셀 수 없다. check-widgets.js의 선택자는
+		// 파싱된 노드의 class 속성을 읽는데 classList.add는 엘리먼트 스텁의
+		// Set만 고치고 그 속성을 되쓰지 않는다 — 실행 중에 붙은 class는
+		// querySelectorAll에 잡히지 않는다(.picked로 1을 기대하면 0이 나온다)
+		expect: { 'button[data-index="5"]': 1 },
+	},
+	{
 		label: "밤 — 능력을 이미 쓴 직업",
 		file: "phase.html",
 		size: [340, 300],
@@ -308,7 +349,7 @@ const SCENES = [
 				role: "자경단원",
 				team: "citizen",
 				alive: true,
-				note: "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.",
+				note: "능력을 쓸 수 있는 횟수를 다 썼습니다. 이번 밤은 지켜보세요.",
 				deaths: [],
 				spectating: false,
 			},

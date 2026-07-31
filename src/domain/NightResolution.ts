@@ -23,16 +23,11 @@ import { NightActionKind, roleDef } from "./Roles.ts";
  */
 export interface NightSelectResult {
 	/**
-	 * 능력을 소모했는가.
+	 * 능력을 소모했는가. 즉 이 지목으로 이번 밤의 차례가 끝났는가.
 	 *
-	 * 지금은 모든 갈래가 true를 돌려준다. false를 내던 유일한 자리 —
-	 * 마피아를 찾아낸 스파이가 그 밤에 한 번 더 누를 수 있던 보너스 —
-	 * 가 답을 아침으로 옮기면서 사라졌기 때문이다.
-	 *
-	 * 그래도 필드를 남기는 이유는 NightPipeline.putIntent의 교체 경로와
-	 * 같다. "확정했다(confirmed)"와 "다 썼다(consumed)"는 원래 다른 값이고,
-	 * 한 밤에 두 번 지목하는 능력이 다시 생기는 날 그 사실을 여기서 다시
-	 * 알아내야 한다면 호출부의 usedSkill 처리부터 틀린다.
+	 * false를 내는 갈래는 쪽지 하나다 — 대상을 고른 것으로는 아직 아무것도
+	 * 쓰지 않았고, 문구를 고르는 두 번째 클릭이 소모한다. "확정했다
+	 * (confirmed)"와 "다 썼다(consumed)"가 원래 다른 값이라 필드가 둘이다.
 	 */
 	consumed: boolean;
 	/** 위젯에 선택 확정(selectResponse)을 보낼 것인가 */
@@ -45,6 +40,14 @@ export interface NightSelectResult {
 	privateSound?: string;
 	/** 방 전체에 재생할 사운드 */
 	roomSound?: string;
+	/**
+	 * 지목만으로 끝나지 않는 능력인가 (쪽지).
+	 *
+	 * 서비스가 NightActionKind를 보고 분기하지 않게 하려고 여기 둔다.
+	 * Night.ts의 약속은 "직업이 늘어도 이 파일은 안 고친다"이고,
+	 * 그 약속은 직업이 아니라 행동으로 분기해도 깨진다.
+	 */
+	needsPhrase?: boolean;
 }
 
 /** 한 줄로 끝나지 않아 읽을 시간이 필요한 라벨의 지속 시간 */
@@ -91,10 +94,10 @@ export function hasNightTurn(seat: Seat, turnCount: number): boolean {
 function noTurnReason(seat: Seat, turnCount: number): string | null {
 	const def = roleDef(seat.role);
 	if (def.nightAction === null) return "밤에 쓸 능력이 없는 직업입니다. 아침을 기다리세요.";
-	// skillSpent만 보면 방금 이번 밤에 쓴 사람도 "차례가 없다"가 되어 분모에서
+	// usesSpent만 보면 방금 이번 밤에 쓴 사람도 "차례가 없다"가 되어 분모에서
 	// 빠진다. 이번 밤에 쓴 것은 위 usedSkill이 답할 몫이다
-	if (def.oncePerGame && seat.skillSpent && !seat.usedSkill) {
-		return "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.";
+	if (def.maxUses !== undefined && seat.usesSpent >= def.maxUses && !seat.usedSkill) {
+		return "능력을 쓸 수 있는 횟수를 다 썼습니다. 이번 밤은 지켜보세요.";
 	}
 	if (def.firstNightOnly && turnCount > 0) {
 		return "첫 밤에만 쓸 수 있는 능력입니다. 이번 밤은 지켜보세요.";
@@ -175,6 +178,17 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 				confirmed: true,
 				label: `${target.index}번 참가자를 취재했습니다.\n내일 아침 모두가 그의 직업을 알게 됩니다.`,
 				labelDurationMs: REVEAL_MS,
+			};
+
+		case NightActionKind.NOTE:
+			// 아직 소모하지 않는다. 문구를 고르는 두 번째 클릭이 소모한다 —
+			// 여기서 usedSkill을 켜면 문구를 안 고르고 나간 사람도 쓴 것이 된다.
+			// 확정도 아직이다. 격자를 물리면 문구 목록을 띄울 자리가 없다
+			return {
+				consumed: false,
+				confirmed: false,
+				label: `${target.index}번에게 보낼 문구를 고르세요.`,
+				needsPhrase: true,
 			};
 	}
 }

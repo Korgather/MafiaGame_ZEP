@@ -506,8 +506,18 @@ describe("NightResolution", () => {
 	});
 
 	it("능력이 없는 직업은 null", () => {
-		assert.equal(recordNightIntent(seat(1, Role.CITIZEN), seat(2, Role.MAFIA)), null);
+		assert.equal(recordNightIntent(seat(1, Role.SOLDIER), seat(2, Role.MAFIA)), null);
 		assert.equal(recordNightIntent(seat(1, Role.SHAMAN), seat(2, Role.MAFIA)), null);
+	});
+
+	it("시민의 지목은 아직 아무것도 소모하지 않고 문구를 요구한다", () => {
+		// 소모는 문구를 고르는 두 번째 클릭이 한다. 여기서 소모하면 문구를
+		// 안 고르고 나간 시민이 한 장을 날린다
+		const result = recordNightIntent(seat(1, Role.CITIZEN), seat(2, Role.MAFIA));
+		assert.equal(result?.needsPhrase, true);
+		assert.equal(result?.consumed, false);
+		// 확정도 아직이다. 격자를 물리면 문구 목록을 띄울 자리가 없다
+		assert.equal(result?.confirmed, false);
 	});
 });
 
@@ -556,16 +566,31 @@ describe("NightResolution - 정산", () => {
 	});
 
 	it("1회성 능력자는 쓴 그 밤까지만 차례에 남는다", () => {
-		// 자경단원은 쏘는 순간 usedSkill·skillSpent가 함께 켜진다. 둘을 구분하지
-		// 않으면 쏜 사람이 그 밤의 분모에서 사라진다
-		const tonight = seat(1, Role.VIGILANTE, { usedSkill: true, skillSpent: true });
+		// 자경단원이 쏘면 그 밤에는 usedSkill만 켜진다. usesSpent는 밤이 끝날 때
+		// 파이프라인이 올린다 — 둘을 구분하지 않으면 쏜 사람이 그 밤의 분모에서 사라진다
+		const tonight = seat(1, Role.VIGILANTE, { usedSkill: true, usesSpent: 1 });
 		assert.equal(hasNightTurn(tonight, 1), true);
 		assert.equal(nightActionBlockedReason(tonight, 1), "이미 대상을 선택했습니다.");
 
 		// 다음 밤에는 usedSkill이 초기화되고(resetRound) 차례 자체가 없어진다
-		const later = seat(1, Role.VIGILANTE, { skillSpent: true });
+		const later = seat(1, Role.VIGILANTE, { usesSpent: 1 });
 		assert.equal(hasNightTurn(later, 2), false);
-		assert.match(nightActionBlockedReason(later, 2)!, /게임당 한 번/);
+		assert.match(nightActionBlockedReason(later, 2)!, /다 썼습니다/);
+	});
+
+	it("횟수 제한은 직업이 아니라 maxUses가 정한다", () => {
+		// oncePerGame(불리언)이었을 때는 "두 번 쓰는 직업"을 넣는 순간
+		// 플래그가 하나 더 늘어나야 했다
+		assert.equal(ROLE_DEFS[Role.VIGILANTE].maxUses, 1);
+		assert.equal(ROLE_DEFS[Role.REPORTER].maxUses, 1);
+		assert.equal(ROLE_DEFS[Role.CITIZEN].maxUses, 1);
+		assert.equal(ROLE_DEFS[Role.DOCTOR].maxUses, undefined);
+	});
+
+	it("횟수가 남아 있으면 차례도 남는다", () => {
+		// maxUses를 "한 번이라도 썼는가"로 읽으면 2회짜리 능력이 들어오는 날
+		// 첫 사용 뒤에 조용히 잠긴다. 비교가 >=인지 >0인지가 그 차이다
+		assert.equal(hasNightTurn(seat(1, Role.VIGILANTE, { usesSpent: 0 }), 2), true);
 	});
 
 	it("자경단원이 시민을 죽이면 자신도 죽는다", () => {

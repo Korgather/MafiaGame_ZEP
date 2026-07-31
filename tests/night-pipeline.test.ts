@@ -67,7 +67,15 @@ function noTrace(target: Seat) {
  * 같은 순간 막힌다 — 새 밤 능력이 아무 소리 없이 아무 일도 하지 않는 길을
  * 타입과 테스트 양쪽에서 닫는다.
  */
-const TRACE_BY_KIND: Record<NightActionKind, { actor: Role; check: (target: Seat) => void }> = {
+const TRACE_BY_KIND: Record<
+	NightActionKind,
+	{
+		actor: Role;
+		/** 시전자에게 미리 심어 둘 상태. 없으면 팩토리 기본값 */
+		actorSetup?: Partial<Seat>;
+		check: (target: Seat, settlement: NightSettlement) => void;
+	}
+> = {
 	HEAL: { actor: Role.DOCTOR, check: t => assert.equal(t.healed, true) },
 	ATTACK: { actor: Role.MAFIA, check: t => assert.deepEqual(t.attackedBy, [1]) },
 	SILENCE: { actor: Role.THUG, check: t => assert.equal(t.silenced, true) },
@@ -78,6 +86,23 @@ const TRACE_BY_KIND: Record<NightActionKind, { actor: Role; check: (target: Seat
 	INSPECT_TEAM: { actor: Role.POLICE, check: noTrace },
 	INSPECT_ROLE: { actor: Role.SPY, check: noTrace },
 	INSPECT_ABILITY: { actor: Role.SEER, check: noTrace },
+	// 쪽지도 대상 좌석에는 아무것도 남기지 않는다. 흔적이 남으면 "쪽지를
+	// 받았다"가 다음 밤의 다른 능력에 새어 나간다.
+	//
+	// 문구를 미리 심어 두지 않으면 apply가 첫 줄에서 돌아 나가 이 행이
+	// 아무것도 안 지키는 통과가 된다. 그래서 배달까지 함께 본다
+	NOTE: {
+		actor: Role.CITIZEN,
+		actorSetup: { noteText: "당신을 믿습니다" },
+		check: (target, settlement) => {
+			noTrace(target);
+			assert.deepEqual(
+				settlement.reveals.map(r => r.seat),
+				[2],
+				"쪽지가 배달되지 않았다 — 이 행은 아무것도 지키지 못한다"
+			);
+		},
+	},
 };
 
 describe("밤 파이프라인 — 클릭 순서", () => {
@@ -206,9 +231,9 @@ describe("밤 파이프라인 — 목록의 완전성", () => {
 			const row = TRACE_BY_KIND[kind];
 			// 표가 실제 직업 정의와 어긋나면 아래 검사는 다른 능력을 보게 된다
 			assert.equal(ROLE_DEFS[row.actor].nightAction, kind);
-			const seats = [seat(1, row.actor), seat(2, Role.CITIZEN)];
-			night(seats, [[1, 2]]);
-			row.check(seats[1]);
+			const seats = [seat(1, row.actor, row.actorSetup), seat(2, Role.CITIZEN)];
+			const settlement = night(seats, [[1, 2]]);
+			row.check(seats[1], settlement);
 		}
 	});
 });

@@ -18,6 +18,7 @@ import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
+	castRoles,
 	chat,
 	chatChannels,
 	chatSaw,
@@ -71,10 +72,14 @@ describe("게임 중 난입", () => {
 		const { players, watcher } = gameWithWatcher();
 
 		assert.equal(mainWidget(watcher).lastOfType("init")?.spectating, true);
-		// 같은 위젯을 쓰는 참가자에게는 이탈 버튼이 없어야 한다
-		finishPhase(room(1)); // ROLE_REVEAL → NIGHT (능력 없는 좌석은 진행 화면)
-		const plain = players.find(player => findSeatOf(player)?.role === Role.CITIZEN);
-		assert.ok(plain, "능력 없는 좌석이 없습니다");
+		// 같은 위젯을 쓰는 참가자에게는 이탈 버튼이 없어야 한다.
+		// 밤에 지목할 것이 없어야 진행 화면(phase)을 받으므로 군인을 앉힌다 —
+		// 시민이 익명 쪽지를 갖게 되면서 plainDeck의 나머지 좌석이 전부
+		// 지목 격자(roleAction)를 받게 됐다
+		castRoles(room(1), [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.SOLDIER]);
+		finishPhase(room(1)); // ROLE_REVEAL → NIGHT
+		const plain = players.find(player => findSeatOf(player)?.role === Role.SOLDIER);
+		assert.ok(plain, "밤에 지목할 것이 없는 좌석이 없습니다");
 		assert.equal(mainWidget(plain).lastOfType("init")?.spectating, false);
 	});
 

@@ -10,6 +10,7 @@ import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
+import { QUICK_NOTE } from "../src/domain/chat/QuickPhrases.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
 import { ACTION_RATE, MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
@@ -1105,6 +1106,127 @@ describe("밤 진행률", () => {
 		const restored = mainWidget(playerOf(mafia)).lastOfType("progress");
 		assert.ok(restored);
 		assert.equal(restored.total, MIN_PLAYERS - 1, "돌아온 사람이 분모로 복귀하지 않았습니다");
+	});
+});
+/**
+ * 시민의 익명 쪽지는 클릭이 두 번이다. 대상을 고르면 격자가 잠기는 대신
+ * 문구 목록이 오고, 문구를 고르는 두 번째 클릭에서야 확정된다.
+ *
+ * 이 배선은 도메인 테스트가 닿지 않는 자리다. recordNightIntent는 needsPhrase를
+ * 옳게 내주고 NightPipeline은 noteText를 옳게 배달하지만, 그 사이에서 문구
+ * 목록을 보내고 번호를 받아 noteText에 넣는 일은 전부 Night.ts가 한다.
+ * 실제로 이 describe를 쓰기 전에는 돌연변이 다섯 개(문구 두 번 고르기 허용,
+ * 번호 범위 검사 제거, 지목 없이 확정, phrase 종류 무시, 문구 목록 미전송)가
+ * 전부 초록으로 살아남았다.
+ */
+describe("시민의 익명 쪽지", () => {
+	/** 첫 밤부터 쓸 수 있다 — 쪽지에는 firstNightOnly도 needsPriorDay도 없다 */
+	function openFirstNight() {
+		startGame(5, 1, [Role.MAFIA, Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		return {
+			target,
+			citizen: seatsWithRole(target, Role.CITIZEN)[0],
+			police: seatsWithRole(target, Role.POLICE)[0],
+			doctor: seatsWithRole(target, Role.DOCTOR)[0],
+		};
+	}
+
+	it("대상을 고르면 격자가 잠기는 대신 문구 목록이 온다", () => {
+		const { citizen, police } = openFirstNight();
+		const widget = mainWidget(playerOf(citizen));
+
+		send(playerOf(citizen), { type: "select", num: police.index });
+
+		const phrases = widget.lastOfType("phrases");
+		assert.ok(phrases, "문구 목록이 오지 않아 두 번째 클릭을 할 방법이 없습니다");
+		assert.equal(phrases.num, police.index);
+		assert.deepEqual(phrases.options, QUICK_NOTE);
+		// 여기서 확정 응답까지 가면 위젯이 격자를 잠근다. 문구를 고를 화면이
+		// 열리기도 전에 잠기는 셈이라 시민은 한 번뿐인 능력을 빈손으로 날린다
+		assert.equal(
+			widget.lastOfType("selectResponse"),
+			undefined,
+			"문구를 고르기 전에 지목이 확정돼 버렸습니다"
+		);
+	});
+
+	it("문구를 고르면 확정되고 다음 아침에 대상에게만 도착한다", () => {
+		const { target, citizen, police, doctor } = openFirstNight();
+		const widget = mainWidget(playerOf(citizen));
+
+		send(playerOf(citizen), { type: "select", num: police.index });
+		send(playerOf(citizen), { type: "phrase", index: 1 });
+
+		const confirmed = widget.lastOfType("selectResponse");
+		assert.ok(confirmed, "문구를 골랐는데 확정 응답이 없어 화면이 열린 채 남습니다");
+		assert.equal(confirmed.num, police.index);
+
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		const line = `✉️ 익명 쪽지: ${QUICK_NOTE[1]}`;
+		assert.ok(chatSaw(playerOf(police), line), "쪽지가 대상에게 도착하지 않았습니다");
+		assert.equal(chatSaw(playerOf(doctor), line), false, "쪽지가 제3자에게 샜습니다");
+		assert.equal(citizen.usesSpent, 1, "보냈는데 사용 횟수가 줄지 않았습니다");
+	});
+
+	it("문구는 한 번만 고를 수 있다", () => {
+		const { target, citizen, police } = openFirstNight();
+
+		send(playerOf(citizen), { type: "select", num: police.index });
+		send(playerOf(citizen), { type: "phrase", index: 0 });
+		// 두 번째 문구가 먹히면 밤이 끝날 때까지 문구를 바꿔가며 고를 수 있다.
+		// 확정이 되돌려지는 능력은 한 번뿐인 능력이 아니다
+		send(playerOf(citizen), { type: "phrase", index: 3 });
+
+		finishPhase(target);
+
+		assert.ok(
+			chatSaw(playerOf(police), `✉️ 익명 쪽지: ${QUICK_NOTE[0]}`),
+			"처음 고른 문구가 사라졌습니다"
+		);
+		assert.equal(
+			chatSaw(playerOf(police), `✉️ 익명 쪽지: ${QUICK_NOTE[3]}`),
+			false,
+			"나중에 온 문구가 처음 것을 덮어썼습니다"
+		);
+	});
+
+	it("목록에 없는 번호는 한 번뿐인 능력을 태우지 않는다", () => {
+		const { target, citizen, police } = openFirstNight();
+
+		send(playerOf(citizen), { type: "select", num: police.index });
+		// 위젯이 보내는 값이라 조작될 수 있다. 범위를 안 보면 noteText가
+		// 빈 값이 된 채 usedSkill만 켜져서, 아무것도 도착하지 않았는데
+		// 시민은 이미 다 쓴 상태가 된다
+		send(playerOf(citizen), { type: "phrase", index: QUICK_NOTE.length });
+		send(playerOf(citizen), { type: "phrase", index: 2 });
+
+		finishPhase(target);
+
+		assert.ok(
+			chatSaw(playerOf(police), `✉️ 익명 쪽지: ${QUICK_NOTE[2]}`),
+			"범위 밖 번호가 한 번뿐인 능력을 태워버렸습니다"
+		);
+	});
+
+	it("지목보다 먼저 온 문구는 아무것도 정하지 못한다", () => {
+		const { target, citizen, police } = openFirstNight();
+
+		// 대상은 서버가 갖고 있다. 지목 없이 문구만 오는 순서는 정상 화면에서
+		// 나올 수 없으므로 무시해야 한다 — 받아들이면 그 자리에서 능력이
+		// 소모되어, 정작 보내려던 사람에게는 보낼 수 없게 된다
+		send(playerOf(citizen), { type: "phrase", index: 0 });
+		send(playerOf(citizen), { type: "select", num: police.index });
+		send(playerOf(citizen), { type: "phrase", index: 4 });
+
+		finishPhase(target);
+
+		assert.ok(
+			chatSaw(playerOf(police), `✉️ 익명 쪽지: ${QUICK_NOTE[4]}`),
+			"지목 전에 온 문구가 능력을 먼저 태워버렸습니다"
+		);
 	});
 });
 /**

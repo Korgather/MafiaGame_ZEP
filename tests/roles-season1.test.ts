@@ -12,7 +12,11 @@ import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { ROLE_DEFS } from "../src/domain/Roles.ts";
-import { hasNightTurn, nightActionBlockedReason } from "../src/domain/NightResolution.ts";
+import {
+	hasNightTurn,
+	nightActionBlockedReason,
+	NightOutcome,
+} from "../src/domain/NightResolution.ts";
 import type { NightIntent, NightSettlement } from "../src/domain/NightPipeline.ts";
 import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
 import { seat } from "./helpers/seat.ts";
@@ -160,18 +164,97 @@ describe("점쟁이", () => {
 		assert.match(reveal(night(seats, [[1, 2]]), 2), /조사했습니다/);
 	});
 
-	it("영매·군인·정치인·시민도 '없습니다'다", () => {
-		// 사기꾼과 같은 답을 내는 시민이 넷 있는 것이, 이 직업이 확정 정보가
-		// 되지 않게 하는 유일한 장치다
-		for (const role of [Role.SHAMAN, Role.SOLDIER, Role.POLITICIAN, Role.CITIZEN]) {
+	it("영매·군인·정치인도 '없습니다'다", () => {
+		// 사기꾼과 같은 답을 내는 직업이 셋 남아 있는 것이, 이 직업이 확정
+		// 정보가 되지 않게 하는 유일한 장치다. 시민이 쪽지를 갖게 되면서
+		// 이 목록에서 빠졌다 — 점괘의 애매함을 지탱하는 인원이 그만큼 줄었다
+		for (const role of [Role.SHAMAN, Role.SOLDIER, Role.POLITICIAN]) {
 			const seats = [seat(1, Role.SEER), seat(2, role)];
 			assert.match(reveal(night(seats, [[1, 2]]), 1), /없습니다/, role);
 		}
+	});
+
+	it("시민은 쪽지를 갖게 되어 '있습니다'로 나온다", () => {
+		// 묻는 것은 보유다. 다 쓴 시민도 여전히 갖고 있으므로 답이 같아야
+		// 한다 — 답이 갈리면 점괘 한 번이 "저 시민은 이미 썼다"까지 알려준다
+		const fresh = [seat(1, Role.SEER), seat(2, Role.CITIZEN)];
+		assert.match(reveal(night(fresh, [[1, 2]]), 1), /있습니다/);
+		const spent = [seat(1, Role.SEER), seat(2, Role.CITIZEN, { usesSpent: 1 })];
+		assert.match(reveal(night(spent, [[1, 2]]), 1), /있습니다/);
 	});
 
 	it("진영은 한 글자도 새지 않는다", () => {
 		const seats = [seat(1, Role.SEER), seat(2, Role.MAFIA)];
 		const line = reveal(night(seats, [[1, 2]]), 1);
 		assert.doesNotMatch(line, /마피아|시민/);
+	});
+});
+
+describe("시민의 익명 쪽지", () => {
+	it("대상에게 문구가 그대로 간다", () => {
+		const sender = seat(1, Role.CITIZEN, { noteText: "당신을 믿습니다" });
+		const seats = [sender, seat(2, Role.DOCTOR)];
+		assert.match(reveal(night(seats, [[1, 2]]), 2), /당신을 믿습니다/);
+	});
+
+	it("보낸 사람은 드러나지 않는다", () => {
+		// 익명이 아니면 시민이 정보원이 된다. 그 순간 시민이 밤의 표적이 된다
+		const sender = seat(1, Role.CITIZEN, { noteText: "당신이 의심됩니다" });
+		const seats = [sender, seat(2, Role.DOCTOR)];
+		const line = reveal(night(seats, [[1, 2]]), 2);
+		// 줄이 아예 없어도 doesNotMatch는 통과한다. 먼저 왔는지를 본다
+		assert.ok(line.length > 0, "쪽지 자체가 오지 않았다");
+		assert.doesNotMatch(line, /1번/);
+	});
+
+	it("문구를 고르기 전에 밤이 끝나면 아무것도 가지 않는다", () => {
+		const sender = seat(1, Role.CITIZEN);
+		const seats = [sender, seat(2, Role.DOCTOR)];
+		assert.equal(reveal(night(seats, [[1, 2]]), 2), "");
+	});
+
+	it("문구를 안 골랐으면 사용 횟수도 안 줄어든다", () => {
+		const sender = seat(1, Role.CITIZEN);
+		night([sender, seat(2, Role.DOCTOR)], [[1, 2]]);
+		assert.equal(sender.usesSpent, 0);
+	});
+
+	it("보내면 사용 횟수가 오른다", () => {
+		const sender = seat(1, Role.CITIZEN, { noteText: "오늘은 조용히 계세요" });
+		night([sender, seat(2, Role.DOCTOR)], [[1, 2]]);
+		assert.equal(sender.usesSpent, 1);
+	});
+
+	it("대상이 그 밤에 죽으면 배달되지 않고 횟수도 안 닳는다", () => {
+		// AFTER step이라 DEATH는 이미 지나갔다. 죽은 사람의 화면에 아침에
+		// 쪽지가 뜨면 그건 유령에게 가는 정보다 — 유령 채널은 영매를 통해
+		// 낮으로 돌아오므로, 조사 결과와 달리 쪽지는 새 정보를 거기 주입한다
+		const sender = seat(1, Role.CITIZEN, { noteText: "내일 나서 주세요" });
+		const seats = [sender, seat(2, Role.MAFIA), seat(3, Role.DOCTOR)];
+		const result = night(seats, [[1, 3], [2, 3]]);
+		// seat.alive는 파이프라인 안에서 내려가지 않는다 — 좌석을 내리는 것은
+		// 밖의 kill()이다. "오늘 죽었다"는 정산 결과로만 관측할 수 있다
+		assert.deepEqual(
+			result.casualties.map(c => [c.seat.index, c.outcome]),
+			[[3, NightOutcome.KILLED]]
+		);
+		assert.equal(reveal(result, 3), "");
+		// 배달되지 않았으니 쓴 것도 아니다. 여기가 false면 대상이 죽는 바람에
+		// 시민이 한 장을 날린다 — 밤 사망은 어차피 공개되므로 새는 정보는 없다
+		assert.equal(sender.usesSpent, 0);
+	});
+
+	it("한 번 쓰면 다음 밤에는 차례가 없다", () => {
+		assert.equal(hasNightTurn(seat(1, Role.CITIZEN, { usesSpent: 1 }), 2), false);
+		assert.match(
+			nightActionBlockedReason(seat(1, Role.CITIZEN, { usesSpent: 1 }), 2) ?? "",
+			/다 썼습니다/
+		);
+	});
+
+	it("쓴 그 밤까지는 차례에 남는다", () => {
+		// 밤이 끝날 때 오르는 값이라 그 밤 동안에는 usedSkill만 켜져 있다
+		const tonight = seat(1, Role.CITIZEN, { usedSkill: true });
+		assert.equal(hasNightTurn(tonight, 1), true);
 	});
 });

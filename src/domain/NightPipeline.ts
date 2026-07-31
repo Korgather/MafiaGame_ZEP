@@ -20,7 +20,7 @@ import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { inMafiaChat, NightActionKind, NightStep, roleDef, roleName } from "./Roles.ts";
 import type { NightCasualty } from "./NightResolution.ts";
-import { resolveNightCasualties } from "./NightResolution.ts";
+import { NightOutcome, resolveNightCasualties } from "./NightResolution.ts";
 
 /** 누가 누구를 지목했는가. 좌석 index 두 개 */
 export interface NightIntent {
@@ -117,6 +117,19 @@ export function putIntent(intents: NightIntent[], actor: number, target: number)
 }
 
 /**
+ * 이 좌석이 지목한 대상 번호. 지목이 없으면 0이다 — 좌석 번호는 1부터다.
+ *
+ * 쪽지의 두 번째 클릭(문구 고르기)은 대상을 다시 보내지 않는다. 위젯이
+ * 대상을 다시 보내게 하면 조작된 메시지가 문구와 대상을 함께 정할 수 있다.
+ */
+export function intentTarget(intents: readonly NightIntent[], actor: number): number {
+	for (const intent of intents) {
+		if (intent.actor === actor) return intent.target;
+	}
+	return 0;
+}
+
+/**
  * 이 좌석이 지목한 좌석. 지목이 없거나 그 번호의 좌석이 없으면 null.
  *
  * actor가 처음 맞는 intent에서 끝낸다 — 그 뒤는 보지 않는다. putIntent가
@@ -145,6 +158,14 @@ interface NightLedger {
 	readonly defected: number[];
 	/** 조사당한 좌석. 같은 좌석이 여러 번 들어올 수 있다 */
 	readonly inspected: number[];
+	/**
+	 * 이 밤에 죽은 좌석. DEATH step이 채운다.
+	 *
+	 * seat.alive로는 알 수 없다 — 좌석을 실제로 내리는 것은 파이프라인이 아니라
+	 * 밖의 kill()이라, DEATH를 지난 뒤에도 오늘의 시체는 alive가 true다.
+	 * AFTER step의 능력이 "대상이 오늘 죽었는가"를 물을 곳이 여기뿐이다.
+	 */
+	readonly killed: number[];
 }
 
 /**
@@ -175,36 +196,41 @@ function notifyInspected(
 /**
  * 이 능력이 대상에 남기는 흔적. 정산이 나중에 읽는다.
  *
+ * 돌려주는 값은 "능력을 실제로 썼는가"다. 사용 횟수를 이 값으로 센다 —
+ * 지목했다는 사실만으로 세면 쪽지 문구를 안 고르고 나간 시민이 한 장을
+ * 날린다. 막는 능력이 들어오면 이 값이 그대로 "막히면 안 닳는다"가 된다.
+ *
  * default 가지를 두지 않는다. NightActionKind를 하나 늘리고 여기 가지를
  * 빠뜨리면 맨 아래 unhandled가 never가 아니게 되어 컴파일이 막힌다.
  * default: return이 있으면 그 새 능력은 아무 소리 없이 아무 일도 하지 않는다 —
  * 밤 능력이 조용히 죽는 두 번째 길이 그것이었다.
  *
  * 짝인 recordNightIntent(NightResolution.ts)도 default를 두지 않는데, 그쪽은
- * 반환 타입에 null이 있어 가지가 모자라면 "반환문이 없다"로 잡힌다. 이 함수는
- * void라 그 방법이 통하지 않으므로 switch 뒤의 never 대입으로 잡는다.
+ * 반환 타입에 null이 있어 가지가 모자라면 "반환문이 없다"로 잡힌다. 이 함수도
+ * 이제 값을 돌려주지만, never 대입은 그대로 둔다 — 반환 타입이 boolean이라
+ * "가지가 모자라다"가 "암묵적 undefined"로 조용히 통과할 여지가 있다.
  */
-function apply(actor: Seat, target: Seat, ledger: NightLedger): void {
+function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 	const def = roleDef(actor.role);
 	const kind = def.nightAction;
 	// 지목할 것이 없는 직업은 애초에 intent를 남기지 못하므로 여기 오지 않는다.
 	// 그래도 타입에는 null이 남아 있으니, 걷어내야 아래 switch가 "종류 전부를
 	// 덮는가"라는 질문이 된다. default가 있던 유일한 이유가 이 null이었다.
-	if (kind === null) return;
+	if (kind === null) return false;
 
 	switch (kind) {
 		case NightActionKind.HEAL:
 			target.healed = true;
-			return;
+			return true;
 		case NightActionKind.ATTACK:
 			target.attackedBy.push(actor.index);
-			return;
+			return true;
 		case NightActionKind.SILENCE:
 			target.silenced = true;
-			return;
+			return true;
 		case NightActionKind.SCOOP:
 			target.scooped = true;
-			return;
+			return true;
 
 		case NightActionKind.INSPECT_TEAM:
 			ledger.inspected.push(target.index);
@@ -216,7 +242,7 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): void {
 					? `🔍 ${target.index}번 참가자는 마피아입니다!`
 					: `🔍 ${target.index}번 참가자는 마피아가 아닙니다.`,
 			});
-			return;
+			return true;
 
 		case NightActionKind.INSPECT_ROLE:
 			ledger.inspected.push(target.index);
@@ -234,28 +260,47 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): void {
 					seat: actor.index,
 					line: `🕵️ ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.\n마피아 팀에 합류했습니다.`,
 				});
-				return;
+				return true;
 			}
 			ledger.reveals.push({
 				seat: actor.index,
 				line: `🔍 ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.`,
 			});
-			return;
+			return true;
 
 		case NightActionKind.INSPECT_ABILITY:
 			ledger.inspected.push(target.index);
 			// 묻는 것은 보유이지 가용이 아니다. "오늘 쓸 수 있는가"로 바꾸면
 			// 첫 밤의 점괘가 needsPriorDay 직업 목록을 그대로 흘린다.
 			// 진영은 한 글자도 나가지 않는다 — 이 능력의 값어치는 답이
-			// 확정이 아니라는 데 있고, 능력 없는 시민 넷과 사기꾼이 같은
-			// 답을 낸다는 사실이 그 애매함을 지탱한다
+			// 확정이 아니라는 데 있고, nightAction이 null인 직업 넷(영매·정치인·
+			// 군인·사기꾼)이 같은 답을 낸다는 사실이 그 애매함을 지탱한다.
+			// 시민이 쪽지를 갖게 되면서 그 넷에서 빠졌다 — 애매함을 받치는
+			// 인원이 그만큼 줄었다는 뜻이다
 			ledger.reveals.push({
 				seat: actor.index,
 				line: roleDef(target.role).nightAction !== null
 					? `🃏 ${target.index}번 참가자는 밤에 쓸 능력이 있습니다.`
 					: `🃏 ${target.index}번 참가자는 밤에 쓸 능력이 없습니다.`,
 			});
-			return;
+			return true;
+
+		case NightActionKind.NOTE:
+			// 문구를 고르기 전에 밤이 끝났다. 보낼 것이 없으므로 쓴 것도 아니다
+			if (!actor.noteText) return false;
+			// AFTER step이라 DEATH는 이미 지나갔다. 오늘 죽은 사람에게 보내지
+			// 않는다 — 유령 채널은 영매를 통해 낮으로 돌아오므로, 조사 결과와
+			// 달리 쪽지는 그 채널에 새 정보를 주입한다. 밤 사망은 어차피 공개되니
+			// 안 닳는 것으로 새는 정보도 없다.
+			// alive는 "밤이 시작될 때 이미 죽어 있었는가"를, killed는 "오늘 죽었는가"를
+			// 답한다. 좌석을 실제로 내리는 것은 파이프라인 밖의 kill()이라 둘이 필요하다
+			if (!target.alive) return false;
+			if (ledger.killed.indexOf(target.index) >= 0) return false;
+			ledger.reveals.push({
+				seat: target.index,
+				line: `✉️ 익명 쪽지: ${actor.noteText}`,
+			});
+			return true;
 	}
 
 	// 위 switch가 종류를 전부 덮으면 여기 오는 kind는 never다. 가지를 하나
@@ -276,7 +321,7 @@ export function resolveNightIntents(
 	intents: readonly NightIntent[],
 	opts: { readonly skipAttacks: boolean }
 ): NightSettlement {
-	const ledger: NightLedger = { reveals: [], defected: [], inspected: [] };
+	const ledger: NightLedger = { reveals: [], defected: [], inspected: [], killed: [] };
 	let casualties: NightCasualty[] = [];
 
 	/*
@@ -305,7 +350,19 @@ export function resolveNightIntents(
 
 	for (const step of STEP_ORDER) {
 		if (step === NightStep.DEATH) {
-			if (!opts.skipAttacks) casualties = resolveNightCasualties(seats);
+			if (!opts.skipAttacks) {
+				casualties = resolveNightCasualties(seats);
+				// 살아남은 결말(SAVED·SHIELDED)은 여기 들어오지 않는다. 뒤 step이
+				// 묻는 것은 "오늘 죽었는가"이지 "오늘 공격받았는가"가 아니다 —
+				// 후자를 답하면 의사가 살린 사람에게 쪽지가 안 가고, 그 사실이
+				// 곧 "저 사람은 어젯밤 공격받았다"를 알려주는 신호가 된다
+				for (const casualty of casualties) {
+					const died =
+						casualty.outcome === NightOutcome.KILLED ||
+						casualty.outcome === NightOutcome.BACKFIRED;
+					if (died) ledger.killed.push(casualty.seat.index);
+				}
+			}
 			continue;
 		}
 		if (step === NightStep.ATTACK && opts.skipAttacks) continue;
@@ -317,7 +374,9 @@ export function resolveNightIntents(
 			if (roleDef(seat.role).nightStep !== step) continue;
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
-			apply(seat, target, ledger);
+			// 실제로 적용된 것만 센다. 지목만으로 세면 쪽지를 안 보낸 시민이
+			// 한 장을 날린다. 막는 능력이 들어오면 "막히면 안 닳는다"도 여기서 나온다
+			if (apply(seat, target, ledger)) seat.usesSpent++;
 		}
 	}
 

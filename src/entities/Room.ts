@@ -67,7 +67,8 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		silenced: false,
 		scooped: false,
 		usedSkill: false,
-		skillSpent: false,
+		usesSpent: 0,
+		noteText: "",
 		kickedBy: [],
 		connected: true,
 	};
@@ -90,7 +91,8 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.alive = true;
 	seat.ready = false;
 	seat.armored = def.survivesFirstAttack === true;
-	seat.skillSpent = false;
+	seat.usesSpent = 0;
+	seat.noteText = "";
 	seat.usedSkill = false;
 	seat.votedFor = 0;
 	seat.voteCount = 0;
@@ -245,10 +247,10 @@ export function withdrawKicks(room: Room, voterId: string): void {
 /**
  * 밤/투표 한 턴이 시작될 때 초기화되는 값 (기존 tagReset).
  *
- * armored(군인의 방탄)와 skillSpent(자경단원·기자의 1회성 능력)는 **일부러
- * 남긴다.** 게임당 한 번뿐인 자원이라 밤이 바뀔 때마다 되돌아오면 능력이
- * 무제한이 된다. 소모는 각각 resolveNightCasualties와 밤 위젯 핸들러에서만
- * 일어나고, 되돌리는 곳은 assignRole(게임 시작) 하나뿐이다.
+ * armored(군인의 방탄)와 usesSpent(횟수 제한 능력의 소모)는 **일부러 남긴다.**
+ * 게임당 정해진 자원이라 밤이 바뀔 때마다 되돌아오면 능력이 무제한이 된다.
+ * 소모는 각각 resolveNightCasualties와 NightPipeline에서만 일어나고,
+ * 되돌리는 곳은 assignRole(게임 시작) 하나뿐이다.
  */
 export function resetRound(room: Room): void {
 	room.voteRecord = emptyVoteRecord();
@@ -258,6 +260,10 @@ export function resetRound(room: Room): void {
 	room.nightReveals = [];
 	for (const seat of room.seats) {
 		seat.usedSkill = false;
+		// 지난밤에 고른 문구가 남으면 대상만 새로 찍어도 옛 문구가 다시 날아간다.
+		// 밤이 끝날 때가 아니라 시작할 때 지우는 것이라(beginNight → resetRound,
+		// 정산은 resolveNight) 배달 전에 지워질 일은 없다
+		seat.noteText = "";
 		seat.votedFor = 0;
 		seat.voteCount = 0;
 		seat.healed = false;

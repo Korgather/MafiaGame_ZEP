@@ -54,6 +54,41 @@
 				opacity: 0.45;
 				filter: grayscale(1);
 			}
+
+			/*
+			 * 문구 고르기. 격자와 자리를 바꿔서 뜬다.
+			 *
+			 * 채팅창의 .quick과 같은 일을 하지만 가로 스크롤을 쓰지 않는다 —
+			 * 여섯 문장이 한 줄로 늘어서면 뒤쪽 셋은 있는 줄도 모른다.
+			 */
+			.choices {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s1);
+				padding: var(--s2);
+				overflow-y: auto;
+			}
+
+			.choices button {
+				padding: var(--s2) var(--s3);
+				font: inherit;
+				font-size: var(--t-sm);
+				text-align: left;
+				color: var(--ink);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r2);
+				cursor: pointer;
+			}
+
+			.choices button:hover {
+				background: var(--surface-3);
+			}
+
+			.choices button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
 		</style>
 	</head>
 	<body>
@@ -71,6 +106,7 @@
 
 			<div class="body" id="body">
 				<div class="grid scroll" id="grid" role="group" aria-label="지목 대상"></div>
+				<div class="choices hidden" id="choices" role="group" aria-label="보낼 문구"></div>
 			</div>
 
 			<p class="note" id="note" role="status" aria-live="polite"></p>
@@ -107,6 +143,14 @@
 				Parent.send({ type: "select", num: Number(el.dataset.num) });
 			});
 
+			// 대상은 보내지 않는다. 서버가 이미 갖고 있고, 위젯이 다시 보내면
+			// 조작된 메시지 하나가 문구와 대상을 함께 정할 수 있게 된다
+			qs("#choices").addEventListener("click", event => {
+				const el = event.target.closest("button");
+				if (!el) return;
+				Parent.send({ type: "phrase", index: Number(el.dataset.index) });
+			});
+
 			Parent.on({
 				init(data) {
 					myNum = Number(data.myNum) || 0;
@@ -124,6 +168,11 @@
 					qs("#grid").classList.remove("locked");
 
 					qs("#note").textContent = data.note || "";
+					// 밤마다 위젯을 새로 열지만 열린 채로 init이 다시 오는 길이
+					// 있다(재접속·화면 복구). 지난밤의 문구 목록이 남으면 격자
+					// 대신 그것이 뜬 채로 밤이 시작된다
+					qs("#choices").classList.add("hidden");
+					qs("#choices").innerHTML = "";
 					if (data.timer) startTimer(qs("#timer"), data.timer);
 				},
 
@@ -144,6 +193,23 @@
 					tally.setAttribute("aria-label", `${total}명 중 ${done}명 지목 완료`);
 				},
 
+				/*
+				 * 지목만으로 끝나지 않는 능력의 두 번째 화면 (시민의 쪽지).
+				 *
+				 * 문구 목록을 위젯이 갖고 있지 않은 이유는 나머지 전부와 같다 —
+				 * 문구는 기획이 가장 자주 손대는 것이고, 여기 두면 문구 한 줄을
+				 * 고치는 일이 위젯 빌드를 다시 돌리는 일이 된다.
+				 */
+				phrases(data) {
+					const options = Array.isArray(data.options) ? data.options : [];
+					qs("#grid").classList.add("hidden");
+					qs("#choices").classList.remove("hidden");
+					qs("#choices").innerHTML = html`${options.map(
+						(text, i) => html`<button type="button" data-index="${i}">${text}</button>`
+					)}`;
+					qs("#note").textContent = `${Number(data.num) || 0}번에게 보낼 문구를 고르세요.`;
+				},
+
 				// 서버가 지목을 받아들였을 때만 표시가 바뀐다. 기존에는 누른 즉시
 				// 빨간 테두리를 그려서, 서버가 거절해도 화면은 선택된 것처럼 보였다
 				selectResponse(data) {
@@ -157,6 +223,10 @@
 					// 격자 전체를 물린다. 비활성 타일만으로는 "내 차례가 끝났다"가
 					// 아니라 "왜 안 눌리지"로 읽힌다
 					qs("#grid").classList.add("locked");
+					// 문구를 고르고 온 경우다. 목록을 치우고 격자를 되돌려 놓아야
+					// 누구를 골랐는지가 화면에 남는다
+					qs("#choices").classList.add("hidden");
+					qs("#grid").classList.remove("hidden");
 					qs("#note").textContent = `✔ ${picked}번을 지목했습니다.`;
 				},
 			});

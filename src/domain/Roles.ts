@@ -45,6 +45,8 @@ export const NightActionKind = {
 	SCOOP: "SCOOP",
 	/** 점쟁이: 대상이 밤에 지목하는 직업인지만 확인 */
 	INSPECT_ABILITY: "INSPECT_ABILITY",
+	/** 시민: 대상에게 정해진 문구 하나를 익명으로 보낸다 */
+	NOTE: "NOTE",
 } as const;
 export type NightActionKind = (typeof NightActionKind)[keyof typeof NightActionKind];
 
@@ -168,8 +170,13 @@ export interface RoleDef {
 	 * 없애려고 만들어진 바로 그 형태다(직업 이름으로 분기하는 코드).
 	 */
 	readonly defectsToMafia?: boolean;
-	/** 능력을 게임 전체에서 한 번만 쓸 수 있는가 (자경단원·기자) */
-	readonly oncePerGame?: boolean;
+	/**
+	 * 게임 전체에서 쓸 수 있는 횟수. 없으면 무제한 (자경단원·기자·시민이 1).
+	 *
+	 * 불리언 oncePerGame이었다. 세 직업이 같은 플래그를 쓰게 된 시점에서,
+	 * 두 번 쓰는 직업이 하나만 나와도 플래그가 하나 더 늘어난다.
+	 */
+	readonly maxUses?: number;
 	/**
 	 * 첫 밤에만 쓸 수 있는가 (점쟁이).
 	 *
@@ -329,7 +336,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightPrompt: "사살할 대상을 선택하세요. 이 판에 한 번뿐입니다.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
-		oncePerGame: true,
+		maxUses: 1,
 		backfiresOnAlly: true,
 		needsPriorDay: true,
 	},
@@ -378,7 +385,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightPrompt: "취재할 대상을 선택하세요. 이 판에 한 번뿐입니다.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
-		oncePerGame: true,
+		maxUses: 1,
 	},
 	BEAST: {
 		displayName: "짐승인간",
@@ -441,16 +448,20 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "시민",
 		team: Team.CITIZEN,
 		glyph: "🧑",
-		ability: "특별한 능력은 없습니다.",
-		tip: "당신의 무기는 투표입니다. 낮 토론을 잘 듣고 판단하세요.",
-		nightAction: null,
+		ability: "게임당 한 번, 한 명에게 익명 쪽지를 보냅니다.",
+		tip: "아는 것은 없지만 말을 옮길 수는 있습니다. 누구에게 언제 보낼지가 전부입니다.",
+		nightAction: NightActionKind.NOTE,
+		// AFTER인 것이 핵심이다. 쪽지는 아무것도 막지 않고 아무도 죽이지 않으므로
+		// 밤의 마지막에 서고, 그래서 "대상이 오늘 죽었는가"를 이미 아는 상태에서
+		// 배달을 정할 수 있다
 		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
-		nightPrompt: null,
+		nightPrompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
+		maxUses: 1,
 	},
 };
 
