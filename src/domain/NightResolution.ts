@@ -16,6 +16,11 @@ import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { inMafiaChat, NightActionKind, roleDef, roleName } from "./Roles.ts";
 
+/**
+ * 밤에 대상을 지목했을 때 시전자에게 돌아가는 것.
+ * 대상의 상태는 여기서 바꾸지 않는다 — NightPipeline이 밤 끝에 적용한다.
+ * (스파이의 진영 이동만 아직 예외다)
+ */
 export interface NightSelectResult {
 	/** 능력을 소모했는가. false면 같은 밤에 다시 지목할 수 있다 */
 	consumed: boolean;
@@ -89,19 +94,23 @@ function noTurnReason(seat: Seat, turnCount: number): string | null {
 }
 
 /**
- * 밤에 대상을 지목했을 때의 결과.
- * actor/target의 healed·attackedBy·silenced·scooped·team을 직접 갱신한다.
- * (Seat은 순수 데이터라 이 갱신도 Node 테스트에서 그대로 관찰할 수 있다)
+ * 밤에 대상을 지목했을 때 시전자가 보는 것.
+ *
+ * 전에는 이 함수가 대상의 healed·attackedBy·silenced·scooped를 직접 세웠다.
+ * 즉 능력의 적용 시점이 곧 클릭 시점이었고, 그래서 밤의 결과가 손 빠르기에
+ * 달려 있었다. 적용은 NightPipeline이 밤 끝에 정해진 순서로 한다.
+ *
+ * 여기 남는 것은 "지금 이 사람 화면에 무엇이 뜨는가"뿐이다.
+ * 조사 응답만 예외로 아직 여기서 나간다 — 그 이동은 다음 슬라이스다.
  *
  * 능력이 없는 직업이면 null.
  */
-export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult | null {
+export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult | null {
 	const def = roleDef(actor.role);
 	if (def.nightAction === null) return null;
 
 	switch (def.nightAction) {
 		case NightActionKind.HEAL:
-			target.healed = true;
 			return {
 				consumed: true,
 				confirmed: true,
@@ -110,11 +119,9 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 			};
 
 		case NightActionKind.ATTACK: {
-			// 기존에는 이미 지목된 대상이면 "다른 마피아가 선택한 대상입니다"로
-			// 되돌렸다. 공격자가 마피아뿐일 때는 표 낭비를 막는 배려였지만,
-			// 지금은 그 문구가 자경단원에게 "여기 마피아가 다녀갔다"를 알려준다.
-			// 중복 지목은 어차피 무해하므로(정산은 좌석 단위) 규칙을 없앤다.
-			target.attackedBy.push(actor.index);
+			// 이미 지목된 대상이어도 되돌리지 않는다. 되돌리는 문구가
+			// 자경단원에게 "여기 마피아가 다녀갔다"를 알려주기 때문이다.
+			// 중복 지목은 무해하다 — 정산은 좌석 단위다
 			const attack: NightSelectResult = {
 				consumed: true,
 				confirmed: true,
@@ -162,7 +169,6 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 			};
 
 		case NightActionKind.SILENCE:
-			target.silenced = true;
 			return {
 				consumed: true,
 				confirmed: true,
@@ -170,7 +176,6 @@ export function resolveNightSelect(actor: Seat, target: Seat): NightSelectResult
 			};
 
 		case NightActionKind.SCOOP:
-			target.scooped = true;
 			return {
 				consumed: true,
 				confirmed: true,

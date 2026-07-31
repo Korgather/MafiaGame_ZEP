@@ -46,6 +46,36 @@ export const NightActionKind = {
 } as const;
 export type NightActionKind = (typeof NightActionKind)[keyof typeof NightActionKind];
 
+/**
+ * 밤 정산에서 이 직업의 능력이 적용되는 시점.
+ *
+ * 지금까지 밤 능력은 클릭한 순서대로 대상을 바꿨다. 결과가 맞았던 것은
+ * resolveNightCasualties가 밤 끝에 한 번만 보기 때문이지 순서를 정했기
+ * 때문이 아니다. 능력을 막는 능력(차단)이 들어오는 순간 그 우연이 깨진다 —
+ * 막을 사람이 늦게 누르면 이미 지나간 능력을 막게 된다.
+ *
+ * 숫자 사이를 비워 둔 것은 나중에 끼우기 위해서다. 원문 기획의 SWAP(10)은
+ * 대상을 바꿔치기하는 직업 전용이라 아직 넣지 않았다.
+ *
+ * 값이 아니라 순서만 뜻한다. STEP_ORDER(NightPipeline.ts)가 이 순서를
+ * 배열로 고정한다 — Jint에서 sort 안정성을 믿지 않기로 했으므로 정렬하지 않는다.
+ */
+export const NightStep = {
+	/** 능력 차단 — 건달(S6), 마담(시즌 2) */
+	BLOCK: 20,
+	/** 보호 — 의사 */
+	PROTECT: 30,
+	/** 공격 — 마피아·짐승인간·자경단원 */
+	ATTACK: 40,
+	/** 사망 확정 + 자경단원 자책 */
+	DEATH: 50,
+	/** 조사 — 경찰·스파이·점쟁이 */
+	INSPECT: 60,
+	/** 사후 — 기자 특종·건달 협박·시민 쪽지·사기꾼 역알림 */
+	AFTER: 70,
+} as const;
+export type NightStep = (typeof NightStep)[keyof typeof NightStep];
+
 export interface RoleDef {
 	/** 위젯·라벨에 노출되는 한글 이름. 게임 로직은 이 값을 비교하지 않는다 */
 	readonly displayName: string;
@@ -66,6 +96,14 @@ export interface RoleDef {
 	readonly tip: string;
 	/** 밤에 지목할 대상이 있으면 그 종류, 없으면 null */
 	readonly nightAction: NightActionKind | null;
+	/**
+	 * 밤 정산에서 이 직업이 처리되는 시점.
+	 *
+	 * nightAction이 null인 직업도 값을 적는다. 지목이 없어도 사후 효과가
+	 * 붙을 수 있어서다 — 사기꾼은 아무도 지목하지 않지만 AFTER에서
+	 * "누가 나를 조사했는가"를 받는다.
+	 */
+	readonly nightStep: NightStep;
 	/** 밤에 참여하는 비밀 채팅 채널 */
 	readonly nightChat: NightChannel | null;
 	/** 밤 동안 바뀌는 캐릭터 스프라이트 */
@@ -164,6 +202,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "밤마다 한 명을 처형합니다.",
 		tip: "낮에는 시민인 척하세요. 마피아 수가 시민 수와 같아지면 이깁니다.",
 		nightAction: NightActionKind.ATTACK,
+		nightStep: NightStep.ATTACK,
 		nightChat: ChatChannel.MAFIA,
 		nightSprite: "mafia",
 		nightAttackSprite: "bullet",
@@ -180,6 +219,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "밤마다 한 명을 마피아의 공격에서 지킵니다.",
 		tip: "정체를 밝히면 다음 밤에 죽습니다. 조용히 지키세요.",
 		nightAction: NightActionKind.HEAL,
+		nightStep: NightStep.PROTECT,
 		nightChat: null,
 		nightSprite: "doctor",
 		nightAttackSprite: null,
@@ -194,6 +234,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "밤마다 한 명이 마피아인지 조사합니다.",
 		tip: "찾아냈다면 낮에 설득하세요. 다만 밝히는 순간 표적이 됩니다.",
 		nightAction: NightActionKind.INSPECT_TEAM,
+		nightStep: NightStep.INSPECT,
 		nightChat: null,
 		nightSprite: "police",
 		nightAttackSprite: null,
@@ -211,6 +252,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// 시민을 도와 시민이 이기면 스파이 본인은 패배로 기록된다.
 		tip: "마피아를 찾아내면 그 편이 되어 함께 이깁니다. 찾을 때까지는 시민입니다.",
 		nightAction: NightActionKind.INSPECT_ROLE,
+		nightStep: NightStep.INSPECT,
 		nightChat: ChatChannel.MAFIA,
 		nightSprite: "spy",
 		nightAttackSprite: null,
@@ -231,6 +273,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "밤마다 죽은 사람들과 대화합니다.",
 		tip: "죽은 사람은 자기를 죽인 쪽을 압니다. 그 말을 낮에 전하세요.",
 		nightAction: null,
+		nightStep: NightStep.AFTER,
 		nightChat: ChatChannel.GHOST,
 		nightSprite: null,
 		nightAttackSprite: null,
@@ -245,6 +288,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "투표로 처형되지 않고, 당신의 표는 2표로 계산됩니다.",
 		tip: "처형되지 않으니 앞에 나서서 토론을 이끄세요.",
 		nightAction: null,
+		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
@@ -260,6 +304,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "둘째 밤부터, 게임에 딱 한 번 한 명을 사살합니다.",
 		tip: "낮의 이야기를 듣고 쏘세요. 시민을 쏘면 책임을 지고 당신도 죽습니다.",
 		nightAction: NightActionKind.ATTACK,
+		nightStep: NightStep.ATTACK,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: "bullet",
@@ -277,6 +322,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "밤에 받는 첫 공격을 한 번 버팁니다.",
 		tip: "한 번은 버팁니다. 살아남았다면 그날 밤 누군가 당신을 노렸다는 뜻입니다.",
 		nightAction: null,
+		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
@@ -292,6 +338,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "밤마다 한 명을 협박해 다음 낮 발언과 투표를 막습니다.",
 		tip: "시민 편입니다. 확정 시민을 막으면 헛턴이니 밤에 움직이는 사람을 찾으세요.",
 		nightAction: NightActionKind.SILENCE,
+		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
@@ -306,6 +353,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "게임에 딱 한 번, 취재한 사람의 직업을 다음 아침 모두에게 공개합니다.",
 		tip: "한 번뿐입니다. 의견이 갈려 아무도 확신하지 못할 때 터뜨리세요.",
 		nightAction: NightActionKind.SCOOP,
+		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
@@ -324,6 +372,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// 겹칠지 말지 고를 수조차 없었다. 실제로 할 수 있는 판단만 적는다.
 		tip: "마피아와 대화할 수 없습니다. 마피아가 노릴 만한 사람은 피해야 시체가 둘 나옵니다.",
 		nightAction: NightActionKind.ATTACK,
+		nightStep: NightStep.ATTACK,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: "claw",
@@ -340,6 +389,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "특별한 능력은 없습니다.",
 		tip: "당신의 무기는 투표입니다. 낮 토론을 잘 듣고 판단하세요.",
 		nightAction: null,
+		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,

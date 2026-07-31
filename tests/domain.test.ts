@@ -19,7 +19,7 @@ import {
 	nightActionBlockedReason,
 	NightOutcome,
 	resolveNightCasualties,
-	resolveNightSelect,
+	recordNightIntent,
 } from "../src/domain/NightResolution.ts";
 import { expReward, levelFromExp, recordKey } from "../src/domain/Progression.ts";
 import { tallyVotes, VoteOutcome } from "../src/domain/Vote.ts";
@@ -36,31 +36,7 @@ import {
 	ROOM_COUNT,
 } from "../src/constants/GameConfig.ts";
 import { isInsideRoom, seatPosition } from "../src/constants/RoomLayout.ts";
-
-function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
-	return {
-		playerId: `p${index}`,
-		index,
-		name: `p${index}`,
-		rank: "Lv.1",
-		role,
-		team: ROLE_DEFS[role].team,
-		alive: true,
-		ready: false,
-		votedFor: 0,
-		voteCount: 0,
-		healed: false,
-		attackedBy: [],
-		armored: ROLE_DEFS[role].survivesFirstAttack === true,
-		silenced: false,
-		scooped: false,
-		usedSkill: false,
-		skillSpent: false,
-		kickedBy: [],
-		connected: true,
-		...overrides,
-	};
-}
+import { seat } from "./helpers/seat.ts";
 
 /** 그 진영의 좌석이 몇 개인가. 직업이 아니라 진영으로 세야 하는 곳이 많다 */
 function teamCount(deck: Role[], team: Team): number {
@@ -480,64 +456,51 @@ describe("Vote", () => {
 });
 
 describe("NightResolution", () => {
-	it("의사가 치료하면 healed가 선다", () => {
-		const doctor = seat(1, Role.DOCTOR);
-		const target = seat(2, Role.CITIZEN);
-		const result = resolveNightSelect(doctor, target);
+	it("의사의 지목은 능력을 소모한다", () => {
+		// 대상이 실제로 healed가 되는지는 tests/night-pipeline.test.ts가 본다.
+		// 이 함수는 이제 시전자 화면만 정한다
+		const result = recordNightIntent(seat(1, Role.DOCTOR), seat(2, Role.CITIZEN));
 		assert.equal(result?.consumed, true);
-		assert.equal(target.healed, true);
+		assert.equal(result?.confirmed, true);
 	});
 
-	it("공격은 공격자의 번호를 대상에 남긴다", () => {
-		const mafia = seat(1, Role.MAFIA);
-		const target = seat(2, Role.CITIZEN);
-		const result = resolveNightSelect(mafia, target);
+	it("공격 지목은 능력을 소모한다", () => {
+		const result = recordNightIntent(seat(1, Role.MAFIA), seat(2, Role.CITIZEN));
 		assert.equal(result?.consumed, true);
-		assert.deepEqual(target.attackedBy, [1]);
-	});
-
-	it("여러 공격자가 같은 사람을 노려도 각자 기록된다", () => {
-		// 예전에는 이미 지목된 대상이면 "다른 마피아가 골랐다"며 되돌렸다.
-		// 그 문구가 자경단원에게 마피아의 동선을 알려주기 때문에 규칙을 없앴다.
-		const target = seat(3, Role.CITIZEN);
-		resolveNightSelect(seat(1, Role.MAFIA), target);
-		resolveNightSelect(seat(2, Role.BEAST), target);
-		assert.deepEqual(target.attackedBy, [1, 2]);
+		assert.match(result!.label, /공격 대상/);
 	});
 
 	it("마피아만 총성을 낸다", () => {
 		// 공격자마다 소리가 나면 밤마다 소리 횟수로 공격자 수가 샌다
-		assert.ok(resolveNightSelect(seat(1, Role.MAFIA), seat(2, Role.CITIZEN))?.roomSound);
-		assert.equal(resolveNightSelect(seat(1, Role.VIGILANTE), seat(2, Role.CITIZEN))?.roomSound, undefined);
-		assert.equal(resolveNightSelect(seat(1, Role.BEAST), seat(2, Role.CITIZEN))?.roomSound, undefined);
+		assert.ok(recordNightIntent(seat(1, Role.MAFIA), seat(2, Role.CITIZEN))?.roomSound);
+		assert.equal(recordNightIntent(seat(1, Role.VIGILANTE), seat(2, Role.CITIZEN))?.roomSound, undefined);
+		assert.equal(recordNightIntent(seat(1, Role.BEAST), seat(2, Role.CITIZEN))?.roomSound, undefined);
 	});
 
 	it("경찰은 짐승인간도 건달도 마피아로 보지 못한다", () => {
 		// 짐승인간은 위장해서 안 잡히고, 건달은 애초에 시민이라 잡을 것이 없다.
 		// 경찰이 "마피아입니다"를 듣는 상대는 진짜 마피아 진영뿐이어야 한다
 		const police = seat(1, Role.POLICE);
-		assert.match(resolveNightSelect(police, seat(2, Role.BEAST))!.label, /마피아가 아닙니다/);
-		assert.match(resolveNightSelect(police, seat(3, Role.THUG))!.label, /마피아가 아닙니다/);
-		assert.match(resolveNightSelect(police, seat(4, Role.MAFIA))!.label, /마피아입니다/);
+		assert.match(recordNightIntent(police, seat(2, Role.BEAST))!.label, /마피아가 아닙니다/);
+		assert.match(recordNightIntent(police, seat(3, Role.THUG))!.label, /마피아가 아닙니다/);
+		assert.match(recordNightIntent(police, seat(4, Role.MAFIA))!.label, /마피아입니다/);
 	});
 
-	it("건달이 협박하면 대상의 투표가 막힌다", () => {
-		const target = seat(2, Role.CITIZEN);
-		const result = resolveNightSelect(seat(1, Role.THUG), target);
+	it("건달의 협박은 능력을 소모한다", () => {
+		const result = recordNightIntent(seat(1, Role.THUG), seat(2, Role.CITIZEN));
 		assert.equal(result?.consumed, true);
-		assert.equal(target.silenced, true);
+		assert.equal(result?.confirmed, true);
 	});
 
-	it("기자가 취재하면 대상에 표식이 남는다", () => {
-		const target = seat(2, Role.MAFIA);
-		const result = resolveNightSelect(seat(1, Role.REPORTER), target);
+	it("기자의 취재는 능력을 소모한다", () => {
+		const result = recordNightIntent(seat(1, Role.REPORTER), seat(2, Role.MAFIA));
 		assert.equal(result?.consumed, true);
-		assert.equal(target.scooped, true);
+		assert.equal(result?.confirmed, true);
 	});
 
 	it("스파이가 마피아를 찾으면 진영이 바뀌고 능력이 남는다", () => {
 		const spy = seat(1, Role.SPY);
-		const result = resolveNightSelect(spy, seat(2, Role.MAFIA));
+		const result = recordNightIntent(spy, seat(2, Role.MAFIA));
 		assert.equal(spy.team, Team.MAFIA);
 		assert.equal(result?.consumed, false);
 		assert.equal(result?.joinedMafia, true);
@@ -545,20 +508,20 @@ describe("NightResolution", () => {
 
 	it("스파이가 시민을 조사하면 능력을 소모한다", () => {
 		const spy = seat(1, Role.SPY);
-		const result = resolveNightSelect(spy, seat(2, Role.DOCTOR));
+		const result = recordNightIntent(spy, seat(2, Role.DOCTOR));
 		assert.equal(spy.team, Team.CITIZEN);
 		assert.equal(result?.consumed, true);
 	});
 
 	it("능력이 없는 직업은 null", () => {
-		assert.equal(resolveNightSelect(seat(1, Role.CITIZEN), seat(2, Role.MAFIA)), null);
-		assert.equal(resolveNightSelect(seat(1, Role.SHAMAN), seat(2, Role.MAFIA)), null);
+		assert.equal(recordNightIntent(seat(1, Role.CITIZEN), seat(2, Role.MAFIA)), null);
+		assert.equal(recordNightIntent(seat(1, Role.SHAMAN), seat(2, Role.MAFIA)), null);
 	});
 
 	it("스파이가 건달을 찾아도 합류하지 않는다", () => {
 		// 건달은 시민이다. 스파이가 합류할 마피아 진영이 아니다
 		const spy = seat(1, Role.SPY);
-		const result = resolveNightSelect(spy, seat(2, Role.THUG));
+		const result = recordNightIntent(spy, seat(2, Role.THUG));
 		assert.notEqual(result?.joinedMafia, true);
 		assert.equal(spy.team, Team.CITIZEN);
 		assert.equal(result?.consumed, true);

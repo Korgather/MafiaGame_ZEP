@@ -23,9 +23,9 @@ import {
 	isPeacefulNight,
 	nightActionBlockedReason,
 	NightOutcome,
-	resolveNightCasualties,
-	resolveNightSelect,
+	recordNightIntent,
 } from "../domain/NightResolution.ts";
+import { putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
 import { aliveSeats, resetRound, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
@@ -47,15 +47,6 @@ import { sprite } from "../infrastructure/Sprites.ts";
 
 /** 밤 능력 안내 라벨 표시 시간(ms). 지목할 시간을 충분히 준다 */
 const NIGHT_PROMPT_MS = 6000;
-
-/**
- * 아무도 죽지 않은 아침의 보고.
- *
- * 아무도 죽지 않는 아침은 두 갈래다 — 첫 밤 무사(정산을 아예 건너뛴다)와
- * 지목이 없었거나 전부 막힌 밤. 두 곳에 같은 문장을 따로 적어 두면 한쪽만
- * 고쳐졌을 때 같은 결과가 밤마다 다른 말로 나온다.
- */
-const NO_DEATH_REPORT = "✨ 이번 밤에 아무도 죽지 않았습니다.";
 
 /**
  * 지목할 것이 없는 사람들이 보는 밤 화면.
@@ -267,8 +258,11 @@ function bindNightWidget(widget: ScriptWidget): void {
 		const target = seatAt(room, targetIndex);
 		if (!target || !target.alive) return;
 
-		const result = resolveNightSelect(seat, target);
+		const result = recordNightIntent(seat, target);
 		if (!result) return;
+
+		// 적용은 밤이 끝날 때다. 여기서는 "이 사람이 저 사람을 골랐다"만 남긴다
+		putIntent(room.nightIntents, seat.index, target.index);
 
 		if (result.consumed) {
 			seat.usedSkill = true;
@@ -313,17 +307,19 @@ export function resolveNight(room: Room): void {
 	// 아침 화면이 읽을 밤 기록. kill()이 사망 한 줄씩 채워 넣는다
 	room.nightReport = [];
 
-	// 첫 밤 무사는 사망 정산보다 앞이다. resolveNightCasualties는 공격받은
-	// 좌석의 방탄을 소모하므로, 뒤에 두면 군인이 죽지도 않은 채 방탄만 잃는다.
-	// attackedBy는 그대로 남지만 다음 밤 시작의 resetRound가 비운다.
-	if (isPeacefulNight(room.turnCount, room.total, room.ruleSet.firstNightPeacefulUpTo)) {
-		report(room, NO_DEATH_REPORT);
-		publishScoops(room);
-		return;
-	}
-
-	const casualties = resolveNightCasualties(room.seats);
-	if (casualties.length === 0) report(room, NO_DEATH_REPORT);
+	/*
+	 * 첫 밤 무사는 이제 분기가 아니라 파이프라인의 인자다.
+	 *
+	 * S0에서는 resolveNightCasualties 앞에서 되돌아가야 했다 — 그 함수가
+	 * 공격받은 좌석의 방탄을 소모하기 때문이다. 지금은 ATTACK step 자체를
+	 * 건너뛰므로 attackedBy가 비어 있고, 방탄을 볼 일이 애초에 없다.
+	 * 기자의 특종은 AFTER step이라 그대로 나간다.
+	 */
+	const settlement = resolveNightIntents(room.seats, room.nightIntents, {
+		skipAttacks: isPeacefulNight(room.turnCount, room.total, room.ruleSet.firstNightPeacefulUpTo),
+	});
+	const casualties = settlement.casualties;
+	if (casualties.length === 0) report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
 
 	for (const casualty of casualties) {
 		switch (casualty.outcome) {

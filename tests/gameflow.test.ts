@@ -449,7 +449,12 @@ describe("밤 단계", () => {
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 
 		send(playerOf(mafia), { type: "select", num: victim.index });
-		assert.deepEqual(victim.attackedBy, [mafia.index], "지목이 좌석에 반영되지 않았습니다");
+		// 클릭은 의도만 남긴다 — 좌석에 적용되는 것은 밤이 끝날 때다
+		assert.deepEqual(
+			target.nightIntents,
+			[{ actor: mafia.index, target: victim.index }],
+			"지목이 기록되지 않았습니다"
+		);
 
 		finishPhase(target); // NIGHT → 정산 → DAY
 
@@ -485,8 +490,13 @@ describe("밤 단계", () => {
 		send(playerOf(mafia), { type: "select", num: others[0].index });
 		send(playerOf(mafia), { type: "select", num: others[1].index });
 
-		assert.deepEqual(others[0].attackedBy, [mafia.index]);
-		assert.deepEqual(others[1].attackedBy, [], "능력을 두 번 썼습니다");
+		// 두 번째 클릭은 nightActionBlockedReason이 막으므로 지목이 하나만 남는다.
+		// putIntent가 교체하기 때문이 아니라 애초에 두 번째가 오지 않는 것이다
+		assert.deepEqual(
+			target.nightIntents,
+			[{ actor: mafia.index, target: others[0].index }],
+			"능력을 두 번 썼습니다"
+		);
 	});
 
 	/**
@@ -526,9 +536,9 @@ describe("밤 단계", () => {
 
 		send(playerOf(vigilante), { type: "select", num: victim.index });
 		assert.deepEqual(
-			victim.attackedBy,
-			[vigilante.index],
-			"둘째 밤의 사살이 좌석에 반영되지 않았습니다"
+			target.nightIntents,
+			[{ actor: vigilante.index, target: victim.index }],
+			"둘째 밤의 사살이 기록되지 않았습니다"
 		);
 	});
 
@@ -579,6 +589,28 @@ describe("밤 단계", () => {
 		assert.equal(soldier.armored, true);
 	});
 
+	it("첫 밤이 무사여도 기자의 특종은 아침에 나간다", () => {
+		// 첫 밤 무사가 조기 반환이던 시절에는 그 반환 직전에 publishScoops를
+		// 한 번 더 불러서 지켰다. 지금은 취재가 AFTER step이라 공격을 건너뛰는
+		// 것과 무관하게 지나간다 — 두 경로가 같은 결과를 낸다는 것을 못 박는다.
+		// 사망 정산을 건너뛰면서 특종까지 함께 떨어뜨리면 여기서 걸린다.
+		startGame(5, 1, [Role.REPORTER, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
+
+		const reporter = seatsWithRole(target, Role.REPORTER)[0];
+		const scooped = seatsWithRole(target, Role.MAFIA)[0];
+
+		send(playerOf(reporter), { type: "select", num: scooped.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		assert.ok(
+			target.nightReport.some(line => line.indexOf("특종") >= 0 && line.indexOf(scooped.name) >= 0),
+			`특종이 아침 기록에 없습니다: ${target.nightReport.join(" / ")}`
+		);
+		assert.equal(scooped.alive, true, "첫 밤은 무사인데 누군가 죽었습니다");
+	});
+
 	it("밤이 아닌 때 온 지목은 무시한다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
@@ -591,7 +623,9 @@ describe("밤 단계", () => {
 		finishPhase(target); // → DAY. 밤 위젯은 닫혔지만 조작된 메시지는 올 수 있다
 		widget.emit(playerOf(mafia), { type: "select", num: victim.index });
 
-		assert.deepEqual(victim.attackedBy, [], "낮에 들어온 지목이 처리됐습니다");
+		// 좌석의 attackedBy로는 볼 수 없다 — 밤에 들어온 지목도 정산 전에는
+		// 좌석을 건드리지 않으므로 그 단언은 무엇이 오든 통과한다
+		assert.deepEqual(target.nightIntents, [], "낮에 들어온 지목이 처리됐습니다");
 	});
 });
 
