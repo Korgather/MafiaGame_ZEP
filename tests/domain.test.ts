@@ -110,6 +110,18 @@ function roomBox(roomNum: number): {
 	};
 }
 
+/**
+ * 결정적인 rng. deck.test.ts의 같은 이름과 같은 수열을 낸다 —
+ * 덱 테스트는 시드를 여럿 밟아야 리드가 갈리는 인원까지 닿는다
+ */
+function rngFrom(seed: number): () => number {
+	let state = seed;
+	return () => {
+		state = (state * 1103515245 + 12345) % 2147483648;
+		return state / 2147483648;
+	};
+}
+
 describe("RoleAssignment", () => {
 	it("인원수만큼 직업을 배분한다", () => {
 		for (const count of EVERY_COUNT) {
@@ -152,15 +164,20 @@ describe("RoleAssignment", () => {
 		// 6인 판은 짐승인간 혼자가 리드일 수 있다 — 혼자라 대화 상대가 없고
 		// 밀담이 없어도 손실이 0이다. 반대로 팀이 둘 이상인데 밀담이 없으면
 		// 팀원이 있는데 말을 걸 수 없는 상태가 된다
+		//
+		// 인원당 한 판만 돌리면 안 된다. 이 불변식은 리드가 갈리는 인원에서만
+		// 깨지므로, 그 인원에서 마피아 리드가 뽑힌 판 하나로는 아무것도 못 본다
 		for (const count of EVERY_COUNT) {
-			const deck = buildRoleDeck(STANDARD_RULES.deck, count);
-			const team = deck.filter(role => ROLE_DEFS[role].team === Team.MAFIA);
-			assert.ok(team.length > 0, `${count}인`);
-			if (team.length < 2) continue;
-			const talkers = team.filter(
-				role => ROLE_DEFS[role].nightChat === ChatChannel.MAFIA
-			);
-			assert.ok(talkers.length > 0, `${count}인`);
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(STANDARD_RULES.deck, count, rngFrom(seed));
+				const team = deck.filter(role => ROLE_DEFS[role].team === Team.MAFIA);
+				assert.ok(team.length > 0, `${count}인 seed ${seed}`);
+				if (team.length < 2) continue;
+				const talkers = team.filter(
+					role => ROLE_DEFS[role].nightChat === ChatChannel.MAFIA
+				);
+				assert.ok(talkers.length > 0, `${count}인 seed ${seed} [${deck.join(", ")}]`);
+			}
 		}
 	});
 

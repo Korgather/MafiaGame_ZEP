@@ -177,6 +177,47 @@ describe("마피아 리드 선정", () => {
 			}
 		}
 	});
+
+	it("배타 라이벌 때문에 자리를 못 채우는 후보는 리드가 되지 않는다", () => {
+		/*
+		 * 합성 스펙. 사기꾼(Task 6)이 마피아 풀에 들어오면서 짐승인간과 배타로
+		 * 묶이는 상태를 미리 세운다 — 오늘 마피아 팀 직업은 둘뿐이라, 밀담에
+		 * 앉는 세 번째 직업 자리에는 스파이를 대역으로 세웠다(스파이는 진영이
+		 * 시민이지만 nightChat이 마피아라 단독 킬러가 아니다). 그래서 자리 수는
+		 * 진영이 아니라 "마피아 자리에서 온 직업"으로 센다.
+		 *
+		 * 리드가 짐승인간이면 남은 두 자리는 밀담 후보에서만 오는데, 그 후보 중
+		 * 스파이는 짐승인간과 같은 그룹이라 함께 빠진다. 남는 것은 마피아 하나뿐
+		 * 이라 두 자리를 못 채우고, 모자란 자리는 buildRoleDeck 끝의 while이
+		 * 시민으로 메운다 — 덱 길이는 맞으므로 인원표가 깨진 것을 아무도 모른다.
+		 *
+		 * 그래서 "채울 수 있는가"는 후보마다 다르다. 밀담 후보를 한 번 세는
+		 * 것으로는 어느 후보가 몇 명을 데려갈 수 있는지 구별할 수 없다.
+		 */
+		const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.SPY];
+		const spec = {
+			...DECK,
+			mafiaPool: [Role.MAFIA, Role.SPY],
+			// 스파이가 시민 추첨으로도 들어오면 자리 수를 셀 수 없다
+			citizenPool: DECK.citizenPool.filter(role => role !== Role.SPY),
+			exclusiveGroups: [[Role.BEAST, Role.SPY]],
+		};
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const seats = deck.filter(role => MAFIA_SEATS.indexOf(role) >= 0).length;
+				assert.equal(
+					seats,
+					DECK.mafiaTeamSize[count],
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+				assert.ok(
+					!(deck.includes(Role.BEAST) && deck.includes(Role.SPY)),
+					`${count}인 seed ${seed}: 배타 그룹이 함께 나왔다`
+				);
+			}
+		}
+	});
 });
 
 describe("시민 풀 필터", () => {
@@ -211,6 +252,131 @@ describe("시민 풀 필터", () => {
 					assert.ok(hits <= 1, `${group.join("+")} ${count}인 seed ${seed}`);
 				}
 			}
+		}
+	});
+});
+
+/*
+ * 배타 경로를 합성 스펙으로 직접 밟는다.
+ *
+ * 위 "배타 그룹의 두 직업이 한 덱에 함께 나오지 않는다"는 DECK.exclusiveGroups를
+ * 훑는데 그 배열이 아직 비어 있다(사기꾼이 Task 6에 온다). 그래서 그 테스트는
+ * 공허하게 통과하는 데 그치지 않고, withoutRivals의 금지 경로와 drawExclusive의
+ * 중간 제외가 저장소 어디에서도 한 번도 실행되지 않는다는 뜻이 된다 — Task 3이
+ * 만들려던 장치가 통째로 미검증인 상태다. 진짜 그룹이 채워질 때까지 이 스펙들이
+ * 그 자리를 대신한다(위 테스트는 그대로 둔다. 그쪽은 실제 값이 들어오는 순간 문다).
+ */
+describe("배타 그룹 (합성 스펙)", () => {
+	it("한 그룹의 두 직업은 함께 나오지 않는다", () => {
+		const spec = { ...DECK, exclusiveGroups: [[Role.SPY, Role.SOLDIER]] };
+		let spies = 0;
+		let soldiers = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				if (deck.includes(Role.SPY)) spies++;
+				if (deck.includes(Role.SOLDIER)) soldiers++;
+				assert.ok(
+					!(deck.includes(Role.SPY) && deck.includes(Role.SOLDIER)),
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+			}
+		}
+		// 양쪽 다 실제로 나와야 "함께 나오지 않는다"가 의미를 갖는다.
+		// 한쪽이 0이면 금지 경로가 아니라 인원 하한이 통과시킨 것일 수 있다
+		assert.ok(spies > 0, "스파이가 한 번도 안 나왔다");
+		assert.ok(soldiers > 0, "군인이 한 번도 안 나왔다");
+	});
+
+	it("두 그룹에 동시에 든 직업은 양쪽을 모두 막는다", () => {
+		const spec = {
+			...DECK,
+			exclusiveGroups: [
+				[Role.SPY, Role.SOLDIER],
+				[Role.SPY, Role.POLITICIAN],
+			],
+		};
+		let spies = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				if (!deck.includes(Role.SPY)) continue;
+				spies++;
+				assert.ok(
+					!deck.includes(Role.SOLDIER) && !deck.includes(Role.POLITICIAN),
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+			}
+		}
+		assert.ok(spies > 0, "스파이가 한 번도 안 나와 금지 경로를 밟지 못했다");
+	});
+
+	it("진영을 가로지르는 그룹도 막는다", () => {
+		// withoutRivals의 독 코멘트가 약속하는 방향(마피아 자리를 먼저 확정하고
+		// 그 결과를 시민 필터의 입력으로 넘긴다)이 실제로 이어져 있는지 본다
+		const spec = { ...DECK, exclusiveGroups: [[Role.BEAST, Role.SOLDIER]] };
+		let beasts = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				if (!deck.includes(Role.BEAST)) continue;
+				beasts++;
+				assert.ok(
+					!deck.includes(Role.SOLDIER),
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+			}
+		}
+		assert.ok(beasts > 0, "짐승인간이 한 번도 안 나와 금지 경로를 밟지 못했다");
+	});
+
+	it("이미 뽑힌 직업은 자기 그룹이 걸려도 풀에서 빠지지 않는다", () => {
+		/*
+		 * withoutRivals는 그룹이 걸리면 "아직 안 뽑힌 나머지"만 막아야 한다.
+		 * 뽑힌 직업까지 막으면 그 직업이 남은 자리 후보에서도 사라진다 — 리드가
+		 * 마피아인 판에서 둘째 자리 후보의 마피아가 통째로 빠지는 식이다.
+		 *
+		 * 위 의사·경찰 케이스로는 이걸 볼 수 없다. 그쪽은 뽑힌 둘이 애초에
+		 * 남은 풀에 없어서 과잉 금지가 결과를 바꾸지 못한다. 여기서는 마피아가
+		 * 리드로 뽑히고도 둘째 자리 풀에 남아 있어야 인원표가 맞는다.
+		 */
+		const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.SPY];
+		const spec = {
+			...DECK,
+			leadPool: [Role.MAFIA],
+			mafiaPool: [Role.MAFIA, Role.SPY],
+			citizenPool: DECK.citizenPool.filter(role => role !== Role.SPY),
+			exclusiveGroups: [[Role.MAFIA, Role.SOLDIER]],
+		};
+		for (let count = 11; count <= 12; count++) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const seats = deck.filter(role => MAFIA_SEATS.indexOf(role) >= 0).length;
+				assert.equal(
+					seats,
+					DECK.mafiaTeamSize[count],
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+				// 마피아는 언제나 뽑히므로 군인은 언제나 막힌다
+				assert.ok(!deck.includes(Role.SOLDIER), `${count}인 seed ${seed}`);
+			}
+		}
+	});
+
+	it("그룹 전원이 이미 뽑혔으면 아무도 더 막지 않는다", () => {
+		// 의사·경찰은 citizenRequired라 8인 판에 항상 함께 들어간다. withoutRivals가
+		// "그룹이 걸렸다"만 보고 남은 전원을 막으면 뽑힌 둘까지 금지 목록에 들어가
+		// 시민 추첨이 통째로 줄어든다 — taken에 없는 직업만 막아야 한다
+		const spec = { ...DECK, exclusiveGroups: [[Role.DOCTOR, Role.POLICE]] };
+		for (let seed = 1; seed <= 100; seed++) {
+			const deck = buildRoleDeck(spec, 8, rngFrom(seed));
+			assert.equal(deck.length, 8, `seed ${seed}`);
+			assert.ok(
+				deck.includes(Role.DOCTOR) && deck.includes(Role.POLICE),
+				`seed ${seed} [${deck.join(", ")}]`
+			);
+			const special = deck.filter(role => DECK.citizenPool.indexOf(role) >= 0).length;
+			assert.equal(special, 2, `seed ${seed} [${deck.join(", ")}]`);
 		}
 	});
 });

@@ -146,25 +146,39 @@ export function buildRoleDeck(
 	 * 리드 선정.
 	 *
 	 * 단독 킬러가 리드가 되면 남은 자리는 전부 밀담 쪽에서 와야 한다 — 예산이
-	 * 하나뿐이라서다. 그런데 밀담 후보가 남은 자리보다 적으면 그 자리는 채워지지
-	 * 않고 아래 while이 시민으로 메운다. 덱 길이는 맞으므로 인원표가 깨진 것을
+	 * 하나뿐이라서다. 그런데 그 자리를 채울 후보가 모자라면 자리는 채워지지 않고
+	 * 아래 while이 시민으로 메운다. 덱 길이는 맞으므로 인원표가 깨진 것을
 	 * 아무도 모른다. 그래서 예산뿐 아니라 "남은 자리를 채울 수 있는가"까지 본다.
+	 *
+	 * 그 판정은 후보마다 다르다. 밀담 후보 중 그 후보와 같은 배타 그룹에 있는
+	 * 직업은 그 후보를 리드로 뽑는 순간 함께 빠지기 때문이다. 풀을 한 번 세는
+	 * 것으로는 어느 후보가 몇 자리를 데려갈 수 있는지 구별할 수 없어서, 후보마다
+	 * 자기 라이벌을 뺀 뒤 센다 — withoutRivals에 taken으로 그 후보 하나만 주면
+	 * 그게 곧 그 후보를 리드로 뽑았을 때 남는 풀이다.
+	 *
+	 * 밀담 리드는 이 검사를 하지 않는다. 밀담 리드가 여는 풀이 가장 넓으므로
+	 * 거기서 모자라면 리드를 바꿔도 나아지지 않고, 거르면 후보만 줄어든다.
 	 *
 	 * 조건을 인원이 아니라 예산과 후보 수로 적은 이유: 정원이나 인원표가 바뀌어도
 	 * 따라온다. "7~9인"이라고 적으면 표가 바뀔 때마다 여기를 다시 고쳐야 한다.
 	 */
-	const leadPool = allowedAt(spec.leadPool, playerCount, spec.minPlayers);
+	// 밀담 자리를 채울 수 있는 후보. 리드 검사와 아래 뽑기가 같은 배열을 본다
 	const talkers = allowedAt(
 		spec.mafiaPool.filter(role => !killsIndependently(role)),
 		playerCount,
 		spec.minPlayers
 	);
-	const loneLeadFits = budget > 1 && talkers.length >= teamSize - 1;
-	const leadCandidates =
-		teamSize >= 2 && !loneLeadFits
-			? leadPool.filter(role => !killsIndependently(role))
-			: leadPool;
-	// 후보가 전부 걸러지면 마피아로 대체한다. 마피아 없는 판은 성립하지 않는다
+	const leadPool = allowedAt(spec.leadPool, playerCount, spec.minPlayers);
+	const leadCandidates = leadPool.filter(role => {
+		// 남는 자리가 없거나 리드가 밀담에 앉으면 채우기 문제가 생기지 않는다
+		if (teamSize < 2 || !killsIndependently(role)) return true;
+		return (
+			budget > 1 &&
+			withoutRivals(talkers, [role], spec.exclusiveGroups).length >= teamSize - 1
+		);
+	});
+	// 거른 뒤에 섞는다. 순서가 있는 배열의 앞을 집으면 후보 사이에 편향이 생긴다.
+	// 후보가 전부 걸러지면 마피아로 대체한다 — 마피아 없는 판은 성립하지 않는다
 	const lead = leadCandidates.length > 0 ? shuffle(leadCandidates, rng)[0] : Role.MAFIA;
 	const roles: Role[] = [lead];
 
@@ -176,15 +190,15 @@ export function buildRoleDeck(
 	 *
 	 * 리드가 이미 단독 킬러면 예산이 남아도 하나 더는 안 된다. 예산 2는
 	 * "밀담 하나 + 단독 하나"를 뜻하지 "단독 둘"이 아니다.
+	 *
+	 * 예산이 없는 가지가 talkers 그 자체인 것은 위 리드 검사의 전제다. 같은
+	 * 집합을 두 번 계산하면 언젠가 한쪽만 바뀌고, 그때 검사는 실제로 뽑을 수
+	 * 없는 리드를 통과시킨다.
 	 */
 	const budgeted = budget > 1 && !killsIndependently(lead)
-		? spec.mafiaPool
-		: spec.mafiaPool.filter(role => !killsIndependently(role));
-	const mafiaPool = withoutRivals(
-		allowedAt(budgeted, playerCount, spec.minPlayers),
-		roles,
-		spec.exclusiveGroups
-	);
+		? allowedAt(spec.mafiaPool, playerCount, spec.minPlayers)
+		: talkers;
+	const mafiaPool = withoutRivals(budgeted, roles, spec.exclusiveGroups);
 	for (const role of drawExclusive(mafiaPool, teamSize - 1, spec.exclusiveGroups, rng)) {
 		roles.push(role);
 	}
