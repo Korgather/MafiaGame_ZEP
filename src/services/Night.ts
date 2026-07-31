@@ -267,8 +267,10 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (result.consumed) {
 			seat.usedSkill = true;
 			if (def.oncePerGame) seat.skillSpent = true;
-			// 소모되지 않는 지목(마피아가 대상을 바꾸는 것 등)은 인원수를
-			// 움직이지 않으므로 알리지 않는다
+			// 진행률의 분자는 usedSkill을 센다. 소모되지 않은 지목은 그 숫자를
+			// 움직이지 않으므로 방에 알릴 것도 없다. 지금 그런 갈래는 하나도
+			// 없지만(recordNightIntent가 전부 consumed: true다) 조건은 남겨둔다 —
+			// 없는 갈래를 세는 비용보다 생겼을 때 여기를 잊는 값이 크다
 			broadcastNightProgress(room);
 		}
 		label(sender, result.label, result.labelDurationMs);

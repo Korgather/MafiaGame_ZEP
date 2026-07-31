@@ -9,6 +9,7 @@
 import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
+import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
 import { ACTION_RATE, MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
@@ -16,6 +17,7 @@ import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
 	cardWidget,
+	chatChannels,
 	chatLines,
 	chatSaw,
 	connect,
@@ -1100,5 +1102,125 @@ describe("밤 진행률", () => {
 		const restored = mainWidget(playerOf(mafia)).lastOfType("progress");
 		assert.ok(restored);
 		assert.equal(restored.total, MIN_PLAYERS - 1, "돌아온 사람이 분모로 복귀하지 않았습니다");
+	});
+});
+/**
+ * 밤에 알아낸 것이 실제로 그 사람 손에 들어가는가.
+ *
+ * 조사 답을 클릭 시점에서 아침으로 옮기면서 "만드는 쪽"(NightPipeline)과
+ * "배달하는 쪽"(GameFlow → deliverNightReveals)이 갈라졌다. 도메인 테스트는
+ * 앞쪽만 본다 — 뒤쪽은 루프를 통째로 지워도, 승패 판정 뒤로 옮겨도 전부
+ * 초록이었다. 이 describe가 덮는 것은 그 사이의 배선이다.
+ */
+describe("밤에 알아낸 것의 배달", () => {
+	/**
+	 * 이번 밤에 판이 끝나도록 짜인 판.
+	 *
+	 * 5명(마피아 2 : 시민 3)에서 시민 하나가 죽으면 2:2가 되어 마피아가 이긴다.
+	 * 첫 밤은 무사한 밤이므로 한 바퀴를 돌고 나서 두 번째 밤을 쓴다.
+	 */
+	function reachDecisiveNight() {
+		startGame(5, 1, [Role.MAFIA, Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT (첫 밤, 무사)
+		passPeacefulFirstNight(target);
+
+		const mafias = seatsWithRole(target, Role.MAFIA);
+		return {
+			target,
+			killer: mafias[0],
+			accomplice: mafias[1],
+			police: seatsWithRole(target, Role.POLICE)[0],
+			victim: seatsWithRole(target, Role.CITIZEN)[0],
+		};
+	}
+
+	/**
+	 * 답이 아침으로 밀려난 뒤로, 마지막 밤의 조사는 "판이 끝났으니 없던 일"이
+	 * 되기 쉬운 자리에 놓였다. 승패 판정이 먼저 돌면 배달 코드는 도달조차
+	 * 하지 않는데, 도메인은 답을 옳게 만들었으므로 아무도 빨개지지 않는다.
+	 * 확인하고 죽은 경찰에게는 그 답이 마지막으로 남길 말이기도 하다.
+	 */
+	it("마지막 밤에 판이 끝나도 조사한 사람은 답을 받는다", () => {
+		const { target, killer, accomplice, police, victim } = reachDecisiveNight();
+
+		send(playerOf(killer), { type: "select", num: victim.index });
+		send(playerOf(police), { type: "select", num: accomplice.index });
+		finishPhase(target); // NIGHT → 정산 → 승패
+
+		// 판이 정말 이 밤에 끝났는지부터 못박는다. 안 끝나면 이 테스트는
+		// 평범한 아침 배달을 확인하는 것이 되어 회귀를 못 잡는다
+		assert.equal(target.phase, GamePhase.GAME_OVER, "이 밤에 판이 끝나지 않았습니다");
+		assert.equal(target.winner, Team.MAFIA);
+
+		assert.ok(
+			chatSaw(playerOf(police), `🔍 ${accomplice.index}번 참가자는 마피아입니다!`),
+			"판이 끝났다고 조사 답이 사라졌습니다"
+		);
+	});
+
+	/** 답은 조사한 사람의 것이다. 한 명에게라도 더 가면 그 밤의 정보가 공짜가 된다 */
+	it("조사 답은 조사한 사람에게만 간다", () => {
+		const { target, killer, accomplice, police, victim } = reachDecisiveNight();
+
+		send(playerOf(killer), { type: "select", num: victim.index });
+		send(playerOf(police), { type: "select", num: accomplice.index });
+		finishPhase(target);
+
+		const answer = `🔍 ${accomplice.index}번 참가자는 마피아입니다!`;
+		assert.ok(chatSaw(playerOf(police), answer));
+
+		for (const seat of target.seats) {
+			if (seat === police) continue;
+			assert.equal(
+				chatSaw(playerOf(seat), answer),
+				false,
+				`${seat.index}번이 남의 조사 답을 봤습니다`
+			);
+		}
+	});
+
+	/**
+	 * 스파이가 마피아를 찾아내면 그 밤에 진영이 바뀐다. 바뀐 진영은 승패
+	 * 계산에만 쓰이는 숫자가 아니라 "밀담이 열린다"는 게임 안의 사건이고,
+	 * 그 사건을 사람이 알게 되는 통로는 마피아 채널의 안내 한 줄뿐이다.
+	 * 안내를 지워도 team 필드는 멀쩡하므로 도메인 테스트로는 잡히지 않는다.
+	 */
+	it("스파이가 합류하면 마피아 채널에 안내가 뜨고 본인에게 밀담 탭이 열린다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.SPY, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		// 스파이는 낮 이야기를 듣고 나서야 쓸 수 있다(needsPriorDay)
+		passPeacefulFirstNight(target);
+
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const spy = seatsWithRole(target, Role.SPY)[0];
+		const citizen = seatsWithRole(target, Role.CITIZEN)[0];
+
+		// 마피아는 지목하지 않는다. 아무도 죽지 않아야 판이 이어지고,
+		// 합류한 뒤의 화면을 볼 수 있다
+		send(playerOf(spy), { type: "select", num: mafia.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		assert.equal(target.phase, GamePhase.DAY, "판이 끝나버려 합류 이후를 볼 수 없습니다");
+		assert.equal(spy.team, Team.MAFIA);
+
+		const notice = `${playerOf(spy).name}(스파이)님이 마피아 채팅에 합류했습니다`;
+		assert.ok(chatSaw(playerOf(mafia), notice), "마피아가 합류 사실을 모릅니다");
+		assert.ok(
+			chatLines(playerOf(spy), ChatChannel.MAFIA).some(line => line.text.indexOf(notice) >= 0),
+			"스파이 본인이 마피아 채널의 안내를 받지 못했습니다"
+		);
+		// 안내만 오고 탭이 없으면 다음 밤에 밀담을 쓸 수 없다.
+		// 쓰기 권한은 보지 않는다 — 밀담은 밤에만 열리므로 낮에는 읽기 전용이다
+		assert.ok(
+			chatChannels(playerOf(spy)).some(tab => tab.id === ChatChannel.MAFIA),
+			"스파이에게 마피아 탭이 열리지 않았습니다"
+		);
+		assert.equal(
+			chatSaw(playerOf(citizen), notice),
+			false,
+			"마피아 밀담의 안내가 시민에게 샜습니다"
+		);
 	});
 });

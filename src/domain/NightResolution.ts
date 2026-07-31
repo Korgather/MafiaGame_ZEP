@@ -22,7 +22,18 @@ import { NightActionKind, roleDef } from "./Roles.ts";
  * NightPipeline이 밤 끝에 한 번에 적용한다.
  */
 export interface NightSelectResult {
-	/** 능력을 소모했는가. false면 같은 밤에 다시 지목할 수 있다 */
+	/**
+	 * 능력을 소모했는가.
+	 *
+	 * 지금은 모든 갈래가 true를 돌려준다. false를 내던 유일한 자리 —
+	 * 마피아를 찾아낸 스파이가 그 밤에 한 번 더 누를 수 있던 보너스 —
+	 * 가 답을 아침으로 옮기면서 사라졌기 때문이다.
+	 *
+	 * 그래도 필드를 남기는 이유는 NightPipeline.putIntent의 교체 경로와
+	 * 같다. "확정했다(confirmed)"와 "다 썼다(consumed)"는 원래 다른 값이고,
+	 * 한 밤에 두 번 지목하는 능력이 다시 생기는 날 그 사실을 여기서 다시
+	 * 알아내야 한다면 호출부의 usedSkill 처리부터 틀린다.
+	 */
 	consumed: boolean;
 	/** 위젯에 선택 확정(selectResponse)을 보낼 것인가 */
 	confirmed: boolean;
@@ -140,6 +151,10 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 				consumed: true,
 				confirmed: true,
 				label: `${target.index}번 참가자를 조사합니다.\n결과는 내일 아침에 알게 됩니다.`,
+				// 이 라벨이야말로 오래 떠 있어야 한다. 답이 아니라 "오늘 밤에는
+				// 안 나온다"는 안내이고, 바로 그 기대를 이번에 바꿨기 때문이다.
+				// 3초에 스쳐 지나가면 조사자는 오지 않을 답을 밤새 기다린다
+				labelDurationMs: REVEAL_MS,
 				privateSound: Sound.INVESTIGATE,
 			};
 
