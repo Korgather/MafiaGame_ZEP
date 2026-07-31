@@ -102,7 +102,7 @@ npm run verify
 | `src/domain/NightResolution.ts` | 첫 밤 무사 판정 추가 → intent 기록기로 축소 → 차례 판정 확장 | 1, 4, 5, 7, 8, 10 |
 | `src/domain/chat/ChatPermission.ts` | `freeText` 도입 → `silenced` 제거 | 2, 9 |
 | `src/domain/chat/QuickPhrases.ts` | 침묵전 문구·쪽지 문구 | 2, 8 |
-| `src/types/Game.types.ts` | `Room.ruleSet` → `Room.nightIntents`/`nightReveals` → `Seat.noteText`·`Seat.skillUsed` → `Seat.blocked` | 2, 4, 5, 8, 9, 10 |
+| `src/types/Game.types.ts` | `Room.ruleSet` → `Room.nightIntents`/`nightReveals` → `Seat.noteText`·`Seat.usesSpent` → `Seat.blocked` | 2, 4, 5, 8, 9, 10 |
 | `src/entities/Room.ts` | 위 필드들의 생성·초기화 | 2, 4, 5, 8, 9, 10 |
 | `src/services/Night.ts` | 첫 밤 고지 → 파이프라인 호출 → reveals 배달 → 쪽지 2단 지목 → 자기 지목 차단 | 1, 4, 5, 8, 10 |
 | `src/services/GameFlow.ts` · `Outcome.ts` | `TIMING` → `room.ruleSet.timing` | 2 |
@@ -1725,7 +1725,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: 좌석 팩토리를 공용 헬퍼로 옮긴다**
 
-이 슬라이스부터 좌석 팩토리를 쓰는 테스트 파일이 넷이 된다(`domain` · `night-pipeline` · Task 6의 `roles-season1` · Task 10의 `night-block`). `Seat`은 이 계획에서만 세 번 바뀌므로(Task 8의 `skillSpent` → `skillUsed`, Task 9의 `silenced` 삭제, Task 10의 `blocked` 추가) 사본이 넷이면 그때마다 네 곳을 함께 고쳐야 한다. 한 군데로 모은다.
+이 슬라이스부터 좌석 팩토리를 쓰는 테스트 파일이 넷이 된다(`domain` · `night-pipeline` · Task 6의 `roles-season1` · Task 10의 `night-block`). `Seat`은 이 계획에서만 세 번 바뀌므로(Task 8의 `skillSpent` → `usesSpent`, Task 9의 `silenced` 삭제, Task 10의 `blocked` 추가) 사본이 넷이면 그때마다 네 곳을 함께 고쳐야 한다. 한 군데로 모은다.
 
 `tests/helpers/seat.ts`를 새로 만든다. `tests/helpers/`에는 이미 `Harness.ts`와 `FakeZep.ts`가 있고, `npm test`의 글롭은 `tests/**/*.test.ts`라 이 파일은 테스트로 실행되지 않는다.
 
@@ -3430,7 +3430,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 플래그가 하나 더 늘어난다. 횟수로 바꾼다.
 
 **Files:**
-- Modify: `src/types/Game.types.ts:150` (`skillSpent` → `skillUsed`), `Seat`에 `noteText`
+- Modify: `src/types/Game.types.ts:150` (`skillSpent` → `usesSpent`), `Seat`에 `noteText`
 - Modify: `src/entities/Room.ts:66`, `:89`, `:241-259`
 - Modify: `src/domain/Roles.ts:33-47`(`NOTE`), `:123-124`(`maxUses`), `:159-351`(자경단원·기자·시민)
 - Modify: `src/domain/NightResolution.ts:19-34`(`needsPhrase`), `:72-89`(`noTurnReason`), `recordNightIntent`
@@ -3444,7 +3444,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: Task 4의 `putIntent`·`NightLedger`, Task 5의 `NightReveal`·`deliverNightReveals`, Task 7의 `firstNightOnly`.
 - Produces:
   - `RoleDef.maxUses?: number` — `oncePerGame`을 **대체한다**(지운다).
-  - `Seat.skillUsed: number` — `skillSpent: boolean`을 **대체한다**. 정산 시점에만 오른다.
+  - `Seat.usesSpent: number` — `skillSpent: boolean`을 **대체한다**. 정산 시점에만 오른다.
   - `Seat.noteText: string` — 이번 밤에 고른 쪽지 문구. 빈 문자열이면 아직 안 골랐다.
   - `NightActionKind.NOTE = "NOTE"`
   - `NightSelectResult.needsPhrase?: boolean` — 지목만으로 끝나지 않는 능력.
@@ -3480,13 +3480,13 @@ describe("시민의 익명 쪽지", () => {
 	it("문구를 안 골랐으면 사용 횟수도 안 줄어든다", () => {
 		const sender = seat(1, Role.CITIZEN);
 		night([sender, seat(2, Role.DOCTOR)], [[1, 2]]);
-		assert.equal(sender.skillUsed, 0);
+		assert.equal(sender.usesSpent, 0);
 	});
 
 	it("보내면 사용 횟수가 오른다", () => {
 		const sender = seat(1, Role.CITIZEN, { noteText: "오늘은 조용히 계세요" });
 		night([sender, seat(2, Role.DOCTOR)], [[1, 2]]);
-		assert.equal(sender.skillUsed, 1);
+		assert.equal(sender.usesSpent, 1);
 	});
 
 	it("대상이 그 밤에 죽으면 배달되지 않는다", () => {
@@ -3500,9 +3500,9 @@ describe("시민의 익명 쪽지", () => {
 	});
 
 	it("한 번 쓰면 다음 밤에는 차례가 없다", () => {
-		assert.equal(hasNightTurn(seat(1, Role.CITIZEN, { skillUsed: 1 }), 2), false);
+		assert.equal(hasNightTurn(seat(1, Role.CITIZEN, { usesSpent: 1 }), 2), false);
 		assert.match(
-			nightActionBlockedReason(seat(1, Role.CITIZEN, { skillUsed: 1 }), 2) ?? "",
+			nightActionBlockedReason(seat(1, Role.CITIZEN, { usesSpent: 1 }), 2) ?? "",
 			/다 썼습니다/
 		);
 	});
@@ -3534,7 +3534,7 @@ describe("시민의 익명 쪽지", () => {
 npm test
 ```
 
-Expected: FAIL — `noteText`·`skillUsed`가 `Seat`에 없다.
+Expected: FAIL — `noteText`·`usesSpent`가 `Seat`에 없다.
 
 - [ ] **Step 3: 좌석에 두 필드를 넣는다**
 
@@ -3550,7 +3550,7 @@ Expected: FAIL — `noteText`·`skillUsed`가 `Seat`에 없다.
 	 * 오르는 시점은 **정산**이다. 클릭 시점이 아니다 — 막히는 능력(건달)이
 	 * 들어오면 막힌 자경단원이 총알을 잃은 채로 남는다.
 	 */
-	skillUsed: number;
+	usesSpent: number;
 	/**
 	 * 이번 밤에 고른 쪽지 문구. 안 골랐으면 빈 문자열.
 	 *
@@ -3567,14 +3567,14 @@ Expected: FAIL — `noteText`·`skillUsed`가 `Seat`에 없다.
 
 ```ts
 		usedSkill: false,
-		skillUsed: 0,
+		usesSpent: 0,
 		noteText: "",
 ```
 
 `assignRole`(`:89`).
 
 ```ts
-	seat.skillUsed = 0;
+	seat.usesSpent = 0;
 	seat.noteText = "";
 	seat.usedSkill = false;
 ```
@@ -3585,7 +3585,7 @@ Expected: FAIL — `noteText`·`skillUsed`가 `Seat`에 없다.
 /**
  * 밤/투표 한 턴이 시작될 때 초기화되는 값 (기존 tagReset).
  *
- * armored(군인의 방탄)와 skillUsed(횟수 제한 능력의 소모)는 **일부러 남긴다.**
+ * armored(군인의 방탄)와 usesSpent(횟수 제한 능력의 소모)는 **일부러 남긴다.**
  * 게임당 정해진 자원이라 밤이 바뀔 때마다 되돌아오면 능력이 무제한이 된다.
  * 소모는 각각 resolveNightCasualties와 NightPipeline에서만 일어나고,
  * 되돌리는 곳은 assignRole(게임 시작) 하나뿐이다.
@@ -3658,9 +3658,9 @@ export function resetRound(room: Room): void {
 `src/domain/NightResolution.ts`. `oncePerGame` 분기를 통째로 대체한다.
 
 ```ts
-	// skillUsed만 보면 방금 이번 밤에 쓴 사람도 "차례가 없다"가 되어 분모에서
+	// usesSpent만 보면 방금 이번 밤에 쓴 사람도 "차례가 없다"가 되어 분모에서
 	// 빠진다. 이번 밤에 쓴 것은 위 usedSkill이 답할 몫이다
-	if (def.maxUses !== undefined && seat.skillUsed >= def.maxUses && !seat.usedSkill) {
+	if (def.maxUses !== undefined && seat.usesSpent >= def.maxUses && !seat.usedSkill) {
 		return "능력을 쓸 수 있는 횟수를 다 썼습니다. 이번 밤은 지켜보세요.";
 	}
 ```
@@ -3769,7 +3769,7 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 			if (!target) continue;
 			// 실제로 적용된 것만 센다. 지목만으로 세면 쪽지를 안 보낸 시민이
 			// 한 장을 날리고, Task 10에서는 막힌 사람이 능력을 잃는다
-			if (apply(seat, target, ledger)) seat.skillUsed++;
+			if (apply(seat, target, ledger)) seat.usesSpent++;
 ```
 
 - [ ] **Step 11: 지목한 번호를 서비스가 읽을 수 있게 한다**
@@ -4062,26 +4062,26 @@ function chooseNotePhrase(
 
 - [ ] **Step 15: 좌석 팩토리와 기존 테스트를 맞춘다**
 
-`tests/helpers/seat.ts`(Task 4)에서 `skillSpent: false,`를 `skillUsed: 0,` + `noteText: "",`로 바꾼다. **한 곳이면 된다** — `domain`·`night-pipeline`·`roles-season1` 세 테스트 파일이 모두 이 헬퍼를 임포트한다.
+`tests/helpers/seat.ts`(Task 4)에서 `skillSpent: false,`를 `usesSpent: 0,` + `noteText: "",`로 바꾼다. **한 곳이면 된다** — `domain`·`night-pipeline`·`roles-season1` 세 테스트 파일이 모두 이 헬퍼를 임포트한다.
 
 `tests/domain.test.ts:586-597`의 1회성 능력 테스트를 고친다.
 
 ```ts
 	it("1회성 능력자는 쓴 그 밤까지만 차례에 남는다", () => {
-		// 자경단원이 쏘면 그 밤에는 usedSkill만 켜진다. skillUsed는 밤이 끝날 때
+		// 자경단원이 쏘면 그 밤에는 usedSkill만 켜진다. usesSpent는 밤이 끝날 때
 		// 파이프라인이 올린다 — 둘을 구분하지 않으면 쏜 사람이 그 밤의 분모에서 사라진다
-		const tonight = seat(1, Role.VIGILANTE, { usedSkill: true, skillUsed: 1 });
+		const tonight = seat(1, Role.VIGILANTE, { usedSkill: true, usesSpent: 1 });
 		assert.equal(hasNightTurn(tonight, 1), true);
 		assert.equal(nightActionBlockedReason(tonight, 1), "이미 대상을 선택했습니다.");
 
 		// 다음 밤에는 usedSkill이 초기화되고(resetRound) 차례 자체가 없어진다
-		const later = seat(1, Role.VIGILANTE, { skillUsed: 1 });
+		const later = seat(1, Role.VIGILANTE, { usesSpent: 1 });
 		assert.equal(hasNightTurn(later, 2), false);
 		assert.match(nightActionBlockedReason(later, 2)!, /다 썼습니다/);
 	});
 ```
 
-시민이 밤 차례를 갖게 되면서 깨질 수 있는 곳이 하나 더 있다. `tests/domain.test.ts`에서 `hasNightTurn(seat(_, Role.CITIZEN), _)`가 `false`임을 전제하는 단언이 있으면 **한 번 쓴 뒤**(`skillUsed: 1`)로 바꾼다. 없으면 그대로 둔다.
+시민이 밤 차례를 갖게 되면서 깨질 수 있는 곳이 하나 더 있다. `tests/domain.test.ts`에서 `hasNightTurn(seat(_, Role.CITIZEN), _)`가 `false`임을 전제하는 단언이 있으면 **한 번 쓴 뒤**(`usesSpent: 1`)로 바꾼다. 없으면 그대로 둔다.
 
 ```bash
 grep -n "Role.CITIZEN" tests/domain.test.ts tests/gameflow.test.ts
@@ -4556,7 +4556,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `tests/night-block.test.ts`
 
 **Interfaces:**
-- Consumes: Task 4의 `NightStep.BLOCK`(값 `20`, `STEP_ORDER`의 첫 항목)·`putIntent`·`resolveNightIntents`, Task 6의 `NightLedger`, Task 8의 `apply(actor, target, ledger): boolean`과 `Seat.skillUsed`.
+- Consumes: Task 4의 `NightStep.BLOCK`(값 `20`, `STEP_ORDER`의 첫 항목)·`putIntent`·`resolveNightIntents`, Task 6의 `NightLedger`, Task 8의 `apply(actor, target, ledger): boolean`과 `Seat.usesSpent`.
 - Produces:
   - `NightActionKind.BLOCK` — `src/domain/Roles.ts`
   - `RoleDef.noSelfTarget?: boolean` — `src/domain/Roles.ts`
@@ -4573,7 +4573,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
  * 차단(BLOCK)과 건달.
  *
  * 이 파일이 지키는 것은 한 문장이다 — "막힌 능력은 일어나지 않는다".
- * 능력마다 흔적이 남는 자리가 다르다(healed·attackedBy·reveals·skillUsed).
+ * 능력마다 흔적이 남는 자리가 다르다(healed·attackedBy·reveals·usesSpent).
  * 그래서 하나로 대표하지 않고 직업별로 한 번씩 확인한다. 대표 하나만
  * 두면 새 step이 생겼을 때 가드를 빠뜨린 것을 아무도 못 잡는다.
  */
@@ -4651,14 +4651,14 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		night(seats, [[1, 2], [2, 3]]);
 		assert.equal(seats[2].alive, true);
 		// 이 단언이 Task 8의 "apply가 참을 돌려줄 때만 센다"를 지킨다
-		assert.equal(seats[1].skillUsed, 0);
+		assert.equal(seats[1].usesSpent, 0);
 	});
 
 	it("막힌 기자의 특종은 나가지 않는다", () => {
 		const seats = [seat(1, Role.THUG), seat(2, Role.REPORTER), seat(3, Role.CITIZEN)];
 		night(seats, [[1, 2], [2, 3]]);
 		assert.equal(seats[2].scooped, false);
-		assert.equal(seats[1].skillUsed, 0);
+		assert.equal(seats[1].usesSpent, 0);
 	});
 
 	it("막힌 시민의 쪽지는 배달되지 않는다", () => {
@@ -4669,7 +4669,7 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		];
 		const result = night(seats, [[1, 2], [2, 3]]);
 		assert.equal(linesFor(result.reveals, 3), 0);
-		assert.equal(seats[1].skillUsed, 0);
+		assert.equal(seats[1].usesSpent, 0);
 	});
 });
 
@@ -4871,12 +4871,12 @@ Step 14에서 확인한다.
 			if (step !== NightStep.BLOCK && seat.blocked) continue;
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
-			if (apply(seat, target, ledger)) seat.skillUsed++;
+			if (apply(seat, target, ledger)) seat.usesSpent++;
 		}
 ```
 
 `continue`가 `targetOf`보다 **앞**이라는 것이 중요하다. 뒤로 가면 막힌 사람도
-`skillUsed`를 셀 위험이 생기고, 그러면 "막히면 안 닳는다"가 깨진다.
+`usesSpent`를 셀 위험이 생기고, 그러면 "막히면 안 닳는다"가 깨진다.
 
 `notifyInspected`(step 70에서 도는 별도 루프)는 건드리지 않는다. 그쪽이 보는
 것은 "조사당했는가"이고, 조사가 막혔으면 `ledger.inspected`에 애초에 아무것도

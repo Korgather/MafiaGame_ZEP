@@ -84,7 +84,7 @@ S1~S6은 **구조와 그 구조의 첫 소비자를 같은 슬라이스에 둔�
 - **롤백도 배포다.** "데이터 한 줄 되돌리기"가 싼 것은 코드 수정 비용이지
   운영 비용이 아니다 — 되돌리는 순간 그때 진행 중인 판도 같이 죽는다.
   각 슬라이스의 롤백 조건은 이 비용을 포함해서 읽어야 한다
-- 그 대신 S5의 `Seat.skillSpent` → `skillUsed` 같은 필드 타입 변경에
+- 그 대신 S5의 `Seat.skillSpent` → `usesSpent` 같은 필드 타입 변경에
   마이그레이션이 필요 없다. 배포 시점에 살아 있는 좌석이 없다
 
 **첫 배포 전에 확인할 것 하나.** 재배포가 정말로 방 상태를 초기화하는지,
@@ -294,15 +294,15 @@ export interface RuleSet {
 | S1 | `Room.ruleSet: RuleSet` | 신규. 방 생성 시 결정, 게임 중 불변 |
 | S3 | `Room.nightIntents: NightIntent[]` | 신규. `resetRound`에서 비운다 |
 | S3 | `Room.nightReveals: NightReveal[]` | 신규. 아침 배포 후 비운다 |
-| S5 | `Seat.skillSpent: boolean` → `Seat.skillUsed: number` | 누적 사용 횟수. 0에서 시작 |
+| S5 | `Seat.skillSpent: boolean` → `Seat.usesSpent: number` | 누적 사용 횟수. 0에서 시작 |
 | S6 | `Seat.blocked: boolean` | 신규. `resetRound`에서 초기화 |
 | S6 | `Seat.silenced: boolean` | **삭제** (D9) |
 
 `blocked`는 `silenced`와 달리 **당일 밤 안에서만** 의미가 있다. 협박은 다음 낮에
 작용해서 `resetRound`를 넘겨 살아야 했지만, 차단은 그 밤의 정산에만 쓰인다.
-따라서 `armored`·`skillUsed`처럼 남기는 필드가 아니라 매 라운드 초기화 대상이다.
+따라서 `armored`·`usesSpent`처럼 남기는 필드가 아니라 매 라운드 초기화 대상이다.
 
-`skillUsed`를 "남은 횟수"가 아니라 "쓴 횟수"로 정의한 이유: 남은 횟수로 하면
+`usesSpent`를 "남은 횟수"가 아니라 "쓴 횟수"로 정의한 이유: 남은 횟수로 하면
 무제한 능력에 `-1` 같은 센티넬이 필요해진다. 쓴 횟수면 `maxUses === undefined`가
 곧 무제한이다.
 
@@ -1196,10 +1196,10 @@ minPlayers: { BEAST: 6, SEER: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11 },
 | 파일 | 변경 |
 | --- | --- |
 | `src/domain/Roles.ts` | `maxUses?`, `oncePerGame` **삭제**, `NightActionKind.NOTE`, 시민 정의 |
-| `src/types/Game.types.ts` | `Seat.skillSpent: boolean` → `Seat.skillUsed: number` |
-| `src/entities/Room.ts` | `createSeat`·`assignRole`에서 `skillUsed = 0` |
+| `src/types/Game.types.ts` | `Seat.skillSpent: boolean` → `Seat.usesSpent: number` |
+| `src/entities/Room.ts` | `createSeat`·`assignRole`에서 `usesSpent = 0` |
 | `src/domain/NightResolution.ts` | `noTurnReason`이 `maxUses`를 본다 |
-| `src/domain/NightPipeline.ts` | `AFTER` step에 `NOTE`. 정산 시 `skillUsed++` |
+| `src/domain/NightPipeline.ts` | `AFTER` step에 `NOTE`. 정산 시 `usesSpent++` |
 | `src/services/Night.ts` | 쪽지 문구 선택 UI |
 | `src/domain/chat/QuickPhrases.ts` | 쪽지 문구셋 |
 
@@ -1221,7 +1221,7 @@ maxUses: 1,
 `noTurnReason`의 판정:
 
 ```ts
-if (def.maxUses !== undefined && seat.skillUsed >= def.maxUses && !seat.usedSkill) {
+if (def.maxUses !== undefined && seat.usesSpent >= def.maxUses && !seat.usedSkill) {
 	return "이 능력은 이미 사용했습니다.";
 }
 ```
@@ -1229,7 +1229,7 @@ if (def.maxUses !== undefined && seat.skillUsed >= def.maxUses && !seat.usedSkil
 `!seat.usedSkill` 조건은 기존 코드에 있던 것을 그대로 옮긴다 —
 이번 밤에 방금 쓴 사람이 `nightProgress`의 분모에서 빠지지 않게 하는 장치다.
 
-`skillUsed++`는 **정산 시점에만** 일어난다(D2). 클릭 시점에는 `usedSkill = true`만
+`usesSpent++`는 **정산 시점에만** 일어난다(D2). 클릭 시점에는 `usedSkill = true`만
 세운다.
 
 #### 익명 쪽지
@@ -1290,7 +1290,7 @@ const QUICK_NOTE: string[] = [
 #### 검증 기준
 
 - 신규 테스트: 자경단원·기자가 게임당 한 번만 쓴다 (기존 동작 회귀)
-- 신규 테스트: `skillUsed`가 정산 시점에 증가하고 클릭 시점에는 그대로다
+- 신규 테스트: `usesSpent`가 정산 시점에 증가하고 클릭 시점에는 그대로다
 - 신규 테스트: 시민이 판당 한 번 쪽지를 보내고, 두 번째 밤에 차례가 없다
 - 신규 테스트: 쪽지가 대상에게만 배포되고 발신자 정보가 없다
 - 신규 테스트: 죽은 시민이 쪽지를 보낼 수 없다
@@ -1382,7 +1382,7 @@ BLOCK: "BLOCK",
 for (const step of STEP_ORDER) {
   for (const seat of seats) {
     // step 20을 제외한 모든 step: actor가 blocked면 intent를 버린다
-    // 버려진 intent는 skillUsed를 증가시키지 않는다 (D2)
+    // 버려진 intent는 usesSpent를 증가시키지 않는다 (D2)
   }
 }
 ```
@@ -1528,7 +1528,7 @@ minPlayers: { BEAST: 6, SEER: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11, THUG: 8
 - 신규 테스트: 차단된 마피아의 공격이 사라지고 사망자가 0
 - 신규 테스트: 차단된 경찰의 조사 결과가 `reveals`에 없다
 - 신규 테스트: 차단된 스파이가 마피아팀에 합류하지 않는다
-- 신규 테스트: 차단된 자경단원·기자·시민의 `skillUsed`가 증가하지 않는다
+- 신규 테스트: 차단된 자경단원·기자·시민의 `usesSpent`가 증가하지 않는다
 - 신규 테스트: 차단된 정치인의 `voteWeight`가 그대로 남는다 (군인의 `armored`도
   같은 규칙이지만 배타라 실전 덱에는 함께 서지 않는다)
 - 신규 테스트: 사기꾼을 차단하면 사기꾼에게 통보가 가지 않는다
@@ -1570,7 +1570,7 @@ S6까지 적용된 최종 상태다.
 치유하거나 마피아 둘이 다른 사람을 공격하는 경우 모두 결과가 결정적이다.
 
 **step 20을 제외한 모든 step은 `actor.blocked`를 먼저 본다.** 차단된 intent는
-버려지고 `skillUsed`를 증가시키지 않는다. step 20 자신은 이 검사를 하지 않으므로
+버려지고 `usesSpent`를 증가시키지 않는다. step 20 자신은 이 검사를 하지 않으므로
 차단끼리는 서로에게 영향을 주지 않는다.
 
 첫 밤 무사(`skipAttacks`)에서 건너뛰는 것: step 40, step 50.
@@ -1589,7 +1589,7 @@ S6까지 적용된 최종 상태다.
 | 3 | 조사자가 그 밤에 사망 | `reveals` 배포됨 | 유령 채널로 정보가 흐를 수 있어야 한다 |
 | 4 | 조사 대상이 그 밤에 사망 | 답은 동일, 사망 언급 없음 | 사망자 명단보다 먼저 새면 안 된다 |
 | 5 | 게임이 그 밤에 종료 | `reveals` 배포됨 | `finishIfDecided` 경로도 배포를 거친다 |
-| 6 | 쪽지 대상이 그 밤에 사망 | 배포 안 함, `skillUsed`는 증가 | 죽은 사람에게 배달되지 않는다. 판당 1회를 잘못 쓴 것도 판단의 결과다 |
+| 6 | 쪽지 대상이 그 밤에 사망 | 배포 안 함, `usesSpent`도 그대로 | 19번과 같은 규칙이다 — 효과가 난 밤에만 닳는다. 소모만 시키려면 `apply`가 "배달 못 했지만 썼다"를 돌려줄 수 있어야 하는데, 반환값은 불리언 하나다. 예외 하나를 위해 그 계약을 늘리지 않는다 |
 | 7 | 스파이가 사기꾼을 조사 | 정확한 직업 노출 + 합류 | 위장의 범위는 진영 조사 한정 |
 | 8 | 사기꾼을 두 명이 조사 | 역알림 한 줄 | 조사자 수가 새면 경찰 수가 노출된다 |
 | 9 | 점쟁이가 사기꾼을 조사 | "없음" + 역알림 | 정의가 `nightAction !== null` |
@@ -1602,7 +1602,7 @@ S6까지 적용된 최종 상태다.
 | 16 | 재접속 중 밤 정산 | `showPhaseView`가 아침 상태를 그린다 | `reveals`는 접속 중인 좌석에만 배포. 미접속자는 놓친다 |
 | 17 | 건달이 능력 없는 사람을 차단 | 대상에게 통보 없음, 건달은 "아무것도 하지 않았습니다" | 통보하면 사기꾼이 건달의 존재를 확정한다 |
 | 18 | 건달이 능력자를 차단했으나 그 사람이 지목을 안 했다 | 17번과 동일 | 건달은 "능력 없음"과 "안 씀"을 구분하지 못한다 |
-| 19 | 차단당한 자경단원·기자·시민 | 능력 무효, `skillUsed` 유지 | D2. 차단 = 정산 스킵 = 차감 없음 |
+| 19 | 차단당한 자경단원·기자·시민 | 능력 무효, `usesSpent` 유지 | D2. 차단 = 정산 스킵 = 차감 없음 |
 | 20 | 건달이 정치인을 차단 | `voteWeight` 그대로 | 차단은 intent를 막고 상태는 못 막는다. 군인의 `armored`도 같은 규칙이지만 군인은 건달과 배타라 같은 덱에 없다 |
 | 21 | 첫 밤 무사 + 건달이 마피아를 차단 | 양쪽 통보 모두 정상 | 마피아의 intent는 첫 밤에도 접수된다(D4). 사망자가 0인 이유가 두 개가 되지만 아침 문장은 하나다 |
 | 22 | 건달이 그 밤에 사망 | 차단은 유효, 통보도 배포 | 3번과 같은 근거. `BLOCK`(20)이 `DEATH`(50)보다 앞이다 |
