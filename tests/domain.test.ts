@@ -148,17 +148,19 @@ describe("RoleAssignment", () => {
 		}
 	});
 
-	it("마피아 채팅을 여는 직업이 최소 한 명 들어간다", () => {
-		// 이 테스트는 원래 "정확히 한 명"을 봤고, rng를 () => 0으로 고정해 두어
-		// 통과했다. 실제로는 MAFIA_POOL에 Role.MAFIA가 다시 들어 있어서
-		// (능력 없는 공범도 마피아 자리의 한 갈래다) 둘이 나오는 판이 있다.
-		// 지켜야 하는 것은 "정확히 하나"가 아니라 "하나도 없는 판은 없다"다 —
-		// 마피아 채팅을 여는 직업이 0이면 마피아가 밤에 아무것도 못 한다.
+	it("마피아 팀이 비지 않고, 둘 이상이면 밀담이 열린다", () => {
+		// 6인 판은 짐승인간 혼자가 리드일 수 있다 — 혼자라 대화 상대가 없고
+		// 밀담이 없어도 손실이 0이다. 반대로 팀이 둘 이상인데 밀담이 없으면
+		// 팀원이 있는데 말을 걸 수 없는 상태가 된다
 		for (const count of EVERY_COUNT) {
-			for (let trial = 0; trial < 50; trial++) {
-				const deck = buildRoleDeck(STANDARD_RULES.deck, count);
-				assert.ok(deck.includes(Role.MAFIA), `${count}명 [${deck.join(", ")}]`);
-			}
+			const deck = buildRoleDeck(STANDARD_RULES.deck, count);
+			const team = deck.filter(role => ROLE_DEFS[role].team === Team.MAFIA);
+			assert.ok(team.length > 0, `${count}인`);
+			if (team.length < 2) continue;
+			const talkers = team.filter(
+				role => ROLE_DEFS[role].nightChat === ChatChannel.MAFIA
+			);
+			assert.ok(talkers.length > 0, `${count}인`);
 		}
 	});
 

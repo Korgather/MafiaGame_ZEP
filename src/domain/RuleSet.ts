@@ -120,13 +120,14 @@ export interface RuleSet {
  * 전에 인원만 줄어든다. 9인부터는 죽어도 토론할 사람이 충분히 남는다.
  *
  * mafiaPool의 두 후보는 둘 다 마피아 팀이지만 하는 일이 다르다 — 둘째
- * 마피아는 같이 죽일 사람을 고르고, 짐승인간은 혼자 따로 문다. 건달이
- * 시민으로 돌아간 뒤로 후보가 둘뿐이라 실제로 판마다 구성이 갈리는 인원은
- * 10인 하나다. 뽑는 개수(mafia - 1)와 밤 사망자 예산 필터를 겹치면 이렇다.
- *   4~6인  : 0개를 뽑는다 — 마피아 한 명으로 고정
- *   7~9인  : 짐승인간이 걸러져 남는 후보가 하나뿐이라 늘 마피아
- *   10인   : 후보 둘 중 하나를 뽑는다 — 구성이 갈리는 유일한 인원
- *   11~12인: 후보 2개에서 2개를 뽑으니 늘 마피아 + 짐승인간
+ * 마피아는 같이 죽일 사람을 고르고, 짐승인간은 혼자 따로 문다. 짐승인간이
+ * leadPool에도 들어가면서 첫 자리부터 갈리게 되었다. 인원 하한(minPlayers)과
+ * 밤 사망자 예산 필터를 겹치면 이렇다.
+ *   4~5인  : 짐승인간이 하한(6)에 걸려 마피아 한 명으로 고정
+ *   6인    : 팀이 하나뿐이라 리드가 마피아나 짐승인간 — 구성이 여기서 갈린다
+ *   7~9인  : 예산이 1이라 양쪽 자리 모두에서 짐승인간이 걸러져 늘 마피아 둘
+ *   10인   : 예산이 2로 풀려 리드도 둘째 자리도 갈린다
+ *   11~12인: 리드는 마피아 고정(아래), 남는 두 자리는 늘 마피아 + 짐승인간
  *
  * 그런데도 Role.MAFIA를 풀에 남겨 둔 이유는 둘째 줄에 있다. 짐승인간을
  * 감당하지 못하는 판에도 두 번째 자리는 채워야 하고, 아무 능력 없는 공범이
@@ -134,16 +135,18 @@ export interface RuleSet {
  *
  * 걸러지는 기준은 밤 사망자 예산(CITIZENS_PER_NIGHT_KILL)이다. 조건은
  * 인원수가 아니라 시민 자리 수(citizenSlots)이므로 마피아 수와 함께 움직인다 —
- * 정리하면 citizenSlots >= 8일 때만 짐승인간이 후보로 남는다. 인원표에서
- * 10인 판이 마피아 2명이 되면서 시민 자리가 8이 되었고, 짐승인간은 그
- * 10인부터 뽑힌다.
+ * 정리하면 citizenSlots >= 8일 때만 짐승인간이 둘째 자리 후보로 남는다.
+ * 리드 자리는 여기에 조건이 하나 더 붙는다: 단독 킬러가 리드면 남는 자리는
+ * 전부 밀담 후보(여기서는 Role.MAFIA 하나)에서 와야 하므로, 남는 자리가
+ * 둘인 11~12인에서는 짐승인간이 리드가 될 수 없다.
  *
- * 주의: mafiaPool의 길이(2)가 곧 최대 추첨 수(11~12인의 mafia - 1 = 2)라
- * 여유가 한 칸도 없다. mafiaTeamSize를 고쳐서 mafia >= 3인 인원이 짐승인간이
- * 걸러지는 구간(citizenSlots < 8)과 겹치면 draw가 요청보다 적게 돌려주고,
+ * 주의: mafiaPool의 길이(2)가 곧 최대 추첨 수(11~12인의 teamSize - 1 = 2)라
+ * 여유가 한 칸도 없다. mafiaTeamSize를 고쳐서 teamSize >= 3인 인원이 짐승인간이
+ * 걸러지는 구간(citizenSlots < 8)과 겹치면 뽑기가 요청보다 적게 돌려주고,
  * 덱은 마피아 한 명이 모자란 채로 조용히 나간다. 그때는 인원표만이 아니라 이
- * 풀에도 후보를 더해야 한다 (tests/deck.test.ts "마피아 진영 인원이 표와
- * 정확히 같다"가 4~12인을 훑으므로 그 자리에서 걸린다).
+ * 풀에도 후보를 더해야 한다 (tests/deck.test.ts의 "마피아 진영 인원이 표와
+ * 정확히 같다"와 "리드를 무엇으로 뽑든 마피아 진영 인원이 표와 같다"가 4~12인을
+ * 훑으므로 그 자리에서 걸린다 — 뒤쪽은 시드를 여럿 밟아 리드가 갈리는 인원까지 본다).
  */
 export const STANDARD_RULES: RuleSet = {
 	id: "standard",
@@ -159,7 +162,7 @@ export const STANDARD_RULES: RuleSet = {
 	deck: {
 		mafiaTeamSize: [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3],
 		//              0  1  2  3  4  5  6  7  8  9  10 11 12
-		leadPool: [Role.MAFIA],
+		leadPool: [Role.MAFIA, Role.BEAST],
 		mafiaPool: [Role.MAFIA, Role.BEAST],
 		citizenRequired: [Role.DOCTOR, Role.POLICE],
 		citizenPool: [
@@ -167,7 +170,10 @@ export const STANDARD_RULES: RuleSet = {
 			Role.SOLDIER, Role.REPORTER, Role.VIGILANTE,
 		],
 		exclusiveGroups: [],
-		minPlayers: {},
+		// BEAST: 4~5인은 시민이 3~4명뿐이라 은폐자가 도는 시간이 없다
+		// SHAMAN: 8인 구성부터 들어간다
+		// REPORTER: 조기 특종이 게임을 끝낸다
+		minPlayers: { BEAST: 6, SHAMAN: 8, REPORTER: 11 },
 	},
 	firstNightPeacefulUpTo: 8,
 	minPlayers: 4,

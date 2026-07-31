@@ -64,6 +64,62 @@ function draw(pool: readonly Role[], count: number, rng: () => number): Role[] {
 	return shuffle(pool.slice(), rng).slice(0, count);
 }
 
+/** spec.minPlayers를 넘지 못하는 직업을 뺀다 */
+function allowedAt(
+	pool: readonly Role[],
+	playerCount: number,
+	floors: Partial<Record<Role, number>>
+): Role[] {
+	return pool.filter(role => {
+		const floor = floors[role];
+		return floor === undefined || playerCount >= floor;
+	});
+}
+
+/**
+ * 이미 뽑힌 직업과 같은 배타 그룹에 있는 후보를 뺀다.
+ *
+ * 그룹은 진영을 가로지를 수 있다. 마피아 자리를 먼저 확정하고 그 결과를
+ * 시민 필터의 입력으로 넘기면 방향이 한쪽이라 순환이 생기지 않는다.
+ */
+function withoutRivals(
+	pool: readonly Role[],
+	taken: readonly Role[],
+	groups: readonly (readonly Role[])[]
+): Role[] {
+	const banned: Role[] = [];
+	for (const group of groups) {
+		let hit = false;
+		for (const role of group) if (taken.indexOf(role) >= 0) hit = true;
+		if (!hit) continue;
+		for (const role of group) if (taken.indexOf(role) < 0) banned.push(role);
+	}
+	return pool.filter(role => banned.indexOf(role) < 0);
+}
+
+/**
+ * 풀에서 count개를 뽑되, 하나 뽑을 때마다 그 직업의 그룹 동료를 남은 풀에서 뺀다.
+ *
+ * 배타는 뽑는 순서에 의존한다. 먼저 섞고 앞에서부터 채우면 그룹 안에서
+ * 어느 쪽이 남는지가 매 판 균등해진다 — 배열 순서대로 거르면 항상 앞의
+ * 직업만 나온다.
+ */
+function drawExclusive(
+	pool: readonly Role[],
+	count: number,
+	groups: readonly (readonly Role[])[],
+	rng: () => number
+): Role[] {
+	if (count <= 0) return [];
+	let remaining = shuffle(pool.slice(), rng);
+	const picked: Role[] = [];
+	while (picked.length < count && remaining.length > 0) {
+		picked.push(remaining[0]);
+		remaining = withoutRivals(remaining.slice(1), picked, groups);
+	}
+	return picked;
+}
+
 /**
  * 인원수에 맞는 직업 목록을 섞어서 돌려준다.
  *
@@ -82,20 +138,56 @@ export function buildRoleDeck(
 	playerCount: number,
 	rng: () => number = Math.random
 ): Role[] {
-	const mafia = mafiaCount(spec, playerCount);
-	const citizenSlots = playerCount - mafia;
-	// 첫 자리를 무작위로 고르는 것은 여기가 아니다. 지금은 두 모드 모두
-	// 후보가 하나뿐이라 첫 칸을 그대로 쓴다.
-	const roles: Role[] = [spec.leadPool.length > 0 ? spec.leadPool[0] : Role.MAFIA];
+	const teamSize = mafiaCount(spec, playerCount);
+	const citizenSlots = playerCount - teamSize;
+	const budget = nightKillBudget(citizenSlots);
 
-	// 마피아 리더가 이미 밤 사망자 하나를 쓴다. 예산이 남지 않으면 두 번째 자리는
-	// 따로 죽이지 않는 직업 중에서만 뽑는다 — 인원 상한이 올라가면 이 필터가
-	// 저절로 풀리므로, 직업을 지우거나 인원별 예외를 적어둘 필요가 없다.
-	const affordsLoneKiller = nightKillBudget(citizenSlots) > 1;
-	const mafiaPool = affordsLoneKiller
+	/*
+	 * 리드 선정.
+	 *
+	 * 단독 킬러가 리드가 되면 남은 자리는 전부 밀담 쪽에서 와야 한다 — 예산이
+	 * 하나뿐이라서다. 그런데 밀담 후보가 남은 자리보다 적으면 그 자리는 채워지지
+	 * 않고 아래 while이 시민으로 메운다. 덱 길이는 맞으므로 인원표가 깨진 것을
+	 * 아무도 모른다. 그래서 예산뿐 아니라 "남은 자리를 채울 수 있는가"까지 본다.
+	 *
+	 * 조건을 인원이 아니라 예산과 후보 수로 적은 이유: 정원이나 인원표가 바뀌어도
+	 * 따라온다. "7~9인"이라고 적으면 표가 바뀔 때마다 여기를 다시 고쳐야 한다.
+	 */
+	const leadPool = allowedAt(spec.leadPool, playerCount, spec.minPlayers);
+	const talkers = allowedAt(
+		spec.mafiaPool.filter(role => !killsIndependently(role)),
+		playerCount,
+		spec.minPlayers
+	);
+	const loneLeadFits = budget > 1 && talkers.length >= teamSize - 1;
+	const leadCandidates =
+		teamSize >= 2 && !loneLeadFits
+			? leadPool.filter(role => !killsIndependently(role))
+			: leadPool;
+	// 후보가 전부 걸러지면 마피아로 대체한다. 마피아 없는 판은 성립하지 않는다
+	const lead = leadCandidates.length > 0 ? shuffle(leadCandidates, rng)[0] : Role.MAFIA;
+	const roles: Role[] = [lead];
+
+	/*
+	 * 나머지 마피아 자리.
+	 *
+	 * 리드가 이미 밤 사망자 하나를 쓴다 — 밀담이든 단독이든 마찬가지다.
+	 * 예산이 남지 않으면 따로 죽이지 않는 직업 중에서만 뽑는다.
+	 *
+	 * 리드가 이미 단독 킬러면 예산이 남아도 하나 더는 안 된다. 예산 2는
+	 * "밀담 하나 + 단독 하나"를 뜻하지 "단독 둘"이 아니다.
+	 */
+	const budgeted = budget > 1 && !killsIndependently(lead)
 		? spec.mafiaPool
 		: spec.mafiaPool.filter(role => !killsIndependently(role));
-	for (const role of draw(mafiaPool, mafia - 1, rng)) roles.push(role);
+	const mafiaPool = withoutRivals(
+		allowedAt(budgeted, playerCount, spec.minPlayers),
+		roles,
+		spec.exclusiveGroups
+	);
+	for (const role of drawExclusive(mafiaPool, teamSize - 1, spec.exclusiveGroups, rng)) {
+		roles.push(role);
+	}
 
 	/*
 	 * 시민 자리는 세 갈래로 나뉜다 — 정보(의사·경찰) / 판마다 뽑는 능력자 /
@@ -126,13 +218,23 @@ export function buildRoleDeck(
 	// floor가 아니라 round인 이유: 자리가 둘 남는 4명 판은 floor(1)=1로 같지만,
 	// 예전 계산(자리 하나)에서는 floor(0.5)=0이라 능력자가 아예 못 들어왔다.
 	// (7명도 floor(1.5)=1이라 5명과 구성이 같았다 — 절벽이 두 군데였다)
+	// 인원 제한과 배타를 먼저 걸고, 그 결과의 길이를 추첨 수의 상한으로 쓴다.
+	// 상한을 걸지 않으면 draw가 요청한 수를 못 채우고 부족분이 아래
+	// while에서 평민으로 메워진다 — 덱 길이는 맞으므로 실패가 조용하다
+	const citizenPool = withoutRivals(
+		allowedAt(spec.citizenPool, playerCount, spec.minPlayers),
+		roles,
+		spec.exclusiveGroups
+	);
 	const plainSlots = citizenSlots - requiredSlots;
 	const special = Math.min(
 		Math.max(Math.round(plainSlots * SPECIAL_CITIZEN_RATIO), MIN_SPECIAL_CITIZENS),
 		Math.max(plainSlots - MIN_PLAIN_CITIZENS, 0),
-		spec.citizenPool.length,
+		citizenPool.length,
 	);
-	for (const role of draw(spec.citizenPool, special, rng)) roles.push(role);
+	for (const role of drawExclusive(citizenPool, special, spec.exclusiveGroups, rng)) {
+		roles.push(role);
+	}
 
 	while (roles.length < playerCount) roles.push(Role.CITIZEN);
 	return shuffle(roles, rng);
