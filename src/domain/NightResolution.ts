@@ -151,9 +151,10 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 		}
 
 		case NightActionKind.BLOCK:
-			// 막았는지 아닌지는 알려주지 않는다. "막았습니다"가 뜨면 그 문구가
-			// 곧 대상이 밤 능력을 가진 직업이라는 답이 되어, 조사 능력이
-			// 하나 더 생기는 셈이 된다. 건달이 아는 것은 자기가 고른 사람뿐이다
+			// 지목한 순간에는 막았는지 아닌지를 답할 수 없다. 대상이 아직
+			// 아무것도 고르지 않았을 수 있고, 그 밤이 어떻게 정산될지는
+			// 파이프라인이 돌아야 정해진다. 답은 아침에 한 번만 간다 —
+			// NightPipeline의 notifyBlocked다
 			return {
 				consumed: true,
 				confirmed: true,

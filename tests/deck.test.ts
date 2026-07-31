@@ -80,12 +80,50 @@ describe("마피아 진영 인원표", () => {
 });
 
 describe("덱 구성", () => {
-	it("건달은 어느 인원에서도 나오지 않는다", () => {
-		// 시즌 0에서 건달은 시민이 되었고, 마피아 풀에서 빠졌다.
-		// 시민 풀에는 아직 없다 — 다시 들어오는 것은 건달 재설계 슬라이스다
+	it("건달은 8인 미만 덱에 나오지 않는다", () => {
+		// 킬러가 1명인 구간에서 건달이 그 1명을 맞추면 밤이 통째로 사라진다.
+		// 6인이면 자기를 뺀 5명 중 하나라 20%이고, 의사까지 합쳐 사망자 0인
+		// 밤이 30%가 된다(의사만이면 17%). 8인은 23%로 내려간다 —
+		// 근거는 RuleSet.ts의 THUG 하한 주석에 적어 두었다
+		for (let count = MIN_PLAYERS; count < 8; count++) {
+			for (let seed = 1; seed <= 100; seed++) {
+				assert.ok(
+					!buildRoleDeck(DECK, count, rngFrom(seed)).includes(Role.THUG),
+					`${count}인 seed ${seed}`
+				);
+			}
+		}
+	});
+
+	it("건달은 8인 이상에서 실제로 나온다", () => {
+		let seen = 0;
+		for (let seed = 1; seed <= 200; seed++) {
+			if (buildRoleDeck(DECK, 8, rngFrom(seed)).includes(Role.THUG)) seen++;
+		}
+		assert.ok(seen > 0, "200판을 돌려도 건달이 한 번도 안 나왔다");
+	});
+
+	it("건달과 군인은 같은 덱에 함께 서지 않는다", () => {
 		for (const count of EVERY_COUNT) {
-			for (let trial = 0; trial < 50; trial++) {
-				assert.ok(!buildRoleDeck(STANDARD_RULES.deck, count).includes(Role.THUG), `${count}인`);
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(DECK, count, rngFrom(seed));
+				assert.ok(
+					!(deck.includes(Role.THUG) && deck.includes(Role.SOLDIER)),
+					`${count}인 seed ${seed}`
+				);
+			}
+		}
+	});
+
+	it("밤 킬을 무효화할 수 있는 직업은 최대 둘이다", () => {
+		// 의사는 citizenRequired라 5인 이상에서 항상 나온다. 그 위에
+		// 군인 또는 건달 하나만 허용된다는 것이 배타 규칙의 목적이다
+		const blockers = [Role.DOCTOR, Role.SOLDIER, Role.THUG];
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(DECK, count, rngFrom(seed));
+				const kinds = blockers.filter(role => deck.includes(role)).length;
+				assert.ok(kinds <= 2, `${count}인 seed ${seed}: ${kinds}종`);
 			}
 		}
 	});

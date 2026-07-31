@@ -46,7 +46,7 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 	if (!player) return;
 
 	// 처형당한 시민 진영에게는 위로 경험치. 전적은 건드리지 않는다.
-	// role !== MAFIA로 판정하면 건달·짐승인간이 처형당할 때마다 위로금을 받는다.
+	// role !== MAFIA로 판정하면 짐승인간·사기꾼이 처형당할 때마다 위로금을 받는다.
 	if (cause === DeathCause.EXECUTION && seat.team !== Team.MAFIA) {
 		awardExp(player, CONSOLATION_EXP);
 	}
@@ -63,7 +63,7 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 		return;
 	}
 	// 시민이 알아야 하는 것은 직업이 아니라 "마피아를 줄였는가"다.
-	// 건달·짐승인간을 처형하고도 "마피아가 아니었다"고 하면 시민이 오판한다.
+	// 짐승인간·사기꾼을 처형하고도 "마피아가 아니었다"고 하면 시민이 오판한다.
 	Chat.announce(
 		room,
 		seat.team === Team.MAFIA

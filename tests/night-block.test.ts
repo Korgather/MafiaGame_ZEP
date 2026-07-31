@@ -33,6 +33,14 @@ function linesFor(reveals: readonly NightReveal[], index: number): number {
 	return count;
 }
 
+/** 이 좌석에게 가는 첫 줄. 없으면 빈 문자열 */
+function lineFor(reveals: readonly NightReveal[], index: number): string {
+	for (const reveal of reveals) {
+		if (reveal.seat === index) return reveal.line;
+	}
+	return "";
+}
+
 describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 	it("막힌 마피아는 아무도 죽이지 못한다", () => {
 		const seats = [seat(1, Role.THUG), seat(2, Role.MAFIA), seat(3, Role.CITIZEN)];
@@ -61,7 +69,11 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		// 한쪽만 막고 다른 쪽이 새면 그 한 줄이 곧 "경찰이 살아 있다"는 정보다
 		const seats = [seat(1, Role.THUG), seat(2, Role.POLICE), seat(3, Role.CON_ARTIST)];
 		const result = night(seats, [[1, 2], [2, 3]]);
-		assert.equal(linesFor(result.reveals, 2), 0);
+		// 경찰이 받는 것은 방해 통보 한 줄뿐이다. 조사 답은 그 안에 없다
+		assert.equal(linesFor(result.reveals, 2), 1);
+		const line = lineFor(result.reveals, 2);
+		assert.ok(line.length > 0, "막힌 경찰에게 아무 줄도 오지 않았습니다");
+		assert.doesNotMatch(line, /마피아입니다|마피아가 아닙니다/);
 		assert.equal(linesFor(result.reveals, 3), 0);
 	});
 
@@ -72,7 +84,11 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
 		const result = night(seats, [[1, 2], [2, 3]]);
 		assert.equal(result.defected.length, 0);
 		assert.equal(seats[1].team, Team.CITIZEN);
-		assert.equal(linesFor(result.reveals, 2), 0);
+		// 방해 통보 한 줄만 온다. 직업을 읽은 답도 합류 안내도 없다
+		assert.equal(linesFor(result.reveals, 2), 1);
+		const line = lineFor(result.reveals, 2);
+		assert.ok(line.length > 0, "막힌 스파이에게 아무 줄도 오지 않았습니다");
+		assert.doesNotMatch(line, /직업은|합류/);
 	});
 
 	it("막힌 자경단원은 총알을 잃지 않는다", () => {
@@ -112,7 +128,7 @@ describe("차단 — 닿지 않는 것", () => {
 		// alive와 armored를 함께 본다: 살아남았고 방탄은 소모됐다 —
 		// 즉 "방탄이 제 일을 했다"이다. armored만 보면 "처음부터 없었다"와
 		// 구분되지 않는다.
-		// (실전 덱에서는 Task 11의 배타 규칙 때문에 군인과 건달이 함께
+		// (실전 덱에서는 RuleSet.ts의 배타 그룹 때문에 군인과 건달이 함께
 		//  서지 않는다. 그래도 규칙과 코드는 따로 지킨다)
 		const seats = [seat(1, Role.THUG), seat(2, Role.SOLDIER), seat(3, Role.MAFIA)];
 		night(seats, [[1, 2], [3, 2]]);
@@ -204,7 +220,12 @@ describe("차단 — 닿지 않는 것", () => {
 		const seats = [seat(1, Role.THUG), seat(2, Role.POLICE), seat(3, Role.MAFIA)];
 		const result = night(seats, [[1, 2], [2, 3]], true);
 		assert.equal(seats[1].blocked, true);
-		assert.equal(linesFor(result.reveals, 2), 0);
+		// 통보도 첫 밤에 그대로 간다. 건달의 하한(8인)과 첫 밤 무사(8인 이하)가
+		// 겹치므로 8인 판에서는 이쪽이 오히려 흔한 경우다
+		assert.equal(linesFor(result.reveals, 2), 1);
+		const line = lineFor(result.reveals, 2);
+		assert.ok(line.length > 0, "첫 밤에 막힌 경찰에게 아무 줄도 오지 않았습니다");
+		assert.doesNotMatch(line, /마피아입니다|마피아가 아닙니다/);
 	});
 });
 
@@ -225,5 +246,145 @@ describe("건달 — 자기 자신은 고를 수 없다", () => {
 		// Task 1의 테스트와 겹치지만, 겹치는 값이 아니라 겹치는 위험을 본다
 		assert.equal(ROLE_DEFS[Role.THUG].team, Team.CITIZEN);
 		assert.equal(ROLE_DEFS[Role.THUG].appearsAsMafia, undefined);
+	});
+});
+
+describe("차단 통보", () => {
+	it("막은 건달은 상대가 움직였다는 것을 안다", () => {
+		const seats = [seat(1, Role.THUG), seat(2, Role.MAFIA), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[1, 2], [2, 3]]);
+		assert.equal(linesFor(result.reveals, 1), 1);
+		assert.match(lineFor(result.reveals, 1), /2번은 어젯밤 능력을 썼고/);
+	});
+
+	it("움직이지 않은 사람을 막으면 그렇게 알려준다", () => {
+		// 능력이 없는 사람과 있는데 안 쓴 사람을 합친 문안이다. 구분되면
+		// 점쟁이의 정보와 완전히 겹친다
+		const seats = [seat(1, Role.THUG), seat(2, Role.MAFIA), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[1, 2]]);
+		assert.match(lineFor(result.reveals, 1), /2번은 어젯밤 아무것도 하지 않았습니다/);
+	});
+
+	it("막힌 사람은 막혔다는 것만 안다", () => {
+		const seats = [seat(1, Role.THUG), seat(2, Role.MAFIA), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[1, 2], [2, 3]]);
+		const line = lineFor(result.reveals, 2);
+		assert.match(line, /누군가 당신을 방해해/);
+		// 건달의 번호가 들어가면 다음 낮에 건달이 처형된다
+		assert.equal(line.indexOf("1번"), -1);
+	});
+
+	it("사기꾼을 막으면 사기꾼에게는 아무것도 가지 않는다", () => {
+		// "능력이 없는데 방해받았다"는 곧 건달의 존재 확정이다.
+		// 손해가 없었으므로 알릴 것도 없다
+		const seats = [seat(1, Role.THUG), seat(2, Role.CON_ARTIST), seat(3, Role.MAFIA)];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(linesFor(result.reveals, 2), 0);
+		assert.match(lineFor(result.reveals, 1), /아무것도 하지 않았습니다/);
+	});
+
+	it("밤에 죽은 사람에게는 통보가 가지 않는다", () => {
+		// 유령에게 가는 줄이다. 건달 쪽 통보는 그대로 간다 — 막은 것은 사실이다.
+		//
+		// 오늘의 시체를 seat.alive로는 알 수 없다. 파이프라인은 판정만 하고
+		// 좌석을 실제로 내리는 것은 밖의 kill()이라 DEATH를 지난 뒤에도 alive가
+		// 참이다 — 그래서 casualties로 죽음을 확인하고, 구현도 ledger.killed를 본다
+		const seats = [
+			seat(1, Role.THUG),
+			seat(2, Role.POLICE),
+			seat(3, Role.MAFIA),
+			seat(4, Role.CITIZEN),
+		];
+		const result = night(seats, [[1, 2], [2, 4], [3, 2]]);
+		assert.equal(result.casualties.length, 1);
+		assert.equal(result.casualties[0].seat.index, 2);
+		assert.equal(result.casualties[0].outcome, NightOutcome.KILLED);
+		assert.equal(linesFor(result.reveals, 2), 0);
+		assert.equal(linesFor(result.reveals, 1), 1);
+	});
+
+	it("막은 건달이 그 밤에 죽어도 통보는 간다", () => {
+		// 건달의 죽음은 BLOCK(20)보다 뒤인 DEATH(50)에서 확정된다. 이미 성립한
+		// 차단을 되돌리지 않고, 통보도 삼키지 않는다 — 유령 채널로 흘려보내야
+		// 남은 시민이 "어젯밤 3번이 움직였다"를 쓸 수 있다
+		const seats = [
+			seat(1, Role.THUG),
+			seat(2, Role.MAFIA),
+			seat(3, Role.POLICE),
+			seat(4, Role.CITIZEN),
+		];
+		const result = night(seats, [[1, 3], [2, 1], [3, 4]]);
+		assert.equal(result.casualties.length, 1);
+		assert.equal(result.casualties[0].seat.index, 1);
+		assert.match(lineFor(result.reveals, 1), /3번은 어젯밤 능력을 썼고/);
+		// 막힌 경찰은 조사 답 대신 방해 통보 한 줄만 받는다
+		assert.equal(linesFor(result.reveals, 3), 1);
+		assert.match(lineFor(result.reveals, 3), /방해/);
+	});
+
+	it("건달이 둘이면 각자 자기 대상만 안다", () => {
+		const seats = [
+			seat(1, Role.THUG),
+			seat(2, Role.THUG),
+			seat(3, Role.MAFIA),
+			seat(4, Role.POLICE),
+			seat(5, Role.CITIZEN),
+		];
+		const result = night(seats, [[1, 3], [2, 4], [3, 5], [4, 5]]);
+		assert.match(lineFor(result.reveals, 1), /3번/);
+		assert.match(lineFor(result.reveals, 2), /4번/);
+		assert.equal(linesFor(result.reveals, 1), 1);
+		assert.equal(linesFor(result.reveals, 2), 1);
+	});
+
+	it("둘이 같은 사람을 막아도 당사자에게는 한 줄만 간다", () => {
+		// 줄 수가 곧 건달의 수가 되면 안 된다
+		const seats = [
+			seat(1, Role.THUG),
+			seat(2, Role.THUG),
+			seat(3, Role.MAFIA),
+			seat(4, Role.CITIZEN),
+		];
+		const result = night(seats, [[1, 3], [2, 3], [3, 4]]);
+		assert.equal(linesFor(result.reveals, 3), 1);
+		// 반대로 건달 둘은 각자 받는다. 하나만 받으면 나머지 하나는
+		// 자기 능력이 작동했는지조차 모른다
+		assert.equal(linesFor(result.reveals, 1), 1);
+		assert.equal(linesFor(result.reveals, 2), 1);
+	});
+
+	it("어젯밤 이전에 이미 죽어 있던 사람에게는 통보가 가지 않는다", () => {
+		// 위의 "밤에 죽은 사람"과는 다른 좌석 상태다. 저쪽은 alive가 아직 참이고
+		// ledger.killed로만 알 수 있는 오늘의 시체이고, 이쪽은 밤이 시작될 때부터
+		// alive가 거짓인 어제까지의 시체다. 그래서 가드가 둘 다 필요하다.
+		//
+		// 아래로 흘려보내도 걸러 주는 곳이 없다 — deliverNightReveals는 죽은
+		// 사람에게도 그대로 전한다(그 밤에 죽은 경찰의 마지막 조사를 살리려는
+		// 설계다). 서비스 계층이 죽은 좌석을 지목 대상에서 빼 주기는 하지만
+		// 이 파이프라인은 그 바깥 가드에 기대지 않는다
+		const seats = [
+			seat(1, Role.THUG),
+			seat(2, Role.POLICE, { alive: false }),
+			seat(3, Role.CITIZEN),
+		];
+		const result = night(seats, [[1, 2], [2, 3]]);
+		assert.equal(linesFor(result.reveals, 2), 0);
+		// 죽은 경찰의 조사도 일어나지 않는다. 산 사람만 능력을 쓴다
+		assert.equal(linesFor(result.reveals, 3), 0);
+	});
+
+	it("건달이 뒤 좌석이어도 양쪽 통보가 그대로 간다", () => {
+		// 위 아홉은 전부 건달이 1번 좌석이다. 통보 루프가 좌석 순서를 도는
+		// 이상 그 배치만으로는 규칙이 순서에 기대고 있는지 알 수 없다 —
+		// Task 10에서 살아남은 변이의 원인이 정확히 그것이었다.
+		// 여기서는 막는 쪽이 배열 끝에 있고 막히는 쪽이 앞에 있다
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.POLICE), seat(3, Role.THUG)];
+		const result = night(seats, [[3, 1], [1, 2], [2, 1]]);
+		assert.equal(seats[0].blocked, true);
+		assert.equal(result.casualties.length, 0);
+		assert.equal(linesFor(result.reveals, 3), 1);
+		assert.match(lineFor(result.reveals, 3), /1번은 어젯밤 능력을 썼고/);
+		assert.equal(linesFor(result.reveals, 1), 1);
+		assert.match(lineFor(result.reveals, 1), /누군가 당신을 방해해/);
 	});
 });

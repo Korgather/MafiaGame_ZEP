@@ -202,9 +202,16 @@ export const STANDARD_RULES: RuleSet = {
 		citizenPool: [
 			Role.POLITICIAN, Role.SHAMAN, Role.SPY,
 			Role.SOLDIER, Role.REPORTER, Role.VIGILANTE, Role.SEER,
+			Role.THUG,
 		],
-		// 둘 다 경찰 조사를 흐린다. 한 판에 겹치면 경찰이 얻는 정보가 사실상 없다
-		exclusiveGroups: [[Role.BEAST, Role.CON_ARTIST]],
+		exclusiveGroups: [
+			// 둘 다 경찰 조사를 흐린다. 한 판에 겹치면 경찰이 얻는 정보가 사실상 없다
+			[Role.BEAST, Role.CON_ARTIST],
+			// 밤 킬을 무효로 만드는 시민을 최대 둘로 묶는다. 의사는 5인 이상이면
+			// citizenRequired라 반드시 들어가므로(4인만 절반), 그 위에 하나만
+			// 허용하는 것이 이 줄이 하는 일이다
+			[Role.SOLDIER, Role.THUG],
+		],
 		// BEAST: 4~5인은 시민이 3~4명뿐이라 은폐자가 도는 시간이 없다
 		// CON_ARTIST: 마피아 자리가 하나뿐인 판(4~6인)에 들어오면 아무도 죽이지
 		//   않는 마피아 진영이 되어 게임이 끝나지 않는다. 다만 오늘 그 일을 막는
@@ -235,7 +242,23 @@ export const STANDARD_RULES: RuleSet = {
 		//   이상에서는 인원마다 점쟁이가 나오는 판이 있다」가 하나씩 잡는다
 		// SHAMAN: 8인 구성부터 들어간다
 		// REPORTER: 조기 특종이 게임을 끝낸다
-		minPlayers: { BEAST: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11, SEER: 6 },
+		// THUG: 밤 킬을 없던 일로 만드는 두 번째 시민이라, 킬러가 하나뿐인
+		//   구간에 들어오면 아무도 안 죽는 밤이 급격히 늘어난다. 실제
+		//   NightPipeline에 마피아 대표·의사·건달을 태워 인원마다 40만 판을
+		//   돌려 사망자 0인 밤을 세면 6인은 16.7% -> 29.9%, 8인은
+		//   12.5% -> 23.2%다. 곱으로 어림하면 안 된다 — 두 확률의 단순 곱은
+		//   6인 36.0%, 8인 26.5%인데, 건달이 의사를 막아 밤을 되살리는 경우를
+		//   빼먹어서 6%p를 부풀린다. 실측은 1/(N-1) + (N-3)/(N-1)·1/N과
+		//   소수점 첫째 자리까지 같다.
+		//   이 값은 위아래로 다 구속한다 — 노는 방향이 없다. 4~12인을
+		//   200시드씩 돌려 비교하면 지울 때 4~7인 797판이, 6으로 낮추면
+		//   6·7인 400판이, 7이면 7인 200판이 바뀌며 그 인원들에 건달이
+		//   44~54판씩 들어온다. 9로 올리면 8인 200판이 전부 바뀌고 그 인원의
+		//   건달이 55판 -> 0판으로 사라진다. 8인 이상은 어느 방향이든 카드
+		//   한 장까지 그대로다. 아래쪽은 tests/deck.test.ts의 「건달은 8인
+		//   미만 덱에 나오지 않는다」가, 위쪽은 「건달은 8인 이상에서 실제로
+		//   나온다」가 잡는다
+		minPlayers: { BEAST: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11, SEER: 6, THUG: 8 },
 	},
 	firstNightPeacefulUpTo: 8,
 	minPlayers: 4,

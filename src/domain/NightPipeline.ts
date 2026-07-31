@@ -166,6 +166,14 @@ interface NightLedger {
 	/** 조사당한 좌석. 같은 좌석이 여러 번 들어올 수 있다 */
 	readonly inspected: number[];
 	/**
+	 * 누가 누구를 막았는가. 아침 통보가 읽는다.
+	 *
+	 * seat.blocked가 이미 있는데 따로 두는 이유는 **누가 막았는지**가 좌석
+	 * 상태에 없기 때문이다. 그리고 건달 둘이 같은 사람을 막으면 항목이 둘
+	 * 쌓여야 한다 — 불리언 하나로는 둘 다에게 통보할 수 없다.
+	 */
+	readonly blocks: NightIntent[];
+	/**
 	 * 이 밤에 죽은 좌석. DEATH step이 채운다.
 	 *
 	 * seat.alive로는 알 수 없다 — 좌석을 실제로 내리는 것은 파이프라인이 아니라
@@ -196,6 +204,58 @@ function notifyInspected(
 		ledger.reveals.push({
 			seat: seat.index,
 			line: "🎭 어젯밤 누군가 당신을 조사했습니다.",
+		});
+	}
+}
+
+/**
+ * 차단을 양쪽에 알린다.
+ *
+ * 막은 쪽은 blocks를 그대로 돈다 — 같은 사람을 둘이 막았으면 둘 다 알아야
+ * 하고, 항목이 곧 한 명의 건달이다. 생존 검사가 없는 것도 의도다: 그 밤에
+ * 죽은 건달에게도 보낸다. 차단은 DEATH(50)보다 앞인 BLOCK(20)에서 이미
+ * 성립했고, 유령 채널로 흘러가야 남은 시민이 그 정보를 쓸 수 있다.
+ *
+ * 막힌 쪽은 좌석 순서로 돈다. blocks를 돌면 같은 사람에게 같은 줄이 두 번
+ * 가고, 그 줄 수가 곧 살아 있는 건달의 수를 알려준다.
+ *
+ * 알려진 부정확성: acted가 답하는 것은 "지목했는가"이지 "능력이 실제로
+ * 발동했는가"가 아니다. 문구를 안 고른 시민(NOTE)을 막으면 건달은 "능력을
+ * 썼습니다"를 받는데 그 시민은 아무것도 보내지 않았다. 통보의 정확도 문제일
+ * 뿐 정보 누출은 아니라서 그대로 둔다 — 고치려면 apply의 반환값을 지목마다
+ * 되짚어야 하는데, 그 값은 차단으로 능력이 걸러진 뒤의 값이라(막힌 사람은
+ * apply까지 가지도 않는다) 여기서는 언제나 거짓이 된다.
+ */
+function notifyBlocked(
+	seats: readonly Seat[],
+	intents: readonly NightIntent[],
+	ledger: NightLedger
+): void {
+	for (const block of ledger.blocks) {
+		const acted = intentTarget(intents, block.target) !== 0;
+		ledger.reveals.push({
+			seat: block.actor,
+			line: acted
+				? `🥊 ${block.target}번은 어젯밤 능력을 썼고, 당신이 막았습니다.`
+				: `🥊 ${block.target}번은 어젯밤 아무것도 하지 않았습니다.`,
+		});
+	}
+
+	for (const seat of seats) {
+		if (!seat.blocked) continue;
+		// 막을 것이 없었으면 알리지 않는다. 능력 없는 사람이 "방해받았다"를
+		// 받으면 그 한 줄이 곧 건달의 존재 확정이다
+		if (intentTarget(intents, seat.index) === 0) continue;
+		// 오늘 아침 죽어 있는 사람에게는 보내지 않는다. 쪽지(NOTE)와 같은
+		// 판정이다 — alive는 "밤이 시작될 때 이미 죽어 있었는가"를, killed는
+		// "오늘 죽었는가"를 답한다. 좌석을 실제로 내리는 것은 파이프라인 밖의
+		// kill()이라 DEATH를 지난 뒤에도 오늘의 시체는 alive가 참이다
+		if (!seat.alive) continue;
+		if (ledger.killed.indexOf(seat.index) >= 0) continue;
+		ledger.reveals.push({
+			seat: seat.index,
+			// 누가 막았는지는 없다. 알면 다음 낮에 건달을 찾아 처형한다
+			line: "🥊 어젯밤 누군가 당신을 방해해 능력이 무효가 되었습니다.",
 		});
 	}
 }
@@ -232,6 +292,7 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 			// 어떻게 없던 일로 하는가"를 능력 종류마다 따로 알아야 한다.
 			// step 20이 전부보다 앞이므로 그럴 일이 없다
 			target.blocked = true;
+			ledger.blocks.push({ actor: actor.index, target: target.index });
 			return true;
 		case NightActionKind.HEAL:
 			target.healed = true;
@@ -333,7 +394,9 @@ export function resolveNightIntents(
 	intents: readonly NightIntent[],
 	opts: { readonly skipAttacks: boolean }
 ): NightSettlement {
-	const ledger: NightLedger = { reveals: [], defected: [], inspected: [], killed: [] };
+	const ledger: NightLedger = {
+		reveals: [], defected: [], inspected: [], killed: [], blocks: [],
+	};
 	let casualties: NightCasualty[] = [];
 
 	/*
@@ -378,8 +441,13 @@ export function resolveNightIntents(
 			continue;
 		}
 		if (step === NightStep.ATTACK && opts.skipAttacks) continue;
-		// 지목 없이 일어나는 사후 처리. INSPECT가 이미 지나간 뒤다
-		if (step === NightStep.AFTER) notifyInspected(seats, wasAlive, ledger);
+		// 지목 없이 일어나는 사후 처리. INSPECT가 이미 지나간 뒤다.
+		// skipAttacks(첫 밤 무사)여도 이 줄들은 돈다 — 첫 밤에 막힌 사람은
+		// 첫 밤에 통보를 받는다
+		if (step === NightStep.AFTER) {
+			notifyInspected(seats, wasAlive, ledger);
+			notifyBlocked(seats, intents, ledger);
+		}
 
 		for (const seat of seats) {
 			if (wasAlive.indexOf(seat.index) < 0) continue;
