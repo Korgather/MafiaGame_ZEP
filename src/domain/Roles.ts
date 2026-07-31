@@ -39,6 +39,8 @@ export const NightActionKind = {
 	INSPECT_TEAM: "INSPECT_TEAM",
 	/** 스파이: 대상의 정확한 직업 확인. 마피아면 밤 정산에서 마피아로 넘어간다 */
 	INSPECT_ROLE: "INSPECT_ROLE",
+	/** 건달: 대상의 그날 밤 능력을 통째로 막는다 */
+	BLOCK: "BLOCK",
 	/** 기자: 대상의 직업을 다음 아침에 전체 공개한다 */
 	SCOOP: "SCOOP",
 	/** 점쟁이: 대상이 밤에 지목하는 직업인지만 확인 */
@@ -204,6 +206,27 @@ export interface RoleDef {
 	 */
 	readonly needsPriorDay?: boolean;
 	/**
+	 * 자기 자신은 대상으로 고를 수 없는가 (건달).
+	 *
+	 * 켜는 기준은 "결과가 반드시 없는 지목인가"다. 건달이 자기를 막으면
+	 * 정말로 아무 일도 일어나지 않는다 — BLOCK은 대상의 blocked만 켜는데,
+	 * 파이프라인의 가드는 BLOCK step 자신은 건너뛰므로(NightPipeline.ts)
+	 * 자기 blocked는 자기 능력을 되돌리지 못하고, 그 밤의 다른 무엇도
+	 * blocked를 읽지 않는다. 고를 수는 있지만 아무 일도 없는 칸이 하나
+	 * 생기는 셈이라, 위젯에서 아예 잠근다.
+	 *
+	 * 자경단원에게는 일부러 켜지 않았다. 자기를 쏘는 것은 빈 수가 아니라
+	 * 실제로 죽는 수다("자기 자신을 지목해도 막지 않는다",
+	 * tests/night-pipeline.test.ts). 나쁜 선택을 막는 것은 이 플래그의 일이
+	 * 아니다 — 그건 규칙이 아니라 후견이고, 같은 논리를 밀면 의사의 자가
+	 * 치료(명백한 정식 수)까지 같은 잣대에 걸린다.
+	 *
+	 * 알려진 문제(자기를 쏜 자경단원에게 BACKFIRED가 안 붙는다)와도 다른
+	 * 축이다. 그건 아침에 붙는 결과 라벨이 틀린 것인데, 지목을 막으면
+	 * 상황을 숨길 뿐 라벨을 고치지는 못한다.
+	 */
+	readonly noSelfTarget?: boolean;
+	/**
 	 * 공격을 지목한 순간 방 전체에 들리는 소리.
 	 *
 	 * 총성은 연출이자 정보다 — "오늘 밤 마피아가 움직였다"를 모두가 안다.
@@ -358,23 +381,20 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "건달",
 		team: Team.CITIZEN,
 		glyph: "🥊",
-		// 능력이 빠진 자리다. 항목 자체를 지우지 않는 이유는 두 가지다 —
-		// ROLE_DEFS가 Role 전체를 덮는 레코드라 지우면 타입이 깨지고,
-		// 경찰·스파이 조사 테스트가 Role.THUG를 시민 팀의 표본으로 쓴다.
-		// 그 둘이 시즌 0 진영 정정의 회귀 방지선이다.
-		//
-		// 아래 두 문장은 도감에 그대로 나간다. roleBook()은 아무도 거르지
-		// 않으므로(tests/domain.test.ts), 능력이 없는 동안에도 읽을 사람이 있다.
-		ability: "밤에 할 수 있는 일이 없습니다.",
-		tip: "시민 편입니다. 아직 어느 판에도 배정되지 않습니다.",
-		nightAction: null,
-		nightStep: NightStep.AFTER,
+		ability: "밤마다 한 명을 골라 그 사람의 밤 능력을 막습니다.",
+		tip: "확정 시민을 막으면 헛턴입니다. 밤에 움직일 것 같은 사람을 고르세요.",
+		nightAction: NightActionKind.BLOCK,
+		nightStep: NightStep.BLOCK,
 		nightChat: null,
+		// 밤에 바뀌는 모습이 없다. 차단은 대상에게도 방에도 보이지 않는
+		// 능력이라, 스프라이트가 바뀌면 그 자체가 "건달이 여기 있다"가 된다
 		nightSprite: null,
 		nightAttackSprite: null,
-		nightPrompt: null,
+		nightPrompt: "방해할 대상을 선택하세요.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
+		// 자기를 막는 것은 확정된 헛턴이다 — 이유는 noSelfTarget 선언에 적었다
+		noSelfTarget: true,
 	},
 	REPORTER: {
 		displayName: "기자",

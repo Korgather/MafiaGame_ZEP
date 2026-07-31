@@ -64,6 +64,7 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		healed: false,
 		attackedBy: [],
 		armored: false,
+		blocked: false,
 		scooped: false,
 		usedSkill: false,
 		usesSpent: 0,
@@ -97,6 +98,7 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.voteCount = 0;
 	seat.healed = false;
 	seat.attackedBy = [];
+	seat.blocked = false;
 	seat.scooped = false;
 }
 
@@ -266,6 +268,8 @@ export function resetRound(room: Room): void {
 		seat.voteCount = 0;
 		seat.healed = false;
 		seat.attackedBy = [];
+		// 지우지 않으면 한 번 막힌 사람이 남은 판 내내 막힌 채로 있는다
+		seat.blocked = false;
 		seat.scooped = false;
 	}
 }

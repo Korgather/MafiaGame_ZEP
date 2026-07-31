@@ -198,6 +198,8 @@ let picked = null;
 
 let canPick = false;
 
+let noSelf = false;
+
 function tile(seat) {
  const mine = seat.num === myNum;
  const caption = mine ? "나" : seat.alive ? seat.name || "" : "사망";
@@ -207,7 +209,7 @@ function tile(seat) {
 					type="button"
 					class="${classes}"
 					data-num="${seat.num}"
-					${flag(!seat.alive, "disabled")}
+					${flag(!seat.alive || mine && noSelf, "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}"
 				>
 					${badge}<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
@@ -236,6 +238,7 @@ Parent.on({
  init(data) {
   myNum = Number(data.myNum) || 0;
   picked = null;
+  noSelf = !!data.noSelf;
   const role = qs("#myrole");
   role.textContent = data.role || "";
   role.classList.add(data.team === "mafia" ? "mafia" : "citizen");

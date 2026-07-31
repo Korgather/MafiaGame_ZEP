@@ -117,6 +117,8 @@
 			let myNum = 0;
 			let picked = null;
 			let canPick = false;
+			// 내 칸을 잠그는가. 건달처럼 자기 지목이 확정된 헛턴인 직업만 참이다
+			let noSelf = false;
 
 			function tile(seat) {
 				const mine = seat.num === myNum;
@@ -130,7 +132,7 @@
 					type="button"
 					class="${classes}"
 					data-num="${seat.num}"
-					${flag(!seat.alive, "disabled")}
+					${flag(!seat.alive || (mine && noSelf), "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}"
 				>
 					${badge}<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
@@ -155,6 +157,8 @@
 				init(data) {
 					myNum = Number(data.myNum) || 0;
 					picked = null;
+					// 격자를 그리기 전에 정해야 한다. tile()이 이 값을 읽는다
+					noSelf = !!data.noSelf;
 
 					const role = qs("#myrole");
 					role.textContent = data.role || "";

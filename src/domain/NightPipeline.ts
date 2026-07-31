@@ -226,6 +226,13 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 	if (kind === null) return false;
 
 	switch (kind) {
+		case NightActionKind.BLOCK:
+			// 켜 두기만 한다. 실제로 막는 것은 아래 순회의 가드다 —
+			// 이 자리에서 대상의 능력을 되돌리려 하면 "이미 적용된 것을
+			// 어떻게 없던 일로 하는가"를 능력 종류마다 따로 알아야 한다.
+			// step 20이 전부보다 앞이므로 그럴 일이 없다
+			target.blocked = true;
+			return true;
 		case NightActionKind.HEAL:
 			target.healed = true;
 			return true;
@@ -377,6 +384,12 @@ export function resolveNightIntents(
 		for (const seat of seats) {
 			if (wasAlive.indexOf(seat.index) < 0) continue;
 			if (roleDef(seat.role).nightStep !== step) continue;
+			// 막힌 사람은 이 밤에 아무것도 하지 않는다. targetOf보다 앞에
+			// 두는 것이 중요하다 — 뒤에 두면 apply까지 가지 않더라도
+			// 여기서 걸러진 것과 대상이 없어 걸러진 것이 구분되지 않는다.
+			// BLOCK step 자신은 통과시킨다. 같은 step 안에는 순서가 없으므로
+			// 건달끼리 서로를 막으면 누가 먼저 눌렀는지가 밤을 가른다
+			if (step !== NightStep.BLOCK && seat.blocked) continue;
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
 			// 실제로 적용된 것만 센다. 지목만으로 세면 쪽지를 안 보낸 시민이

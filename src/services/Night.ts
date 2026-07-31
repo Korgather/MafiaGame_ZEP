@@ -163,6 +163,8 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		...identityOf(seat),
 		prompt: def.nightPrompt || "",
 		seats: seatViews(room, inMafiaChat(seat) ? seat.team : undefined),
+		// 선택 필드를 그대로 넘기면 undefined가 ZEP까지 간다
+		noSelf: def.noSelfTarget === true,
 		timer: room.phaseTimer,
 		note: def.nightNotice,
 	});

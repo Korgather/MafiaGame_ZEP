@@ -141,6 +141,17 @@ export interface Seat {
 	 * 자원이라 소모 시점(resolveNightCasualties)에서만 false가 된다.
 	 */
 	armored: boolean;
+	/**
+	 * 이번 밤에 능력이 막혔는가 (건달).
+	 *
+	 * 읽는 곳은 밤 파이프라인의 순회 한 곳뿐이고, 대상 본인에게도 알리지
+	 * 않는다 — "막혔습니다"가 뜨면 그날 밤 건달이 살아 있다는 정보가 매번
+	 * 흘러나간다. 막힌 사람이 아는 것은 아무 답도 못 받았다는 사실뿐이다.
+	 *
+	 * healed와 같이 밤마다 초기화된다. PlayerTag.blocked(채팅 차단 목록)와는
+	 * 이름만 같고 아무 관계가 없다.
+	 */
+	blocked: boolean;
 	/** 기자가 취재해 다음 아침에 직업이 공개되는가 */
 	scooped: boolean;
 	/** 이번 밤에 능력을 이미 썼는가 */

@@ -320,6 +320,8 @@ export interface NightActionPayload extends Identity {
 	prompt: string;
 	/** 지목 대상. 비어 있으면 격자를 숨긴다 */
 	seats: SeatView[];
+	/** 내 칸을 잠글 것인가 (RoleDef.noSelfTarget) */
+	noSelf: boolean;
 	timer: number;
 	note: string;
 }

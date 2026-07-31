@@ -118,11 +118,15 @@ function noTurnReason(seat: Seat, turnCount: number): string | null {
  * 여기 남는 것은 "지금 이 사람 화면에 무엇이 뜨는가"뿐이다. 조사 답도
  * 이제 여기서 나가지 않는다 — 파이프라인이 만들어 아침에 배달한다.
  *
- * 능력이 없는 직업이면 null.
+ * 능력이 없는 직업이면 null. 고를 수 없는 대상이어도 null이다.
  */
 export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult | null {
 	const def = roleDef(actor.role);
 	if (def.nightAction === null) return null;
+	// 위젯이 이미 잠근 칸이지만 여기서도 막는다. 위젯의 잠금은 화면의 일이고,
+	// 지목이 실제로 기록되는 곳은 여기다 — 한쪽만 있으면 위젯을 안 거치는
+	// 경로가 하나 생기는 날 규칙이 사라진다
+	if (def.noSelfTarget === true && actor.index === target.index) return null;
 
 	switch (def.nightAction) {
 		case NightActionKind.HEAL:
@@ -145,6 +149,16 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 			if (def.attackSound) attack.roomSound = def.attackSound;
 			return attack;
 		}
+
+		case NightActionKind.BLOCK:
+			// 막았는지 아닌지는 알려주지 않는다. "막았습니다"가 뜨면 그 문구가
+			// 곧 대상이 밤 능력을 가진 직업이라는 답이 되어, 조사 능력이
+			// 하나 더 생기는 셈이 된다. 건달이 아는 것은 자기가 고른 사람뿐이다
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자를 방해하기로 했습니다.`,
+			};
 
 		case NightActionKind.INSPECT_TEAM:
 		case NightActionKind.INSPECT_ROLE:

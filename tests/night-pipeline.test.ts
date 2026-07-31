@@ -40,6 +40,7 @@ function snapshot(seats: readonly Seat[]) {
 		alive: s.alive,
 		healed: s.healed,
 		armored: s.armored,
+		blocked: s.blocked,
 		scooped: s.scooped,
 		attackedBy: s.attackedBy.slice(),
 	}));
@@ -54,6 +55,7 @@ function outcomes(settlement: NightSettlement) {
 function noTrace(target: Seat) {
 	assert.equal(target.healed, false);
 	assert.deepEqual(target.attackedBy, []);
+	assert.equal(target.blocked, false);
 	assert.equal(target.scooped, false);
 }
 
@@ -75,6 +77,7 @@ const TRACE_BY_KIND: Record<
 	}
 > = {
 	HEAL: { actor: Role.DOCTOR, check: t => assert.equal(t.healed, true) },
+	BLOCK: { actor: Role.THUG, check: t => assert.equal(t.blocked, true) },
 	ATTACK: { actor: Role.MAFIA, check: t => assert.deepEqual(t.attackedBy, [1]) },
 	SCOOP: { actor: Role.REPORTER, check: t => assert.equal(t.scooped, true) },
 	// 조사의 답은 대상이 아니라 시전자에게 간다(reveals). 대상은 자기가
@@ -380,9 +383,18 @@ describe("밤 파이프라인 — 조사 결과", () => {
 		// 사망 확정(DEATH)이 조사보다 앞이므로, 총을 맞는 순간의 스파이는 아직
 		// 시민이다. 예전에는 클릭 즉시 마피아가 되어 자경단원이 멀쩡했다.
 		//
-		// 쏜 시점의 진영으로 보는 쪽을 남긴다 — 자경단원은 그날 밤의 스파이가
-		// 무엇을 알아냈는지 알 길이 없고, 알 수 없는 것으로 결과가 갈리면
-		// 그건 자경단원 입장에서 운이다
+		// **이것은 관측이 아니라 규칙이다.** 총을 쏜 시점의 진영으로 본다 —
+		// 같은 밤의 합류는 그 총알보다 나중에 밝혀지는 사실이지 쏠 때 이미
+		// 참이던 사실이 아니다. 자경단원은 그날 밤 스파이가 무엇을 알아냈는지
+		// 알 길이 없고, 알 수 없는 것으로 자기 생사가 갈리면 그건 추리가 아니라
+		// 운이다. 뒤집으려면 INSPECT를 DEATH 앞으로 옮겨야 하는데, 그러면
+		// "그 밤에 죽은 경찰도 답을 받는다"부터 조사·정산 전반이 함께 흔들린다.
+		// STEP_ORDER는 컴파일 타임에 고정돼 있어(StepOrderCoversEveryStep)
+		// 한 밤 안에서 순서가 뒤집히는 경우 자체가 존재하지 않는다.
+		assert.ok(
+			STEP_ORDER.indexOf(NightStep.DEATH) < STEP_ORDER.indexOf(NightStep.INSPECT),
+			"DEATH가 INSPECT보다 앞이라는 것이 이 판정의 유일한 근거다"
+		);
 		const seats = [seat(1, Role.SPY), seat(2, Role.VIGILANTE), seat(3, Role.MAFIA)];
 		const result = night(seats, [[1, 3], [2, 1]]);
 		assert.deepEqual(outcomes(result), [
@@ -392,6 +404,20 @@ describe("밤 파이프라인 — 조사 결과", () => {
 		// 그래도 조사는 끝까지 간다 — 죽은 뒤에도 합류와 답은 남는다
 		assert.deepEqual(result.defected, [1]);
 		assert.match(result.reveals[0].line, /합류/);
+	});
+
+	it("어젯밤 합류한 스파이를 쏜 자경단원은 멀쩡하다", () => {
+		// 위 테스트의 짝이다. 둘을 함께 두어야 자책의 원인이 "스파이를 쐈다"가
+		// 아니라 "합류가 아직 일어나지 않았다"임이 드러난다. 하나만 있으면
+		// 스파이라는 직업 자체가 자책 대상인 것처럼 읽힌다.
+		//
+		// 어제 합류한 스파이는 이미 team이 MAFIA다. 오늘 밤에는 조사하지
+		// 않으므로 INSPECT에서 바뀌는 것도 없다 — 총을 맞는 순간 마피아이고,
+		// 자책 판정은 그것만 본다
+		const seats = [seat(1, Role.SPY, { team: Team.MAFIA }), seat(2, Role.VIGILANTE)];
+		const result = night(seats, [[2, 1]]);
+		assert.deepEqual(outcomes(result), [[1, NightOutcome.KILLED]]);
+		assert.deepEqual(result.defected, []);
 	});
 
 	it("아무도 조사하지 않은 밤의 reveals는 비어 있다", () => {

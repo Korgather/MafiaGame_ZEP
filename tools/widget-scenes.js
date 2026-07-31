@@ -430,6 +430,33 @@ const SCENES = [
 		],
 	},
 	{
+		label: "밤 지목 — 자기 칸이 잠긴다(건달)",
+		file: "roleAction.html",
+		size: [360, 440],
+		messages: [
+			{
+				type: "init",
+				myNum: 4,
+				role: "건달",
+				team: "citizen",
+				alive: true,
+				prompt: "방해할 대상을 선택하세요.",
+				seats: SEATS,
+				// 이 한 줄이 이 장면의 전부다
+				noSelf: true,
+				timer: 22,
+				note: "🌙 밤에는 채팅을 할 수 없습니다.",
+			},
+		],
+		// SEATS는 여섯 칸이고 3번이 사망이다. 여기에 내 칸(4번)이 더해져 둘.
+		// noSelf 가지를 지우면 하나만 남아 이 장면이 빨개진다 — 다른 장면들은
+		// 전부 noSelf 없이(=거짓) 돌아서 그 가지를 한 번도 밟지 않는다.
+		//
+		// class(.me)로는 셀 수 없다. 잠금은 실행 중에 붙는 것이 아니라
+		// 처음부터 속성으로 찍히므로 disabled를 센다
+		expect: { 'button[disabled=""]': 2 },
+	},
+	{
 		label: "투표 — 3/5 진행 중",
 		file: "vote.html",
 		size: [340, 380],

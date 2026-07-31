@@ -1367,4 +1367,59 @@ describe("밤에 알아낸 것의 배달", () => {
 			"마피아 밀담의 안내가 시민에게 샜습니다"
 		);
 	});
+
+	/**
+	 * 차단은 서비스 층에 자기 흔적을 남기지 않는 능력이다. 막힌 사람에게도
+	 * 알리지 않고 막은 사람도 결과를 못 보므로, 배선이 통째로 빠져도
+	 * (payload의 noSelf, 밤마다의 blocked 초기화) 도메인 테스트는 전부 통과한다.
+	 *
+	 * 밖에서 볼 수 있는 것은 "막힌 밤에는 답이 안 오고 다음 밤에는 온다"뿐이다.
+	 * 두 밤을 한 판 안에서 이어 봐야 초기화 한 줄까지 걸린다 — 한 밤만 보면
+	 * 그 줄을 지워도 아무 데도 빨개지지 않는다.
+	 */
+	it("건달에게 막힌 밤은 답이 없고, 다음 밤은 멀쩡하다", () => {
+		// 건달은 아직 어느 덱에도 없다(Task 11). 직업을 직접 앉혀서 본다
+		startGame(7, 1, [
+			Role.MAFIA,
+			Role.POLICE,
+			Role.THUG,
+			Role.CITIZEN,
+			Role.POLITICIAN,
+			Role.SOLDIER,
+			Role.SHAMAN,
+		]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		passPeacefulFirstNight(target); // 둘째 밤
+
+		const thug = seatsWithRole(target, Role.THUG)[0];
+		const police = seatsWithRole(target, Role.POLICE)[0];
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const answer = `🔍 ${mafia.index}번 참가자는 마피아입니다!`;
+
+		// 위젯이 내 칸을 잠그려면 이 한 줄이 payload에 실려야 한다. 값이 상수
+		// false가 되어도 게임 규칙은 멀쩡하고 화면만 조용히 열린다
+		const payload = mainWidget(playerOf(thug)).lastOfType("init");
+		assert.ok(payload);
+		assert.equal(payload.noSelf, true, "건달의 지목 화면이 자기 칸을 열어둔 채 열렸습니다");
+
+		// 둘째 밤: 건달이 경찰을 막는다. 마피아는 지목하지 않아 아무도 죽지 않는다
+		send(playerOf(thug), { type: "select", num: police.index });
+		send(playerOf(police), { type: "select", num: mafia.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		assert.equal(target.phase, GamePhase.DAY, "판이 끝나버려 다음 밤을 볼 수 없습니다");
+		assert.equal(chatSaw(playerOf(police), answer), false, "막힌 경찰이 답을 받았습니다");
+
+		// 셋째 밤으로. 아무도 투표하지 않아 처형도 없다
+		finishPhase(target); // DAY → VOTE
+		finishPhase(target); // VOTE → VOTE_RESULT
+		finishPhase(target); // → NIGHT
+		assert.equal(target.phase, GamePhase.NIGHT, "셋째 밤에 도착하지 못했습니다");
+		assert.equal(police.blocked, false, "지난밤의 차단이 다음 밤까지 남았습니다");
+
+		send(playerOf(police), { type: "select", num: mafia.index });
+		finishPhase(target);
+		assert.ok(chatSaw(playerOf(police), answer), "차단이 풀린 밤에도 답이 오지 않았습니다");
+	});
 });
