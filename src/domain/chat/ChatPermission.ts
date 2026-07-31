@@ -161,6 +161,9 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		// 같아도 화면에 나가는 문장이 다르면 분기를 나눠야 한다 —
 		// 이 note는 사용자가 읽는 유일한 설명이다.
 		if (ctx.spectating) return locked("관전 중에는 읽기만 할 수 있습니다");
+		if (ctx.phase === GamePhase.ROLE_REVEAL) {
+			return locked("직업 확인 중에는 채팅이 잠깁니다");
+		}
 		// 죽은 사람이 방 채팅으로 말하면 산 사람에게 정보가 샌다. 읽기는 남긴다 —
 		// 관전의 재미가 낮 토론을 지켜보는 데 있기 때문이다.
 		if (!ctx.alive) return locked("죽은 사람은 산 사람에게 말할 수 없습니다");
@@ -183,16 +186,13 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		/*
 		 * 침묵전. 좁히는 단계는 낮·투표·개표 셋뿐이다.
 		 *
-		 * 여기까지 내려왔다는 것은 단계가 LOBBY·ROLE_REVEAL·DAY·VOTE·VOTE_RESULT
-		 * 중 하나라는 뜻이다(GAME_OVER와 NIGHT은 위에서 이미 돌아갔다). 그래서
-		 * 조건을 chatMode 하나로 두면 대기실과 직업 공개까지 함께 좁혀지는데,
-		 * 그 둘을 뺀 이유는 각각 다르다.
+		 * 여기까지 내려왔다는 것은 단계가 LOBBY·DAY·VOTE·VOTE_RESULT 중 하나다.
+		 * GAME_OVER·ROLE_REVEAL·NIGHT은 위에서 이미 돌아갔다. 그래서
+		 * 조건을 chatMode 하나로 두면 대기실까지 함께 좁혀지는데,
+		 * 대기실을 뺀 이유는 분명하다.
 		 *   - 대기실: 좁혀도 지키는 것이 없다. started가 false인 동안 전체 채널이
 		 *     OPEN이라(위 GLOBAL 분기) 기다리는 사람들은 거기서 그대로 떠든다.
 		 *     방 탭만 잠그는 것은 규칙이 아니라 불편이다.
-		 *   - 직업 공개: 이 단계의 빠른 문구는 quickFor에서 월드 문구로 떨어진다
-		 *     ("안녕하세요 / 같이 하실 분? / ㅋㅋㅋ"). 좁히면 판 한가운데에서
-		 *     쓸 수 있는 말이 로비 잡담뿐인 상태가 된다.
 		 * 남은 셋은 이 모드의 제약이 값을 갖는 자리(토론과 투표)이고, 셋 다 그
 		 * 상황에 맞는 문구셋이 준비되어 있다.
 		 *

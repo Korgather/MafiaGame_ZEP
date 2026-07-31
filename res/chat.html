@@ -454,7 +454,7 @@ function bubble(line) {
   const chip = line.role ? html`<span class="chip ${line.team === "mafia" ? "mafia" : "citizen"}"
 								>${line.role}</span
 							>` : "";
-  const name = line.num > 0 ? line.num + "번 " + line.name : line.name;
+  const name = line.num > 0 ? line.num + "번 참가자" : line.name;
   who = html`${chip}<span class="ellip">${name}</span>${when}`;
  }
  return html`<div class="msg${mine ? " mine" : ""}${pm}">

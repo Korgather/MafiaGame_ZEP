@@ -136,6 +136,13 @@ function killOnSecondNight(target: Room, mafia: FakePlayer, victim: Seat): void 
 }
 
 describe("채널 권한 표", () => {
+	it("직업 카드 공개 중에는 어느 채널로도 말할 수 없다", () => {
+		const reveal = ctx({ phase: GamePhase.ROLE_REVEAL, mafiaChat: true });
+		for (const channel of [ChatChannel.GLOBAL, ChatChannel.ROOM, ChatChannel.MAFIA, ChatChannel.GHOST]) {
+			assert.equal(accessOf(reveal, channel).write, false, `${channel}이 열려 있습니다`);
+		}
+	});
+
 	it("밤의 시민은 어느 채널로도 말할 수 없다", () => {
 		// 이 판정이 무너지면 밤이 만드는 정보 비대칭이 통째로 사라진다.
 		const night = ctx({ phase: GamePhase.NIGHT });
@@ -218,6 +225,30 @@ describe("채널 권한 표", () => {
 });
 
 describe("채널 격리", () => {
+	it("직업 카드 공개 중 조작된 발언도 서버가 버린다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		sendChat(players[0], { type: "send", channel: ChatChannel.ROOM, text: "카드 봤어요" });
+
+		for (const player of players) {
+			assert.equal(chatSaw(player, "카드 봤어요"), false);
+		}
+	});
+
+	it("게임 중 발언자는 참가 번호로만 표시된다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // NIGHT → DAY
+		const sender = playerOf(target.seats[0]);
+
+		chat(sender, "번호로 불러주세요", ChatChannel.ROOM);
+
+		const line = chatLines(sender, ChatChannel.ROOM).find(message => message.text === "번호로 불러주세요");
+		assert.ok(line, "게임 중 발언이 채팅에 도착하지 않았습니다");
+		assert.equal(line.num, target.seats[0].index);
+		assert.equal(line.name, `${target.seats[0].index}번 참가자`);
+	});
+
 	it("밤 밀담은 마피아 화면에만 도착한다", () => {
 		const { everyone, mafia } = nightGame();
 

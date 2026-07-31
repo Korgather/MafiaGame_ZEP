@@ -39,7 +39,6 @@ import {
 import { finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay } from "./Rewards.ts";
 import {
-	applyNameplate,
 	clearSilhouettes,
 	resetPlayerAppearance,
 	spawnInLobby,
@@ -289,8 +288,6 @@ function beginGame(room: Room): void {
 
 	forEachPlayer(room, (player, seat) => {
 		countPlay(player);
-		applyNameplate(player, seat);
-		player.sendUpdated();
 		// 대기실 위젯을 먼저 치운다. 직업 카드는 별도 슬롯이라 이걸 빼면
 		// 준비 버튼이 달린 대기실 화면이 직업 공개 5초 내내 뒤에 남는다.
 		// 게다가 이 순간 재접속한 사람은(showPhaseView가 카드만 연다)
@@ -317,8 +314,9 @@ function beginGame(room: Room): void {
 export function returnToLobby(room: Room): void {
 	clearSilhouettes(room);
 
-	// 좌석을 비우기 전에 대상을 확보한다. resetRoom이 seats를 비운다.
-	const playerIds = room.seats.map(seat => seat.playerId);
+	// 좌석을 비우기 전에 대상과 원래 닉네임을 확보한다. resetRoom이 seats를 비운다.
+	const seats = room.seats.slice();
+	const playerIds = seats.map(seat => seat.playerId);
 	/*
 	 * 관전자도 마찬가지다. resetRoom은 두 목록을 모두 비우므로 먼저 떠 놓고,
 	 * 방이 빈 뒤에 좌석으로 앉힌다.
@@ -337,6 +335,8 @@ export function returnToLobby(room: Room): void {
 	for (const playerId of playerIds.concat(watchers.map(seat => seat.playerId))) {
 		const player = ScriptApp.getPlayerByID(playerId);
 		if (!player) continue;
+		const seat = seats.find(candidate => candidate.playerId === playerId);
+		if (seat) player.name = seat.name;
 		closeCard(player);
 		// 컷이 도는 중에 방이 끝날 수 있다 — 인원 부족(advanceGame)과 사고 복구
 		// (recover)가 그 경로다. resetRoom은 room.cut만 지우므로 화면은 여기서 걷는다.

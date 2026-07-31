@@ -16,7 +16,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { isInsideRoom, LOBBY_SPAWN_AREA, seatPosition } from "../constants/RoomLayout.ts";
 import { MAX_PLAYERS, ROOM_COUNT } from "../constants/GameConfig.ts";
-import { sprite } from "../infrastructure/Sprites.ts";
+import { basicSprite, sprite } from "../infrastructure/Sprites.ts";
 import type { SpriteKey } from "../constants/Assets.ts";
 import { Tile } from "../constants/Assets.ts";
 import { notifyStaff } from "../infrastructure/Fault.ts";
@@ -99,19 +99,19 @@ export function spawnInLobby(player: ScriptPlayer): void {
 	);
 }
 
-/** 좌석 번호에 해당하는 자리로 옮기고 이동을 막는다 */
+/** 좌석 번호에 해당하는 자리로 옮기고 이동을 막는다. 외형까지 정한 뒤 호출자가 갱신한다. */
 export function seatPlayer(room: Room, player: ScriptPlayer, seat: Seat): void {
 	const position = seatPosition(room.num, seat.index);
 	if (!position) return;
 	player.spawnAt(position.x, position.y);
 	player.moveSpeed = 0;
-	player.sendUpdated();
 }
 
 /** 밤: 전원을 자리에 앉히고 화면에서 숨긴다 */
 export function beginNightStage(room: Room): void {
 	forEachPlayer(room, (player, seat) => {
 		seatPlayer(room, player, seat);
+		applyNameplate(player, seat);
 		player.hidden = true;
 		player.sendUpdated();
 	});
@@ -124,7 +124,7 @@ export function beginDayStage(room: Room): void {
 	forEachPlayer(room, (player, seat) => {
 		seatPlayer(room, player, seat);
 		applyNameplate(player, seat);
-		player.sprite = seat.alive ? DEFAULT_SPRITE : sprite("ghost");
+		player.sprite = seat.alive ? basicSprite : sprite("ghost");
 		player.hidden = false;
 		player.sendUpdated();
 	});
@@ -152,24 +152,23 @@ export function clearSilhouettes(room: Room): void {
 
 /** 밤 동안 직업별 스프라이트로 바꾼다 */
 export function applyNightSprite(player: ScriptPlayer, key: SpriteKey | null): void {
-	player.sprite = key ? sprite(key) : DEFAULT_SPRITE;
+	player.sprite = key ? sprite(key) : basicSprite;
 	player.sendUpdated();
 }
 
 /**
- * 머리 위 이름표를 다시 그린다. 두 줄이다:
+ * 캐릭터 이름과 머리 위 title을 현재 상태에 맞춘다.
  *
- *     Lv.5        ← 뱃지: 판 밖에서는 등급, 판 안에서는 참가 번호(죽으면 유령)
- *     홍길동       ← 닉네임
+ *     판 밖: title = 등급
+ *     판 안: name = N번 참가자, title = 빈 문자열
  *
  * seat가 null이면 판 밖이다 — 접속 직후, 대기실, 게임이 끝나 돌아온 뒤.
  *
- * 왜 닉네임이 여기 들어가는가: ScriptApp.showName = false 이후 ZEP은 닉네임을
- * 그려주지 않는다. 머리 위에 남는 유일한 글자가 title이므로, 닉네임도 그
- * 안에 있어야 서로를 알아볼 수 있다.
+ * 원래 닉네임은 Seat.name에 남는다. 게임 중 player.name만 바꾸므로 ZEP 기본
+ * 닉네임과 말풍선도 같은 참가 번호를 사용하고, 종료 때 원래 값으로 복구할 수 있다.
  *
  * 왜 한 함수인가: 전에는 title을 네 곳(Rewards·GameFlow·Stage·Death)이 각자
- * 조립했고, 어느 곳도 다른 곳이 무엇을 넣는지 몰랐다. 그래서 "N 번 참가자"를
+ * 조립했고, 어느 곳도 다른 곳이 무엇을 넣는지 몰랐다. 그래서 "N번 참가자"를
  * 쓴 곳은 레벨을 지웠고, 대기실 복귀는 title을 아예 복구하지 않아 한 번
  * 죽은 사람은 로비에서도 "유령"을 달고 서 있었다. 조립하는 곳이 하나면
  * 두 줄 규칙을 어길 수 있는 곳도 하나다.
@@ -178,10 +177,13 @@ export function applyNightSprite(player: ScriptPlayer, key: SpriteKey | null): v
  * 중이라 자기 끝에서 한 번에 보낸다.
  */
 export function applyNameplate(player: ScriptPlayer, seat: Seat | null): void {
-	let badge: string;
-	if (!seat) badge = rankOf(player);
-	else badge = seat.alive ? `${seat.index} 번 참가자` : "유령";
-	player.title = `${badge}\n${player.name}`;
+	if (seat) {
+		player.name = `${seat.index}번 참가자`;
+		player.title = "";
+		player.sprite = basicSprite;
+	} else {
+		player.title = rankOf(player);
+	}
 	// 로그인 유저(role 0)와 구분되도록 색을 달리한다
 	player.titleColor = player.role === 0 ? 0x00ff00 : 0xffffff;
 }
@@ -195,7 +197,7 @@ export function applyNameplate(player: ScriptPlayer, seat: Seat | null): void {
  */
 export function restoreAppearance(room: Room, player: ScriptPlayer, seat: Seat): void {
 	applyNameplate(player, seat);
-	player.sprite = seat.alive ? DEFAULT_SPRITE : sprite("ghost");
+	player.sprite = seat.alive ? basicSprite : sprite("ghost");
 	player.hidden = room.phase === GamePhase.NIGHT;
 	player.sendUpdated();
 }

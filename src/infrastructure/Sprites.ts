@@ -28,3 +28,5 @@ for (const key of Object.keys(SPRITE_DEFS)) {
 export function sprite(key: SpriteKey): SpriteInstance {
 	return cache[key];
 }
+
+export const basicSprite = sprite("basic");

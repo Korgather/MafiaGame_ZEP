@@ -149,15 +149,13 @@ describe("침묵전의 낮", () => {
 		assert.equal(accessOf(freeDay, ChatChannel.ROOM).freeText, true);
 	});
 
-	it("대기실과 직업 공개는 침묵전에서도 자유 입력이다", () => {
+	it("대기실은 열리고 직업 공개부터 잠긴다", () => {
 		// 대기실을 좁혀도 지키는 것이 없다 — started가 false인 동안 전체 탭이
-		// OPEN이라(ChatPermission의 GLOBAL 분기) 같은 사람들이 거기서 그대로
-		// 떠든다. 직업 공개는 더 나쁘다: quickFor가 월드 문구로 떨어져
-		// "안녕하세요 / 같이 하실 분? / ㅋㅋㅋ"만 남은 판 한가운데가 된다
+		// OPEN이라(ChatPermission의 GLOBAL 분기) 같은 사람들이 거기서 그대로 떠든다.
 		const lobby = { ...silentDay, started: false, phase: GamePhase.LOBBY };
 		const reveal = { ...silentDay, phase: GamePhase.ROLE_REVEAL };
 		assert.equal(accessOf(lobby, ChatChannel.ROOM).freeText, true, "대기실");
-		assert.equal(accessOf(reveal, ChatChannel.ROOM).freeText, true, "직업 공개");
+		assert.equal(accessOf(reveal, ChatChannel.ROOM).write, false, "직업 공개");
 		// 좁히기로 한 단계는 그대로 좁혀져 있어야 한다
 		assert.equal(accessOf(silentDay, ChatChannel.ROOM).freeText, false, "낮");
 	});

@@ -21,6 +21,7 @@ import {
 	chatChannels,
 	chatLines,
 	chatSaw,
+	clickUnit,
 	connect,
 	cutWidget,
 	disconnect,
@@ -29,6 +30,7 @@ import {
 	finishPhase,
 	hasCard,
 	hasCut,
+	hasProfile,
 	joinRoom,
 	mainWidget,
 	passPeacefulFirstNight,
@@ -64,6 +66,17 @@ function inLobbyArea(pos: { tileX: number; tileY: number }): boolean {
 }
 
 describe("대기실 → 게임 시작", () => {
+	it("프로필은 대기실에서만 열리고 게임 중에는 열리지 않는다", () => {
+		const lobbyClicker = connect("대기실 클릭자");
+		const lobbyTarget = connect("대기실 대상");
+		clickUnit(lobbyClicker, lobbyTarget);
+		assert.equal(hasProfile(lobbyClicker), true, "대기실 프로필이 열리지 않았습니다");
+
+		const players = startGame(MIN_PLAYERS);
+		clickUnit(players[0], players[1]);
+		assert.equal(hasProfile(players[0]), false, "게임 중 프로필이 열렸습니다");
+	});
+
 	it("접속하면 대기실 위젯이 열리고 payload에 크기가 함께 온다", () => {
 		const player = connect("모바일유저", { isMobile: true });
 		const widget = mainWidget(player);
@@ -117,18 +130,18 @@ describe("대기실 → 게임 시작", () => {
 		assert.ok(info >= 1, "정보 직업이 하나도 배분되지 않았습니다");
 
 		for (const player of players) {
-			assert.equal(seatOf(player).alive, true);
-			/*
-			 * 이름표는 두 줄이다 — 참가 번호와 닉네임(Stage.applyNameplate).
-			 *
-			 * 둘째 줄까지 보는 이유: ZEP이 닉네임을 그려주지 않는다
-			 * (index.ts의 showName = false). 이름표를 쓰는 곳이 번호만 넣고
-			 * 끝내면 화면에서 그 사람의 이름이 사라지고, 그건 눈으로만 보이는
-			 * 종류의 고장이라 여기서 세지 않으면 아무도 모른다.
-			 */
-			const [badge, nick] = player.title.split("\n");
-			assert.match(badge, /^\d+ 번 참가자$/);
-			assert.equal(nick, player.name);
+			const seat = seatOf(player);
+			assert.equal(seat.alive, true);
+			assert.equal(player.name, seat.name, "게임룸 이동 전에 참가 번호가 공개됐습니다");
+			assert.notEqual(player.title, "", "게임룸 이동 전에 title이 지워졌습니다");
+			assert.equal(player.sprite, null, "게임룸 이동 전에 기본 캐릭터로 변신했습니다");
+		}
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT: 전원이 게임룸 좌석으로 이동한다
+		for (const player of players) {
+			const seat = seatOf(player);
+			assert.equal(player.name, `${seat.index}번 참가자`);
+			assert.equal(player.title, "");
 		}
 	});
 
@@ -185,7 +198,7 @@ describe("대기실 → 게임 시작", () => {
 			touchObject(player, MapTrigger.GUIDE_BOARD);
 
 			const init = cardWidget(player).messages[0] as { nav: string };
-			assert.equal(init.nav, "steps");
+			assert.equal(init.nav, "grid");
 		});
 
 		it("대기실의 📖 버튼은 직업 도감을 연다", () => {
@@ -917,6 +930,7 @@ describe("승패와 대기실 복귀", () => {
 	it("게임이 끝나면 아바타도 대기실 구역으로 돌아온다", () => {
 		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
+		const originalNames = target.seats.map(seat => [seat.playerId, seat.name] as const);
 
 		finishPhase(target); // ROLE_REVEAL → NIGHT: 전원이 방 자리로 옮겨진다
 		assert.ok(
@@ -942,6 +956,7 @@ describe("승패와 대기실 복귀", () => {
 		assert.equal(target.phase, GamePhase.LOBBY);
 
 		for (const player of players) {
+			assert.equal(player.name, originalNames.find(([id]) => id === player.id)?.[1]);
 			assert.ok(
 				inLobbyArea(player),
 				`${player.name} 님이 방금 끝난 방 좌석(${player.tileX}, ${player.tileY})에 그대로 서 있습니다`

@@ -256,14 +256,8 @@ describe("재접속", () => {
 		disconnect(ghost);
 		reconnect(ghost);
 
-		/*
-		 * 죽었다는 사실은 이름표에 있다(Stage.applyNameplate). 전에는 닉네임
-		 * 뒤에 "(유령)"을 붙였는데, 그러면 되돌리는 코드가 원래 닉네임을 따로
-		 * 기억해야 하고 그걸 잊은 경로가 실제로 있었다 — 한 번 죽은 사람은
-		 * 대기실로 돌아가도 계속 유령이었다. 지금은 닉네임을 건드리지 않고
-		 * 첫 줄만 갈아끼우므로 되돌릴 것이 없다.
-		 */
-		assert.deepEqual(ghost.title.split("\n"), ["유령", ghost.name]);
+		assert.equal(ghost.name, `${victim.index}번 참가자`);
+		assert.equal(ghost.title, "");
 		const widget = freshMain(ghost);
 		assert.equal(widget.fileName, WidgetFile.PHASE);
 		const payload = widget.lastOfType("init");

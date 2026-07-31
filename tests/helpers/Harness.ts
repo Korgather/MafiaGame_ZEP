@@ -152,6 +152,11 @@ export function touchObject(player: FakePlayer, param1: string): void {
 	world.hooks.objectTouched.emit(player, 0, 0, 0, { param1 });
 }
 
+/** 맵 위의 다른 캐릭터를 클릭한다 */
+export function clickUnit(clicker: FakePlayer, target: FakePlayer): void {
+	world.hooks.unitClicked.emit(clicker, target);
+}
+
 export function room(roomNum: number): Room {
 	const found = getRoom(roomNum);
 	if (!found) throw new Error(`${roomNum}번 방이 없습니다.`);
@@ -321,6 +326,11 @@ export function cardWidget(player: FakePlayer): FakeWidget {
 /** 지금 카드가 떠 있는가 (없어야 정상인 경우를 검사할 때) */
 export function hasCard(player: FakePlayer): boolean {
 	return !!tagOf(player).cardWidget;
+}
+
+/** 프로필 창이 열려 있는가 */
+export function hasProfile(player: FakePlayer): boolean {
+	return !!tagOf(player).profileWidget;
 }
 
 /** 화면을 덮고 있는 전환 컷 */
