@@ -137,11 +137,6 @@ export function tick(seconds: number): void {
 	world.hooks.update.emit(seconds);
 }
 
-/** 운영자 명령 등 채팅 입력 */
-export function say(player: FakePlayer, text: string): void {
-	world.hooks.say.emit(player, text);
-}
-
 /**
  * 맵 오브젝트에 부딪힌다. param1은 맵 에디터에 적어 넣는 값이다.
  *
@@ -296,7 +291,7 @@ export function paintPrivateArea(roomNum: number): void {
 }
 
 /** 한 칸만 프라이빗 영역으로 칠한다 (방 밖·옆 방 경로를 만들 때) */
-export function paintTile(tileX: number, tileY: number): void {
+function paintTile(tileX: number, tileY: number): void {
 	world.tiles[`${Tile.EFFECT_LAYER},${tileX},${tileY}`] = Tile.PRIVATE_AREA;
 }
 
@@ -413,7 +408,7 @@ export function finishPhase(target: Room): void {
 }
 
 /** 전원 준비된 대기실의 카운트다운을 소진시켜 게임을 시작한다 */
-export function finishCountdown(target: Room): void {
+function finishCountdown(target: Room): void {
 	tick(target.countdown + 0.001);
 }
 
@@ -476,7 +471,7 @@ export function startGame(playerCount: number, roomNum = 1, roles?: readonly Rol
  * 무작위 덱으로 도는 경로도 검증이 필요하지만 그건 "직업이 배분된다" 테스트
  * 하나가 맡는다. 나머지는 덱을 입력으로 고정한다.
  */
-export function plainDeck(playerCount: number): Role[] {
+function plainDeck(playerCount: number): Role[] {
 	const deck: Role[] = [Role.MAFIA, Role.DOCTOR, Role.POLICE];
 	while (deck.length < playerCount) deck.push(Role.CITIZEN);
 	return deck.slice(0, playerCount);
