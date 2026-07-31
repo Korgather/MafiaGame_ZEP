@@ -365,7 +365,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		//
 		// 아래 두 문장은 도감에 그대로 나간다. roleBook()은 아무도 거르지
 		// 않으므로(tests/domain.test.ts), 능력이 없는 동안에도 읽을 사람이 있다.
-		ability: "능력을 다시 만드는 중입니다. 지금은 밤에 할 수 있는 일이 없습니다.",
+		ability: "밤에 할 수 있는 일이 없습니다.",
 		tip: "시민 편입니다. 아직 어느 판에도 배정되지 않습니다.",
 		nightAction: null,
 		nightStep: NightStep.AFTER,
