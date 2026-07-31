@@ -60,6 +60,16 @@ describe("사기꾼", () => {
 		assert.match(reveal(night(seats, [[1, 2]]), 2), /조사했습니다/);
 	});
 
+	it("스파이가 조사해도 다음 아침에 알게 된다", () => {
+		// 알림에 닿는 경로가 둘이다 — 경찰의 INSPECT_TEAM과 스파이의 INSPECT_ROLE.
+		// 경찰 쪽만 보면 스파이 쪽에서 기록이 통째로 빠져도 아무 테스트도 죽지
+		// 않는다. 아래 「여러 명이 조사해도」는 경찰이 함께 앉아 있어서
+		// 스파이 쪽이 아무것도 안 남겨도 "한 줄"이 그대로 맞는다
+		const seats = [seat(1, Role.SPY), seat(2, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 2]]);
+		assert.match(reveal(result, 2), /조사했습니다/);
+	});
+
 	it("누가 조사했는지는 알려주지 않는다", () => {
 		// 조사한 사람이 드러나면 이 알림은 경찰을 지목하는 능력이 된다
 		const seats = [seat(1, Role.POLICE), seat(2, Role.CON_ARTIST)];
@@ -89,5 +99,17 @@ describe("사기꾼", () => {
 	it("다른 직업은 조사당해도 알림을 받지 않는다", () => {
 		const seats = [seat(1, Role.POLICE), seat(2, Role.CITIZEN)];
 		assert.equal(reveal(night(seats, [[1, 2]]), 2), "");
+	});
+
+	it("밤이 시작될 때 이미 죽어 있었으면 알림이 오지 않는다", () => {
+		// 조사 자체는 시체에도 답을 준다 — 묻는 것이 "그 사람이 누구였는가"라서다.
+		// 그 답은 조사한 쪽에만 간다. 이미 죽은 자리에까지 아침 알림이 가면
+		// 나갈 곳 없는 줄이 밤마다 쌓인다
+		const seats = [seat(1, Role.POLICE), seat(2, Role.CON_ARTIST, { alive: false })];
+		const result = night(seats, [[1, 2]]);
+		// 조사가 실제로 돌았는지 먼저 본다. 답이 안 나왔다면 알림이 없는 것은
+		// 당연해서 아래 단언이 아무것도 안 지킨다
+		assert.match(reveal(result, 1), /마피아가 아닙니다/);
+		assert.equal(reveal(result, 2), "");
 	});
 });

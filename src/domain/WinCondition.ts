@@ -17,9 +17,9 @@ export interface AliveCount {
  * 진영별 생존자 수.
  *
  * `mafiaRole`(직업이 마피아인 생존자 수)이라는 필드가 하나 더 있었지만
- * 아무도 읽지 않았다. 승패는 진영으로만 갈리기 때문이다. 직업이 12개가 된
+ * 아무도 읽지 않았다. 승패는 진영으로만 갈리기 때문이다. 직업이 13개가 된
  * 지금 저 필드를 그대로 뒀다면 "마피아 진영 = 마피아 직업"이라는 옛 전제를
- * 되살리는 함정이 된다 — 건달·짐승인간은 마피아 팀이지만 직업이 마피아가 아니다.
+ * 되살리는 함정이 된다 — 짐승인간·사기꾼은 마피아 팀이지만 직업이 마피아가 아니다.
  */
 export function countAlive(seats: readonly Seat[]): AliveCount {
 	const result: AliveCount = { mafiaTeam: 0, citizenTeam: 0 };

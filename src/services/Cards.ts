@@ -78,7 +78,7 @@ export function showGuide(player: ScriptPlayer): void {
 	});
 }
 
-/** 직업 12종 도감. 스스로 닫히지 않는다 — 읽는 속도는 사람마다 다르다 */
+/** 직업 13종 도감. 스스로 닫히지 않는다 — 읽는 속도는 사람마다 다르다 */
 export function showBook(player: ScriptPlayer): void {
 	show(player, {
 		type: "init",
