@@ -39,6 +39,7 @@ export function createRoom(num: number): Room {
 		voteRecord: emptyVoteRecord(),
 		nightReport: [],
 		nightIntents: [],
+		nightReveals: [],
 		seats: [],
 		spectators: [],
 		silhouettes: [],
@@ -253,6 +254,8 @@ export function resetRound(room: Room): void {
 	room.voteRecord = emptyVoteRecord();
 	// 지난밤의 지목은 남겨두면 다음 밤에 그대로 다시 적용된다
 	room.nightIntents = [];
+	// 정상 경로에서는 이미 비어 있다. 게임이 중간에 리셋된 경우를 위한 것이다
+	room.nightReveals = [];
 	for (const seat of room.seats) {
 		seat.usedSkill = false;
 		seat.votedFor = 0;
@@ -278,6 +281,9 @@ export function resetRoom(room: Room): void {
 	room.voteRecord = emptyVoteRecord();
 	room.nightReport = [];
 	room.nightIntents = [];
+	// 정상 경로에서는 배달이 이미 비웠다. 사고 복구로 밤 도중에 방이 끝나면
+	// 배달 전의 답이 남는데, 그건 지난 판의 정보라 다음 판으로 넘길 것이 아니다
+	room.nightReveals = [];
 	room.seats = [];
 	// 관전자를 좌석으로 승격하는 것은 returnToLobby의 일이다. 여기서는 지운다 —
 	// 이 함수는 "방을 빈 상태로" 만드는 곳이지 사람을 옮기는 곳이 아니고,

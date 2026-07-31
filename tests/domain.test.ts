@@ -477,13 +477,10 @@ describe("NightResolution", () => {
 		assert.equal(recordNightIntent(seat(1, Role.BEAST), seat(2, Role.CITIZEN))?.roomSound, undefined);
 	});
 
-	it("경찰은 짐승인간도 건달도 마피아로 보지 못한다", () => {
-		// 짐승인간은 위장해서 안 잡히고, 건달은 애초에 시민이라 잡을 것이 없다.
-		// 경찰이 "마피아입니다"를 듣는 상대는 진짜 마피아 진영뿐이어야 한다
-		const police = seat(1, Role.POLICE);
-		assert.match(recordNightIntent(police, seat(2, Role.BEAST))!.label, /마피아가 아닙니다/);
-		assert.match(recordNightIntent(police, seat(3, Role.THUG))!.label, /마피아가 아닙니다/);
-		assert.match(recordNightIntent(police, seat(4, Role.MAFIA))!.label, /마피아입니다/);
+	it("조사 지목은 답을 주지 않는다", () => {
+		const result = recordNightIntent(seat(1, Role.POLICE), seat(2, Role.MAFIA));
+		assert.equal(result?.consumed, true);
+		assert.doesNotMatch(result!.label, /마피아/);
 	});
 
 	it("건달의 협박은 능력을 소모한다", () => {
@@ -498,33 +495,19 @@ describe("NightResolution", () => {
 		assert.equal(result?.confirmed, true);
 	});
 
-	it("스파이가 마피아를 찾으면 진영이 바뀌고 능력이 남는다", () => {
+	it("스파이의 지목도 한 번만이다", () => {
+		// 마피아를 찾아냈을 때의 재지목 보너스는 사라졌다. "또 누를 수 있다"가
+		// 곧 "방금 마피아를 찾았다"였기 때문이다.
+		// 합류 판정은 tests/night-pipeline.test.ts가 본다
 		const spy = seat(1, Role.SPY);
 		const result = recordNightIntent(spy, seat(2, Role.MAFIA));
-		assert.equal(spy.team, Team.MAFIA);
-		assert.equal(result?.consumed, false);
-		assert.equal(result?.joinedMafia, true);
-	});
-
-	it("스파이가 시민을 조사하면 능력을 소모한다", () => {
-		const spy = seat(1, Role.SPY);
-		const result = recordNightIntent(spy, seat(2, Role.DOCTOR));
-		assert.equal(spy.team, Team.CITIZEN);
 		assert.equal(result?.consumed, true);
+		assert.equal(spy.team, Team.CITIZEN);
 	});
 
 	it("능력이 없는 직업은 null", () => {
 		assert.equal(recordNightIntent(seat(1, Role.CITIZEN), seat(2, Role.MAFIA)), null);
 		assert.equal(recordNightIntent(seat(1, Role.SHAMAN), seat(2, Role.MAFIA)), null);
-	});
-
-	it("스파이가 건달을 찾아도 합류하지 않는다", () => {
-		// 건달은 시민이다. 스파이가 합류할 마피아 진영이 아니다
-		const spy = seat(1, Role.SPY);
-		const result = recordNightIntent(spy, seat(2, Role.THUG));
-		assert.notEqual(result?.joinedMafia, true);
-		assert.equal(spy.team, Team.CITIZEN);
-		assert.equal(result?.consumed, true);
 	});
 });
 

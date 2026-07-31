@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Role } from "../src/types/Game.types.ts";
+import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
 import { NightActionKind, NightStep, ROLE_DEFS } from "../src/domain/Roles.ts";
 import { NightOutcome } from "../src/domain/NightResolution.ts";
@@ -72,8 +72,9 @@ const TRACE_BY_KIND: Record<NightActionKind, { actor: Role; check: (target: Seat
 	ATTACK: { actor: Role.MAFIA, check: t => assert.deepEqual(t.attackedBy, [1]) },
 	SILENCE: { actor: Role.THUG, check: t => assert.equal(t.silenced, true) },
 	SCOOP: { actor: Role.REPORTER, check: t => assert.equal(t.scooped, true) },
-	// 조사 응답은 아직 클릭 시점에 나간다(Task 5에서 reveals로 옮긴다).
-	// 그래서 파이프라인이 대상에 남기는 것이 없다
+	// 조사의 답은 대상이 아니라 시전자에게 간다(reveals). 대상은 자기가
+	// 조사당한 것을 알 수 없어야 하므로 여기 남는 흔적이 없는 것이 맞다.
+	// 답 자체는 「밤 파이프라인 — 조사 결과」가 본다
 	INSPECT_TEAM: { actor: Role.POLICE, check: noTrace },
 	INSPECT_ROLE: { actor: Role.SPY, check: noTrace },
 };
@@ -237,8 +238,9 @@ describe("밤 파이프라인 — 첫 밤 무사", () => {
 
 describe("putIntent", () => {
 	it("같은 좌석이 다시 지목하면 교체한다", () => {
-		// 스파이는 마피아를 찾으면 능력을 소모하지 않아 같은 밤에 또 지목한다.
-		// 밀어 넣기만 하면 "이 좌석의 intent"가 둘이 되어 조회가 모호해진다
+		// 스파이의 재지목 보너스가 사라져 지금은 여기까지 오는 경로가 없다.
+		// 그래도 못 박아 두는 것은 "이 좌석의 intent는 하나"에 조회가 기대기
+		// 때문이다 — 밀어 넣기만 하면 조회가 조용히 첫 지목을 답한다
 		const intents: NightIntent[] = [];
 		putIntent(intents, 1, 5);
 		putIntent(intents, 2, 6);
@@ -280,5 +282,104 @@ describe("putIntent", () => {
 		// 목록에 있는 좌석이라 hasCasualty가 두 번째 항목을 막는다
 		const vigilante = [seat(1, Role.VIGILANTE), seat(2, Role.CITIZEN)];
 		assert.deepEqual(outcomes(night(vigilante, [[1, 1]])), [[1, NightOutcome.KILLED]]);
+	});
+});
+
+describe("밤 파이프라인 — 조사 결과", () => {
+	it("경찰의 답은 reveals로 나온다", () => {
+		const seats = [seat(1, Role.POLICE), seat(2, Role.MAFIA)];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(result.reveals.length, 1);
+		assert.equal(result.reveals[0].seat, 1);
+		assert.match(result.reveals[0].line, /마피아입니다/);
+	});
+
+	it("경찰은 짐승인간을 잡지 못한다", () => {
+		const seats = [seat(1, Role.POLICE), seat(2, Role.BEAST)];
+		const result = night(seats, [[1, 2]]);
+		assert.match(result.reveals[0].line, /마피아가 아닙니다/);
+	});
+
+	it("경찰은 건달도 마피아로 보지 못한다", () => {
+		// 짐승인간과 갈라지는 이유가 다르다 — 짐승인간은 마피아 팀이면서
+		// 위장으로 빠져나가고, 건달은 애초에 시민이라 잡을 것이 없다.
+		// 클릭 시점 라벨을 보던 domain 테스트가 지키던 판정을 여기로 옮겨 왔다
+		const seats = [seat(1, Role.POLICE), seat(2, Role.THUG)];
+		const result = night(seats, [[1, 2]]);
+		assert.match(result.reveals[0].line, /마피아가 아닙니다/);
+	});
+
+	it("그 밤에 죽은 경찰도 답을 받는다", () => {
+		// 조사(INSPECT)는 사망 확정(DEATH)보다 뒤다. 마지막으로 알아낸 것을
+		// 삼키면 영매를 통해 나올 정보 하나가 그냥 사라진다.
+		//
+		// 죽음은 alive가 아니라 사망자 목록으로 본다 — 파이프라인은 판정만 하고
+		// 좌석을 내리는 것은 서비스(kill)의 몫이라 이 시점에 alive는 아직 true다
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.POLICE), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[1, 2], [2, 1]]);
+		assert.deepEqual(outcomes(result), [[2, NightOutcome.KILLED]]);
+		assert.equal(result.reveals.length, 1);
+		assert.equal(result.reveals[0].seat, 2);
+		assert.match(result.reveals[0].line, /마피아입니다/);
+	});
+
+	it("조사 대상이 그 밤에 죽어도 답은 같다", () => {
+		const seats = [seat(1, Role.POLICE), seat(2, Role.MAFIA), seat(3, Role.VIGILANTE)];
+		const result = night(seats, [[1, 2], [3, 2]]);
+		assert.deepEqual(outcomes(result), [[2, NightOutcome.KILLED]]);
+		assert.match(result.reveals[0].line, /마피아입니다/);
+	});
+
+	it("스파이가 마피아를 찾으면 진영이 바뀌고 defected에 남는다", () => {
+		const seats = [seat(1, Role.SPY), seat(2, Role.MAFIA)];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(seats[0].team, Team.MAFIA);
+		assert.deepEqual(result.defected, [1]);
+		assert.match(result.reveals[0].line, /합류/);
+	});
+
+	it("스파이가 짐승인간을 찾아도 합류하지 않는다", () => {
+		// 대화 상대가 없는 짐승인간을 찾아낸 것으로 마피아 채팅이 열릴 수는 없다
+		const seats = [seat(1, Role.SPY), seat(2, Role.BEAST)];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(seats[0].team, Team.CITIZEN);
+		assert.deepEqual(result.defected, []);
+		assert.match(result.reveals[0].line, /짐승인간/);
+	});
+
+	it("스파이가 건달을 찾아도 합류하지 않는다", () => {
+		// 짐승인간과 막히는 지점이 다르다 — 저쪽은 진영이 같은데 채팅이 없고,
+		// 건달은 진영부터 시민이다. 조건이 곱해진 것이므로 둘 다 남긴다
+		const seats = [seat(1, Role.SPY), seat(2, Role.THUG)];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(seats[0].team, Team.CITIZEN);
+		assert.deepEqual(result.defected, []);
+		assert.match(result.reveals[0].line, /건달/);
+	});
+
+	it("합류하는 스파이를 쏜 자경단원은 자책한다", () => {
+		// 진영이 바뀌는 시점이 클릭에서 조사(INSPECT)로 밀리면서 달라진 판정이다.
+		// 사망 확정(DEATH)이 조사보다 앞이므로, 총을 맞는 순간의 스파이는 아직
+		// 시민이다. 예전에는 클릭 즉시 마피아가 되어 자경단원이 멀쩡했다.
+		//
+		// 쏜 시점의 진영으로 보는 쪽을 남긴다 — 자경단원은 그날 밤의 스파이가
+		// 무엇을 알아냈는지 알 길이 없고, 알 수 없는 것으로 결과가 갈리면
+		// 그건 자경단원 입장에서 운이다
+		const seats = [seat(1, Role.SPY), seat(2, Role.VIGILANTE), seat(3, Role.MAFIA)];
+		const result = night(seats, [[1, 3], [2, 1]]);
+		assert.deepEqual(outcomes(result), [
+			[1, NightOutcome.KILLED],
+			[2, NightOutcome.BACKFIRED],
+		]);
+		// 그래도 조사는 끝까지 간다 — 죽은 뒤에도 합류와 답은 남는다
+		assert.deepEqual(result.defected, [1]);
+		assert.match(result.reveals[0].line, /합류/);
+	});
+
+	it("아무도 조사하지 않은 밤의 reveals는 비어 있다", () => {
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.CITIZEN)];
+		const result = night(seats, [[1, 2]]);
+		assert.deepEqual(result.reveals, []);
+		assert.deepEqual(result.defected, []);
 	});
 });

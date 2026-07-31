@@ -14,12 +14,12 @@
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { inMafiaChat, NightActionKind, roleDef, roleName } from "./Roles.ts";
+import { NightActionKind, roleDef } from "./Roles.ts";
 
 /**
  * 밤에 대상을 지목했을 때 시전자에게 돌아가는 것.
- * 대상의 상태는 여기서 바꾸지 않는다 — NightPipeline이 밤 끝에 적용한다.
- * (스파이의 진영 이동만 아직 예외다)
+ * 대상의 상태도 시전자의 진영도 여기서 바꾸지 않는다 —
+ * NightPipeline이 밤 끝에 한 번에 적용한다.
  */
 export interface NightSelectResult {
 	/** 능력을 소모했는가. false면 같은 밤에 다시 지목할 수 있다 */
@@ -34,11 +34,9 @@ export interface NightSelectResult {
 	privateSound?: string;
 	/** 방 전체에 재생할 사운드 */
 	roomSound?: string;
-	/** 스파이가 이번 지목으로 마피아 진영에 합류했는가 */
-	joinedMafia?: boolean;
 }
 
-/** 조사 결과처럼 읽을 시간이 필요한 라벨의 지속 시간 */
+/** 한 줄로 끝나지 않아 읽을 시간이 필요한 라벨의 지속 시간 */
 const REVEAL_MS = 6000;
 
 /**
@@ -100,8 +98,8 @@ function noTurnReason(seat: Seat, turnCount: number): string | null {
  * 즉 능력의 적용 시점이 곧 클릭 시점이었고, 그래서 밤의 결과가 손 빠르기에
  * 달려 있었다. 적용은 NightPipeline이 밤 끝에 정해진 순서로 한다.
  *
- * 여기 남는 것은 "지금 이 사람 화면에 무엇이 뜨는가"뿐이다.
- * 조사 응답만 예외로 아직 여기서 나간다 — 그 이동은 다음 슬라이스다.
+ * 여기 남는 것은 "지금 이 사람 화면에 무엇이 뜨는가"뿐이다. 조사 답도
+ * 이제 여기서 나가지 않는다 — 파이프라인이 만들어 아침에 배달한다.
  *
  * 능력이 없는 직업이면 null.
  */
@@ -132,39 +130,16 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 		}
 
 		case NightActionKind.INSPECT_TEAM:
-			return {
-				consumed: true,
-				confirmed: true,
-				label: roleDef(target.role).appearsAsMafia
-					? `${target.index}번 참가자는 마피아입니다!`
-					: `${target.index}번 참가자는 마피아가 아닙니다.`,
-				labelDurationMs: REVEAL_MS,
-				privateSound: Sound.INVESTIGATE,
-			};
-
 		case NightActionKind.INSPECT_ROLE:
-			// 조건이 둘 곱해진 것이다. 넘어가는 직업인가(def)와, 찾아낸 사람이
-			// 마피아 채팅에 있는가(target). 뒤쪽이 "마피아 직업인가"가 아닌 이유는
-			// 대화 상대가 없는 건달·짐승인간을 찾아낸 것으로 채팅이 열릴 수는
-			// 없기 때문이다. 앞쪽이 없으면 직업을 읽는 능력이 곧 배신이 된다.
-			if (def.defectsToMafia && inMafiaChat(target)) {
-				// 마피아를 찾아내면 진영을 옮기고, 능력은 소모하지 않는다.
-				// (기존 코드도 useSkill을 세우지 않았다 — 의도된 보상이다)
-				actor.team = Team.MAFIA;
-				return {
-					consumed: false,
-					confirmed: false,
-					label: `🕵️ ${target.index}번 참가자는 마피아입니다.\n마피아 팀에 합류했고 능력을 한 번 더 쓸 수 있습니다.`,
-					labelDurationMs: REVEAL_MS,
-					privateSound: Sound.INVESTIGATE,
-					joinedMafia: true,
-				};
-			}
+			// 답은 여기서 내지 않는다. 막는 능력이 들어오면 막힌 경찰이 이미
+			// 답을 본 뒤가 되고, 그때 가서 되돌릴 방법이 없다.
+			// 스파이도 마찬가지로 한 번만 지목한다 — 예전에는 마피아를 찾아내면
+			// consumed: false로 또 누를 수 있었는데, 그 "또 누를 수 있음" 자체가
+			// 답을 클릭 즉시 알려주는 신호였다.
 			return {
 				consumed: true,
 				confirmed: true,
-				label: `${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.`,
-				labelDurationMs: REVEAL_MS,
+				label: `${target.index}번 참가자를 조사합니다.\n결과는 내일 아침에 알게 됩니다.`,
 				privateSound: Sound.INVESTIGATE,
 			};
 

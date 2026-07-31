@@ -15,7 +15,7 @@
 import type { ScriptWidget, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
-import type { NightIntent } from "../domain/NightPipeline.ts";
+import type { NightIntent, NightReveal } from "../domain/NightPipeline.ts";
 import type { Bucket } from "../domain/RateLimit.ts";
 import type { RuleSet } from "../domain/RuleSet.ts";
 
@@ -253,6 +253,8 @@ export interface Room {
 	nightReport: string[];
 	/** 이번 밤에 쌓인 지목. 밤이 끝날 때 NightPipeline이 순서대로 적용한다 */
 	nightIntents: NightIntent[];
+	/** 아침 진입 직전에 각자에게 전할 밤의 답. 전하고 나면 비운다 */
+	nightReveals: NightReveal[];
 	seats: Seat[];
 	/**
 	 * 게임이 시작된 뒤 들어와 지켜보는 사람들.

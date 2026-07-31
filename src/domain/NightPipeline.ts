@@ -17,7 +17,8 @@
  * 보는 상태를 언제 만드는가"뿐이다.
  */
 import type { Seat } from "../types/Game.types.ts";
-import { NightActionKind, NightStep, roleDef } from "./Roles.ts";
+import { Team } from "../types/Game.types.ts";
+import { inMafiaChat, NightActionKind, NightStep, roleDef, roleName } from "./Roles.ts";
 import type { NightCasualty } from "./NightResolution.ts";
 import { resolveNightCasualties } from "./NightResolution.ts";
 
@@ -40,8 +41,16 @@ export interface NightReveal {
 
 export interface NightSettlement {
 	readonly casualties: NightCasualty[];
-	/** Task 5까지는 항상 빈 배열이다 — 조사 응답은 아직 클릭 시점에 나간다 */
+	/** 조사한 사람에게만 전할 한 줄들. 아침 진입 직전에 배달한다 */
 	readonly reveals: NightReveal[];
+	/**
+	 * 이 밤에 마피아로 넘어간 좌석. 지금은 스파이 하나뿐이다.
+	 *
+	 * reveals에 섞지 않는 이유는 배달 방식이 달라서다. 조사 답은 본인에게
+	 * 귓속말 한 줄이면 끝이지만, 합류는 마피아 채널에 남길 한 줄과 본인
+	 * 위젯의 탭 목록 갱신이 따로 필요하다. 그건 domain이 할 수 없는 일이다.
+	 */
+	readonly defected: number[];
 }
 
 /**
@@ -91,9 +100,11 @@ export const STEP_ORDER: StepOrderCoversEveryStep = DECLARED_STEP_ORDER;
 /**
  * 이 좌석의 지목을 기록한다. 같은 좌석이 다시 지목하면 교체한다.
  *
- * 스파이는 마피아를 찾아내면 능력을 소모하지 않으므로 같은 밤에 또 지목한다.
- * 밀어 넣기만 하면 한 좌석에 intent가 둘이 되고, 파이프라인의 "이 좌석의
- * 지목" 조회가 어느 쪽을 뜻하는지 알 수 없어진다.
+ * 지금은 교체가 실제로 일어나지 않는다 — 스파이의 재지목 보너스가 사라지면서
+ * 한 밤에 두 번 지목하는 길이 없어졌고, 클릭 경로가 usedSkill로 두 번째를
+ * 막는다. 그래도 교체로 두는 이유는 targetOf가 "한 좌석의 지목은 하나"에
+ * 기대고 있어서다. 밀어 넣기만 하면 한 좌석에 intent가 둘이 되고, 조회가
+ * 조용히 첫 지목을 답한다.
  */
 export function putIntent(intents: NightIntent[], actor: number, target: number): void {
 	for (let i = 0; i < intents.length; i++) {
@@ -140,8 +151,9 @@ function targetOf(
  * 반환 타입에 null이 있어 가지가 모자라면 "반환문이 없다"로 잡힌다. 이 함수는
  * void라 그 방법이 통하지 않으므로 switch 뒤의 never 대입으로 잡는다.
  */
-function apply(actor: Seat, target: Seat): void {
-	const kind = roleDef(actor.role).nightAction;
+function apply(actor: Seat, target: Seat, reveals: NightReveal[], defected: number[]): void {
+	const def = roleDef(actor.role);
+	const kind = def.nightAction;
 	// 지목할 것이 없는 직업은 애초에 intent를 남기지 못하므로 여기 오지 않는다.
 	// 그래도 타입에는 null이 남아 있으니, 걷어내야 아래 switch가 "종류 전부를
 	// 덮는가"라는 질문이 된다. default가 있던 유일한 이유가 이 null이었다.
@@ -160,10 +172,40 @@ function apply(actor: Seat, target: Seat): void {
 		case NightActionKind.SCOOP:
 			target.scooped = true;
 			return;
-		// 조사는 Task 5에서 reveals로 옮긴다. 지금은 클릭 시점에 답이 나가므로
-		// 여기서 할 일이 없다
+
 		case NightActionKind.INSPECT_TEAM:
+			// 대상이 방금 DEATH에서 죽었어도 답은 같다. 조사는 시체가 아니라
+			// 그 사람이 누구였는가를 묻는 것이다
+			reveals.push({
+				seat: actor.index,
+				line: roleDef(target.role).appearsAsMafia
+					? `🔍 ${target.index}번 참가자는 마피아입니다!`
+					: `🔍 ${target.index}번 참가자는 마피아가 아닙니다.`,
+			});
+			return;
+
 		case NightActionKind.INSPECT_ROLE:
+			// 조건이 둘 곱해진 것이다. 넘어가는 직업인가(def)와, 찾아낸 사람이
+			// 마피아 채팅에 있는가(target). 뒤쪽이 "마피아 직업인가"가 아닌 이유는
+			// 대화 상대가 없는 짐승인간을 찾아낸 것으로 채팅이 열릴 수는
+			// 없기 때문이다. 앞쪽이 없으면 직업을 읽는 능력이 곧 배신이 된다.
+			if (def.defectsToMafia && inMafiaChat(target)) {
+				actor.team = Team.MAFIA;
+				defected.push(actor.index);
+				// 정확한 직업을 적는다. 지금은 대상이 마피아뿐이라 "마피아입니다"와
+				// 같지만, 사기꾼(Task 6)이 들어오면 갈린다 — 위장은 팀 조사에만
+				// 통해야 하고 직업을 읽는 능력까지 속이면 스파이가 사기꾼을
+				// 만났을 때 아무 일도 일어나지 않는다
+				reveals.push({
+					seat: actor.index,
+					line: `🕵️ ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.\n마피아 팀에 합류했습니다.`,
+				});
+				return;
+			}
+			reveals.push({
+				seat: actor.index,
+				line: `🔍 ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.`,
+			});
 			return;
 	}
 
@@ -186,6 +228,7 @@ export function resolveNightIntents(
 	opts: { readonly skipAttacks: boolean }
 ): NightSettlement {
 	const reveals: NightReveal[] = [];
+	const defected: number[] = [];
 	let casualties: NightCasualty[] = [];
 
 	/*
@@ -196,12 +239,13 @@ export function resolveNightIntents(
 	 * 하고 좌석을 내리는 것은 파이프라인이 끝난 뒤 서비스의 kill()이다. 그래서
 	 * 이 스냅숏은 매 step에서 라이브 값과 언제나 같다.
 	 *
-	 * 그런데도 두는 이유는, 사망 적용이 파이프라인 안으로 들어오는 순간(그 계획이
-	 * Task 5/10에 있다) 여기가 곧바로 실효를 갖기 때문이다. 그때 step마다
+	 * 그런데도 두는 이유는, 사망 적용이 파이프라인 안으로 들어오는 날 여기가
+	 * 곧바로 실효를 갖기 때문이다 — 그런 계획이 잡혀 있지는 않다. 그때 step마다
 	 * seat.alive를 다시 읽으면 DEATH에서 죽은 사람의 능력이 뒤 step에서 사라진다 —
 	 * 그 밤에 죽은 기자의 특종(AFTER)이 안 나가고, 그 밤에 죽은 경찰의
-	 * 조사(INSPECT)가 답을 못 받는다. 밤의 능력은 살아서 지목한 사람의 것이고,
-	 * 그 뒤에 죽었는지는 무관하다.
+	 * 조사(INSPECT)가 답을 못 받는다. 뒤쪽은 이제 이 파일이 만드는 답이다
+	 * (reveals). 밤의 능력은 살아서 지목한 사람의 것이고, 그 뒤에 죽었는지는
+	 * 무관하다.
 	 *
 	 * 지금 실제로 걸러내는 것은 하나뿐이다: 밤이 시작될 때 **이미** 죽어 있던
 	 * 좌석의 지목.
@@ -223,9 +267,9 @@ export function resolveNightIntents(
 			if (roleDef(seat.role).nightStep !== step) continue;
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
-			apply(seat, target);
+			apply(seat, target, reveals, defected);
 		}
 	}
 
-	return { casualties, reveals };
+	return { casualties, reveals, defected };
 }

@@ -275,7 +275,6 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (result.confirmed) widget.sendMessage({ type: "selectResponse", num: targetIndex });
 		if (result.privateSound) sender.playSound(result.privateSound);
 		if (result.roomSound) playSound(room, result.roomSound);
-		if (result.joinedMafia) announceSpyJoin(room, sender);
 	});
 }
 
@@ -318,6 +317,7 @@ export function resolveNight(room: Room): void {
 	const settlement = resolveNightIntents(room.seats, room.nightIntents, {
 		skipAttacks: isPeacefulNight(room.turnCount, room.total, room.ruleSet.firstNightPeacefulUpTo),
 	});
+	room.nightReveals = settlement.reveals;
 	const casualties = settlement.casualties;
 	if (casualties.length === 0) report(room, "✨ 이번 밤에 아무도 죽지 않았습니다.");
 
@@ -347,6 +347,15 @@ export function resolveNight(room: Room): void {
 	}
 
 	publishScoops(room);
+
+	// 스파이의 합류는 채널 안내와 탭 목록 갱신이 필요해서 reveals와 따로 간다.
+	// 채널에 남긴 한 줄은 기록에도 남아 나중에 합류한 사람도 볼 수 있다
+	for (const index of settlement.defected) {
+		const joined = seatAt(room, index);
+		if (!joined) continue;
+		const player = ScriptApp.getPlayerByID(joined.playerId);
+		if (player) announceSpyJoin(room, player);
+	}
 }
 
 /** 아침 화면과 채팅 기록에 같은 한 줄을 남긴다 */
@@ -358,6 +367,24 @@ function report(room: Room, line: string): void {
 function tellSeat(seat: Seat, message: string): void {
 	const player = ScriptApp.getPlayerByID(seat.playerId);
 	if (player) Chat.tell(player, message);
+}
+
+/**
+ * 밤에 알아낸 것을 각자에게 전한다. 아침 진입 직전에 한 번.
+ *
+ * 죽은 사람도 받는다. 그 밤에 죽은 경찰이 마지막으로 알아낸 것을 삼키면
+ * 영매를 통해 나올 정보 하나가 그냥 사라진다.
+ *
+ * 접속이 끊긴 사람은 놓친다 — tellSeat이 조용히 버린다. 남는 손실이지만
+ * 밤 결과 라벨도 이미 같은 방식이라 동작 변화는 아니다. 복구하려면 좌석별
+ * 개인 로그를 저장해야 하고, 그건 관전 인프라와 같은 작업이다.
+ */
+export function deliverNightReveals(room: Room): void {
+	for (const reveal of room.nightReveals) {
+		const target = seatAt(room, reveal.seat);
+		if (target) tellSeat(target, reveal.line);
+	}
+	room.nightReveals = [];
 }
 
 /**

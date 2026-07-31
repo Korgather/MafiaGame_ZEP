@@ -29,7 +29,13 @@ import { showRoleReveal } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
 import { advanceCut, playCut, showCut } from "./Cut.ts";
 import { broadcastRoomCounts, enterLobby, refreshSpectators, seatSpectators } from "./Lobby.ts";
-import { beginNight, broadcastNightProgress, openNightView, resolveNight } from "./Night.ts";
+import {
+	beginNight,
+	broadcastNightProgress,
+	deliverNightReveals,
+	openNightView,
+	resolveNight,
+} from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay } from "./Rewards.ts";
 import {
@@ -162,6 +168,9 @@ function advancePhase(room: Room): void {
 			break;
 		case GamePhase.NIGHT:
 			resolveNight(room);
+			// 승패 판정보다 먼저다. 마지막 밤에 확인한 답도 알려주어야 한다 —
+			// 게임이 그 밤에 끝난다고 없던 일이 되지 않는다
+			deliverNightReveals(room);
 			if (!finishIfDecided(room)) beginDay(room);
 			break;
 		case GamePhase.DAY:

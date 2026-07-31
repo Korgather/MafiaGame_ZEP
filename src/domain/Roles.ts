@@ -37,7 +37,7 @@ export const NightActionKind = {
 	ATTACK: "ATTACK",
 	/** 경찰: 대상이 마피아로 보이는지만 확인 */
 	INSPECT_TEAM: "INSPECT_TEAM",
-	/** 스파이: 대상의 정확한 직업 확인. 마피아면 합류하고 능력을 소모하지 않음 */
+	/** 스파이: 대상의 정확한 직업 확인. 마피아면 밤 정산에서 마피아로 넘어간다 */
 	INSPECT_ROLE: "INSPECT_ROLE",
 	/** 건달: 대상의 다음 낮 투표를 막는다 */
 	SILENCE: "SILENCE",
