@@ -376,6 +376,36 @@ describe("사기꾼 배치", () => {
 	});
 });
 
+describe("점쟁이 배치", () => {
+	it("5인 이하에서는 나오지 않는다", () => {
+		// 부정 단언이라 Role.SEER가 통째로 사라져도 그냥 통과한다. 아래
+		// 「6인 이상에서는」이 반대편을 잡아 주는 것이 짝으로 필요하다.
+		// 하한을 지우거나 5로 낮추면 여기서 죽는다 — 두 인원 모두 그 순간
+		// 점쟁이가 44/200판에 들어온다(RuleSet.ts의 SEER 주석에 측정 기록)
+		for (let count = 4; count <= 5; count++) {
+			for (let seed = 1; seed <= 40; seed++) {
+				assert.ok(
+					!buildRoleDeck(DECK, count, rngFrom(seed)).includes(Role.SEER),
+					`${count}인 seed ${seed}`
+				);
+			}
+		}
+	});
+
+	it("6인 이상에서는 인원마다 점쟁이가 나오는 판이 있다", () => {
+		// 인원별로 세는 것이 요점이다. 한 인원만 표본으로 삼으면 하한을 7로
+		// 올려도 아무 테스트도 죽지 않는다 — 실제로 바뀌는 것은 6인뿐이고
+		// 그 인원에서만 88판이 0판이 된다
+		for (let count = 6; count <= MAX_PLAYERS; count++) {
+			let seen = 0;
+			for (let seed = 1; seed <= 200; seed++) {
+				if (buildRoleDeck(DECK, count, rngFrom(seed)).includes(Role.SEER)) seen++;
+			}
+			assert.ok(seen > 0, `${count}인 판에서 점쟁이가 한 번도 안 나왔다`);
+		}
+	});
+});
+
 describe("시민 풀 필터", () => {
 	it("영매는 7인 이하 판에 나오지 않는다", () => {
 		for (let count = MIN_PLAYERS; count <= 7; count++) {

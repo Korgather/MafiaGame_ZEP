@@ -77,6 +77,7 @@ const TRACE_BY_KIND: Record<NightActionKind, { actor: Role; check: (target: Seat
 	// 답 자체는 「밤 파이프라인 — 조사 결과」가 본다
 	INSPECT_TEAM: { actor: Role.POLICE, check: noTrace },
 	INSPECT_ROLE: { actor: Role.SPY, check: noTrace },
+	INSPECT_ABILITY: { actor: Role.SEER, check: noTrace },
 };
 
 describe("밤 파이프라인 — 클릭 순서", () => {

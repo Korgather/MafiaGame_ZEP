@@ -96,6 +96,9 @@ function noTurnReason(seat: Seat, turnCount: number): string | null {
 	if (def.oncePerGame && seat.skillSpent && !seat.usedSkill) {
 		return "능력은 게임당 한 번뿐이고 이미 사용했습니다. 이번 밤은 지켜보세요.";
 	}
+	if (def.firstNightOnly && turnCount > 0) {
+		return "첫 밤에만 쓸 수 있는 능력입니다. 이번 밤은 지켜보세요.";
+	}
 	if (def.needsPriorDay && turnCount === 0) {
 		return "첫 밤에는 쓸 수 없습니다. 낮의 이야기를 듣고 내일 밤에 쓰세요.";
 	}
@@ -142,6 +145,7 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 
 		case NightActionKind.INSPECT_TEAM:
 		case NightActionKind.INSPECT_ROLE:
+		case NightActionKind.INSPECT_ABILITY:
 			// 답은 여기서 내지 않는다. 막는 능력이 들어오면 막힌 경찰이 이미
 			// 답을 본 뒤가 되고, 그때 가서 되돌릴 방법이 없다.
 			// 스파이도 마찬가지로 한 번만 지목한다 — 예전에는 마피아를 찾아내면

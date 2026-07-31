@@ -201,7 +201,7 @@ export const STANDARD_RULES: RuleSet = {
 		citizenRequired: [Role.DOCTOR, Role.POLICE],
 		citizenPool: [
 			Role.POLITICIAN, Role.SHAMAN, Role.SPY,
-			Role.SOLDIER, Role.REPORTER, Role.VIGILANTE,
+			Role.SOLDIER, Role.REPORTER, Role.VIGILANTE, Role.SEER,
 		],
 		// 둘 다 경찰 조사를 흐린다. 한 판에 겹치면 경찰이 얻는 정보가 사실상 없다
 		exclusiveGroups: [[Role.BEAST, Role.CON_ARTIST]],
@@ -218,9 +218,22 @@ export const STANDARD_RULES: RuleSet = {
 		//   규칙만으로는 하한 자체를 겨눌 수 없어서, 그쪽은 tests/deck.test.ts의
 		//   「인원 하한이 사기꾼을 막는다」가 낮은 인원의 마피아 자리를 둘로 올린
 		//   합성 스펙으로 밟아 둔다
+		// SEER: 점괘의 값어치는 답이 확정이 아니라는 데 있다. 4·5인에서는 그
+		//   전제가 아예 성립하지 않는다 — 하한을 지우고 4~12인을 200시드씩 돌려
+		//   점쟁이가 든 판을 세어 보면 4인 44판과 5인 44판이 전부 '없습니다'가
+		//   나올 사람이 정확히 한 명(시민)뿐인 판이다. 점괘 한 장이 그 한 명을
+		//   딱 집어낸다는 뜻이다. 후보가 둘 이상인 판은 6인에서 처음 생긴다
+		//   (점쟁이가 든 88판 중 29판).
+		//   사기꾼 하한과 달리 이 값은 위아래로 다 구속한다 — 노는 방향이 없다.
+		//   지우면 4인 198판·5인 199판이 바뀌며 두 인원에 점쟁이가 44판씩
+		//   들어오고, 5로 낮추면 5인만 그렇게 바뀐다. 7로 올리면 6인 200판이
+		//   전부 바뀌고 그 인원에서 점쟁이가 사라진다(88판 -> 0판). 6~12인은
+		//   지우든 5로 낮추든 카드 한 장까지 그대로다. 세 방향 모두
+		//   tests/deck.test.ts의 「5인 이하에서는 나오지 않는다」와 「6인
+		//   이상에서는 인원마다 점쟁이가 나오는 판이 있다」가 하나씩 잡는다
 		// SHAMAN: 8인 구성부터 들어간다
 		// REPORTER: 조기 특종이 게임을 끝낸다
-		minPlayers: { BEAST: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11 },
+		minPlayers: { BEAST: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11, SEER: 6 },
 	},
 	firstNightPeacefulUpTo: 8,
 	minPlayers: 4,

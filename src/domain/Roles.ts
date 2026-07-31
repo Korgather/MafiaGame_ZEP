@@ -43,6 +43,8 @@ export const NightActionKind = {
 	SILENCE: "SILENCE",
 	/** 기자: 대상의 직업을 다음 아침에 전체 공개한다 */
 	SCOOP: "SCOOP",
+	/** 점쟁이: 대상이 밤에 지목하는 직업인지만 확인 */
+	INSPECT_ABILITY: "INSPECT_ABILITY",
 } as const;
 export type NightActionKind = (typeof NightActionKind)[keyof typeof NightActionKind];
 
@@ -120,7 +122,7 @@ export interface RoleDef {
 	// ── 아래는 전부 "끄면 아무 일도 없음"이 안전한 기본값인 능력 플래그다.
 	//
 	// team이나 nightAction을 빠뜨리면 게임이 성립하지 않으므로 필수로 두지만,
-	// 이 플래그들은 빠뜨려도 "평범한 직업"으로 조용히 떨어진다. 13개 항목에
+	// 이 플래그들은 빠뜨려도 "평범한 직업"으로 조용히 떨어진다. 14개 항목에
 	// false를 마흔 번 적는 대신 켜는 직업에서만 true를 적는다.
 
 	/**
@@ -168,6 +170,14 @@ export interface RoleDef {
 	readonly defectsToMafia?: boolean;
 	/** 능력을 게임 전체에서 한 번만 쓸 수 있는가 (자경단원·기자) */
 	readonly oncePerGame?: boolean;
+	/**
+	 * 첫 밤에만 쓸 수 있는가 (점쟁이).
+	 *
+	 * needsPriorDay의 정반대다. 저쪽은 "정보 없이 쓰면 주사위가 되는" 능력을
+	 * 늦추고, 이쪽은 "정보가 다 모인 뒤에는 의미가 없는" 능력을 첫 밤에 묶는다.
+	 * 횟수 제한과도 다른 축이다 — 몇 번인지가 아니라 언제인지를 정한다.
+	 */
+	readonly firstNightOnly?: boolean;
 	/** 같은 진영을 죽이면 시전자도 함께 죽는가 (자경단원) */
 	readonly backfiresOnAlly?: boolean;
 	/** 첫 공격을 한 번 버티는가 (군인) */
@@ -406,6 +416,26 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		immuneToVote: false,
 		notifiesOnInspect: true,
 		// appearsAsMafia를 켜지 않는다 — 그것이 이 직업의 전부다
+	},
+	SEER: {
+		displayName: "점쟁이",
+		team: Team.CITIZEN,
+		glyph: "🃏",
+		ability: "첫 밤에만, 한 명이 밤에 쓸 능력을 가졌는지 봅니다.",
+		tip: "진영은 알 수 없습니다. 언제 말할지가 당신의 유일한 선택입니다.",
+		nightAction: NightActionKind.INSPECT_ABILITY,
+		nightStep: NightStep.INSPECT,
+		nightChat: null,
+		// 그림이 없어서가 아니라 새면 안 되어서 null이다. 밤에 목격된 모습이
+		// 곧 직업표가 되면 정보직 시민은 첫 밤에 사라진다
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: "점을 볼 대상을 선택하세요. 첫 밤에만 가능합니다.",
+		nightNotice: NO_CHAT,
+		immuneToVote: false,
+		// maxUses 같은 횟수 제한이 필요 없다. 밤이 하나뿐이고 그 밤 안에서는
+		// usedSkill이 두 번째 지목을 막는다
+		firstNightOnly: true,
 	},
 	CITIZEN: {
 		displayName: "시민",

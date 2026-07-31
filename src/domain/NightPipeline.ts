@@ -241,6 +241,21 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): void {
 				line: `🔍 ${target.index}번 참가자의 직업은 ${roleName(target.role)}입니다.`,
 			});
 			return;
+
+		case NightActionKind.INSPECT_ABILITY:
+			ledger.inspected.push(target.index);
+			// 묻는 것은 보유이지 가용이 아니다. "오늘 쓸 수 있는가"로 바꾸면
+			// 첫 밤의 점괘가 needsPriorDay 직업 목록을 그대로 흘린다.
+			// 진영은 한 글자도 나가지 않는다 — 이 능력의 값어치는 답이
+			// 확정이 아니라는 데 있고, 능력 없는 시민 넷과 사기꾼이 같은
+			// 답을 낸다는 사실이 그 애매함을 지탱한다
+			ledger.reveals.push({
+				seat: actor.index,
+				line: roleDef(target.role).nightAction !== null
+					? `🃏 ${target.index}번 참가자는 밤에 쓸 능력이 있습니다.`
+					: `🃏 ${target.index}번 참가자는 밤에 쓸 능력이 없습니다.`,
+			});
+			return;
 	}
 
 	// 위 switch가 종류를 전부 덮으면 여기 오는 kind는 never다. 가지를 하나

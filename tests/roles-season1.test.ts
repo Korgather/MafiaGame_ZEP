@@ -12,6 +12,7 @@ import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { ROLE_DEFS } from "../src/domain/Roles.ts";
+import { hasNightTurn, nightActionBlockedReason } from "../src/domain/NightResolution.ts";
 import type { NightIntent, NightSettlement } from "../src/domain/NightPipeline.ts";
 import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
 import { seat } from "./helpers/seat.ts";
@@ -111,5 +112,66 @@ describe("사기꾼", () => {
 		// 당연해서 아래 단언이 아무것도 안 지킨다
 		assert.match(reveal(result, 1), /마피아가 아닙니다/);
 		assert.equal(reveal(result, 2), "");
+	});
+});
+
+describe("점쟁이", () => {
+	it("첫 밤에는 차례가 있다", () => {
+		// turnCount는 밤이 끝날 때 오르므로 첫 밤 동안에는 0이다
+		assert.equal(hasNightTurn(seat(1, Role.SEER), 0), true);
+	});
+
+	it("둘째 밤부터는 차례가 없다", () => {
+		assert.equal(hasNightTurn(seat(1, Role.SEER), 1), false);
+		assert.equal(hasNightTurn(seat(1, Role.SEER), 5), false);
+	});
+
+	it("차례가 없는 이유를 문장으로 알려준다", () => {
+		// 이 문장이 곧 밤 화면의 안내다. null이면 격자가 열리는데 누를 것이 없다
+		const reason = nightActionBlockedReason(seat(1, Role.SEER), 1);
+		assert.match(reason ?? "", /첫 밤/);
+	});
+
+	it("능력을 가진 직업은 '있습니다'로 나온다", () => {
+		const seats = [seat(1, Role.SEER), seat(2, Role.DOCTOR)];
+		assert.match(reveal(night(seats, [[1, 2]]), 1), /있습니다/);
+	});
+
+	it("자경단원은 첫 밤에 못 쓰지만 '있습니다'다", () => {
+		// 판정 기준은 보유다. "오늘 쓸 수 있는가"로 바꾸면 첫 밤의 점괘가
+		// needsPriorDay 직업 목록을 그대로 흘린다
+		const seats = [seat(1, Role.SEER), seat(2, Role.VIGILANTE)];
+		assert.match(reveal(night(seats, [[1, 2]]), 1), /있습니다/);
+	});
+
+	it("점쟁이 자신도 '있습니다'다", () => {
+		const seats = [seat(1, Role.SEER)];
+		assert.match(reveal(night(seats, [[1, 1]]), 1), /있습니다/);
+	});
+
+	it("사기꾼은 '없습니다'로 나온다", () => {
+		const seats = [seat(1, Role.SEER), seat(2, Role.CON_ARTIST)];
+		assert.match(reveal(night(seats, [[1, 2]]), 1), /없습니다/);
+	});
+
+	it("사기꾼은 점을 당한 것도 알아챈다", () => {
+		// 점쟁이만 빼면 사기꾼을 안전하게 걸러내는 경로가 하나 생긴다
+		const seats = [seat(1, Role.SEER), seat(2, Role.CON_ARTIST)];
+		assert.match(reveal(night(seats, [[1, 2]]), 2), /조사했습니다/);
+	});
+
+	it("영매·군인·정치인·시민도 '없습니다'다", () => {
+		// 사기꾼과 같은 답을 내는 시민이 넷 있는 것이, 이 직업이 확정 정보가
+		// 되지 않게 하는 유일한 장치다
+		for (const role of [Role.SHAMAN, Role.SOLDIER, Role.POLITICIAN, Role.CITIZEN]) {
+			const seats = [seat(1, Role.SEER), seat(2, role)];
+			assert.match(reveal(night(seats, [[1, 2]]), 1), /없습니다/, role);
+		}
+	});
+
+	it("진영은 한 글자도 새지 않는다", () => {
+		const seats = [seat(1, Role.SEER), seat(2, Role.MAFIA)];
+		const line = reveal(night(seats, [[1, 2]]), 1);
+		assert.doesNotMatch(line, /마피아|시민/);
 	});
 });
