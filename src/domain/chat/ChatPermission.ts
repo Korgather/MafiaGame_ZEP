@@ -144,11 +144,9 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 	}
 
 	if (channel === ChatChannel.GLOBAL) {
-		// 듣는 것은 언제나 자유다. 다만 게임 중에는 말할 수 없다 —
-		// 전체 채널이 열려 있으면 밤에 마피아가 바깥으로 신호를 보내거나
-		// 죽은 사람이 산 사람에게 정보를 흘릴 수 있고, 그러면 아래 세 채널의
-		// 제약이 전부 무의미해진다. 게임 밖에서만 열리는 로비 광장이다.
-		return ctx.started ? locked("게임 중에는 전체 채팅을 쓸 수 없습니다") : OPEN;
+		// 게임 밖에서만 열리는 로비 광장이다. 판 안에서는 말하기뿐 아니라
+		// 탭 자체를 숨긴다 — 방·밀담·유령 채널만으로 게임에 필요한 대화가 끝난다.
+		return ctx.started ? NONE : OPEN;
 	}
 
 	if (channel === ChatChannel.ROOM) {

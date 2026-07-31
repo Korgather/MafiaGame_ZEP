@@ -433,15 +433,15 @@ describe("밤 단계", () => {
 		const payload = widget.lastOfType("init");
 		assert.ok(payload);
 		assert.equal(payload.myNum, mafia.index);
-		// 번호만 보내던 시절에는 화면에 1~8만 있고 이름이 없었다. 이제 이름이 온다
+		// 실제 닉네임은 게임 UI로 보내지 않고 참가 번호만 공개한다.
 		const seats = payload.seats as Array<{ num: number; name: string }>;
 		assert.deepEqual(
 			seats.map(seat => seat.num),
 			[1, 2, 3, 4]
 		);
-		assert.ok(
-			seats.every(seat => seat.name.length > 0),
-			"지목 격자에 이름이 비어 있습니다"
+		assert.deepEqual(
+			seats.map(seat => seat.name),
+			["1번 참가자", "2번 참가자", "3번 참가자", "4번 참가자"]
 		);
 	});
 
@@ -622,10 +622,10 @@ describe("밤 단계", () => {
 		send(playerOf(reporter), { type: "select", num: scooped.index });
 		finishPhase(target); // NIGHT → 정산 → DAY
 
-		assert.ok(
-			target.nightReport.some(line => line.indexOf("특종") >= 0 && line.indexOf(scooped.name) >= 0),
-			`특종이 아침 기록에 없습니다: ${target.nightReport.join(" / ")}`
-		);
+		const scoop = target.nightReport.find(line => line.indexOf("특종") >= 0);
+		assert.ok(scoop, `특종이 아침 기록에 없습니다: ${target.nightReport.join(" / ")}`);
+		assert.ok(scoop.indexOf(`${scooped.index}번 참가자`) >= 0);
+		assert.equal(scoop.indexOf(scooped.name), -1);
 		assert.equal(scooped.alive, true, "첫 밤은 무사인데 누군가 죽었습니다");
 	});
 
@@ -661,18 +661,26 @@ describe("투표", () => {
 	it("최다 득표자가 처형된다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
+		const voteSeats = mainWidget(playerOf(target.seats[0])).lastOfType("init")?.seats as Array<{
+			num: number;
+			name: string;
+		}>;
+		assert.ok(voteSeats.every(seat => seat.name === `${seat.num}번 참가자`));
 
 		// 마피아를 처형하면 그 자리에서 판이 끝나 처형 자체를 보기 어렵다
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
 		for (const seat of target.seats) {
 			if (seat.index === victim.index) continue;
 			vote(playerOf(seat), victim.index);
+			assert.equal(playerOf(seat).lastLabel(), `${victim.index}번 참가자에게 투표했습니다.`);
 		}
 
 		finishPhase(target); // VOTE → VOTE_RESULT (집계와 처형이 여기서 일어난다)
 
 		assert.equal(target.phase, GamePhase.VOTE_RESULT);
 		assert.equal(victim.alive, false);
+		assert.equal(target.voteRecord.message, `☠️ ${victim.index}번 참가자가 처형되었습니다.`);
+		assert.equal(target.voteRecord.message.indexOf(victim.name), -1);
 	});
 
 	/**
@@ -827,6 +835,10 @@ describe("투표", () => {
 		const voter = target.seats[1];
 		disconnect(playerOf(gone));
 		assert.equal(gone.connected, false, "이탈이 좌석에 반영되지 않았습니다");
+		assert.equal(
+			playerOf(voter).lastLabel(),
+			`${gone.index}번 참가자의 접속이 끊겼습니다.`
+		);
 
 		vote(playerOf(voter), target.seats[2].index);
 
@@ -871,7 +883,9 @@ describe("승패와 대기실 복귀", () => {
 		assert.ok(result, "종료 화면이 payload 없이 열렸습니다");
 		assert.equal(result.winner, Team.CITIZEN);
 		// 전원 직업 공개는 채팅이 아니라 화면에 남는다
-		assert.equal((result.players as unknown[]).length, MIN_PLAYERS);
+		const revealed = result.players as Array<{ num: number; name: string }>;
+		assert.equal(revealed.length, MIN_PLAYERS);
+		assert.ok(revealed.every(player => player.name === `${player.num}번 참가자`));
 		assert.ok(
 			chatSaw(survivor, "전원의 직업"),
 			"종료 시 직업 공개가 없습니다"
@@ -1060,7 +1074,7 @@ describe("전환 컷", () => {
 		// 처형은 자기 컷을 갖지 않는다. 개표 화면이 이미 7초를 쓴 뒤라
 		// 같은 소식을 한 번 더 기다리게 하는 대신 밤 컷의 첫 줄로 얹는다
 		assert.ok(
-			lines.length > 0 && lines[0].indexOf(victim.name) >= 0,
+			lines.length > 0 && lines[0].indexOf(`${victim.index}번 참가자`) >= 0,
 			`처형 결과가 밤 컷에 실리지 않았습니다: ${JSON.stringify(lines)}`
 		);
 	});
@@ -1187,6 +1201,14 @@ describe("밤에 알아낸 것의 배달", () => {
 
 		const answer = `🔍 ${accomplice.index}번 참가자는 마피아입니다!`;
 		assert.ok(chatSaw(playerOf(police), answer));
+		assert.ok(
+			chatLines(playerOf(police), ChatChannel.ROOM).some(line => line.text === answer),
+			"조사 결과가 방 탭에 오지 않았습니다"
+		);
+		assert.equal(
+			chatLines(playerOf(police), ChatChannel.GLOBAL).some(line => line.text === answer),
+			false
+		);
 
 		for (const seat of target.seats) {
 			if (seat === police) continue;

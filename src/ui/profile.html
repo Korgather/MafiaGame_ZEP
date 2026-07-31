@@ -147,6 +147,10 @@
 				photo.src = url;
 			}
 
+			qs("#close").addEventListener("click", () => {
+				Parent.send({ type: "close" });
+			});
+
 			function openAvatarNameEdit() {
 				Parent.send(
 					{

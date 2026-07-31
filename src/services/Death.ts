@@ -16,6 +16,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { CONSOLATION_EXP } from "../domain/Progression.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
+import { participantLabel } from "../entities/Room.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 import * as Chat from "./ChatService.ts";
 import { awardExp } from "./Rewards.ts";
@@ -55,11 +56,12 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 }
 
 function announce(room: Room, seat: Seat, cause: DeathCause): void {
+	const name = participantLabel(seat);
 	if (cause === DeathCause.NIGHT_KILL) {
 		// 아침 화면이 그대로 읽는다. 채팅으로만 흘리면 토론에 밀려 사라진다
-		const line = `☠️ ${seat.name} 님이 죽었습니다.`;
+		const line = `☠️ ${name}가 죽었습니다.`;
 		room.nightReport.push(line);
-		Chat.announce(room, `☠️ 이번 밤에 ${seat.name} 님이 죽었습니다.`);
+		Chat.announce(room, `☠️ 이번 밤에 ${name}가 죽었습니다.`);
 		return;
 	}
 	// 시민이 알아야 하는 것은 직업이 아니라 "마피아를 줄였는가"다.
@@ -67,8 +69,8 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 	Chat.announce(
 		room,
 		seat.team === Team.MAFIA
-			? `☠️ ${seat.name} 님이 처형당했습니다. 그는 마피아 팀이었습니다!`
-			: `☠️ ${seat.name} 님이 처형당했습니다. 그는 마피아 팀이 아니었습니다.`
+			? `☠️ ${name}가 처형당했습니다. 그는 마피아 팀이었습니다!`
+			: `☠️ ${name}가 처형당했습니다. 그는 마피아 팀이 아니었습니다.`
 	);
 }
 
@@ -97,5 +99,5 @@ function becomeGhost(room: Room, player: ScriptPlayer, seat: Seat): void {
 	Chat.tell(player, "☠️ 당신은 죽었습니다. 유령 탭에서 죽은 사람들과 대화하세요.");
 	// 유령 채널로 탭을 옮겨 준다. 자동 전환은 ChatPermission이 정한다
 	Chat.refresh(player);
-	Chat.channelSay(room, ChatChannel.GHOST, `👻 ${seat.name} 님이 유령이 되었습니다.`);
+	Chat.channelSay(room, ChatChannel.GHOST, `👻 ${participantLabel(seat)}가 유령이 되었습니다.`);
 }

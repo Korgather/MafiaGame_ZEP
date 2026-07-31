@@ -17,7 +17,7 @@ import { Sound } from "../constants/Assets.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
-import { aliveSeats, seatAt, seatViews } from "../entities/Room.ts";
+import { aliveSeats, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
@@ -203,7 +203,7 @@ function bindVoteWidget(widget: ScriptWidget): void {
 		if (target) {
 			voter.votedFor = target.index;
 			target.voteCount += voteWeight(voter);
-			label(sender, `${target.index}번 ${target.name} 님에게 투표했습니다.`);
+			label(sender, `${participantLabel(target)}에게 투표했습니다.`);
 		} else {
 			label(sender, "기권했습니다.");
 		}
@@ -279,16 +279,16 @@ export function beginVoteResult(room: Room): void {
  * 문자열을 값으로 만들면 화면과 채팅이 같은 문장을 쓴다.
  */
 function outcomeMessage(result: VoteResult): string {
-	const name = result.target ? result.target.name : "";
+	const name = result.target ? participantLabel(result.target) : "";
 	switch (result.outcome) {
 		case VoteOutcome.NO_VOTES:
 			return "🕊️ 아무도 표를 받지 않아 처형이 무산되었습니다.";
 		case VoteOutcome.TIE:
 			return "🕊️ 동률이 나와 아무도 처형되지 않았습니다.";
 		case VoteOutcome.IMMUNE:
-			return `🎖️ ${name} 님은 정치인이라 처형되지 않았습니다.`;
+			return `🎖️ ${name}는 정치인이라 처형되지 않았습니다.`;
 		case VoteOutcome.EXECUTE:
-			return `☠️ ${name} 님이 처형되었습니다.`;
+			return `☠️ ${name}가 처형되었습니다.`;
 	}
 }
 

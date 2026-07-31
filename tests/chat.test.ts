@@ -216,6 +216,13 @@ describe("채널 권한 표", () => {
 		assert.deepEqual(readableChannels(LOOSE_CONTEXT), [ChatChannel.GLOBAL]);
 	});
 
+	it("게임 중에는 전체 탭을 숨긴다", () => {
+		const night = ctx({ phase: GamePhase.NIGHT });
+		assert.deepEqual(rw(accessOf(night, ChatChannel.GLOBAL)), { read: false, write: false });
+		assert.equal(readableChannels(night).indexOf(ChatChannel.GLOBAL), -1);
+		assert.equal(preferredChannel(night, ChatChannel.GLOBAL), ChatChannel.ROOM);
+	});
+
 	it("말할 수 있는 탭은 밑에서 바꿔치우지 않는다", () => {
 		// 멀쩡한 탭을 서버가 옮기면 방금 친 말이 엉뚱한 청중에게 간다.
 		const lobby = ctx({ started: false, phase: GamePhase.LOBBY });
@@ -225,6 +232,24 @@ describe("채널 권한 표", () => {
 });
 
 describe("채널 격리", () => {
+	it("밤 안내는 전체가 아니라 방 탭에 온다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		const citizen = playerOf(seatsWithRole(target, Role.CITIZEN)[0]);
+
+		assert.equal(chatChannels(citizen).some(channel => channel.id === ChatChannel.GLOBAL), false);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		assert.equal(activeChannel(citizen), ChatChannel.ROOM);
+		assert.ok(
+			chatLines(citizen, ChatChannel.ROOM).some(line => line.text === "🌙 밤에는 채팅을 할 수 없습니다.")
+		);
+		assert.equal(
+			chatLines(citizen, ChatChannel.GLOBAL).some(line => line.text.indexOf("밤에는 채팅") >= 0),
+			false
+		);
+	});
+
 	it("직업 카드 공개 중 조작된 발언도 서버가 버린다", () => {
 		const players = startPlainGame(MIN_PLAYERS);
 		sendChat(players[0], { type: "send", channel: ChatChannel.ROOM, text: "카드 봤어요" });
@@ -341,7 +366,7 @@ describe("채널 격리", () => {
 		assert.equal(chatSaw(outside, "곧 시작합니다"), false, "방 채팅이 방 밖으로 샜습니다");
 	});
 
-	it("게임이 시작되면 전체 채팅으로 말할 수 없다", () => {
+	it("게임이 시작되면 전체 채팅을 보거나 쓸 수 없다", () => {
 		// 열어두면 밤의 마피아가 바깥으로 신호를 보내거나 죽은 사람이
 		// 산 사람에게 정보를 흘릴 수 있어 다른 채널의 제약이 전부 무의미해진다.
 		const outside = connect("바깥사람");
@@ -350,9 +375,10 @@ describe("채널 격리", () => {
 		sendChat(players[0], { type: "send", channel: ChatChannel.GLOBAL, text: "저 좀 살려주세요" });
 
 		assert.equal(chatSaw(outside, "저 좀 살려주세요"), false);
-		// 듣는 것은 여전히 자유다
+		// 게임 밖 사람끼리의 전체 채팅은 그대로지만 참가자 화면에는 들어오지 않는다.
 		chat(outside, "구경 중입니다");
-		assert.ok(chatSaw(players[0], "구경 중입니다"));
+		assert.ok(chatSaw(outside, "구경 중입니다"));
+		assert.equal(chatSaw(players[0], "구경 중입니다"), false);
 	});
 });
 
@@ -669,7 +695,9 @@ describe("알림과 기록", () => {
 
 		const events = chatLines(doctor).filter(line => line.kind === MessageKind.EVENT);
 		assert.ok(events.length > 0, "사건 기록이 하나도 없습니다");
-		assert.ok(events.some(line => line.text.indexOf(victim.name) >= 0));
+		const death = events.find(line => line.text.indexOf(`${victim.index}번 참가자`) >= 0);
+		assert.ok(death);
+		assert.equal(death.text.indexOf(victim.name), -1);
 	});
 
 	it("단계 전환은 안내로 남고 사건과 섞이지 않는다", () => {

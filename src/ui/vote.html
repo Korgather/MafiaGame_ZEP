@@ -116,7 +116,7 @@
 					type="button"
 					class="${classes}"
 					data-num="${seat.num}"
-					${flag(!seat.alive, "disabled")}
+					${flag(locked || !seat.alive, "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}"
 				>
 					<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
@@ -154,11 +154,11 @@
 
 			Parent.on({
 				init(data) {
-					// 건달에게 협박당했으면 표를 낼 수 없다. 서버도 같은 판정으로
-					// 막지만(Voting.canVote), 눌리는 버튼을 두고 거절만 하면
-					// "왜 안 되는지"를 라벨이 뜬 뒤에야 알게 된다
-					locked = !!data.silenced;
 					myNum = Number(data.myNum) || 0;
+					const ghost = seats(data).some(seat => seat.num === myNum && !seat.alive);
+					// 서버도 Voting.canVote로 막지만, 눌리는 버튼을 남기면 실제로
+					// 투표된 것처럼 보인다. 같은 생존/협박 조건으로 화면도 잠근다.
+					locked = ghost || !!data.silenced;
 					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다
 					myPick = Number(data.picked) || null;
 					qs("#heading").textContent = locked ? "투표할 수 없습니다" : "누구를 처형할까요";
@@ -166,8 +166,10 @@
 					qs("#grid").classList.toggle("blocked", locked);
 					paintPick();
 					qs("#note").classList.toggle("blocked", locked);
-					qs("#note").textContent = locked
-						? "🥊 협박당해 이번 투표에는 참여할 수 없습니다."
+					qs("#note").textContent = ghost
+						? "👻 유령은 투표할 수 없습니다."
+						: locked
+							? "🥊 협박당해 이번 투표에는 참여할 수 없습니다."
 						: myPick === null
 							? "고르지 않으면 기권입니다."
 							: pickNote();

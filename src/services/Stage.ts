@@ -16,6 +16,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { isInsideRoom, LOBBY_SPAWN_AREA, seatPosition } from "../constants/RoomLayout.ts";
 import { MAX_PLAYERS, ROOM_COUNT } from "../constants/GameConfig.ts";
+import { participantLabel } from "../entities/Room.ts";
 import { basicSprite, sprite } from "../infrastructure/Sprites.ts";
 import type { SpriteKey } from "../constants/Assets.ts";
 import { Tile } from "../constants/Assets.ts";
@@ -178,7 +179,7 @@ export function applyNightSprite(player: ScriptPlayer, key: SpriteKey | null): v
  */
 export function applyNameplate(player: ScriptPlayer, seat: Seat | null): void {
 	if (seat) {
-		player.name = `${seat.index}번 참가자`;
+		player.name = participantLabel(seat);
 		player.title = "";
 		player.sprite = basicSprite;
 	} else {
