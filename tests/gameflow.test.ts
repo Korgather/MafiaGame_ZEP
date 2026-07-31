@@ -1228,6 +1228,63 @@ describe("시민의 익명 쪽지", () => {
 			"지목 전에 온 문구가 능력을 먼저 태워버렸습니다"
 		);
 	});
+
+	/*
+	 * 지난밤 문구는 밤이 시작될 때 지워진다(resetRound). 그 한 줄이 없으면
+	 * 다음 밤에 대상만 새로 찍어도 옛 문구가 클릭 없이 날아간다.
+	 *
+	 * 닿는 길이 있다는 것이 핵심이다. 쪽지는 대상이 그 밤에 죽으면 환불되므로
+	 * (usesSpent가 안 오른다) 시민에게 다음 밤 차례가 그대로 남고, putIntent는
+	 * 첫 클릭에서 이미 일어난다 — 즉 그 밤에 문구를 고르지 않아도 지목은
+	 * 성립한다. 이론적 방어가 아니라 평범한 판에서 나오는 순서다.
+	 */
+	it("지난밤 문구는 다음 밤으로 넘어가지 않는다", () => {
+		// 5인은 시민 하나가 죽으면 2:2로 판이 끝난다. 사람이 죽어야 하는
+		// 시나리오라 판이 살아남는 7인으로 짠다
+		startGame(7, 1, [
+			Role.MAFIA,
+			Role.POLICE,
+			Role.DOCTOR,
+			Role.CITIZEN,
+			Role.POLITICIAN,
+			Role.SOLDIER,
+			Role.SHAMAN,
+		]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		passPeacefulFirstNight(target); // 첫 밤은 무사라 사람이 죽지 않는다
+
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const citizen = seatsWithRole(target, Role.CITIZEN)[0];
+		const victim = seatsWithRole(target, Role.POLITICIAN)[0];
+		const nextTarget = seatsWithRole(target, Role.SHAMAN)[0];
+
+		// 둘째 밤: 쪽지를 끝까지 확정하고, 그 대상을 마피아가 죽인다
+		send(playerOf(citizen), { type: "select", num: victim.index });
+		send(playerOf(citizen), { type: "phrase", index: 1 });
+		send(playerOf(mafia), { type: "select", num: victim.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		// 전제를 못박는다. 대상이 살아 있으면 쪽지가 배달되면서 환불이 없고,
+		// 그러면 셋째 밤에 차례가 없어 아래 단언이 빈 밤을 보고 통과한다
+		assert.equal(victim.alive, false, "쪽지 대상이 둘째 밤에 죽지 않았습니다");
+		assert.equal(citizen.usesSpent, 0, "죽은 대상에게 보낸 쪽지가 환불되지 않았습니다");
+
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
+		finishPhase(target); // → NIGHT (셋째 밤)
+		assert.equal(target.phase, GamePhase.NIGHT, "셋째 밤에 도착하지 못했습니다");
+
+		// 셋째 밤: 대상만 새로 찍고 문구는 고르지 않는다
+		send(playerOf(citizen), { type: "select", num: nextTarget.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		assert.equal(
+			chatSaw(playerOf(nextTarget), `✉️ 익명 쪽지: ${QUICK_NOTE[1]}`),
+			false,
+			"지난밤에 고른 문구가 클릭 없이 다시 날아갔습니다"
+		);
+	});
 });
 /**
  * 밤에 알아낸 것이 실제로 그 사람 손에 들어가는가.

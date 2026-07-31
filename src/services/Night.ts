@@ -298,9 +298,19 @@ function bindNightWidget(widget: ScriptWidget): void {
  * 대상을 위젯에서 다시 받으면 조작된 메시지 하나가 대상과 문구를 함께
  * 정할 수 있게 된다 — 그러면 밤 위젯이 잠긴 뒤에도 대상을 바꿀 수 있다.
  *
+ * 직업이 쪽지인지는 여기서 보지 않는다. 아래 세 관문(usedSkill·지목 유무·
+ * 번호 범위)이 다른 직업을 전부 막지만, 그 안전은 "recordNightIntent가
+ * consumed: false를 돌려주는 능력이 쪽지뿐"이라는 불변식 위에 서 있다.
+ * 둘째가 생기면 그 직업의 첫 클릭 뒤에 온 phrase가 noteText를 채워서,
+ * 밤 능력이 조용히 쪽지로 바뀐다. 불변식은 tests/domain.test.ts의
+ * 「소모하지 않는 지목은 쪽지 하나뿐이다」가 지킨다.
+ *
  * 진행률은 알리지 않는다. 쪽지는 nightProgress의 분모에서 빠져 있어서
  * 이 좌석의 usedSkill이 켜져도 acted와 total 어느 쪽도 움직이지 않는다 —
  * 부르면 방금 보낸 것과 똑같은 숫자를 방 전원에게 한 번 더 보내는 일이 된다.
+ * 이 이유는 nightProgress가 NOTE를 continue로 빼는 한 줄에 통째로 매달려
+ * 있다. 그 줄이 사라지면 쪽지가 분모에 들어가고, 그 순간 여기의 침묵이
+ * 진짜 버그가 된다 — 문구를 고른 사람 몫이 진행률에서 영영 빠진다.
  */
 function chooseNotePhrase(
 	room: Room,

@@ -159,6 +159,10 @@ export interface Seat {
 	 * 오르는 시점은 **정산**이다. 클릭 시점이 아니다 — 쪽지처럼 지목한 뒤에도
 	 * 실제로 쓰지 않고 끝날 수 있는 능력이 있고, 막는 능력이 들어오면
 	 * 막힌 자경단원이 총알을 잃은 채로 남는다.
+	 *
+	 * 이 값은 횟수다. `if (seat.usesSpent)`는 컴파일되지만 뜻이 다르다 —
+	 * 그것은 "한 번이라도 썼는가"이지 "다 썼는가"가 아니다. 남은 횟수는
+	 * NightResolution의 noTurnReason이 maxUses와 견주어 판정한다.
 	 */
 	usesSpent: number;
 	/**

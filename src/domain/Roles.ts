@@ -428,7 +428,9 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "점쟁이",
 		team: Team.CITIZEN,
 		glyph: "🃏",
-		ability: "첫 밤에만, 한 명이 밤에 쓸 능력을 가졌는지 봅니다.",
+		// "밤에 쓸 능력"이 아니라 "직업 능력"이다. 시민의 익명 쪽지는 세지 않으므로
+		// 전자로 적으면 쪽지를 든 시민에게 '없습니다'가 나갈 때 설명이 거짓말이 된다
+		ability: "첫 밤에만, 한 명이 직업 능력을 가졌는지 봅니다.",
 		tip: "진영은 알 수 없습니다. 언제 말할지가 당신의 유일한 선택입니다.",
 		nightAction: NightActionKind.INSPECT_ABILITY,
 		nightStep: NightStep.INSPECT,
@@ -497,4 +499,23 @@ export function inMafiaChat(seat: { role: Role; team: Team }): boolean {
  */
 export function hearsGhosts(seat: { role: Role }): boolean {
 	return ROLE_DEFS[seat.role].nightChat === ChatChannel.GHOST;
+}
+
+/**
+ * 이 직업이 "직업 능력"을 갖고 있는가. 점쟁이의 점괘가 묻는 것이 이것이다.
+ *
+ * 익명 쪽지(NOTE)는 세지 않는다. 쪽지는 평범한 시민이라면 누구나 똑같이
+ * 들고 있는 기본 행동이지 그 사람이 무엇인지를 가르는 능력이 아니다.
+ * 이 구별이 없으면 점괘가 상수가 된다 — 시민에게 쪽지가 생긴 뒤 하한을 지우고
+ * 4~12인을 200시드씩 돌려 보면, 쪽지를 세는 판정에서는 6인 88판 중 59판이
+ * '없습니다'가 나올 사람이 아예 없는 판이다(4·5인은 44/44판이 그렇다).
+ * 쪽지를 빼면 그 값이 전부 최소 한 명으로 돌아온다.
+ *
+ * nightAction !== null을 여기저기 흩어 쓰지 않는 이유가 그것이다. 그 식은
+ * "오늘 밤 차례가 있는가"(NightResolution.noTurnReason)와 글자가 같고 뜻이
+ * 다르다. 묻는 것이 다르면 함수도 달라야 한다.
+ */
+export function hasJobAbility(role: Role): boolean {
+	const kind = ROLE_DEFS[role].nightAction;
+	return kind !== null && kind !== NightActionKind.NOTE;
 }

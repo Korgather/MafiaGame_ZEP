@@ -119,6 +119,16 @@ describe("사기꾼", () => {
 	});
 });
 
+/*
+ * 점괘 두 줄. 문구를 통째로 못 박는다.
+ *
+ * /있습니다/만 보면 문구가 "밤에 쓸 능력이 있습니다"로 되돌아가도 전부
+ * 통과한다 — 그 문구는 쪽지를 든 시민에게 '없습니다'를 내보내는 순간
+ * 거짓말이 되므로, 무엇을 묻는 문장인지까지 잡아 둔다.
+ */
+const HAS = /직업 능력이 있습니다/;
+const NONE = /직업 능력이 없습니다/;
+
 describe("점쟁이", () => {
 	it("첫 밤에는 차례가 있다", () => {
 		// turnCount는 밤이 끝날 때 오르므로 첫 밤 동안에는 0이다
@@ -138,24 +148,24 @@ describe("점쟁이", () => {
 
 	it("능력을 가진 직업은 '있습니다'로 나온다", () => {
 		const seats = [seat(1, Role.SEER), seat(2, Role.DOCTOR)];
-		assert.match(reveal(night(seats, [[1, 2]]), 1), /있습니다/);
+		assert.match(reveal(night(seats, [[1, 2]]), 1), HAS);
 	});
 
 	it("자경단원은 첫 밤에 못 쓰지만 '있습니다'다", () => {
 		// 판정 기준은 보유다. "오늘 쓸 수 있는가"로 바꾸면 첫 밤의 점괘가
 		// needsPriorDay 직업 목록을 그대로 흘린다
 		const seats = [seat(1, Role.SEER), seat(2, Role.VIGILANTE)];
-		assert.match(reveal(night(seats, [[1, 2]]), 1), /있습니다/);
+		assert.match(reveal(night(seats, [[1, 2]]), 1), HAS);
 	});
 
 	it("점쟁이 자신도 '있습니다'다", () => {
 		const seats = [seat(1, Role.SEER)];
-		assert.match(reveal(night(seats, [[1, 1]]), 1), /있습니다/);
+		assert.match(reveal(night(seats, [[1, 1]]), 1), HAS);
 	});
 
 	it("사기꾼은 '없습니다'로 나온다", () => {
 		const seats = [seat(1, Role.SEER), seat(2, Role.CON_ARTIST)];
-		assert.match(reveal(night(seats, [[1, 2]]), 1), /없습니다/);
+		assert.match(reveal(night(seats, [[1, 2]]), 1), NONE);
 	});
 
 	it("사기꾼은 점을 당한 것도 알아챈다", () => {
@@ -165,27 +175,36 @@ describe("점쟁이", () => {
 	});
 
 	it("영매·군인·정치인도 '없습니다'다", () => {
-		// 사기꾼과 같은 답을 내는 직업이 셋 남아 있는 것이, 이 직업이 확정
-		// 정보가 되지 않게 하는 유일한 장치다. 시민이 쪽지를 갖게 되면서
-		// 이 목록에서 빠졌다 — 점괘의 애매함을 지탱하는 인원이 그만큼 줄었다
+		// 사기꾼과 같은 답을 내는 직업이 넷 더 있는 것이, 이 직업이 확정
+		// 정보가 되지 않게 하는 유일한 장치다
 		for (const role of [Role.SHAMAN, Role.SOLDIER, Role.POLITICIAN]) {
 			const seats = [seat(1, Role.SEER), seat(2, role)];
-			assert.match(reveal(night(seats, [[1, 2]]), 1), /없습니다/, role);
+			assert.match(reveal(night(seats, [[1, 2]]), 1), NONE, role);
 		}
 	});
 
-	it("시민은 쪽지를 갖게 되어 '있습니다'로 나온다", () => {
-		// 묻는 것은 보유다. 다 쓴 시민도 여전히 갖고 있으므로 답이 같아야
-		// 한다 — 답이 갈리면 점괘 한 번이 "저 시민은 이미 썼다"까지 알려준다
-		const fresh = [seat(1, Role.SEER), seat(2, Role.CITIZEN)];
-		assert.match(reveal(night(fresh, [[1, 2]]), 1), /있습니다/);
+	it("시민의 익명 쪽지는 직업 능력으로 세지 않는다", () => {
+		// 점괘가 쪽지를 세면 '없습니다'가 나올 사람이 판에서 통째로 사라진다 —
+		// 하한을 지우고 4~12인을 200시드씩 돌리면 6인 88판 중 59판이 후보 0명이
+		// 되고, 4·5인은 44/44판이 그렇다. 쪽지는 평민이면 누구나 똑같이 들고
+		// 있어서 그 사람이 무엇인지를 가르지 못한다.
+		// 이 단언은 hasJobAbility에서 NOTE 제외를 빼는 순간 죽는다
+		const seats = [seat(1, Role.SEER), seat(2, Role.CITIZEN)];
+		assert.match(reveal(night(seats, [[1, 2]]), 1), NONE);
+	});
+
+	it("다 쓴 시민도 답이 같다", () => {
+		// 묻는 것은 보유다. 답이 갈리면 점괘 한 번이 "저 시민은 이미 썼다"까지
+		// 알려주고, 그건 점쟁이가 갖지 않기로 한 확정 정보다
 		const spent = [seat(1, Role.SEER), seat(2, Role.CITIZEN, { usesSpent: 1 })];
-		assert.match(reveal(night(spent, [[1, 2]]), 1), /있습니다/);
+		assert.match(reveal(night(spent, [[1, 2]]), 1), NONE);
 	});
 
 	it("진영은 한 글자도 새지 않는다", () => {
 		const seats = [seat(1, Role.SEER), seat(2, Role.MAFIA)];
 		const line = reveal(night(seats, [[1, 2]]), 1);
+		// 줄이 아예 없어도 doesNotMatch는 통과한다. 먼저 왔는지를 본다
+		assert.ok(line.length > 0, "점괘 자체가 오지 않았다");
 		assert.doesNotMatch(line, /마피아|시민/);
 	});
 });
@@ -241,6 +260,49 @@ describe("시민의 익명 쪽지", () => {
 		assert.equal(reveal(result, 3), "");
 		// 배달되지 않았으니 쓴 것도 아니다. 여기가 false면 대상이 죽는 바람에
 		// 시민이 한 장을 날린다 — 밤 사망은 어차피 공개되므로 새는 정보는 없다
+		assert.equal(sender.usesSpent, 0);
+	});
+
+	it("의사가 살린 대상에게는 그대로 배달된다", () => {
+		// 배달 조건은 "오늘 죽었는가"이지 "오늘 공격받았는가"가 아니다.
+		// 후자로 바꾸면 살아난 사람에게만 쪽지가 안 오고, 그 침묵 자체가
+		// "저 사람은 어젯밤 공격받았다"를 알려주는 신호가 된다 —
+		// 정보 유출 방어라 흔적이 없어서 조용히 사라지기 쉽다
+		const sender = seat(1, Role.CITIZEN, { noteText: "내일 나서 주세요" });
+		const seats = [sender, seat(2, Role.MAFIA), seat(3, Role.DOCTOR), seat(4, Role.POLITICIAN)];
+		const result = night(seats, [[1, 4], [2, 4], [3, 4]]);
+		// 실제로 공격이 있었고 살아남았는지 먼저 본다. 공격이 조용히 빠지면
+		// 아래 배달 단언은 평범한 밤을 보고 통과한다
+		assert.deepEqual(
+			result.casualties.map(c => [c.seat.index, c.outcome]),
+			[[4, NightOutcome.SAVED]]
+		);
+		assert.match(reveal(result, 4), /내일 나서 주세요/);
+		assert.equal(sender.usesSpent, 1);
+	});
+
+	it("군인의 방탄이 막은 대상에게도 그대로 배달된다", () => {
+		// SAVED와 같은 이유다. 결말이 둘이라 한쪽만 잡으면 다른 쪽이 샌다
+		const sender = seat(1, Role.CITIZEN, { noteText: "오늘은 조용히 계세요" });
+		const seats = [sender, seat(2, Role.MAFIA), seat(3, Role.SOLDIER)];
+		const result = night(seats, [[1, 3], [2, 3]]);
+		assert.deepEqual(
+			result.casualties.map(c => [c.seat.index, c.outcome]),
+			[[3, NightOutcome.SHIELDED]]
+		);
+		assert.match(reveal(result, 3), /오늘은 조용히 계세요/);
+		assert.equal(sender.usesSpent, 1);
+	});
+
+	it("밤이 시작될 때 이미 죽어 있었으면 배달되지 않는다", () => {
+		// 지목 목록은 죽은 자리를 걸러 주지 않는다(targetOf). 어제 죽은 사람을
+		// 찍은 지목이 남아 있으면 그 좌석으로 쪽지가 간다 — 유령에게 가는
+		// 정보라는 점에서 "그 밤에 죽은 사람"과 같다
+		const sender = seat(1, Role.CITIZEN, { noteText: "당신을 믿습니다" });
+		const seats = [sender, seat(2, Role.POLITICIAN, { alive: false })];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(reveal(result, 2), "");
+		// 배달되지 않았으니 쓴 것도 아니다
 		assert.equal(sender.usesSpent, 0);
 	});
 

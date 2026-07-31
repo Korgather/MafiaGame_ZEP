@@ -18,7 +18,14 @@
  */
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
-import { inMafiaChat, NightActionKind, NightStep, roleDef, roleName } from "./Roles.ts";
+import {
+	hasJobAbility,
+	inMafiaChat,
+	NightActionKind,
+	NightStep,
+	roleDef,
+	roleName,
+} from "./Roles.ts";
 import type { NightCasualty } from "./NightResolution.ts";
 import { NightOutcome, resolveNightCasualties } from "./NightResolution.ts";
 
@@ -273,15 +280,16 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 			// 묻는 것은 보유이지 가용이 아니다. "오늘 쓸 수 있는가"로 바꾸면
 			// 첫 밤의 점괘가 needsPriorDay 직업 목록을 그대로 흘린다.
 			// 진영은 한 글자도 나가지 않는다 — 이 능력의 값어치는 답이
-			// 확정이 아니라는 데 있고, nightAction이 null인 직업 넷(영매·정치인·
-			// 군인·사기꾼)이 같은 답을 낸다는 사실이 그 애매함을 지탱한다.
-			// 시민이 쪽지를 갖게 되면서 그 넷에서 빠졌다 — 애매함을 받치는
-			// 인원이 그만큼 줄었다는 뜻이다
+			// 확정이 아니라는 데 있고, '없습니다'를 내는 직업 다섯(영매·정치인·
+			// 군인·사기꾼·시민)이 같은 답을 낸다는 사실이 그 애매함을 지탱한다.
+			// 판정을 hasJobAbility에 맡기는 이유가 그 다섯 번째다: 시민의 익명
+			// 쪽지를 능력으로 세면 그 자리가 비고 점괘가 상수에 가까워진다
+			// (Roles.ts의 hasJobAbility에 측정 기록)
 			ledger.reveals.push({
 				seat: actor.index,
-				line: roleDef(target.role).nightAction !== null
-					? `🃏 ${target.index}번 참가자는 밤에 쓸 능력이 있습니다.`
-					: `🃏 ${target.index}번 참가자는 밤에 쓸 능력이 없습니다.`,
+				line: hasJobAbility(target.role)
+					? `🃏 ${target.index}번 참가자는 직업 능력이 있습니다.`
+					: `🃏 ${target.index}번 참가자는 직업 능력이 없습니다.`,
 			});
 			return true;
 

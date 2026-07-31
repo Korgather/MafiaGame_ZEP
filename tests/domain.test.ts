@@ -519,6 +519,24 @@ describe("NightResolution", () => {
 		// 확정도 아직이다. 격자를 물리면 문구 목록을 띄울 자리가 없다
 		assert.equal(result?.confirmed, false);
 	});
+
+	it("소모하지 않는 지목은 쪽지 하나뿐이다", () => {
+		// Night.ts의 chooseNotePhrase는 좌석의 직업이 정말 NOTE인지 보지 않는다.
+		// 세 관문(usedSkill·지목 유무·번호 범위)이 막아 주지만, 그 안전이
+		// 기대는 것은 "consumed: false로 돌아오는 능력이 쪽지뿐"이라는 이
+		// 불변식이다. 둘째가 생기면 그 직업의 첫 클릭 뒤에 phrase 메시지가 오는
+		// 순간 noteText가 채워진다 — 밤 능력이 조용히 쪽지로 바뀐다.
+		// 새 밤 능력을 더할 때 여기가 먼저 빨개지라고 둔 테스트다
+		const nonConsuming: NightActionKind[] = [];
+		for (const role of Object.keys(ROLE_DEFS) as Role[]) {
+			const kind = ROLE_DEFS[role].nightAction;
+			if (kind === null) continue;
+			const result = recordNightIntent(seat(1, role), seat(2, Role.CITIZEN));
+			assert.ok(result, `${role}의 지목이 null로 돌아왔습니다`);
+			if (!result.consumed) nonConsuming.push(kind);
+		}
+		assert.deepEqual(nonConsuming, [NightActionKind.NOTE]);
+	});
 });
 
 describe("NightResolution - 정산", () => {

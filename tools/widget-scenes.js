@@ -335,6 +335,58 @@ const SCENES = [
 		expect: { 'button[data-index="5"]': 1 },
 	},
 	{
+		// 위와 같은 장면인데 끝에 init이 한 번 더 온다. 밤마다 위젯을 새로
+		// 열지만 열린 채로 init이 다시 오는 길이 있고(재접속·화면 복구),
+		// 그때 지난밤의 문구 목록을 치우는 것이 init의 두 줄이다.
+		//
+		// 그 두 줄은 게임 화면에 흔적을 남기지 않아서 지워도 아무 장면이
+		// 빨개지지 않는다 — 위 장면은 phrases에서 끝나므로 청소를 한 번도
+		// 밟지 않는다. 지우면 지난밤 문구가 격자 대신 뜬 채로 밤이 시작된다
+		label: "밤 지목 — 지난밤 문구 목록은 다시 열 때 치운다",
+		file: "roleAction.html",
+		size: [360, 440],
+		messages: [
+			{
+				type: "init",
+				myNum: 3,
+				role: "시민",
+				team: "citizen",
+				alive: true,
+				prompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
+				seats: SEATS,
+				timer: 22,
+				note: "🌙 밤에는 채팅을 할 수 없습니다.",
+			},
+			{
+				type: "phrases",
+				num: 5,
+				options: [
+					"당신을 믿습니다",
+					"당신이 의심됩니다",
+					"오늘은 조용히 계세요",
+					"내일 나서 주세요",
+					"저에게 투표하지 마세요",
+					"우리 편이라면 신호를 주세요",
+				],
+			},
+			// 둘째 밤
+			{
+				type: "init",
+				myNum: 3,
+				role: "시민",
+				team: "citizen",
+				alive: true,
+				prompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
+				seats: SEATS,
+				timer: 22,
+				note: "🌙 밤에는 채팅을 할 수 없습니다.",
+			},
+		],
+		// 위 장면이 1을 기대하는 그 버튼이 여기서는 0이어야 한다. 두 장면이
+		// 짝이라서, 청소를 지우면 이쪽이 6을 세고 빨개진다
+		expect: { 'button[data-index="5"]': 0 },
+	},
+	{
 		label: "밤 — 능력을 이미 쓴 직업",
 		file: "phase.html",
 		size: [340, 300],
