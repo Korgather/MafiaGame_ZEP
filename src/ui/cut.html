@@ -36,25 +36,15 @@
 				overflow: hidden;
 			}
 
-			.cut::before {
-				content: "";
-				position: absolute;
-				inset: 0;
-				background-image: var(--scene-backdrop, none);
-				background-size: cover;
-				background-position: center;
-				filter: saturate(0.9) contrast(1.05);
-			}
-
 			.cut::after {
 				content: "";
 				position: absolute;
 				inset: 0;
-				background-image: linear-gradient(90deg, rgba(10, 8, 8, 0.7), rgba(10, 8, 8, 0.25), rgba(10, 8, 8, 0.7)),
+				background-image: linear-gradient(90deg, rgba(13, 19, 35, 0.42), rgba(13, 19, 35, 0.12), rgba(13, 19, 35, 0.42)),
 					var(--scene-image, none);
 				background-size: cover;
 				background-position: center;
-				opacity: 0.94;
+				opacity: 0.98;
 			}
 
 			/*
@@ -85,7 +75,15 @@
 				flex-direction: column;
 				align-items: center;
 				gap: var(--s3);
+				width: min(100%, 640px);
 				max-width: 640px;
+				padding: var(--s4) var(--s5);
+				background: linear-gradient(135deg, rgba(15, 27, 51, 0.64), rgba(42, 35, 68, 0.44));
+				border: 1px solid rgba(255, 255, 255, 0.16);
+				border-radius: var(--r3);
+				box-shadow: 0 16px 42px rgba(8, 12, 28, 0.28);
+				backdrop-filter: blur(6px);
+				transform: translateY(-6vh);
 			}
 
 			.title {
@@ -184,11 +182,6 @@
 			const BODY = 0.62;
 			/** 화면이 걷히기 직전에 흐려지는 시간(ms) */
 			const OUT = 300;
-			const SCENE_BACKDROP = {
-				execution: "art_bg_prison.png",
-				"night-result": "art_bg_graveyard.png",
-			};
-
 			Parent.on({
 				init(data) {
 					const ms = Math.max(1000, Number(data.ms) || 3000);
@@ -196,8 +189,6 @@
 					const cut = qs("#cut");
 					const art = typeof data.art === "string" ? data.art : "";
 					cut.style["--scene-image"] = art ? `url("${art}")` : "none";
-					const backdrop = SCENE_BACKDROP[data.scene] || "";
-					cut.style["--scene-backdrop"] = backdrop ? `url("${backdrop}")` : "none";
 
 					cut.classList.add(data.tone || "neutral");
 					// 나타남과 사라짐을 한 줄에 싣는다. 걷는 것은 서버(Cut.ts의 advanceCut)라

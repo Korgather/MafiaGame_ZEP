@@ -157,18 +157,18 @@ body {
 
 /* 단계별 분위기. 배경만 갈아끼우고 구조는 같다 */
 .panel.night {
-	background-image: linear-gradient(160deg, rgba(27, 35, 64, 0.84), rgba(13, 16, 32, 0.94)),
+	background-image: linear-gradient(160deg, rgba(25, 43, 74, 0.28), rgba(16, 27, 49, 0.54)),
 		url("art_bg_village_night.png");
 }
 .panel.day {
-	background-image: linear-gradient(160deg, rgba(64, 51, 27, 0.82), rgba(26, 20, 16, 0.94)),
+	background-image: linear-gradient(160deg, rgba(79, 63, 37, 0.18), rgba(31, 27, 31, 0.52)),
 		url("art_bg_village_day.png");
 }
 .panel.vote {
 	--panel-frame: url("art_ui_vote_frame.png");
 	--panel-slice: 59 38 51 37 fill;
 	--panel-border: 20px;
-	background-image: linear-gradient(160deg, rgba(43, 32, 54, 0.86), rgba(20, 15, 26, 0.95)),
+	background-image: linear-gradient(160deg, rgba(48, 42, 78, 0.24), rgba(24, 22, 43, 0.58)),
 		url("art_bg_vote_hall.png");
 }
 

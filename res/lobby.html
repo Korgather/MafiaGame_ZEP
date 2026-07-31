@@ -44,18 +44,18 @@
 	z-index: 1;
 }
 .panel.night {
-	background-image: linear-gradient(160deg, rgba(27, 35, 64, 0.84), rgba(13, 16, 32, 0.94)),
+	background-image: linear-gradient(160deg, rgba(25, 43, 74, 0.28), rgba(16, 27, 49, 0.54)),
 		url("art_bg_village_night.png");
 }
 .panel.day {
-	background-image: linear-gradient(160deg, rgba(64, 51, 27, 0.82), rgba(26, 20, 16, 0.94)),
+	background-image: linear-gradient(160deg, rgba(79, 63, 37, 0.18), rgba(31, 27, 31, 0.52)),
 		url("art_bg_village_day.png");
 }
 .panel.vote {
 	--panel-frame: url("art_ui_vote_frame.png");
 	--panel-slice: 59 38 51 37 fill;
 	--panel-border: 20px;
-	background-image: linear-gradient(160deg, rgba(43, 32, 54, 0.86), rgba(20, 15, 26, 0.95)),
+	background-image: linear-gradient(160deg, rgba(48, 42, 78, 0.24), rgba(24, 22, 43, 0.58)),
 		url("art_bg_vote_hall.png");
 }
 .hd {	display: flex;	align-items: center;	justify-content: space-between;	gap: var(--s2);	flex: 0 0 auto;}.hd-title {	display: flex;	align-items: center;	gap: var(--s2);	min-width: 0;	font-size: var(--t-lg);	font-weight: 700;	letter-spacing: -0.01em;}.hd-sub {	font-size: var(--t-xs);	color: var(--ink-3);	white-space: nowrap;}.timer {
@@ -177,11 +177,11 @@
 		<style>						.rooms {				display: grid;				grid-template-columns: repeat(2, 1fr);				gap: var(--s2);				align-content: start;			}			.room {				display: flex;				align-items: center;				justify-content: space-between;				gap: var(--s2);				padding: var(--s2) var(--s3);				font: inherit;				font-size: var(--t-sm);				font-weight: 700;				color: var(--ink);				background: var(--surface-2);				border: 1px solid var(--line);				border-radius: var(--r2);				cursor: pointer;				transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);			}			.room:hover:not(:disabled) {				background: var(--surface-3);				border-color: var(--accent);			}			.room:focus-visible {				outline: 2px solid var(--accent);				outline-offset: 2px;			}			.room:disabled {				cursor: default;				color: var(--ink-3);				opacity: 0.6;			}			.room .cnt {				font-variant-numeric: tabular-nums;				font-weight: 500;				color: var(--ink-2);			}			.room.full .cnt {				color: var(--warn);			}						.room.playing .cnt {				color: var(--accent);			}						.seat {				display: flex;				align-items: center;				gap: var(--s2);				padding: var(--s2);				background: var(--surface-2);				border: 1px solid var(--line);				border-radius: var(--r2);			}			.seat.ready {				border-color: var(--ok);			}			.seat.me {				background: var(--surface-3);			}			.seat .idx {				flex: 0 0 auto;				width: 18px;				font-size: var(--t-sm);				font-weight: 700;				color: var(--ink-3);				text-align: right;			}			.seat .nm {				font-size: var(--t-sm);				font-weight: 600;			}			.seat .meta {				font-size: var(--t-xs);				color: var(--ink-3);			}			.seat .state {				flex: 0 0 auto;				font-size: var(--t-xs);				font-weight: 700;				color: var(--ink-3);			}			.seat.ready .state {				color: var(--ok);			}			.kick {				flex: 0 0 auto;				min-height: 26px;				padding: 2px var(--s2);				font-size: var(--t-xs);			}			.kick.voted {				color: var(--danger);				border-color: var(--danger);			}			.list {
 				display: flex;				flex-direction: column;				gap: var(--s1);			}
 			.panel.title {
-				background-image: linear-gradient(rgba(20, 16, 15, 0.7), rgba(20, 16, 15, 0.94)),
+				background-image: linear-gradient(rgba(20, 29, 50, 0.24), rgba(18, 24, 43, 0.56)),
 					url("art_bg_title.png");
 			}
 			.panel.lobby {
-				background-image: linear-gradient(rgba(20, 16, 15, 0.72), rgba(20, 16, 15, 0.94)),
+				background-image: linear-gradient(rgba(20, 36, 54, 0.22), rgba(18, 27, 43, 0.54)),
 					url("art_bg_lobby.png");
 			}
 		</style>

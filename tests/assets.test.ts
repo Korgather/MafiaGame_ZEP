@@ -367,6 +367,28 @@ describe("프로덕션 비주얼 에셋 매니페스트", () => {
 		}
 	});
 
+	it("리뉴얼한 배경과 컷신을 과한 암막으로 다시 가리지 않는다", () => {
+		const sources = ["theme.css", "lobby.html", "gameOver.html"].map(file =>
+			readFileSync(join(UI_SOURCE_DIR, file), "utf8")
+		);
+
+		for (const source of sources) {
+			const backgroundBlocks = source.match(/background-image:[\s\S]{0,220}?url\("art_bg_[^"]+"\)/g) || [];
+			assert.ok(backgroundBlocks.length > 0, "배경 이미지 선언을 찾지 못했습니다");
+
+			for (const block of backgroundBlocks) {
+				const alphas = [...block.matchAll(/rgba\([^)]*,\s*(0?\.\d+)\)/g)].map(match => Number(match[1]));
+				assert.ok(alphas.every(alpha => alpha <= 0.62), `배경 암막이 너무 진합니다: ${block}`);
+			}
+		}
+
+		const cutSource = readFileSync(join(UI_SOURCE_DIR, "cut.html"), "utf8");
+		const cutOverlay = cutSource.match(/\.cut::after\s*\{[\s\S]*?\}/)?.[0] || "";
+		const cutAlphas = [...cutOverlay.matchAll(/rgba\([^)]*,\s*(0?\.\d+)\)/g)].map(match => Number(match[1]));
+		assert.ok(cutAlphas.length > 0, "컷신 오버레이를 찾지 못했습니다");
+		assert.ok(cutAlphas.every(alpha => alpha <= 0.5), `컷신 암막이 너무 진합니다: ${cutOverlay}`);
+	});
+
 	it("장식 프레임과 버튼은 100% 100% 배경으로 늘려 그리지 않는다", () => {
 		const source = allFrameUiSource();
 
