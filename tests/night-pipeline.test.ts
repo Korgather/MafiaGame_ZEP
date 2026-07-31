@@ -1,20 +1,24 @@
 /**
  * 밤 파이프라인 테스트.
  *
- * 이 파일이 지키는 것은 하나다: 밤의 결과가 클릭 순서에 의존하지 않는다.
- * 지금은 의사가 늦게 눌러도 결과가 같지만 그건 resolveNightCasualties가
- * 밤 끝에 한 번만 보기 때문이지 순서를 정했기 때문이 아니다.
- * 차단(BLOCK)이 들어오면 그 우연이 깨진다.
+ * 이 파일이 지키는 것은 둘이다.
+ *   1. 밤의 결과가 클릭 순서에 의존하지 않는다. 지금은 의사가 늦게 눌러도
+ *      결과가 같지만 그건 resolveNightCasualties가 밤 끝에 한 번만 보기
+ *      때문이지 순서를 정했기 때문이 아니다. 차단(BLOCK)이 들어오면 그 우연이
+ *      깨진다.
+ *   2. 밤 능력이 **조용히** 빠지는 길이 없다. step을 순회 목록에서 빠뜨리거나
+ *      능력 종류에 가지를 안 다는 실수는 에러도 실패도 내지 않고 그 능력을
+ *      없던 것으로 만든다. 아래 「목록의 완전성」이 그 둘을 잡는다.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Role } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
-import { NightStep, ROLE_DEFS } from "../src/domain/Roles.ts";
+import { NightActionKind, NightStep, ROLE_DEFS } from "../src/domain/Roles.ts";
 import { NightOutcome } from "../src/domain/NightResolution.ts";
-import type { NightIntent } from "../src/domain/NightPipeline.ts";
-import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
+import type { NightIntent, NightSettlement } from "../src/domain/NightPipeline.ts";
+import { putIntent, resolveNightIntents, STEP_ORDER } from "../src/domain/NightPipeline.ts";
 import { seat } from "./helpers/seat.ts";
 
 /** 밤을 한 번 돌린다. intents는 클릭 순서대로 준다 */
@@ -23,6 +27,56 @@ function night(seats: Seat[], clicks: Array<[number, number]>, skipAttacks = fal
 	for (const [actor, target] of clicks) putIntent(intents, actor, target);
 	return resolveNightIntents(seats, intents, { skipAttacks });
 }
+
+/**
+ * 밤이 좌석에 남긴 것 전부.
+ *
+ * 한 필드만 비교하면 순서가 새는 자리를 놓친다. 이 슬라이스가 지키는 명제는
+ * "결과가 같다"이지 "이 플래그가 켜졌다"가 아니다.
+ */
+function snapshot(seats: readonly Seat[]) {
+	return seats.map(s => ({
+		index: s.index,
+		alive: s.alive,
+		healed: s.healed,
+		armored: s.armored,
+		silenced: s.silenced,
+		scooped: s.scooped,
+		attackedBy: s.attackedBy.slice(),
+	}));
+}
+
+/** 사망 판정을 비교하기 좋은 모양으로 */
+function outcomes(settlement: NightSettlement) {
+	return settlement.casualties.map(c => [c.seat.index, c.outcome]);
+}
+
+/** 파이프라인이 이 좌석에 아무것도 남기지 않았다 */
+function noTrace(target: Seat) {
+	assert.equal(target.healed, false);
+	assert.deepEqual(target.attackedBy, []);
+	assert.equal(target.silenced, false);
+	assert.equal(target.scooped, false);
+}
+
+/**
+ * 능력 종류 하나가 대상에 남기는 흔적.
+ *
+ * Record<NightActionKind, …>라 종류를 늘리면 여기에 줄을 넣기 전까지 이 파일이
+ * 컴파일되지 않는다. apply(NightPipeline.ts)의 switch도 default를 두지 않아
+ * 같은 순간 막힌다 — 새 밤 능력이 아무 소리 없이 아무 일도 하지 않는 길을
+ * 타입과 테스트 양쪽에서 닫는다.
+ */
+const TRACE_BY_KIND: Record<NightActionKind, { actor: Role; check: (target: Seat) => void }> = {
+	HEAL: { actor: Role.DOCTOR, check: t => assert.equal(t.healed, true) },
+	ATTACK: { actor: Role.MAFIA, check: t => assert.deepEqual(t.attackedBy, [1]) },
+	SILENCE: { actor: Role.THUG, check: t => assert.equal(t.silenced, true) },
+	SCOOP: { actor: Role.REPORTER, check: t => assert.equal(t.scooped, true) },
+	// 조사 응답은 아직 클릭 시점에 나간다(Task 5에서 reveals로 옮긴다).
+	// 그래서 파이프라인이 대상에 남기는 것이 없다
+	INSPECT_TEAM: { actor: Role.POLICE, check: noTrace },
+	INSPECT_ROLE: { actor: Role.SPY, check: noTrace },
+};
 
 describe("밤 파이프라인 — 클릭 순서", () => {
 	it("의사가 마피아보다 늦게 눌러도 대상이 산다", () => {
@@ -33,14 +87,21 @@ describe("밤 파이프라인 — 클릭 순서", () => {
 		assert.equal(late.casualties[0].outcome, NightOutcome.SAVED);
 	});
 
-	it("클릭 순서를 뒤집어도 결과가 같다", () => {
-		const first = [seat(1, Role.MAFIA), seat(2, Role.DOCTOR), seat(3, Role.CITIZEN)];
-		const second = [seat(1, Role.MAFIA), seat(2, Role.DOCTOR), seat(3, Role.CITIZEN)];
-		const a = night(first, [[1, 3], [2, 3]]);
-		const b = night(second, [[2, 3], [1, 3]]);
-		assert.equal(a.casualties.length, b.casualties.length);
-		assert.equal(a.casualties[0].outcome, b.casualties[0].outcome);
-		assert.equal(first[2].alive, second[2].alive);
+	it("클릭 순서를 뒤집어도 밤이 남긴 상태 전부가 같다", () => {
+		// 마피아·짐승인간·의사가 모두 4번을 고른다. 순서가 새면 attackedBy의
+		// 적재 순서나 치료의 적용 시점이 갈린다
+		const roles = [Role.MAFIA, Role.BEAST, Role.DOCTOR, Role.CITIZEN];
+		const first = roles.map((role, i) => seat(i + 1, role));
+		const second = roles.map((role, i) => seat(i + 1, role));
+		const a = night(first, [[1, 4], [2, 4], [3, 4]]);
+		const b = night(second, [[3, 4], [2, 4], [1, 4]]);
+
+		assert.deepEqual(snapshot(first), snapshot(second));
+		assert.deepEqual(outcomes(a), outcomes(b));
+		// 빈 상태끼리 비교해 놓고 통과하는 일이 없도록, 비교 대상이 실제로
+		// 무언가를 담고 있음을 함께 못 박는다
+		assert.deepEqual(first[3].attackedBy, [1, 2]);
+		assert.deepEqual(outcomes(a), [[4, NightOutcome.SAVED]]);
 	});
 
 	it("공격자 번호는 좌석 순서대로 쌓인다", () => {
@@ -53,27 +114,40 @@ describe("밤 파이프라인 — 클릭 순서", () => {
 
 describe("밤 파이프라인 — step 배치", () => {
 	it("치료는 사망 확정보다 먼저 적용된다", () => {
-		const seats = [seat(1, Role.DOCTOR), seat(2, Role.CITIZEN)];
-		night(seats, [[1, 2]]);
-		assert.equal(seats[1].healed, true);
+		// 순서를 보는 관측은 healed 플래그가 아니라 정산 결과다. PROTECT(30)가
+		// DEATH(50)보다 뒤에 있었다면 정산이 healed를 보지 못해 KILLED가 된다
+		const seats = [seat(1, Role.DOCTOR), seat(2, Role.MAFIA), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[1, 3], [2, 3]]);
+		assert.equal(seats[2].healed, true);
+		assert.deepEqual(outcomes(result), [[3, NightOutcome.SAVED]]);
+		assert.ok(STEP_ORDER.indexOf(NightStep.PROTECT) < STEP_ORDER.indexOf(NightStep.DEATH));
 	});
 
 	it("자경단원 자책은 DEATH step에서 일어난다", () => {
 		const seats = [seat(1, Role.VIGILANTE), seat(2, Role.CITIZEN)];
 		const result = night(seats, [[1, 2]]);
-		const outcomes = result.casualties.map(c => c.outcome);
-		assert.ok(outcomes.includes(NightOutcome.KILLED));
-		assert.ok(outcomes.includes(NightOutcome.BACKFIRED));
+		const list = result.casualties.map(c => c.outcome);
+		assert.ok(list.includes(NightOutcome.KILLED));
+		assert.ok(list.includes(NightOutcome.BACKFIRED));
 	});
 
 	it("협박과 취재는 사망 확정 뒤에 걸린다", () => {
 		// AFTER에 두는 이유: 협박은 다음 낮에 작용하므로 이미 죽은 사람을
-		// 협박하는 낭비가 없어야 한다
+		// 협박하는 낭비가 없어야 한다.
+		//
+		// "뒤"를 확인하려면 두 가지가 함께 필요하다 — 직업이 AFTER에 있다는 것과,
+		// AFTER가 순회에서 DEATH 뒤에 선다는 것. 앞의 것만으로는 AFTER가 어디에
+		// 서는지 알 수 없다.
 		assert.equal(ROLE_DEFS[Role.THUG].nightStep, NightStep.AFTER);
 		assert.equal(ROLE_DEFS[Role.REPORTER].nightStep, NightStep.AFTER);
-		const seats = [seat(1, Role.REPORTER), seat(2, Role.MAFIA)];
-		night(seats, [[1, 2]]);
-		assert.equal(seats[1].scooped, true);
+		assert.ok(STEP_ORDER.indexOf(NightStep.AFTER) > STEP_ORDER.indexOf(NightStep.DEATH));
+
+		// 흔적 자체는 오늘 순서와 무관하다 — 정산이 silenced·scooped를 읽지
+		// 않기 때문이다. 순서가 결과를 실제로 가르는 것은 차단이 들어올 때다
+		const seats = [seat(1, Role.REPORTER), seat(2, Role.THUG), seat(3, Role.MAFIA)];
+		night(seats, [[1, 3], [2, 3]]);
+		assert.equal(seats[2].scooped, true);
+		assert.equal(seats[2].silenced, true);
 	});
 
 	it("밤 시작 시점에 이미 죽어 있던 좌석의 지목은 버린다", () => {
@@ -93,11 +167,47 @@ describe("밤 파이프라인 — step 배치", () => {
 		// 파이프라인이 끝난 시점에도 seat.alive는 아직 true다.
 		const seats = [seat(1, Role.MAFIA), seat(2, Role.REPORTER), seat(3, Role.CITIZEN)];
 		const result = night(seats, [[1, 2], [2, 3]]);
-		assert.deepEqual(
-			result.casualties.map(c => [c.seat.index, c.outcome]),
-			[[2, NightOutcome.KILLED]]
-		);
+		assert.deepEqual(outcomes(result), [[2, NightOutcome.KILLED]]);
 		assert.equal(seats[2].scooped, true);
+	});
+});
+
+describe("밤 파이프라인 — 목록의 완전성", () => {
+	it("모든 직업의 nightStep이 STEP_ORDER에 들어 있다", () => {
+		// step이 순회 목록에서 빠지면 그 step의 직업은 아무 소리 없이 실행되지
+		// 않는다. 타입 쪽에도 같은 방어가 있지만(StepOrderCoversEveryStep) 그쪽이
+		// 잡는 것은 "NightStep을 늘리고 목록에 안 넣었다"이고, 이쪽이 잡는 것은
+		// "목록 자체를 잘못 고쳤다"이다.
+		for (const role of Object.keys(ROLE_DEFS) as Role[]) {
+			const step = ROLE_DEFS[role].nightStep;
+			assert.ok(
+				STEP_ORDER.indexOf(step) >= 0,
+				`${role}의 nightStep(${step})이 STEP_ORDER에 없다 — 이 직업의 밤 능력은 실행되지 않는다`
+			);
+		}
+	});
+
+	it("STEP_ORDER는 NightStep 숫자값 오름차순이다", () => {
+		// 숫자값(20/30/…)과 배열이 각각 따로 순서를 주장하므로 어긋날 수 있다.
+		// 정렬로 하나를 없애는 길은 Jint의 sort 안정성 때문에 막혀 있으니,
+		// 대신 어긋남을 여기서 잡는다
+		for (let i = 1; i < STEP_ORDER.length; i++) {
+			assert.ok(
+				STEP_ORDER[i - 1] < STEP_ORDER[i],
+				`STEP_ORDER[${i - 1}]=${STEP_ORDER[i - 1]}가 STEP_ORDER[${i}]=${STEP_ORDER[i]}보다 뒤에 있다`
+			);
+		}
+	});
+
+	it("능력 종류마다 대상에 남기는 흔적이 정해져 있다", () => {
+		for (const kind of Object.keys(TRACE_BY_KIND) as NightActionKind[]) {
+			const row = TRACE_BY_KIND[kind];
+			// 표가 실제 직업 정의와 어긋나면 아래 검사는 다른 능력을 보게 된다
+			assert.equal(ROLE_DEFS[row.actor].nightAction, kind);
+			const seats = [seat(1, row.actor), seat(2, Role.CITIZEN)];
+			night(seats, [[1, 2]]);
+			row.check(seats[1]);
+		}
 	});
 });
 
@@ -134,5 +244,41 @@ describe("putIntent", () => {
 		putIntent(intents, 2, 6);
 		putIntent(intents, 1, 7);
 		assert.deepEqual(intents, [{ actor: 1, target: 7 }, { actor: 2, target: 6 }]);
+	});
+
+	it("두 좌석이 같은 대상을 골라도 지목은 둘 다 남는다", () => {
+		// 교체는 시전자 단위다. 대상이 겹친다고 하나로 합쳐지면 마피아와
+		// 짐승인간이 같은 사람을 노린 밤에 공격자 하나가 사라진다
+		const intents: NightIntent[] = [];
+		putIntent(intents, 1, 3);
+		putIntent(intents, 2, 3);
+		assert.deepEqual(intents, [{ actor: 1, target: 3 }, { actor: 2, target: 3 }]);
+
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.BEAST), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[1, 3], [2, 3]]);
+		assert.deepEqual(seats[2].attackedBy, [1, 2]);
+		assert.deepEqual(outcomes(result), [[3, NightOutcome.KILLED]]);
+	});
+
+	it("자기 자신을 지목해도 막지 않는다 (관측한 동작)", () => {
+		// **설계된 규칙이 아니라 오늘의 동작을 못 박는 것이다.** 자기 지목을
+		// 막는 가드는 어디에도 없다 — recordNightIntent에도, Night.ts의 클릭
+		// 경로에도, 밤 위젯에도(자기 타일은 죽었을 때만 비활성화된다).
+		// 파이프라인도 actor === target을 특별 취급하지 않는다.
+		const mafia = [seat(1, Role.MAFIA), seat(2, Role.CITIZEN)];
+		const shot = night(mafia, [[1, 1]]);
+		assert.deepEqual(mafia[0].attackedBy, [1]);
+		assert.deepEqual(outcomes(shot), [[1, NightOutcome.KILLED]]);
+
+		// 의사의 자가 치료도 그대로 걸린다
+		const doctor = [seat(1, Role.MAFIA), seat(2, Role.DOCTOR)];
+		const saved = night(doctor, [[1, 2], [2, 2]]);
+		assert.equal(doctor[1].healed, true);
+		assert.deepEqual(outcomes(saved), [[2, NightOutcome.SAVED]]);
+
+		// 자경단원이 자기를 쏘면 자책은 따로 기록되지 않는다. 이미 사망자
+		// 목록에 있는 좌석이라 hasCasualty가 두 번째 항목을 막는다
+		const vigilante = [seat(1, Role.VIGILANTE), seat(2, Role.CITIZEN)];
+		assert.deepEqual(outcomes(night(vigilante, [[1, 1]])), [[1, NightOutcome.KILLED]]);
 	});
 });
