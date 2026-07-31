@@ -65,22 +65,8 @@ export function beginDay(room: Room): void {
 
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 
-	// 채팅 권한 갱신(밤 탭 잠그기·협박당한 사람 입 막기)은 여기서 하지
-	// 않는다. GameFlow.advancePhase가 모든 전이 뒤에 한 번 부른다.
-	notifySilenced(room);
-}
-
-/**
- * 협박당한 사람에게만 알린다.
- *
- * 방 전체에 알리면 누가 협박당했는지가 공개되고, 그것은 곧 건달이
- * 누구를 지목했는지를 알려주는 단서가 된다. 당사자만 안다.
- */
-function notifySilenced(room: Room): void {
-	forEachPlayer(room, (player, seat) => {
-		if (!seat.alive || !seat.silenced) return;
-		Chat.tell(player, "🥊 간밤에 협박당했습니다. 오늘은 말할 수도, 투표할 수도 없습니다.");
-	});
+	// 채팅 권한 갱신(밤 탭 잠그기)은 여기서 하지 않는다.
+	// GameFlow.advancePhase가 모든 전이 뒤에 한 번 부른다.
 }
 
 /** 한 사람의 아침 화면 */
@@ -133,7 +119,6 @@ export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void
 		seats: seatViews(room),
 		timer: room.phaseTimer,
 		picked: seat.votedFor,
-		silenced: seat.silenced,
 	});
 	if (canVote(seat)) bindVoteWidget(widget);
 	sendVoteProgress(room, player);
@@ -142,13 +127,14 @@ export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void
 /**
  * 이 좌석이 이번 투표에 참여할 수 있는가.
  *
- * 판정이 세 곳(핸들러를 무는가 / 표를 받는가 / 진행률의 분모에 드는가)에서
- * 필요한데, 셋이 어긋나면 증상이 제각각이다 — 핸들러만 빠뜨리면 위젯을
- * 조작해 표를 넣을 수 있고, 분모만 빠뜨리면 진행률이 영원히 100%에
- * 닿지 않아 아무도 투표를 끝내지 못한 것처럼 보인다. 조건은 한 줄로 둔다.
+ * 지금은 생사 하나뿐이지만 판정이 세 곳(핸들러를 무는가 / 표를 받는가 /
+ * 진행률의 분모에 드는가)에서 필요하고, 셋이 어긋나면 증상이 제각각이다 —
+ * 핸들러만 빠뜨리면 위젯을 조작해 표를 넣을 수 있고, 분모만 빠뜨리면
+ * 진행률이 영원히 100%에 닿지 않아 아무도 투표를 끝내지 못한 것처럼 보인다.
+ * 조건이 하나여도 이름을 남겨 두는 이유다.
  */
 function canVote(seat: Seat): boolean {
-	return seat.alive && !seat.silenced;
+	return seat.alive;
 }
 
 /**
@@ -190,7 +176,7 @@ function bindVoteWidget(widget: ScriptWidget): void {
 
 		if (room.phase !== GamePhase.VOTE) return;
 		if (!canVote(voter)) {
-			label(sender, voter.silenced ? "협박당해 이번 투표에는 참여할 수 없습니다." : "투표 권한이 없습니다.");
+			label(sender, "투표 권한이 없습니다.");
 			return;
 		}
 
@@ -223,14 +209,13 @@ function voteProgress(room: Room): { type: "progress"; voted: number; alive: num
 	let voted = 0;
 	let alive = 0;
 	for (const seat of room.seats) {
-		// 협박당한 사람은 분모에서도 빠진다. 남겨두면 그 한 칸이 절대 채워지지
+		// 접속이 끊긴 좌석은 분모에서 뺀다. 남겨두면 그 한 칸이 절대 채워지지
 		// 않아 "아직 안 낸 사람이 있다"가 투표 시간 내내 떠 있는다.
 		//
-		// 접속이 끊긴 좌석도 같은 이유로 뺀다. canVote에 넣지 않는 것은
-		// 의도적이다 — 그쪽은 "표를 낼 자격이 있는가"이고 끊긴 사람의 자격은
-		// 그대로다(돌아오면 낸다). 여기서 묻는 것은 "지금 이 칸이 채워질 수
-		// 있는가"라 질문이 다르다. 한 문장으로 합치면 재접속한 사람의 표를
-		// 거절하게 된다.
+		// canVote에 넣지 않는 것은 의도적이다 — 그쪽은 "표를 낼 자격이
+		// 있는가"이고 끊긴 사람의 자격은 그대로다(돌아오면 낸다). 여기서 묻는
+		// 것은 "지금 이 칸이 채워질 수 있는가"라 질문이 다르다. 한 문장으로
+		// 합치면 재접속한 사람의 표를 거절하게 된다.
 		if (!canVote(seat) || !seat.connected) continue;
 		alive++;
 		if (seat.votedFor > 0) voted++;

@@ -39,8 +39,6 @@ export const NightActionKind = {
 	INSPECT_TEAM: "INSPECT_TEAM",
 	/** 스파이: 대상의 정확한 직업 확인. 마피아면 밤 정산에서 마피아로 넘어간다 */
 	INSPECT_ROLE: "INSPECT_ROLE",
-	/** 건달: 대상의 다음 낮 투표를 막는다 */
-	SILENCE: "SILENCE",
 	/** 기자: 대상의 직업을 다음 아침에 전체 공개한다 */
 	SCOOP: "SCOOP",
 	/** 점쟁이: 대상이 밤에 지목하는 직업인지만 확인 */
@@ -75,7 +73,7 @@ export const NightStep = {
 	DEATH: 50,
 	/** 조사 — 경찰·스파이·점쟁이 */
 	INSPECT: 60,
-	/** 사후 — 기자 특종·건달 협박·시민 쪽지·사기꾼 역알림 */
+	/** 사후 — 기자 특종·시민 쪽지·사기꾼 역알림 */
 	AFTER: 70,
 } as const;
 export type NightStep = (typeof NightStep)[keyof typeof NightStep];
@@ -360,14 +358,21 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "건달",
 		team: Team.CITIZEN,
 		glyph: "🥊",
-		ability: "밤마다 한 명을 협박해 다음 낮 발언과 투표를 막습니다.",
-		tip: "시민 편입니다. 확정 시민을 막으면 헛턴이니 밤에 움직이는 사람을 찾으세요.",
-		nightAction: NightActionKind.SILENCE,
+		// 능력이 빠진 자리다. 항목 자체를 지우지 않는 이유는 두 가지다 —
+		// ROLE_DEFS가 Role 전체를 덮는 레코드라 지우면 타입이 깨지고,
+		// 경찰·스파이 조사 테스트가 Role.THUG를 시민 팀의 표본으로 쓴다.
+		// 그 둘이 시즌 0 진영 정정의 회귀 방지선이다.
+		//
+		// 아래 두 문장은 도감에 그대로 나간다. roleBook()은 아무도 거르지
+		// 않으므로(tests/domain.test.ts), 능력이 없는 동안에도 읽을 사람이 있다.
+		ability: "능력을 다시 만드는 중입니다. 지금은 밤에 할 수 있는 일이 없습니다.",
+		tip: "시민 편입니다. 아직 어느 판에도 배정되지 않습니다.",
+		nightAction: null,
 		nightStep: NightStep.AFTER,
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
-		nightPrompt: "협박할 대상을 선택하세요.",
+		nightPrompt: null,
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
 	},

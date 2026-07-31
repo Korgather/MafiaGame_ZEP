@@ -70,7 +70,6 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
 		spectating: false,
 		mafiaChat: false,
 		ghostChat: false,
-		silenced: false,
 		chatMode: "free",
 	};
 	return { ...base, ...over };
@@ -80,7 +79,7 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
  * 권한 표의 결과를 읽기·쓰기만으로 본다.
  *
  * note(잠긴 이유)까지 deepEqual로 묶으면 안내 문구를 다듬을 때마다 규칙과
- * 무관한 테스트가 깨진다. 문구가 규칙을 대신 지키는 곳(협박·사망)에서만
+ * 무관한 테스트가 깨진다. 문구가 규칙을 대신 지키는 곳(밤·사망)에서만
  * 따로 확인한다.
  */
 function rw(access: { read: boolean; write: boolean }): { read: boolean; write: boolean } {
@@ -178,26 +177,12 @@ describe("채널 권한 표", () => {
 		assert.equal(preferredChannel(over, ChatChannel.GHOST), ChatChannel.ROOM);
 	});
 
-	it("협박당한 사람은 방 채팅에서만 입이 막힌다", () => {
-		// 협박은 "오늘 낮에 말을 못 한다"는 규칙이다. 마피아인 채로 협박당해도
-		// 밤의 밀담까지 잠기면 건달이 같은 편의 작전을 끊어버리게 된다.
-		const muted = ctx({ silenced: true });
-		assert.equal(accessOf(muted, ChatChannel.ROOM).write, false);
-		assert.ok(accessOf(muted, ChatChannel.ROOM).note.indexOf("협박") >= 0);
-		// 듣는 것은 그대로다 — 오늘의 토론을 못 보면 내일 판단할 근거가 없다
-		assert.equal(accessOf(muted, ChatChannel.ROOM).read, true);
-
-		const mafia = ctx({ silenced: true, mafiaChat: true, phase: GamePhase.NIGHT });
-		assert.equal(accessOf(mafia, ChatChannel.MAFIA).write, true);
-	});
-
 	it("잠긴 탭은 저마다 다른 이유를 들고 온다", () => {
-		// 위젯이 "지금은 읽기만 됩니다" 한 문장으로 덮던 자리다. 밤·사망·협박은
-		// 해야 할 행동이 전혀 다른데, 같은 문구를 보면 셋을 구분할 수 없다.
+		// 위젯이 "지금은 읽기만 됩니다" 한 문장으로 덮던 자리다. 밤과 사망은
+		// 해야 할 행동이 전혀 다른데, 같은 문구를 보면 둘을 구분할 수 없다.
 		const notes = [
 			accessOf(ctx({ phase: GamePhase.NIGHT }), ChatChannel.ROOM).note,
 			accessOf(ctx({ alive: false }), ChatChannel.ROOM).note,
-			accessOf(ctx({ silenced: true }), ChatChannel.ROOM).note,
 		];
 		for (const note of notes) assert.notEqual(note, "");
 		assert.equal(new Set(notes).size, notes.length, "잠긴 이유가 서로 겹칩니다");
@@ -804,76 +789,6 @@ describe("채팅 속도 제한", () => {
 		for (let i = 1; i <= CHAT_RATE.BURST; i++) chat(player, `말${i}`);
 
 		assert.deepEqual(spoken(player), ["말1", "말2", "말3", "말4"]);
-	});
-});
-
-describe("건달의 협박", () => {
-	/** 건달 하나가 시민 하나를 협박할 수 있는 밤 */
-	function thugGame(): {
-		target: Room;
-		thug: FakePlayer;
-		muted: FakePlayer;
-		mutedSeat: Seat;
-		bystander: FakePlayer;
-	} {
-		startGame(6, 1, [Role.THUG, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN, Role.CITIZEN]);
-		const target = room(1);
-		const citizens = seatsWithRole(target, Role.CITIZEN);
-		finishPhase(target); // ROLE_REVEAL → NIGHT
-		return {
-			target,
-			thug: playerOf(seatsWithRole(target, Role.THUG)[0]),
-			muted: playerOf(citizens[0]),
-			mutedSeat: citizens[0],
-			bystander: playerOf(citizens[1]),
-		};
-	}
-
-	it("협박당한 사람은 다음 낮에 말할 수 없다", () => {
-		// 원본에서 silenced는 투표만 막았다. 협박의 본체는 발언 봉쇄이고
-		// 투표 차단은 그 결과인데, 기본 채팅을 쓰던 시절에는 발언을 가로챌
-		// 지점이 없어 절반만 구현돼 있었다.
-		const { target, thug, muted, mutedSeat, bystander } = thugGame();
-
-		send(thug, { type: "select", num: mutedSeat.index });
-		finishPhase(target); // → DAY
-
-		const roomTab = chatChannels(muted).filter(tab => tab.id === ChatChannel.ROOM)[0];
-		assert.equal(roomTab.write, false, "협박당했는데 방 탭이 열려 있습니다");
-		assert.ok(roomTab.placeholder.indexOf("협박") >= 0, "잠긴 이유가 화면에 전해지지 않았습니다");
-
-		chat(muted, "저는 시민입니다", ChatChannel.ROOM);
-		assert.equal(chatSaw(bystander, "저는 시민입니다"), false, "협박당한 사람의 말이 나갔습니다");
-
-		// 듣기는 그대로다. 오늘 토론을 못 보면 내일 판단할 근거까지 사라진다
-		chat(bystander, "누가 수상한가요", ChatChannel.ROOM);
-		assert.ok(chatSaw(muted, "누가 수상한가요"), "협박이 듣는 것까지 막았습니다");
-	});
-
-	it("협박당했다는 사실은 당사자만 안다", () => {
-		// 방 전체에 알리면 그것이 곧 "건달이 누구를 지목했는가"의 단서가 된다.
-		const { target, thug, muted, mutedSeat, bystander } = thugGame();
-
-		send(thug, { type: "select", num: mutedSeat.index });
-		finishPhase(target); // → DAY
-
-		assert.ok(chatSaw(muted, "간밤에 협박당했습니다"), "본인이 안내받지 못했습니다");
-		assert.equal(chatSaw(bystander, "협박당했습니다"), false, "협박 사실이 새어 나갔습니다");
-	});
-
-	it("협박은 딱 하루만 간다", () => {
-		const { target, thug, muted, mutedSeat, bystander } = thugGame();
-
-		send(thug, { type: "select", num: mutedSeat.index });
-		finishPhase(target); // → DAY
-		finishPhase(target); // → VOTE
-		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않아 처형 없음)
-		finishPhase(target); // → NIGHT (여기서 좌석이 초기화된다)
-		finishPhase(target); // → DAY (건달이 이번 밤엔 아무도 지목하지 않았다)
-
-		assert.equal(mutedSeat.silenced, false, "협박이 다음 날까지 남았습니다");
-		chat(muted, "이제 말할 수 있습니다", ChatChannel.ROOM);
-		assert.ok(chatSaw(bystander, "이제 말할 수 있습니다"));
 	});
 });
 

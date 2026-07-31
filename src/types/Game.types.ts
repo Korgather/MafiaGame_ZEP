@@ -141,8 +141,6 @@ export interface Seat {
 	 * 자원이라 소모 시점(resolveNightCasualties)에서만 false가 된다.
 	 */
 	armored: boolean;
-	/** 건달에게 협박당해 다음 낮 투표가 막혔는가 */
-	silenced: boolean;
 	/** 기자가 취재해 다음 아침에 직업이 공개되는가 */
 	scooped: boolean;
 	/** 이번 밤에 능력을 이미 썼는가 */

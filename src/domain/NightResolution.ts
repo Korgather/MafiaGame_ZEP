@@ -111,7 +111,7 @@ function noTurnReason(seat: Seat, turnCount: number): string | null {
 /**
  * 밤에 대상을 지목했을 때 시전자가 보는 것.
  *
- * 전에는 이 함수가 대상의 healed·attackedBy·silenced·scooped를 직접 세웠다.
+ * 전에는 이 함수가 대상의 healed·attackedBy·scooped를 직접 세웠다.
  * 즉 능력의 적용 시점이 곧 클릭 시점이었고, 그래서 밤의 결과가 손 빠르기에
  * 달려 있었다. 적용은 NightPipeline이 밤 끝에 정해진 순서로 한다.
  *
@@ -163,13 +163,6 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 				// 3초에 스쳐 지나가면 조사자는 오지 않을 답을 밤새 기다린다
 				labelDurationMs: REVEAL_MS,
 				privateSound: Sound.INVESTIGATE,
-			};
-
-		case NightActionKind.SILENCE:
-			return {
-				consumed: true,
-				confirmed: true,
-				label: `${target.index}번 참가자는 내일 말할 수도 투표할 수도 없습니다.`,
 			};
 
 		case NightActionKind.SCOOP:

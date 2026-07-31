@@ -19,7 +19,7 @@
  *
  * 세 번째 칸(note)이 붙은 이유:
  *   막힌 이유는 이 표만 안다. 그런데 그 이유를 보여주는 곳은 위젯이라,
- *   chat.html이 "지금은 읽기만 됩니다" 한 문장을 지어내 밤·사망·협박을
+ *   chat.html이 "지금은 읽기만 됩니다" 한 문장을 지어내 밤·사망·관전을
  *   모두 같은 말로 덮고 있었다. 이유를 별도 함수로 빼면 같은 조건표가
  *   두 벌이 되는데 — 이 파일이 생긴 원인이 바로 그 중복이다.
  *   그래서 판정과 이유를 한 번에 돌려준다.
@@ -52,8 +52,6 @@ export interface ChatContext {
 	readonly mafiaChat: boolean;
 	/** 유령의 목소리를 듣는 직업인가 (영매) */
 	readonly ghostChat: boolean;
-	/** 건달에게 협박당해 오늘 입이 막혔는가 */
-	readonly silenced: boolean;
 	/** 이 방의 채팅 방식. 침묵전이면 낮에 준비된 문구만 쓸 수 있다 */
 	readonly chatMode: ChatMode;
 }
@@ -122,7 +120,6 @@ export const LOOSE_CONTEXT: ChatContext = {
 	spectating: false,
 	mafiaChat: false,
 	ghostChat: false,
-	silenced: false,
 	chatMode: "free",
 };
 
@@ -164,19 +161,6 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		// 죽은 사람이 방 채팅으로 말하면 산 사람에게 정보가 샌다. 읽기는 남긴다 —
 		// 관전의 재미가 낮 토론을 지켜보는 데 있기 때문이다.
 		if (!ctx.alive) return locked("죽은 사람은 산 사람에게 말할 수 없습니다");
-		/*
-		 * 건달의 협박.
-		 *
-		 * 원래 규칙은 "다음 낮에 말을 못 한다"이고 투표 차단은 그 결과인데,
-		 * 이 게임에서는 오래도록 투표만 막혔다. ZEP 기본 채팅을 가로챌 방법이
-		 * 없어 입을 막을 자리가 아예 없었기 때문이다. 자체 채팅이 생기면서
-		 * 그 제약이 사라졌고, 규칙이 표의 한 줄로 돌아왔다.
-		 *
-		 * 막는 것은 ROOM뿐이다. 협박의 값은 낮 토론에서 배제하는 데 있지
-		 * 모든 대화를 끊는 데 있지 않다 — 마피아 밀담과 유령 채널까지 막으면
-		 * 협박당한 마피아가 팀과 상의도 못 하는 별개의 페널티가 붙는다.
-		 */
-		if (ctx.silenced) return locked("🥊 협박당해 오늘은 말할 수 없습니다");
 		// 밤에 전원이 자유롭게 말할 수 있으면 마피아가 밤에 무엇을 하든
 		// 의미가 없어진다 — 밤이 정보 비대칭을 만드는 유일한 시간이다.
 		if (ctx.phase === GamePhase.NIGHT) return locked("밤에는 방 채팅이 잠깁니다");

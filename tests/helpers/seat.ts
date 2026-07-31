@@ -23,7 +23,6 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		healed: false,
 		attackedBy: [],
 		armored: ROLE_DEFS[role].survivesFirstAttack === true,
-		silenced: false,
 		scooped: false,
 		usedSkill: false,
 		usesSpent: 0,

@@ -483,12 +483,6 @@ describe("NightResolution", () => {
 		assert.doesNotMatch(result!.label, /마피아/);
 	});
 
-	it("건달의 협박은 능력을 소모한다", () => {
-		const result = recordNightIntent(seat(1, Role.THUG), seat(2, Role.CITIZEN));
-		assert.equal(result?.consumed, true);
-		assert.equal(result?.confirmed, true);
-	});
-
 	it("기자의 취재는 능력을 소모한다", () => {
 		const result = recordNightIntent(seat(1, Role.REPORTER), seat(2, Role.MAFIA));
 		assert.equal(result?.consumed, true);

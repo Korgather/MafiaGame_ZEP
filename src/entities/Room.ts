@@ -64,7 +64,6 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		healed: false,
 		attackedBy: [],
 		armored: false,
-		silenced: false,
 		scooped: false,
 		usedSkill: false,
 		usesSpent: 0,
@@ -98,7 +97,6 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.voteCount = 0;
 	seat.healed = false;
 	seat.attackedBy = [];
-	seat.silenced = false;
 	seat.scooped = false;
 }
 
@@ -268,7 +266,6 @@ export function resetRound(room: Room): void {
 		seat.voteCount = 0;
 		seat.healed = false;
 		seat.attackedBy = [];
-		seat.silenced = false;
 		seat.scooped = false;
 	}
 }

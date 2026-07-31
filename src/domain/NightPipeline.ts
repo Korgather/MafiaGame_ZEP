@@ -232,9 +232,6 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 		case NightActionKind.ATTACK:
 			target.attackedBy.push(actor.index);
 			return true;
-		case NightActionKind.SILENCE:
-			target.silenced = true;
-			return true;
 		case NightActionKind.SCOOP:
 			target.scooped = true;
 			return true;

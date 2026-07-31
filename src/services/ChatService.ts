@@ -107,10 +107,6 @@ function contextOf(playerId: string): ChatContext {
 		spectating: false,
 		mafiaChat: inMafiaChat(seat),
 		ghostChat: hearsGhosts(seat),
-		// alive와 같은 이유로 started를 함께 본다. 좌석의 silenced는 밤 정산이
-		// 켜고 다음 밤이 끄는 값이라, 판이 끝난 뒤 남아 있으면 대기실에서
-		// 말을 못 하는 사람이 생긴다.
-		silenced: room.started && seat.silenced,
 		chatMode: room.ruleSet.chatMode,
 	};
 }
@@ -118,7 +114,7 @@ function contextOf(playerId: string): ChatContext {
 /**
  * 좌석이 없는 사람. 진행 중인 방을 보고 있으면 관전, 아니면 로비.
  *
- * 관전자의 좌석 값(role·alive·silenced)은 createSeat이 준 기본값 그대로라
+ * 관전자의 좌석 값(role·alive)은 createSeat이 준 기본값 그대로라
  * 아무 의미가 없다. 그래서 좌석을 들여다보지 않고 상수로 채운다 — 여기서
  * seat을 읽기 시작하면 "관전자의 직업"이라는 없는 개념이 생긴다.
  */
@@ -134,7 +130,6 @@ function spectatorContext(playerId: string): ChatContext {
 		spectating: true,
 		mafiaChat: false,
 		ghostChat: false,
-		silenced: false,
 		chatMode: watching.room.ruleSet.chatMode,
 	};
 }
@@ -221,7 +216,7 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 			write: access.write,
 			unread,
 			// 잠긴 탭의 안내 문구는 채널이 아니라 잠근 이유가 정한다.
-			// 위젯이 지어내던 문장(“지금은 읽기만 됩니다”)이 밤·사망·협박을
+			// 위젯이 지어내던 문장(“지금은 읽기만 됩니다”)이 밤·사망·관전을
 			// 한 마디로 덮고 있었다 — 세 경우에 해야 할 행동이 전혀 다르다.
 			placeholder:
 				access.write && access.freeText ? def.placeholder : `${access.note} (/도움말)`,

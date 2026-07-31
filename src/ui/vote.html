@@ -43,19 +43,6 @@
 				}
 			}
 
-			/* 협박당해 투표가 막힌 상태. 목록을 숨기지 않고 흐리게만 둔다 —
-			   누가 살아 있는지는 여전히 봐야 낮 토론을 따라갈 수 있다 */
-			.grid.blocked {
-				opacity: 0.4;
-				pointer-events: none;
-				filter: grayscale(1);
-			}
-
-			.note.blocked {
-				color: var(--danger);
-				font-weight: 600;
-			}
-
 			/* 득표 막대. 숫자 하나보다 상대 비교가 빠르다 */
 			.bar {
 				position: absolute;
@@ -154,23 +141,17 @@
 
 			Parent.on({
 				init(data) {
-					// 건달에게 협박당했으면 표를 낼 수 없다. 서버도 같은 판정으로
-					// 막지만(Voting.canVote), 눌리는 버튼을 두고 거절만 하면
-					// "왜 안 되는지"를 라벨이 뜬 뒤에야 알게 된다
-					locked = !!data.silenced;
+					// 잠그는 것은 개표(result)뿐이다. 투표 중에 화면을 다시
+					// 여는 유일한 경로가 재접속이고, 그때는 계속 찍을 수 있어야 한다
+					locked = false;
 					myNum = Number(data.myNum) || 0;
 					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다
 					myPick = Number(data.picked) || null;
-					qs("#heading").textContent = locked ? "투표할 수 없습니다" : "누구를 처형할까요";
+					qs("#heading").textContent = "누구를 처형할까요";
 					qs("#grid").innerHTML = html`${seats(data).map(seat => tile(seat))}`;
-					qs("#grid").classList.toggle("blocked", locked);
 					paintPick();
-					qs("#note").classList.toggle("blocked", locked);
-					qs("#note").textContent = locked
-						? "🥊 협박당해 이번 투표에는 참여할 수 없습니다."
-						: myPick === null
-							? "고르지 않으면 기권입니다."
-							: pickNote();
+					qs("#note").textContent =
+						myPick === null ? "고르지 않으면 기권입니다." : pickNote();
 					startTimer(qs("#timer"), data.timer);
 				},
 
@@ -188,9 +169,6 @@
 					qs("#heading").textContent = "개표";
 					qs("#sub").textContent = "";
 					qs("#progress").style.width = "100%";
-					// 협박당한 사람도 개표는 똑같이 본다. init에서 씌운 흐림을 벗긴다
-					qs("#grid").classList.remove("blocked");
-					qs("#note").classList.remove("blocked");
 
 					const list = seats(data);
 					const top = list.reduce((max, seat) => Math.max(max, Number(seat.votes) || 0), 0);

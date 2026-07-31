@@ -40,7 +40,6 @@ function snapshot(seats: readonly Seat[]) {
 		alive: s.alive,
 		healed: s.healed,
 		armored: s.armored,
-		silenced: s.silenced,
 		scooped: s.scooped,
 		attackedBy: s.attackedBy.slice(),
 	}));
@@ -55,7 +54,6 @@ function outcomes(settlement: NightSettlement) {
 function noTrace(target: Seat) {
 	assert.equal(target.healed, false);
 	assert.deepEqual(target.attackedBy, []);
-	assert.equal(target.silenced, false);
 	assert.equal(target.scooped, false);
 }
 
@@ -78,7 +76,6 @@ const TRACE_BY_KIND: Record<
 > = {
 	HEAL: { actor: Role.DOCTOR, check: t => assert.equal(t.healed, true) },
 	ATTACK: { actor: Role.MAFIA, check: t => assert.deepEqual(t.attackedBy, [1]) },
-	SILENCE: { actor: Role.THUG, check: t => assert.equal(t.silenced, true) },
 	SCOOP: { actor: Role.REPORTER, check: t => assert.equal(t.scooped, true) },
 	// 조사의 답은 대상이 아니라 시전자에게 간다(reveals). 대상은 자기가
 	// 조사당한 것을 알 수 없어야 하므로 여기 남는 흔적이 없는 것이 맞다.
@@ -158,23 +155,18 @@ describe("밤 파이프라인 — step 배치", () => {
 		assert.ok(list.includes(NightOutcome.BACKFIRED));
 	});
 
-	it("협박과 취재는 사망 확정 뒤에 걸린다", () => {
-		// AFTER에 두는 이유: 협박은 다음 낮에 작용하므로 이미 죽은 사람을
-		// 협박하는 낭비가 없어야 한다.
-		//
+	it("취재는 사망 확정 뒤에 걸린다", () => {
 		// "뒤"를 확인하려면 두 가지가 함께 필요하다 — 직업이 AFTER에 있다는 것과,
 		// AFTER가 순회에서 DEATH 뒤에 선다는 것. 앞의 것만으로는 AFTER가 어디에
 		// 서는지 알 수 없다.
-		assert.equal(ROLE_DEFS[Role.THUG].nightStep, NightStep.AFTER);
 		assert.equal(ROLE_DEFS[Role.REPORTER].nightStep, NightStep.AFTER);
 		assert.ok(STEP_ORDER.indexOf(NightStep.AFTER) > STEP_ORDER.indexOf(NightStep.DEATH));
 
-		// 흔적 자체는 오늘 순서와 무관하다 — 정산이 silenced·scooped를 읽지
-		// 않기 때문이다. 순서가 결과를 실제로 가르는 것은 차단이 들어올 때다
-		const seats = [seat(1, Role.REPORTER), seat(2, Role.THUG), seat(3, Role.MAFIA)];
-		night(seats, [[1, 3], [2, 3]]);
-		assert.equal(seats[2].scooped, true);
-		assert.equal(seats[2].silenced, true);
+		// 흔적 자체는 오늘 순서와 무관하다 — 정산이 scooped를 읽지 않기
+		// 때문이다. 순서가 결과를 실제로 가르는 것은 차단이 들어올 때다
+		const seats = [seat(1, Role.REPORTER), seat(2, Role.MAFIA)];
+		night(seats, [[1, 2]]);
+		assert.equal(seats[1].scooped, true);
 	});
 
 	it("밤 시작 시점에 이미 죽어 있던 좌석의 지목은 버린다", () => {

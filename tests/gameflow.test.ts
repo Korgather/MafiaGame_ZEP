@@ -763,49 +763,11 @@ describe("투표", () => {
 	});
 
 	/**
-	 * 건달의 협박은 한 판정(Voting.canVote)이 세 곳에서 쓰인다.
-	 * 화면이 잠기는가 / 표가 거절되는가 / 진행률 분모에서 빠지는가.
-	 * 셋 중 하나만 어긋나도 증상이 제각각이라(특히 분모가 어긋나면
-	 * 투표 시간 내내 "아직 안 낸 사람이 있다"가 떠 있다) 한 번에 본다.
-	 */
-	it("협박당한 사람은 화면이 잠기고 표도 진행률도 집계되지 않는다", () => {
-		// 마피아 1 < 시민 4(건달 포함)라 시작하자마자 끝나지 않는다
-		startGame(5, 1, [Role.THUG, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
-		const target = room(1);
-		finishPhase(target); // ROLE_REVEAL → NIGHT
-
-		const thug = seatsWithRole(target, Role.THUG)[0];
-		const muted = seatsWithRole(target, Role.CITIZEN)[0];
-		send(playerOf(thug), { type: "select", num: muted.index });
-
-		finishPhase(target); // NIGHT → DAY
-		assert.equal(muted.silenced, true, "협박이 좌석에 반영되지 않았습니다");
-		finishPhase(target); // DAY → VOTE
-
-		// 1. 화면: 투표 위젯이 잠긴 상태로 열린다
-		const init = mainWidget(playerOf(muted)).lastOfType("init");
-		assert.ok(init, "투표 화면이 payload 없이 열렸습니다");
-		assert.equal(init.silenced, true);
-
-		// 2. 표: 서버도 같은 판정으로 거절한다 (위젯을 우회해도 막혀야 한다)
-		vote(playerOf(muted), thug.index);
-		assert.equal(thug.voteCount, 0, "협박당한 사람의 표가 집계됐습니다");
-
-		// 3. 진행률: 분모는 협박당한 사람을 뺀 4명이다
-		vote(playerOf(seatsWithRole(target, Role.DOCTOR)[0]), thug.index);
-		const progress = mainWidget(playerOf(thug)).lastOfType("progress");
-		assert.ok(progress, "투표 진행률이 전달되지 않았습니다");
-		assert.equal(progress.voted, 1);
-		assert.equal(progress.alive, 4, "협박당한 사람이 분모에 남아 있습니다");
-	});
-
-	/**
 	 * 접속이 끊긴 사람은 진행률 분모에서도 빠진다.
 	 *
-	 * 협박당한 사람을 분모에서 뺀 이유와 같다 — 채워질 수 없는 칸을 남겨두면
-	 * "아직 안 낸 사람이 있다"가 투표 시간 내내 떠서, 남은 사람들이 이미 다
-	 * 냈는데도 서로를 기다린다. 자격(canVote)이 아니라 지금 낼 수 있는가를
-	 * 묻는 자리라 조건이 하나 더 붙는다.
+	 * 채워질 수 없는 칸을 남겨두면 "아직 안 낸 사람이 있다"가 투표 시간
+	 * 내내 떠서, 남은 사람들이 이미 다 냈는데도 서로를 기다린다. 자격(canVote)이
+	 * 아니라 지금 낼 수 있는가를 묻는 자리라 조건이 하나 더 붙는다.
 	 */
 	it("접속이 끊긴 사람은 투표 진행률 분모에서 빠진다", () => {
 		startPlainGame(MIN_PLAYERS);

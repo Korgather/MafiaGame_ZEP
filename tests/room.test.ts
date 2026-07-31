@@ -31,7 +31,6 @@ describe("assignRole", () => {
 			voteCount: 2,
 			healed: true,
 			attackedBy: [7],
-			silenced: true,
 			scooped: true,
 		});
 
@@ -50,7 +49,6 @@ describe("assignRole", () => {
 		assert.equal(reused.voteCount, 0);
 		assert.equal(reused.healed, false);
 		assert.deepEqual(reused.attackedBy, []);
-		assert.equal(reused.silenced, false);
 		assert.equal(reused.scooped, false);
 	});
 

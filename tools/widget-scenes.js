@@ -408,21 +408,21 @@ const SCENES = [
 		],
 	},
 	{
-		label: "밤 지목 — 혼자인 마피아팀(건달)",
+		label: "밤 지목 — 혼자인 마피아팀(짐승인간)",
 		file: "roleAction.html",
 		size: [360, 440],
 		messages: [
 			{
 				type: "init",
 				myNum: 6,
-				role: "건달",
+				role: "짐승인간",
 				team: "mafia",
 				alive: true,
-				prompt: "협박할 대상을 고르세요",
+				prompt: "물어 죽일 대상을 선택하세요.",
 				seats: SEATS,
 				timer: 22,
 				// 마피아 팀이지만 밀담 상대가 없다 — 채팅에 🔪 탭이 생기지 않는다
-				note: "당신은 마피아 팀이지만 동료와 대화할 수 없습니다.",
+				note: "🌙 당신은 마피아 팀이지만 마피아와 대화할 수 없습니다.",
 			},
 			// 분모가 0인 순간. 인원이 갈리면 실제로 나올 수 있는 값이고,
 			// 나누기 전에 걸러내지 않으면 막대 폭이 NaN%가 된다
@@ -434,17 +434,8 @@ const SCENES = [
 		file: "vote.html",
 		size: [340, 380],
 		messages: [
-			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0, silenced: false },
+			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0 },
 			{ type: "progress", voted: 3, alive: 5 },
-		],
-	},
-	{
-		label: "투표 — 협박당해 잠긴 화면",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0, silenced: true },
-			{ type: "progress", voted: 2, alive: 4 },
 		],
 	},
 	{

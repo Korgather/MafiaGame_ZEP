@@ -255,8 +255,6 @@ export interface VotePayload {
 	timer: number;
 	/** 이미 찍어둔 대상. 재접속으로 화면을 다시 열 때 표시를 복원한다 */
 	picked: number;
-	/** 건달에게 협박당해 이번 투표가 막혔는가 */
-	silenced: boolean;
 }
 
 /** 개표 화면. 같은 vote.html이 받는다 */
@@ -447,7 +445,7 @@ export interface ChatLinePayload {
  *
  * 위젯이 보내는 김에 바로 띄우면 왕복 한 번을 아낄 수 있지만, 그러면 발언
  * 권한을 아는 곳이 서버와 위젯 둘이 된다. 둘이 어긋나는 순간(밤이 되기
- * 직전, 협박당한 직후, 죽은 직후)에 서버가 버린 말이 말풍선으로는 뜬다.
+ * 직전, 죽은 직후)에 서버가 버린 말이 말풍선으로는 뜬다.
  */
 export interface ChatSayPayload {
 	type: "say";
