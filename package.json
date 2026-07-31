@@ -13,6 +13,7 @@
 		"build:ui": "node tools/build-widgets.js",
 		"check:ui": "npm run build:ui && node tools/check-widgets.js",
 		"preview:ui": "npm run build:ui && node tools/preview-widgets.js",
+		"balance": "node tools/balance/report.mjs",
 		"verify": "npm run type-check && npm run lint && npm run check:zep && npm test && npm run check:ui",
 		"build": "npm run clean && npm run verify && webpack && zep-script archive",
 		"archive": "npm run build && zep-script archive",
