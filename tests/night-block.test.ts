@@ -135,7 +135,12 @@ describe("차단 — 닿지 않는 것", () => {
 
 	it("차단끼리는 서로를 막지 않는다", () => {
 		// step 20 안에는 순서가 없다. 건달 A가 건달 B에게 막혀도 A의 차단은
-		// 성립한다 — 아니면 누가 먼저 눌렀는지가 다시 밤을 가른다
+		// 성립한다 — 아니면 누가 먼저 눌렀는지가 다시 밤을 가른다.
+		//
+		// 여기서는 막히는 쪽(1번)이 좌석 배열에서 앞에 있다. 순회가 좌석
+		// 순서를 따르므로 이 배치만으로는 가드가 옳은지 알 수 없다 —
+		// 1번은 어차피 막히기 전에 자기 차례를 마친다. 반대 배치가 아래에
+		// 따로 있고, 규칙을 실제로 지키는 것은 그쪽이다
 		const seats = [
 			seat(1, Role.THUG),
 			seat(2, Role.THUG),
@@ -151,6 +156,26 @@ describe("차단 — 닿지 않는 것", () => {
 		assert.equal(seats[0].usesSpent, 1);
 		assert.equal(seats[1].usesSpent, 1);
 		assert.equal(seats[2].usesSpent, 0);
+	});
+
+	it("먼저 놓인 건달에게 막혀도 뒤 건달의 차단은 성립한다", () => {
+		// 위 테스트와 좌석 배치만 반대다. 이번에는 막는 쪽(1번)이 먼저라
+		// 2번은 자기 차례가 오기 전에 이미 blocked다. 가드에서 BLOCK 예외를
+		// 빼면 정확히 여기서만 밤이 갈린다 — 2번의 차단이 통째로 사라지고
+		// 마피아가 4번을 죽인다. 앞 테스트는 이 변경을 통과시킨다
+		const seats = [
+			seat(1, Role.THUG),
+			seat(2, Role.THUG),
+			seat(3, Role.MAFIA),
+			seat(4, Role.CITIZEN),
+		];
+		const result = night(seats, [[1, 2], [2, 3], [3, 4]]);
+		assert.equal(seats[1].blocked, true);
+		assert.equal(seats[2].blocked, true, "막힌 건달의 차단이 사라졌습니다");
+		assert.equal(result.casualties.length, 0);
+		assert.equal(seats[3].alive, true);
+		// 막힌 채로도 자기 차단은 했으니 한 장 닳는다
+		assert.equal(seats[1].usesSpent, 1);
 	});
 
 	it("첫 밤에도 차단은 작동한다", () => {
