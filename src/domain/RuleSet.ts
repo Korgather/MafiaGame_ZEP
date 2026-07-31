@@ -61,7 +61,15 @@ export interface DeckSpec {
 	 * 마피아 없는 판은 성립하지 않으므로 이 자리는 언제나 채워진다.
 	 */
 	readonly leadPool: readonly Role[];
-	/** 둘째 자리부터의 후보 */
+	/**
+	 * 둘째 자리부터의 후보.
+	 *
+	 * 여기 적히지 않은 직업은 뽑히지 않는다 — 다만 Role.MAFIA는 예외다. 배타와
+	 * 인원 하한이 후보를 걷어내 자리가 남으면 마피아 자리 수를 맞추려고
+	 * Role.MAFIA가 들어올 수 있다(leadPool이 비었을 때와 같은 이유다). 마피아를
+	 * 아예 배제하고 싶다면 exclusiveGroups로 막아야 하고, 그마저도 최후에는
+	 * 자리 수가 이긴다.
+	 */
 	readonly mafiaPool: readonly Role[];
 	/**
 	 * 반드시 들어가는 시민 능력자.

@@ -10,14 +10,26 @@ import { describe, it } from "node:test";
 import { Role, Team } from "../src/types/Game.types.ts";
 import { buildRoleDeck, mafiaCount } from "../src/domain/RoleAssignment.ts";
 import { isPeacefulNight } from "../src/domain/NightResolution.ts";
-import { ROLE_DEFS } from "../src/domain/Roles.ts";
+import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
+import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
 import { BLITZ_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
-import { MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
+import {
+	CITIZENS_PER_NIGHT_KILL,
+	MAX_PLAYERS,
+	MIN_PLAYERS,
+} from "../src/constants/GameConfig.ts";
 
 const EVERY_COUNT: number[] = [];
 for (let count = MIN_PLAYERS; count <= MAX_PLAYERS; count++) EVERY_COUNT.push(count);
 
 const DECK = STANDARD_RULES.deck;
+
+/**
+ * 스파이를 뺀 시민 풀. 합성 스펙이 스파이를 마피아 쪽으로 옮겨 쓸 때,
+ * 시민 풀에 남아 있으면 시민 자리에서 뽑힌 스파이까지 마피아 자리로 세어
+ * 자리 수 단언이 엉뚱하게 터진다.
+ */
+const NO_SPY = DECK.citizenPool.filter(role => role !== Role.SPY);
 
 /** 결정적인 rng. 시드를 바꾸면 다른 판이 나온다 */
 function rngFrom(seed: number): () => number {
@@ -429,7 +441,6 @@ describe("배타 그룹 (합성 스펙)", () => {
  */
 describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 	const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.SPY];
-	const NO_SPY = DECK.citizenPool.filter(role => role !== Role.SPY);
 
 	/** 마피아 풀에서 온 직업이 표와 같은 수만큼 있는가를 4~12인 × 시드로 훑는다 */
 	function assertSeatCount(spec: typeof DECK, label: string): void {
@@ -508,11 +519,17 @@ describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 		);
 	});
 
-	it("메움패가 배타 그룹을 어기지 않는다", () => {
+	it("메운 뒤에도 마피아와 스파이가 한 덱에 있지 않다", () => {
 		/*
 		 * 자리를 메우는 쪽이 규칙을 어기면 고친 것이 아니다. 위 첫 번째 스펙은
 		 * 마피아와 스파이가 배타이므로, 스파이가 뽑힌 판에 마피아를 메움패로
 		 * 밀어 넣으면 둘이 한 덱에 함께 있게 된다.
+		 *
+		 * 이름을 "메움패가 배타를 어기지 않는다"에서 바꿨다. 이 단언이 보는 것은
+		 * 덱 전체의 성질이지 메움패가 무엇을 골랐는지가 아니다 — 메움패를
+		 * taken[0](여기서는 리드인 짐승인간)으로 바꿔치기해도 마피아가 아예 안
+		 * 들어와서 이 단언은 그대로 통과한다. 메움패 자체의 선택은 아래
+		 * "메움패 (합성 스펙)" 블록이 겨눈다.
 		 */
 		const spec = {
 			...DECK,
@@ -534,6 +551,215 @@ describe("마피아 자리 수 불변식 (합성 스펙)", () => {
 		}
 		// 스파이가 한 번도 안 뽑히면 위 단언이 공허하게 통과한다
 		assert.ok(spies > 0, "스파이가 한 번도 안 뽑혀 메움패 경로를 밟지 못했다");
+	});
+});
+
+describe("메움패 (합성 스펙)", () => {
+	/*
+	 * 위 블록은 "자리가 다 찼는가"만 본다. 자리를 무엇으로 채웠는지는 보지 않아서,
+	 * 메움패의 가지를 통째로 뭉개도 전부 통과한다. 여기서는 세 갈래를 하나씩 겨눈다.
+	 *
+	 * 각 단언은 돌연변이를 만들어 실제로 터지는지 확인했다:
+	 *   - 첫 갈래의 검사를 지우면(무조건 Role.MAFIA) 하한·배타 테스트가 터진다.
+	 *   - 첫 갈래 앞에서 taken[0]으로 새어 나가면 "능력 없는 마피아를 먼저 쓴다"와
+	 *     "리드가 단독 킬러여도 복제하지 않는다"가 터진다.
+	 *   - 둘째 갈래의 !killsIndependently를 버리면 밤 예산 테스트가 터진다.
+	 *
+	 * 표준 규칙은 이 가지에 닿지 않는다(마피아 풀이 자리보다 넓다). 그래서 전부
+	 * 합성 스펙이다 — 닿지 않는 코드라도 규칙이 바뀌면 그날 바로 닿는다.
+	 */
+
+	/** 밀담 밖에서 혼자 죽이는 직업인가. RoleAssignment의 killsIndependently와 같은 축 */
+	function killsAlone(role: Role): boolean {
+		const def = ROLE_DEFS[role];
+		return def.nightAction === NightActionKind.ATTACK && def.nightChat !== ChatChannel.MAFIA;
+	}
+
+	/**
+	 * 마피아 자리가 만드는 밤 사망자 수.
+	 *
+	 * 밀담은 몇 명이 앉든 상의해서 하나만 치므로 1로 접고, 단독 킬러는 머릿수를
+	 * 그대로 더한다. 시민 자리에서 뽑힌 자경단까지 세면 메움패와 무관한 사망자가
+	 * 섞이므로, 부르는 쪽이 마피아 자리만 걸러서 넘긴다.
+	 */
+	function seatDeaths(seats: readonly Role[]): number {
+		const talks = seats.some(role => {
+			const def = ROLE_DEFS[role];
+			return def.nightAction === NightActionKind.ATTACK && def.nightChat === ChatChannel.MAFIA;
+		});
+		return (talks ? 1 : 0) + seats.filter(killsAlone).length;
+	}
+
+	/** nightKillBudget과 같은 식. 시민 자리 수로 계산한다 */
+	function budgetFor(count: number, teamSize: number): number {
+		return Math.max(1, Math.floor((count - teamSize) / CITIZENS_PER_NIGHT_KILL));
+	}
+
+	/** 덱에서 마피아 자리로 간 직업만 고른다 */
+	function seatsOf(deck: readonly Role[], seatRoles: readonly Role[]): Role[] {
+		return deck.filter(role => seatRoles.indexOf(role) >= 0);
+	}
+
+	it("인원 하한이 막은 마피아는 메움패로도 들어오지 않는다", () => {
+		/*
+		 * 스파이 하나만 든 풀로 세 자리를 채우게 만든다. 뽑기는 하나밖에 못 주므로
+		 * 두 자리가 메움으로 넘어가는데, 마피아의 하한을 정원 밖(99인)으로 올려
+		 * 두었으니 첫 갈래는 마피아를 쓸 수 없다. 하한을 안 보고 넣으면 여기서
+		 * "12인 판에 99인부터 나오는 직업"이 나온다.
+		 */
+		const spec = {
+			...DECK,
+			leadPool: [Role.SPY],
+			mafiaPool: [Role.SPY],
+			citizenPool: NO_SPY,
+			minPlayers: { ...DECK.minPlayers, [Role.MAFIA]: 99 },
+			exclusiveGroups: [],
+		};
+		let filled = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const seats = seatsOf(deck, [Role.MAFIA, Role.SPY]);
+				assert.equal(seats.length, DECK.mafiaTeamSize[count], `${count}인 seed ${seed}`);
+				assert.ok(
+					!deck.includes(Role.MAFIA),
+					`${count}인 seed ${seed} 하한 위반 [${deck.join(", ")}]`
+				);
+				// 풀에 스파이 하나뿐이라 자리가 둘 이상이면 나머지는 전부 메움패다
+				if (seats.length > 1) filled++;
+			}
+		}
+		assert.ok(filled > 0, "메움 경로를 한 번도 밟지 못했다");
+	});
+
+	it("메움패가 배타 그룹을 어기지 않는다", () => {
+		/*
+		 * 같은 모양인데 이번에는 하한이 아니라 배타가 마피아를 막는다. 스파이가
+		 * 자리에 앉아 있는 한 마피아는 첫 갈래를 통과하면 안 된다.
+		 */
+		const spec = {
+			...DECK,
+			leadPool: [Role.SPY],
+			mafiaPool: [Role.SPY],
+			citizenPool: NO_SPY,
+			exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+		};
+		let filled = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const seats = seatsOf(deck, [Role.MAFIA, Role.SPY]);
+				assert.equal(seats.length, DECK.mafiaTeamSize[count], `${count}인 seed ${seed}`);
+				assert.ok(
+					!(deck.includes(Role.MAFIA) && deck.includes(Role.SPY)),
+					`${count}인 seed ${seed} 배타 위반 [${deck.join(", ")}]`
+				);
+				if (seats.length > 1) filled++;
+			}
+		}
+		assert.ok(filled > 0, "메움 경로를 한 번도 밟지 못했다");
+	});
+
+	it("막는 것이 없으면 메움패는 능력 없는 마피아다", () => {
+		/*
+		 * 위 둘에서 하한과 배타만 걷어낸 스펙. 이제 첫 갈래가 열려 있으므로
+		 * 마피아가 정확히 한 장 들어와야 한다(리드 + 뽑기가 스파이 둘).
+		 *
+		 * 이 단언이 "이미 앉은 직업을 아무거나 재사용"과 첫 갈래를 갈라낸다.
+		 * 재사용으로 새면 마피아가 0장이 되고 스파이가 셋이 된다.
+		 */
+		const spec = {
+			...DECK,
+			leadPool: [Role.SPY],
+			mafiaPool: [Role.SPY],
+			citizenPool: NO_SPY,
+			exclusiveGroups: [],
+		};
+		for (let count = 11; count <= 12; count++) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const mafia = deck.filter(role => role === Role.MAFIA).length;
+				const spy = deck.filter(role => role === Role.SPY).length;
+				assert.equal(mafia, 1, `${count}인 seed ${seed} [${deck.join(", ")}]`);
+				assert.equal(spy, 2, `${count}인 seed ${seed} [${deck.join(", ")}]`);
+			}
+		}
+	});
+
+	it("메움패가 단독 킬러를 복제해 밤 예산을 깨지 않는다", () => {
+		/*
+		 * 둘째 갈래를 정면으로 겨눈다. 리드 후보를 비워 리드가 Role.MAFIA로
+		 * 대체되게 하고, 마피아 풀에는 단독 킬러(짐승인간)만 둔다. 하한으로 첫
+		 * 갈래를 막으면 메움 시점의 taken이 [마피아, 짐승인간]이 된다.
+		 *
+		 * 둘 중 무엇을 다시 쓰느냐가 곧 밤 사망자 수다. 마피아는 밀담에 앉으므로
+		 * 몇 장이 되든 사망자가 하나고, 짐승인간을 복제하면 시체가 하나 더 생겨
+		 * 11인 판의 예산 2를 3으로 넘긴다.
+		 */
+		const spec = {
+			...DECK,
+			leadPool: [],
+			mafiaPool: [Role.BEAST],
+			citizenPool: NO_SPY,
+			minPlayers: { ...DECK.minPlayers, [Role.MAFIA]: 99 },
+			exclusiveGroups: [],
+		};
+		let filled = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const teamSize = DECK.mafiaTeamSize[count];
+				const seats = seatsOf(deck, [Role.MAFIA, Role.BEAST]);
+				const where = `${count}인 seed ${seed} [${deck.join(", ")}]`;
+				assert.equal(seats.length, teamSize, where);
+				assert.ok(
+					seatDeaths(seats) <= budgetFor(count, teamSize),
+					`${where} 사망 ${seatDeaths(seats)} > 예산 ${budgetFor(count, teamSize)}`
+				);
+				assert.ok(seats.filter(killsAlone).length <= 1, `${where} 단독 킬러 복제`);
+				// 자리가 셋인 판에서만 [마피아, 짐승인간] 뒤의 메움에 닿는다
+				if (teamSize === 3) filled++;
+			}
+		}
+		assert.ok(filled > 0, "메움 경로를 한 번도 밟지 못했다");
+	});
+
+	it("리드가 단독 킬러여도 메움패가 그를 복제하지 않는다", () => {
+		/*
+		 * 같은 둘째 갈래를 반대쪽에서 본다. 여기서는 taken이 [짐승인간(리드),
+		 * 스파이]라 "앞에서부터 아무거나"가 곧 짐승인간 복제가 된다. 예산 산술만으로는
+		 * 이 모양을 잡을 수 없어서(밀담 공격자가 없어 사망자가 1 + 1로 끝난다)
+		 * "마피아 자리의 단독 킬러는 최대 하나"를 따로 못 박는다 — 스펙의 풀에
+		 * 단독 킬러가 하나뿐이므로 둘이 나왔다면 복제한 것이다.
+		 */
+		const spec = {
+			...DECK,
+			leadPool: [Role.MAFIA, Role.BEAST],
+			mafiaPool: [Role.MAFIA, Role.SPY],
+			citizenPool: NO_SPY,
+			exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+		};
+		let beastLead = 0;
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const teamSize = DECK.mafiaTeamSize[count];
+				const seats = seatsOf(deck, [Role.MAFIA, Role.BEAST, Role.SPY]);
+				const where = `${count}인 seed ${seed} [${deck.join(", ")}]`;
+				assert.equal(seats.length, teamSize, where);
+				assert.ok(seats.filter(killsAlone).length <= 1, `${where} 단독 킬러 복제`);
+				assert.ok(
+					seatDeaths(seats) <= budgetFor(count, teamSize),
+					`${where} 사망 ${seatDeaths(seats)} > 예산 ${budgetFor(count, teamSize)}`
+				);
+				assert.ok(
+					!(deck.includes(Role.MAFIA) && deck.includes(Role.SPY)),
+					`${where} 배타 위반`
+				);
+				if (deck.includes(Role.BEAST) && deck.includes(Role.SPY)) beastLead++;
+			}
+		}
+		assert.ok(beastLead > 0, "[짐승인간, 스파이] 모양을 한 번도 밟지 못했다");
 	});
 });
 
