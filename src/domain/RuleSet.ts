@@ -72,7 +72,15 @@ export interface DeckSpec {
 	readonly citizenRequired: readonly Role[];
 	/** 남는 시민 자리 일부에 뽑히는 후보 */
 	readonly citizenPool: readonly Role[];
-	/** 같은 판에 함께 들어갈 수 없는 묶음 */
+	/**
+	 * 같은 판에 함께 들어갈 수 없는 묶음.
+	 *
+	 * 예외가 하나 있다: citizenRequired는 이 규칙을 보지 않는다. "반드시 들어가는
+	 * 직업"과 "함께 들어갈 수 없는 묶음"이 부딪히면 한쪽은 거짓말이 되어야 하는데,
+	 * 그 자리에서는 citizenRequired가 이긴다 — 그쪽이 없으면 시민에게 정보가 아예
+	 * 없어 토론이 성립하지 않기 때문이다. 배타로 갈라야 하는 직업은 required가
+	 * 아니라 pool에 둔다.
+	 */
 	readonly exclusiveGroups: readonly (readonly Role[])[];
 	/**
 	 * 그 직업이 등장하기 시작하는 최소 참가 인원.
@@ -142,11 +150,13 @@ export interface RuleSet {
  *
  * 주의: mafiaPool의 길이(2)가 곧 최대 추첨 수(11~12인의 teamSize - 1 = 2)라
  * 여유가 한 칸도 없다. mafiaTeamSize를 고쳐서 teamSize >= 3인 인원이 짐승인간이
- * 걸러지는 구간(citizenSlots < 8)과 겹치면 뽑기가 요청보다 적게 돌려주고,
- * 덱은 마피아 한 명이 모자란 채로 조용히 나간다. 그때는 인원표만이 아니라 이
- * 풀에도 후보를 더해야 한다 (tests/deck.test.ts의 "마피아 진영 인원이 표와
- * 정확히 같다"와 "리드를 무엇으로 뽑든 마피아 진영 인원이 표와 같다"가 4~12인을
- * 훑으므로 그 자리에서 걸린다 — 뒤쪽은 시드를 여럿 밟아 리드가 갈리는 인원까지 본다).
+ * 걸러지는 구간(citizenSlots < 8)과 겹치면 뽑기가 요청보다 적게 돌려준다.
+ * 이제 그 자리는 buildRoleDeck의 메움 단계가 마피아로 채우므로 인원표는 그대로
+ * 지켜진다 — 대신 증상이 "마피아가 한 명 모자라다"에서 "그 인원의 구성이 마피아
+ * 복제로 고정된다"로 바뀐다. 자리 수를 세는 테스트로는 이제 안 잡힌다는 뜻이다.
+ * 그 대신 tests/deck.test.ts의 "11~12인 마피아 진영은 마피아 둘 + 짐승인간
+ * 하나로 고정된다"가 오늘의 구성 자체를 못 박아 두었으므로, 풀이 말라 메움패가
+ * 도는 순간 그 테스트가 걸린다. 걸리면 인원표만이 아니라 이 풀에도 후보를 더한다.
  */
 export const STANDARD_RULES: RuleSet = {
 	id: "standard",

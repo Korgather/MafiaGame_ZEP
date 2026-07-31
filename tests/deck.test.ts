@@ -152,6 +152,34 @@ describe("마피아 리드 선정", () => {
 		}
 	});
 
+	it("11~12인 마피아 진영은 마피아 둘 + 짐승인간 하나로 고정된다", () => {
+		/*
+		 * 오늘의 구성 그 자체다. 리드는 마피아 고정이고(단독 킬러 리드는 남는 두
+		 * 자리를 밀담 후보 하나로 못 채운다) 남는 두 자리를 후보 둘에서 둘 뽑으므로
+		 * 갈릴 여지가 없다. Task 6이 사기꾼을 넣으면 여기가 갈린다.
+		 *
+		 * 자리 수만 세는 테스트로 대신할 수 없다. mafiaPool의 여유가 한 칸도 없어서
+		 * (RuleSet.ts의 경고) 후보가 하나라도 줄면 남는 자리를 메움패가 채우는데,
+		 * 그러면 마피아 셋이 되어 자리 수는 그대로 3으로 맞다. 구성을 직접 못 박아야
+		 * 풀이 마른 것이 그 자리에서 걸린다.
+		 */
+		for (let count = 11; count <= 12; count++) {
+			for (let seed = 1; seed <= 100; seed++) {
+				const deck = buildRoleDeck(DECK, count, rngFrom(seed));
+				assert.equal(
+					deck.filter(role => role === Role.MAFIA).length,
+					2,
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+				assert.equal(
+					deck.filter(role => role === Role.BEAST).length,
+					1,
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+			}
+		}
+	});
+
 	it("리드 후보가 전부 걸러져도 마피아가 리드가 된다", () => {
 		const emptyLead = { ...DECK, leadPool: [] };
 		const deck = buildRoleDeck(emptyLead, 8);
@@ -378,6 +406,134 @@ describe("배타 그룹 (합성 스펙)", () => {
 			const special = deck.filter(role => DECK.citizenPool.indexOf(role) >= 0).length;
 			assert.equal(special, 2, `seed ${seed} [${deck.join(", ")}]`);
 		}
+	});
+});
+
+/*
+ * 마피아 자리 수는 뽑기 결과와 무관하게 표와 같아야 한다.
+ *
+ * 리드 선정의 사전 검사는 "남은 풀이 충분히 큰가"를 묻는다. 그런데 drawExclusive는
+ * 하나 뽑을 때마다 그 직업의 그룹 동료를 남은 풀에서 뺀다 — 크기는 필요조건일 뿐
+ * 충분조건이 아니다. 뽑기가 모자라면 buildRoleDeck 끝의 while이 시민으로 메우므로
+ * 덱 길이는 맞고, 마피아 진영만 표보다 작아진 채로 조용히 나간다.
+ *
+ * 아래 스펙들은 전부 사전 검사를 통과하면서 뽑기가 모자라는 모양이다. 사전 검사를
+ * 아무리 정교하게 만들어도 이 모양들을 전부 앞에서 막을 수는 없으므로(검사 뒤에
+ * 좁아지는 뽑기가 있는 한), 자리 수는 뽑기가 끝난 뒤에 못 박혀야 한다.
+ *
+ * 세는 단위가 "진영"이 아니라 "마피아 자리에서 온 직업"인 이유: 오늘 마피아 팀
+ * 직업은 MAFIA·BEAST 둘뿐이라, 밀담에 앉는 세 번째 직업(Task 6의 사기꾼)이
+ * 필요한 모양을 세우려면 대역이 있어야 한다. Role.SPY는 진영이 시민이지만
+ * nightChat이 마피아라 buildRoleDeck이 보는 축(killsIndependently)에서는 사기꾼과
+ * 같다. 시민 추첨으로 들어온 스파이가 숫자에 섞이지 않도록 citizenPool에서는 뺀다.
+ */
+describe("마피아 자리 수 불변식 (합성 스펙)", () => {
+	const MAFIA_SEATS: Role[] = [Role.MAFIA, Role.BEAST, Role.SPY];
+	const NO_SPY = DECK.citizenPool.filter(role => role !== Role.SPY);
+
+	/** 마피아 풀에서 온 직업이 표와 같은 수만큼 있는가를 4~12인 × 시드로 훑는다 */
+	function assertSeatCount(spec: typeof DECK, label: string): void {
+		for (const count of EVERY_COUNT) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				const seats = deck.filter(role => MAFIA_SEATS.indexOf(role) >= 0).length;
+				assert.equal(
+					seats,
+					DECK.mafiaTeamSize[count],
+					`${label} ${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+				assert.equal(deck.length, count, `${label} ${count}인 seed ${seed} 덱 길이`);
+			}
+		}
+	}
+
+	it("살아남은 밀담 후보끼리 배타여도 자리가 다 찬다", () => {
+		/*
+		 * 리드 검사가 통과시키는데 뽑기가 모자라는 첫 번째 모양.
+		 *
+		 * 짐승인간을 리드로 뽑아도 밀담 후보 둘(마피아·스파이)이 그대로 남는다 —
+		 * 어느 쪽도 짐승인간과 묶여 있지 않으니 크기 검사는 2 >= 2로 통과한다.
+		 * 그런데 그 둘이 서로 배타라, 하나를 뽑는 순간 다른 하나가 빠진다.
+		 * 11~12인(자리 셋)에서 마피아 자리가 둘로 끝난다.
+		 */
+		assertSeatCount(
+			{
+				...DECK,
+				leadPool: [Role.BEAST],
+				mafiaPool: [Role.MAFIA, Role.SPY],
+				citizenPool: NO_SPY,
+				exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+			},
+			"밀담 후보끼리 배타"
+		);
+	});
+
+	it("밀담 리드가 자기 라이벌을 지워도 자리가 다 찬다", () => {
+		/*
+		 * 두 번째 모양. 리드가 밀담 직업이면 사전 검사를 아예 하지 않는다 —
+		 * 밀담 리드가 여는 풀이 가장 넓어서 후보를 걸러 봐야 얻는 것이 없기
+		 * 때문이고, 그 판단 자체는 옳다. 다만 "가장 넓다"가 "충분하다"는 아니다.
+		 * 마피아를 리드로 뽑는 순간 같은 그룹의 스파이가 함께 빠져 풀이
+		 * [MAFIA] 하나로 줄고, 11~12인의 남은 두 자리를 하나로만 채운다.
+		 */
+		assertSeatCount(
+			{
+				...DECK,
+				leadPool: [Role.MAFIA],
+				mafiaPool: [Role.MAFIA, Role.SPY],
+				citizenPool: NO_SPY,
+				exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+			},
+			"밀담 리드가 라이벌 제거"
+		);
+	});
+
+	it("Task 6이 넣을 [짐승인간, 사기꾼] 모양에서도 자리가 다 찬다", () => {
+		/*
+		 * 사기꾼이 마피아 풀에 들어오고 짐승인간과 배타로 묶이는, 다음 슬라이스가
+		 * 실제로 만들 모양이다(사기꾼 대역은 스파이). 오늘 코드로도 통과한다 —
+		 * 후보가 셋이라 한 번의 중간 제외로는 자리가 모자라지 않기 때문이다.
+		 * 통과하는 채로 먼저 걸어 두는 이유는, Task 6이 풀을 손대다 이 여유를
+		 * 없애면(후보를 빼거나 그룹을 하나 더 묶으면) 그 자리에서 걸리게 하려는 것이다.
+		 */
+		assertSeatCount(
+			{
+				...DECK,
+				leadPool: [Role.MAFIA, Role.BEAST],
+				mafiaPool: [Role.MAFIA, Role.BEAST, Role.SPY],
+				citizenPool: NO_SPY,
+				exclusiveGroups: [[Role.BEAST, Role.SPY]],
+			},
+			"짐승인간+사기꾼"
+		);
+	});
+
+	it("메움패가 배타 그룹을 어기지 않는다", () => {
+		/*
+		 * 자리를 메우는 쪽이 규칙을 어기면 고친 것이 아니다. 위 첫 번째 스펙은
+		 * 마피아와 스파이가 배타이므로, 스파이가 뽑힌 판에 마피아를 메움패로
+		 * 밀어 넣으면 둘이 한 덱에 함께 있게 된다.
+		 */
+		const spec = {
+			...DECK,
+			leadPool: [Role.BEAST],
+			mafiaPool: [Role.MAFIA, Role.SPY],
+			citizenPool: NO_SPY,
+			exclusiveGroups: [[Role.MAFIA, Role.SPY]],
+		};
+		let spies = 0;
+		for (let count = 11; count <= 12; count++) {
+			for (let seed = 1; seed <= 200; seed++) {
+				const deck = buildRoleDeck(spec, count, rngFrom(seed));
+				if (deck.includes(Role.SPY)) spies++;
+				assert.ok(
+					!(deck.includes(Role.MAFIA) && deck.includes(Role.SPY)),
+					`${count}인 seed ${seed} [${deck.join(", ")}]`
+				);
+			}
+		}
+		// 스파이가 한 번도 안 뽑히면 위 단언이 공허하게 통과한다
+		assert.ok(spies > 0, "스파이가 한 번도 안 뽑혀 메움패 경로를 밟지 못했다");
 	});
 });
 
