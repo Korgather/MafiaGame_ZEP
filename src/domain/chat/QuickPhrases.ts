@@ -56,8 +56,13 @@ export const QUICK_NOTE: string[] = [
  *
  * 번호를 넣지 않는다 — 12명 × 문구 종류만큼 칩이 늘어난다. 지목은 투표와
  * 맵 위의 위치로 한다.
+ *
+ * QUICK_NOTE와 같은 이유로 export한다. 여덟 개는 이 파일에서 가장 긴 묶음이라
+ * 채팅창의 칩 줄이 가장 깨지기 쉬운 입력이고, 위젯 장면(tools/widget-scenes.js)이
+ * 그 화면을 그려 보려면 문구를 여기서 가져와야 한다. 옮겨 적으면 문구를 다듬은
+ * 뒤에도 미리보기는 옛 여덟 줄을 보여준다.
  */
-const QUICK_SILENCE_DAY: string[] = [
+export const QUICK_SILENCE_DAY: string[] = [
 	"의심됩니다",
 	"저는 시민입니다",
 	"정보 있어요",

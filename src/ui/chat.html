@@ -308,8 +308,11 @@
 				const usable = view !== null && view.write && quick.length > 0;
 				qs("#quick").classList.toggle("hidden", !usable);
 				if (!usable) return;
+				// data-index는 누르는 쪽이 아니라 세는 쪽이 쓴다 — 장면 검사기가
+				// "여덟 번째 칩이 그려졌나"를 물을 수 있는 유일한 손잡이다
+				// (roleAction.html의 문구 버튼과 같은 방식)
 				qs("#quick").innerHTML = html`${quick.map(
-					text => html`<button type="button">${text}</button>`
+					(text, i) => html`<button type="button" data-index="${i}">${text}</button>`
 				)}`;
 			}
 

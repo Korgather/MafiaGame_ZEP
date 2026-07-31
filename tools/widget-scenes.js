@@ -14,18 +14,26 @@
  */
 
 /*
- * 카드 화면만 표본을 지어내지 않고 도메인에서 그대로 가져온다.
+ * 화면에 찍히는 글은 지어내지 않고 도메인에서 그대로 가져온다.
  *
- * 나머지 장면의 표본(SEATS 등)은 "깨지기 쉬운 입력"을 일부러 만든 것이라
- * 지어낸 값이 맞다. 그런데 카드의 내용은 지어낼 수 있는 값이 아니다 —
- * 직업 12종의 설명은 ROLE_DEFS 하나에만 있어야 하고(Guide.ts가 그 규칙이다),
- * 여기에 옮겨 적으면 직업을 하나 고칠 때 고칠 곳이 둘이 된다. 그러면 미리보기가
- * 실제와 다른 글을 보여주면서도 아무 검사에 걸리지 않는다.
+ * 좌석 표본(SEATS 등)은 "깨지기 쉬운 입력"을 일부러 만든 것이라 지어낸 값이
+ * 맞다. 그런데 글은 지어낼 수 있는 값이 아니다 — 직업의 설명과 지목 안내는
+ * ROLE_DEFS 하나에만 있어야 하고(Guide.ts가 그 규칙이다), 여기에 옮겨 적으면
+ * 직업을 하나 고칠 때 고칠 곳이 둘이 된다. 그러면 미리보기가 실제와 다른
+ * 글을 보여주면서도 아무 검사에 걸리지 않는다.
+ *
+ * 실제로 그랬다. 마피아·의사·자경단원의 지목 안내가 여기에 옛 문장으로
+ * 남아 있었고("제거할 대상을 고르세요" 등), 밤 안내는 코드에서 이미 지워진
+ * 문장("능력이 있는 직업은 대상을 지목하세요")을 그대로 보여주고 있었다.
  *
  * node 24는 require()로 .ts를 그대로 읽는다(타입 제거). 별도 빌드 단계가
  * 필요 없어서 도구가 소스의 진실을 바로 본다.
  */
 const { GUIDE_CARDS, roleBook } = require("../src/domain/Guide.ts");
+const { ROLE_DEFS } = require("../src/domain/Roles.ts");
+const { Role } = require("../src/types/Game.types.ts");
+const { nightActionBlockedReason } = require("../src/domain/NightResolution.ts");
+const { QUICK_NOTE, QUICK_SILENCE_DAY } = require("../src/domain/chat/QuickPhrases.ts");
 
 /*
  * 정원과 강퇴 표수도 같은 이유로 가져온다. 여기에 8을 적어 두면 정원을
@@ -37,8 +45,38 @@ const { kickVotesNeeded } = require("../src/entities/Room.ts");
 /* 정원은 이제 방마다 다르다. 미리보기도 그 차이를 그대로 보여줘야 한다 */
 const { BLITZ_RULES, STANDARD_RULES } = require("../src/domain/RuleSet.ts");
 
-/** 도감 12장. 첫 장(마피아)은 직업 공개 장면이 함께 쓴다 */
+/** 도감 전부. 첫 장(마피아)은 직업 공개 장면이 함께 쓴다 */
 const BOOK = roleBook();
+
+/**
+ * 밤 지목 화면이 실제로 받는 값.
+ *
+ * Night.ts의 openRoleAction이 이 네 값을 전부 ROLE_DEFS에서 그대로 꺼내
+ * 보낸다(prompt는 nightPrompt, note는 nightNotice). 여기서도 같은 자리에서
+ * 꺼내야 문구를 다듬은 순간 미리보기가 따라 바뀐다.
+ */
+function nightAction(role) {
+	const def = ROLE_DEFS[role];
+	return {
+		role: def.displayName,
+		team: def.team,
+		alive: true,
+		prompt: def.nightPrompt || "",
+		note: def.nightNotice,
+	};
+}
+
+/**
+ * 격자 없이 밤 화면만 보는 사람이 받는 안내.
+ *
+ * Night.ts의 nightNote가 이 함수 하나로 이유를 고른다. 문장을 여기 적어 두면
+ * 조건이 바뀐 뒤에도 미리보기는 옛 이유를 계속 보여준다 — 실제로 여기에는
+ * 코드에서 이미 사라진 문장이 남아 있었다.
+ */
+function noTurnNote(role, over) {
+	const seat = Object.assign({ role, alive: true, usedSkill: false, usesSpent: 0 }, over);
+	return { role: ROLE_DEFS[role].displayName, team: ROLE_DEFS[role].team, note: nightActionBlockedReason(seat, 0) };
+}
 
 /** 이름이 길거나 죽었거나 — 레이아웃이 깨지기 쉬운 표본 */
 const SEATS = [
@@ -158,10 +196,8 @@ const SCENES = [
 				total: 6,
 				aliveCount: 5,
 				timer: 22,
-				role: "정치인",
-				team: "citizen",
+				...noTurnNote(Role.POLITICIAN),
 				alive: true,
-				note: "밤입니다. 능력이 있는 직업은 대상을 지목하세요.",
 				deaths: [],
 				spectating: false,
 			},
@@ -241,13 +277,9 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 2,
-				role: "마피아",
-				team: "mafia",
-				alive: true,
-				prompt: "제거할 대상을 고르세요",
+				...nightAction(Role.MAFIA),
 				seats: SEATS,
 				timer: 22,
-				note: "🌙 동료와의 대화는 채팅창의 🔪 탭에서 합니다.",
 			},
 			{ type: "progress", acted: 0, total: 3 },
 		],
@@ -260,13 +292,9 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 4,
-				role: "의사",
-				team: "citizen",
-				alive: true,
-				prompt: "살릴 대상을 고르세요",
+				...nightAction(Role.DOCTOR),
 				seats: SEATS,
 				timer: 22,
-				note: "밤마다 한 명을 지목해 마피아의 공격에서 살릴 수 있습니다.",
 			},
 			// 지목을 확정한 뒤까지 걸어본다. 여기까지 오지 않으면 격자를 물리는
 			// 길(grid.locked)과 확정 표시가 한 번도 실행되지 않는다
@@ -283,13 +311,9 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 1,
-				role: "자경단원",
-				team: "citizen",
-				alive: true,
-				prompt: "처단할 대상을 고르세요 (게임당 한 번)",
+				...nightAction(Role.VIGILANTE),
 				seats: SEATS,
 				timer: 22,
-				note: "게임당 한 번, 한 명을 죽일 수 있습니다. 시민을 죽이면 자책하여 함께 죽습니다.",
 			},
 		],
 	},
@@ -301,38 +325,24 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 3,
-				role: "시민",
-				team: "citizen",
-				alive: true,
-				prompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
+				...nightAction(Role.CITIZEN),
 				seats: SEATS,
 				timer: 22,
-				note: "🌙 밤에는 채팅을 할 수 없습니다.",
 			},
 			// 두 번째 화면까지 걸어본다. 여기까지 오지 않으면 문구 목록을 그리는
 			// 길과 그것을 다시 치우는 길이 한 번도 실행되지 않는다
-			{
-				type: "phrases",
-				num: 5,
-				options: [
-					"당신을 믿습니다",
-					"당신이 의심됩니다",
-					"오늘은 조용히 계세요",
-					"내일 나서 주세요",
-					"저에게 투표하지 마세요",
-					"우리 편이라면 신호를 주세요",
-				],
-			},
+			{ type: "phrases", num: 5, options: QUICK_NOTE.slice() },
 			{ type: "selectResponse", num: 5 },
 		],
 		// 예외가 없다는 것만으로는 문구 목록이 그려졌는지 알 수 없다. 마지막
-		// 문구의 버튼을 세면 여섯 개가 다 그려졌는지가 확인된다.
+		// 문구의 버튼을 세면 여섯 개가 다 그려졌는지가 확인된다. 문구가 늘거나
+		// 줄면 기대하는 번호도 같이 움직여야 하므로 길이에서 뽑는다.
 		//
 		// 확정 표시(.picked)로는 셀 수 없다. check-widgets.js의 선택자는
 		// 파싱된 노드의 class 속성을 읽는데 classList.add는 엘리먼트 스텁의
 		// Set만 고치고 그 속성을 되쓰지 않는다 — 실행 중에 붙은 class는
 		// querySelectorAll에 잡히지 않는다(.picked로 1을 기대하면 0이 나온다)
-		expect: { 'button[data-index="5"]': 1 },
+		expect: { [`button[data-index="${QUICK_NOTE.length - 1}"]`]: 1 },
 	},
 	{
 		// 위와 같은 장면인데 끝에 init이 한 번 더 온다. 밤마다 위젯을 새로
@@ -349,42 +359,23 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 3,
-				role: "시민",
-				team: "citizen",
-				alive: true,
-				prompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
+				...nightAction(Role.CITIZEN),
 				seats: SEATS,
 				timer: 22,
-				note: "🌙 밤에는 채팅을 할 수 없습니다.",
 			},
-			{
-				type: "phrases",
-				num: 5,
-				options: [
-					"당신을 믿습니다",
-					"당신이 의심됩니다",
-					"오늘은 조용히 계세요",
-					"내일 나서 주세요",
-					"저에게 투표하지 마세요",
-					"우리 편이라면 신호를 주세요",
-				],
-			},
+			{ type: "phrases", num: 5, options: QUICK_NOTE.slice() },
 			// 둘째 밤
 			{
 				type: "init",
 				myNum: 3,
-				role: "시민",
-				team: "citizen",
-				alive: true,
-				prompt: "쪽지를 보낼 대상을 선택하세요. 게임당 한 번입니다.",
+				...nightAction(Role.CITIZEN),
 				seats: SEATS,
 				timer: 22,
-				note: "🌙 밤에는 채팅을 할 수 없습니다.",
 			},
 		],
 		// 위 장면이 1을 기대하는 그 버튼이 여기서는 0이어야 한다. 두 장면이
-		// 짝이라서, 청소를 지우면 이쪽이 6을 세고 빨개진다
-		expect: { 'button[data-index="5"]': 0 },
+		// 짝이라서, 청소를 지우면 이쪽이 문구 수만큼 세고 빨개진다
+		expect: { [`button[data-index="${QUICK_NOTE.length - 1}"]`]: 0 },
 	},
 	{
 		label: "밤 — 능력을 이미 쓴 직업",
@@ -398,10 +389,10 @@ const SCENES = [
 				total: 6,
 				aliveCount: 4,
 				timer: 22,
-				role: "자경단원",
-				team: "citizen",
+				// 총알을 다 쓴 자경단원. maxUses를 넘겼다는 사실만 주면
+				// 문장은 도메인이 고른다
+				...noTurnNote(Role.VIGILANTE, { usesSpent: 1 }),
 				alive: true,
-				note: "능력을 쓸 수 있는 횟수를 다 썼습니다. 이번 밤은 지켜보세요.",
 				deaths: [],
 				spectating: false,
 			},
@@ -415,14 +406,11 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 6,
-				role: "짐승인간",
-				team: "mafia",
-				alive: true,
-				prompt: "물어 죽일 대상을 선택하세요.",
+				// 마피아 팀이지만 밀담 상대가 없다 — 채팅에 🔪 탭이 생기지 않고,
+				// nightNotice가 그 사실을 알리는 유일한 줄이다
+				...nightAction(Role.BEAST),
 				seats: SEATS,
 				timer: 22,
-				// 마피아 팀이지만 밀담 상대가 없다 — 채팅에 🔪 탭이 생기지 않는다
-				note: "🌙 당신은 마피아 팀이지만 마피아와 대화할 수 없습니다.",
 			},
 			// 분모가 0인 순간. 인원이 갈리면 실제로 나올 수 있는 값이고,
 			// 나누기 전에 걸러내지 않으면 막대 폭이 NaN%가 된다
@@ -437,15 +425,11 @@ const SCENES = [
 			{
 				type: "init",
 				myNum: 4,
-				role: "건달",
-				team: "citizen",
-				alive: true,
-				prompt: "방해할 대상을 선택하세요.",
+				...nightAction(Role.THUG),
 				seats: SEATS,
 				// 이 한 줄이 이 장면의 전부다
 				noSelf: true,
 				timer: 22,
-				note: "🌙 밤에는 채팅을 할 수 없습니다.",
 			},
 		],
 		// SEATS는 여섯 칸이고 3번이 사망이다. 여기에 내 칸(4번)이 더해져 둘.
@@ -661,6 +645,55 @@ const SCENES = [
 						role: "의사",
 						team: "citizen",
 						text: "5번이 계속 말 돌리는 거 이상했음",
+					}),
+				],
+			},
+		],
+	},
+	/*
+	 * 침묵전의 낮.
+	 *
+	 * 이 모드에는 장면이 하나도 없었다. 그래서 서른 몇 장면을 다 열어봐도
+	 * "자유 입력이 막히고 칩만 남은 채팅창"은 한 번도 그려지지 않았다 —
+	 * 다른 모드와 화면이 가장 많이 다른 쪽이 검사에서 가장 조용했다.
+	 *
+	 * 문구 여덟 개는 QuickPhrases의 묶음 중 가장 길다. 칩 줄이 감당해야 하는
+	 * 최악의 입력이 이것이라 여기로 가져온다.
+	 */
+	{
+		label: "채팅 — 침묵전의 낮 (문구만)",
+		file: "chat.html",
+		size: CHAT_SIZE,
+		// 마지막 칩까지 그려졌는지 센다. 보이는지까지는 검사기가 모른다(레이아웃이 없다)
+		expect: { [`button[data-index="${QUICK_SILENCE_DAY.length - 1}"]`]: 1 },
+		messages: [
+			{
+				type: "init",
+				channels: [tab("ROOM", { write: true }), tab("GLOBAL", { write: false })],
+				active: "ROOM",
+				quick: QUICK_SILENCE_DAY.slice(),
+				open: true,
+				focus: "",
+				myId: "p1",
+				lines: [
+					line(1, { channel: "ROOM", kind: "SYSTEM", text: "🤐 침묵전입니다. 정해진 문구로만 말할 수 있습니다." }),
+					line(2, {
+						channel: "ROOM",
+						senderId: "p4",
+						num: 4,
+						name: "정수연",
+						role: "시민",
+						team: "citizen",
+						text: "의심됩니다",
+					}),
+					line(3, {
+						channel: "ROOM",
+						senderId: "p1",
+						num: 1,
+						name: "김철수",
+						role: "경찰",
+						team: "citizen",
+						text: "정보 있어요",
 					}),
 				],
 			},

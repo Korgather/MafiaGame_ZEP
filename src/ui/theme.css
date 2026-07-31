@@ -950,18 +950,26 @@ body {
 	outline-offset: -2px;
 }
 
-/* 빠른 메시지 */
+/*
+ * 빠른 메시지.
+ *
+ * 가로 스크롤이었다. 스크롤막대까지 감춰 뒀으므로 넘친 칩은 눌러볼 수 없는
+ * 정도가 아니라 있는 줄도 모른다. 문구가 서넛일 때는 넘칠 일이 없어서 오래
+ * 들키지 않았는데, 침묵전의 낮은 여덟이고 그 모드는 자유 입력이 막혀 있어서
+ * 칩이 곧 말할 수 있는 전부다. 330px 폭에서 재보니 한 줄로 늘어선 여덟 개가
+ * 669px을 요구했고 온전히 보이는 것은 앞의 넷뿐이었다 — 어휘의 절반이 없다.
+ *
+ * 그래서 줄바꿈으로 바꾼다. 여덟 개가 세 줄(76px)을 차지해 대화 영역이
+ * 212 → 164px로 줄지만, 자리를 나눠 주는 쪽이 없는 셈 치는 쪽보다 낫다.
+ * roleAction.html의 .choices도 같은 이유로 가로 스크롤을 쓰지 않는다.
+ */
 .quick {
 	display: flex;
+	flex-wrap: wrap;
 	gap: var(--s1);
 	flex: 0 0 auto;
 	padding: var(--s1) var(--s2);
-	overflow-x: auto;
-	scrollbar-width: none;
 	border-top: 1px solid var(--line);
-}
-.quick::-webkit-scrollbar {
-	display: none;
 }
 
 .quick button {
