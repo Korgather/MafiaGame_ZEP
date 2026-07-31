@@ -3881,14 +3881,17 @@ function chooseNotePhrase(
 
 	seat.noteText = QUICK_NOTE[index];
 	seat.usedSkill = true;
-	broadcastNightProgress(room);
 
 	label(sender, `✉️ ${target}번에게 쪽지를 보냅니다.\n내일 아침에 도착합니다.`);
 	widget.sendMessage({ type: "selectResponse", num: target });
 }
 ```
 
-`nightProgress`(`:175-190`)의 분모에서 쪽지를 뺀다.
+`nightProgress`(`:175-190`)의 분모에서 쪽지를 뺀다. 진행률은 알리지 않는다 —
+분모에서 빠진 사람이 분자를 올리면 그 사람 몫이 진행률에서 영영 빠지고,
+무엇보다 쪽지를 안 쓴 시민에게 "오늘 밤 차례가 있는 사람이 몇 명인가"를
+매 밤 알려 주게 된다. 그 수의 밤 사이 변화는 처형된 사람이 밤 능력을
+가졌는지를 가리킨다 — 게임이 감추는 정보다.
 
 ```ts
 	for (const seat of room.seats) {
