@@ -8,13 +8,14 @@
  */
 import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
-import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
+import { GamePhase, Judgement, Role, Team } from "../src/types/Game.types.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { QUICK_NOTE } from "../src/domain/chat/QuickPhrases.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
 import { ACTION_RATE, MAX_PLAYERS, MIN_PLAYERS } from "../src/constants/GameConfig.ts";
 import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
 import { roleBook } from "../src/domain/Guide.ts";
+import { SKIP_VOTE } from "../src/domain/Vote.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
@@ -33,8 +34,10 @@ import {
 	hasCut,
 	hasProfile,
 	joinRoom,
+	judge,
 	mainWidget,
 	passPeacefulFirstNight,
+	passTrial,
 	playerOf,
 	reconnect,
 	resetWorld,
@@ -676,24 +679,53 @@ describe("투표", () => {
 			assert.equal(playerOf(seat).lastLabel(), `${victim.index}번 참가자에게 투표했습니다.`);
 		}
 
-		finishPhase(target); // VOTE → VOTE_RESULT (집계와 처형이 여기서 일어난다)
+		finishPhase(target); // VOTE → VOTE_RESULT (집계는 여기, 처형은 아직이다)
 
 		assert.equal(target.phase, GamePhase.VOTE_RESULT);
+		assert.equal(target.nominee, victim.index, "최다 득표자가 단상에 오르지 않았습니다");
+		assert.equal(victim.alive, true, "개표만으로 죽었습니다 — 반론과 찬반이 건너뛰어졌습니다");
+		assert.equal(
+			target.voteRecord.message,
+			`⚖️ ${victim.index}번 참가자가 최다 득표로 단상에 올랐습니다.`
+		);
+
+		// 반론 → 찬반. 산 사람이 전부 찬성해야 비로소 처형된다
+		finishPhase(target); // VOTE_RESULT → DEFENSE
+		assert.equal(target.phase, GamePhase.DEFENSE);
+		finishPhase(target); // DEFENSE → JUDGEMENT
+		assert.equal(target.phase, GamePhase.JUDGEMENT);
+		for (const seat of target.seats) {
+			if (seat.index === victim.index) continue;
+			judge(playerOf(seat), Judgement.AGREE);
+			assert.equal(playerOf(seat).lastLabel(), "찬성했습니다.");
+		}
+
+		finishPhase(target); // JUDGEMENT → 처형 → 다음 밤
+
 		assert.equal(victim.alive, false);
-		assert.equal(target.voteRecord.message, `☠️ ${victim.index}번 참가자가 처형되었습니다.`);
-		assert.equal(target.voteRecord.message.indexOf(victim.name), -1);
+		// 처형 문구는 voteRecord.message로 남았다가 다음 밤 컷의 첫 줄이 되고
+		// 그 자리에서 지워진다. 남는 기록은 채팅뿐이다
+		const notice = chatLines(playerOf(target.seats[0])).filter(
+			line => line.text.indexOf("처형당했습니다") >= 0
+		)[0];
+		assert.ok(notice, "처형을 알리는 줄이 없습니다");
+		assert.ok(notice.text.indexOf(`${victim.index}번 참가자`) >= 0);
+		assert.equal(notice.text.indexOf(victim.name), -1, "실명이 새어 나갔습니다");
 	});
 
 	/**
-	 * 처형당한 본인이 개표 화면을 본다.
+	 * 단상에 오른 본인이 개표 화면을 본다.
 	 *
 	 * 이 판에서 가장 중요한 화면을 정작 당사자만 못 보던 자리다. 개표 화면을
 	 * 전원에게 연 직후 kill()이 그 사람의 메인 위젯을 닫아버려서, 처형당한
 	 * 사람은 7초 내내 빈 화면을 봤다. 같은 순간에 재접속한 사람은 제대로
 	 * 받았다 — "머물러 있으면 못 보고 끊었다 들어오면 보인다"는 어긋남이
 	 * 이게 의도가 아니라는 증거다.
+	 *
+	 * 개표에서 바로 죽지 않게 된 지금도 이 화면은 본인에게 가장 중요하다 —
+	 * 곧 자기가 단상에 올라 해명해야 한다는 것을 여기서 처음 알기 때문이다.
 	 */
-	it("처형당한 사람도 개표 화면을 그대로 본다", () => {
+	it("단상에 오른 사람도 개표 화면을 그대로 본다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
 
@@ -706,8 +738,8 @@ describe("투표", () => {
 		finishPhase(target); // VOTE → VOTE_RESULT
 
 		const result = mainWidget(playerOf(victim)).lastOfType("result");
-		assert.ok(result, "처형당한 사람의 개표 화면이 payload 없이 열렸습니다");
-		assert.equal(result.executed, victim.index, "본인이 처형됐다는 사실이 화면에 없습니다");
+		assert.ok(result, "단상에 오른 사람의 개표 화면이 payload 없이 열렸습니다");
+		assert.equal(result.nominee, victim.index, "본인이 지목됐다는 사실이 화면에 없습니다");
 	});
 
 	it("같은 사람이 두 번 투표해도 한 표만 들어간다", () => {
@@ -816,6 +848,189 @@ describe("투표", () => {
 	});
 });
 
+/**
+ * 마피아42에서 가져온 세 가지 — '투표 없음', 최후의 반론과 찬반투표, ±15초.
+ *
+ * 셋 다 "죽이지 않을 길"을 만드는 장치다. 예전에는 낮이 시작되면 누군가는
+ * 반드시 죽었고(최다 득표 = 처형), 단서가 없는 날에도 아무나 찍는 것 말고는
+ * 할 수 있는 일이 없었다. 지금은 스킵으로 밤에 넘길 수 있고, 지목당해도
+ * 해명할 20초가 있으며, 해명이 길어지면 시간을 15초 살 수 있다.
+ */
+describe("스킵 · 재판 · 시간 조절", () => {
+	/** 첫 밤을 아무 일 없이 넘기고 투표까지 진행한다 */
+	function reachVote(): ReturnType<typeof room> {
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // NIGHT → DAY
+		finishPhase(target); // DAY → VOTE
+		assert.equal(target.phase, GamePhase.VOTE);
+		return target;
+	}
+
+	it("'투표 없음'이 최다면 아무도 단상에 오르지 않고 밤으로 넘어간다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+
+		for (const seat of target.seats) {
+			vote(playerOf(seat), SKIP_VOTE);
+			assert.equal(playerOf(seat).lastLabel(), "'투표 없음'을 골랐습니다.");
+		}
+
+		finishPhase(target); // VOTE → VOTE_RESULT
+
+		assert.equal(target.nominee, 0, "스킵이 최다인데 단상에 사람이 올랐습니다");
+		assert.equal(
+			target.voteRecord.message,
+			"🕊️ '투표 없음'이 가장 많아 오늘은 아무도 단상에 오르지 않습니다."
+		);
+
+		// 반론도 찬반도 열리지 않는다. 세울 사람이 없는 재판은 시간만 쓴다
+		finishPhase(target);
+		assert.equal(target.phase, GamePhase.NIGHT);
+		assert.ok(target.seats.every(seat => seat.alive), "스킵한 낮에 누군가 죽었습니다");
+	});
+
+	/**
+	 * 스킵과 지목이 같은 표를 받으면 스킵이 이긴다.
+	 *
+	 * 처형은 되돌릴 수 없고 스킵은 밤 한 번을 내주는 것뿐이다. 표가 정확히
+	 * 갈렸다는 것은 방이 확신하지 못한다는 뜻이므로 값이 싼 쪽으로 기운다.
+	 */
+	it("지목과 '투표 없음'이 동률이면 아무도 죽지 않는 쪽으로 간다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+		const [first, second, third, fourth] = target.seats;
+
+		vote(playerOf(first), third.index);
+		vote(playerOf(second), third.index);
+		vote(playerOf(third), SKIP_VOTE);
+		vote(playerOf(fourth), SKIP_VOTE);
+
+		finishPhase(target); // VOTE → VOTE_RESULT
+
+		assert.equal(third.voteCount, 2, "지목이 집계되지 않았습니다");
+		assert.equal(target.nominee, 0, "동률인데 단상에 사람이 올랐습니다");
+	});
+
+	it("찬반이 부결되면 단상에 오른 사람이 살아 낮으로 돌아간다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+		for (const seat of target.seats) {
+			if (seat.index !== nominee.index) vote(playerOf(seat), nominee.index);
+		}
+
+		passTrial(target, Judgement.OPPOSE);
+
+		assert.equal(nominee.alive, true, "반대가 과반인데 처형됐습니다");
+		assert.deepEqual(target.rejected, [nominee.index], "부결 명단에 남지 않았습니다");
+		assert.equal(target.phase, GamePhase.DAY, "부결됐는데 낮으로 돌아가지 않았습니다");
+		assert.ok(
+			chatSaw(playerOf(target.seats[0]), "처형이 무산되어"),
+			"부결 사실이 채팅에 남지 않았습니다"
+		);
+	});
+
+	/**
+	 * 재지목은 한 번뿐이다.
+	 *
+	 * 상한이 없으면 부결 → 낮 → 투표가 무한히 돌 수 있다. 두 번째 부결에서
+	 * 밤으로 넘기는 것은 tools/balance의 근거이기도 하다 — 재지목 한 번은
+	 * 시민 승률을 사실상 바꾸지 않지만(11인 21.1%→20.7%), 무제한이면
+	 * 마피아가 매일 낮을 통째로 소모시킬 수 있다.
+	 */
+	it("부결된 사람은 재지목에서 고를 수 없고 두 번째 부결이면 밤으로 간다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+		assert.equal(target.voteRound, 1);
+
+		const citizens = seatsWithRole(target, Role.CITIZEN);
+		const first = citizens[0];
+		for (const seat of target.seats) {
+			if (seat.index !== first.index) vote(playerOf(seat), first.index);
+		}
+		passTrial(target, Judgement.OPPOSE);
+		assert.equal(target.phase, GamePhase.DAY);
+
+		finishPhase(target); // DAY → VOTE (재지목)
+		assert.equal(target.voteRound, 2);
+
+		// 화면에도 서버에도 같은 규칙이 걸린다
+		const board = mainWidget(playerOf(target.seats[0])).lastOfType("init");
+		assert.ok(board, "재지목 화면이 payload 없이 열렸습니다");
+		assert.deepEqual(board.rejected, [first.index]);
+
+		const voter = target.seats.filter(seat => seat.index !== first.index)[0];
+		vote(playerOf(voter), first.index);
+		assert.equal(first.voteCount, 0, "부결된 사람에게 다시 표가 들어갔습니다");
+		assert.equal(playerOf(voter).lastLabel(), "방금 부결된 사람은 다시 고를 수 없습니다.");
+
+		// 다른 사람을 올려 다시 부결시키면 오늘은 여기서 끝난다
+		const second = seatsWithRole(target, Role.DOCTOR)[0];
+		for (const seat of target.seats) {
+			if (seat.index !== second.index) vote(playerOf(seat), second.index);
+		}
+		passTrial(target, Judgement.OPPOSE);
+
+		assert.equal(second.alive, true);
+		assert.equal(target.phase, GamePhase.NIGHT, "세 번째 투표가 열렸습니다");
+	});
+
+	/**
+	 * ±15초. 연장과 단축이 횟수를 공유해 한 낮에 딱 한 번이다.
+	 *
+	 * 방향별로 한 번씩 주면 같은 사람이 늘렸다 줄였다를 반복해 아무 대가
+	 * 없이 남의 발언 순서를 흔들 수 있다.
+	 */
+	it("토론 시간은 한 사람이 한 낮에 한 번만 조절할 수 있다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // NIGHT → DAY
+
+		const before = target.phaseTimer;
+		const [user, other] = target.seats;
+
+		send(playerOf(user), { type: "time", delta: 15 });
+		assert.equal(target.phaseTimer, before + 15, "연장이 반영되지 않았습니다");
+		assert.equal(user.timeVoteSpent, true);
+		assert.ok(
+			chatSaw(playerOf(other), "토론 시간을 15초 늘렸습니다"),
+			"누가 시간을 바꿨는지 알 수 없습니다"
+		);
+
+		// 위젯은 시계를 스스로 돌리므로 바깥에서 바뀐 시간은 한 번 맞춰 준다
+		const synced = mainWidget(playerOf(other)).lastOfType("timer");
+		assert.ok(synced, "바뀐 시간이 화면에 전달되지 않았습니다");
+		assert.equal(synced.timer, before + 15);
+		assert.equal(synced.timeVote, true, "아직 안 쓴 사람의 버튼이 사라졌습니다");
+
+		// 같은 사람의 두 번째는 방향을 바꿔도 막힌다
+		send(playerOf(user), { type: "time", delta: -15 });
+		assert.equal(target.phaseTimer, before + 15, "한 사람이 두 번 조절했습니다");
+		assert.equal(playerOf(user).lastLabel(), "이번 낮에는 이미 시간을 조절했습니다.");
+
+		// 다른 사람은 그대로 쓸 수 있다 — 권리는 방이 아니라 사람마다다
+		send(playerOf(other), { type: "time", delta: -15 });
+		assert.equal(target.phaseTimer, before, "다른 사람의 단축이 먹히지 않았습니다");
+		assert.equal(other.timeVoteSpent, true);
+	});
+
+	it("죽은 사람과 낮이 아닌 때의 시간 조절은 무시된다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+
+		// 투표 단계다. 낮 화면은 이미 닫혔지만 조작된 메시지는 올 수 있다
+		const before = target.phaseTimer;
+		const seat = target.seats[0];
+		send(playerOf(seat), { type: "time", delta: 15 });
+
+		assert.equal(target.phaseTimer, before, "투표 시간이 늘어났습니다");
+		assert.equal(seat.timeVoteSpent, false);
+	});
+});
+
 describe("승패와 대기실 복귀", () => {
 	it("마피아를 처형하면 시민이 이기고 방이 비워진다", () => {
 		const players = startPlainGame(MIN_PLAYERS);
@@ -830,11 +1045,9 @@ describe("승패와 대기실 복귀", () => {
 			vote(playerOf(seat), mafia.index);
 		}
 
-		finishPhase(target); // VOTE → VOTE_RESULT (마피아 처형)
+		passTrial(target); // 개표 → 반론 → 찬반(전원 찬성) → 마피아 처형
 		assert.equal(mafia.alive, false);
-
-		finishPhase(target); // VOTE_RESULT → 승패 판정
-		assert.equal(target.phase, GamePhase.GAME_OVER);
+		assert.equal(target.phase, GamePhase.GAME_OVER, "처형 직후 승패가 판정되지 않았습니다");
 
 		// 승리 화면과 전원 직업 공개.
 		// 진영별로 파일이 따로 있던 시절에는 파일명이 곧 승자였다. 이제
@@ -1026,15 +1239,14 @@ describe("전환 컷", () => {
 			if (seat.index === victim.index) continue;
 			vote(playerOf(seat), victim.index);
 		}
-		finishPhase(target); // → VOTE_RESULT (처형)
-		finishPhase(target); // → NIGHT
+		passTrial(target); // 개표 → 반론 → 찬반(전원 찬성) → 처형 → NIGHT
 
 		assert.equal(target.phase, GamePhase.NIGHT);
 		const payload = cutWidget(playerOf(target.seats[0])).lastOfType("init");
 		assert.ok(payload, "밤 컷이 payload 없이 열렸습니다");
 		assert.equal(payload.tone, "night");
 		const lines = payload.lines as string[];
-		// 처형은 자기 컷을 갖지 않는다. 개표 화면이 이미 7초를 쓴 뒤라
+		// 처형은 자기 컷을 갖지 않는다. 개표와 반론과 찬반이 이미 시간을 쓴 뒤라
 		// 같은 소식을 한 번 더 기다리게 하는 대신 밤 컷의 첫 줄로 얹는다
 		assert.ok(
 			lines.length > 0 && lines[0].indexOf(`${victim.index}번 참가자`) >= 0,

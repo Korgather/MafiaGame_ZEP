@@ -245,6 +245,20 @@ export interface PhasePayload extends Identity {
 	 * 화면을 여는 네 곳이 전부 한 번씩 답하게 만든다.
 	 */
 	spectating: boolean;
+	/**
+	 * ±15초 버튼을 그릴 것인가.
+	 *
+	 * spectating과 같은 이유로 필수다. 낮에 살아 있고 아직 쓰지 않은
+	 * 사람에게만 true다 — 밤·관전·사망·이미 사용은 전부 false.
+	 */
+	timeVote: boolean;
+}
+
+/** 낮 시간이 바깥에서 바뀌었을 때 시계만 다시 맞춘다 (±15초) */
+export interface PhaseTimerPayload {
+	type: "timer";
+	timer: number;
+	timeVote: boolean;
 }
 
 /** 투표 화면 */
@@ -255,6 +269,8 @@ export interface VotePayload {
 	timer: number;
 	/** 이미 찍어둔 대상. 재접속으로 화면을 다시 열 때 표시를 복원한다 */
 	picked: number;
+	/** 이번 낮에 찬반투표로 부결된 번호들. 재지목에서 고를 수 없다 */
+	rejected: number[];
 }
 
 /** 개표 화면. 같은 vote.html이 받는다 */
@@ -262,8 +278,12 @@ export interface VoteResultPayload {
 	type: "result";
 	myNum: number;
 	seats: SeatView[];
-	/** 처형된 참가 번호. 없으면 0 */
-	executed: number;
+	/**
+	 * 단상에 오른 참가 번호. 없으면 0.
+	 *
+	 * 처형된 번호가 아니다 — 처형은 찬반투표까지 가야 확정된다.
+	 */
+	nominee: number;
 	message: string;
 	timer: number;
 }
@@ -273,6 +293,28 @@ export interface VoteProgressPayload {
 	type: "progress";
 	voted: number;
 	alive: number;
+}
+
+/** 최후의 반론 / 찬반투표 화면. 두 단계가 같은 judgement.html을 쓴다 */
+export interface JudgementPayload {
+	/** defense = 반론 듣는 중, judge = O/X 누르는 중 */
+	type: "defense" | "judge";
+	myNum: number;
+	/** 단상에 오른 참가 번호 */
+	nominee: number;
+	nomineeName: string;
+	timer: number;
+	/** 내가 고른 값 (Judgement). 재접속해도 표시가 남는다 */
+	picked: string;
+	/** O/X를 누를 수 있는가. 반론 단계·단상 본인·사망자는 false */
+	canJudge: boolean;
+}
+
+/** 찬반 진행률. 찬성·반대 숫자는 끝날 때까지 보내지 않는다 */
+export interface JudgeProgressPayload {
+	type: "judge-progress";
+	voted: number;
+	voters: number;
 }
 
 /** 종료 화면 */
@@ -587,6 +629,11 @@ export function openVote(
 	payload: VotePayload | VoteResultPayload
 ): ScriptWidget {
 	return openMain(player, WidgetFile.VOTE, topAlign(player), WidgetSize.VOTE, payload);
+}
+
+/** 최후의 반론과 찬반투표. 두 단계가 한 파일을 쓴다 */
+export function openJudgement(player: ScriptPlayer, payload: JudgementPayload): ScriptWidget {
+	return openMain(player, WidgetFile.JUDGEMENT, topAlign(player), WidgetSize.JUDGEMENT, payload);
 }
 
 /** 종료 화면 */

@@ -7,12 +7,14 @@
  *   node tools/balance/report.mjs falseclear[n]   경찰 오판 발생률과 그 판의 승률
  *   node tools/balance/report.mjs police    [n]   경찰이 위장을 꿰뚫어 본다면
  *   node tools/balance/report.mjs variants  [n]   인원표·손잡이 대안 비교
+ *   node tools/balance/report.mjs mafia42   [n]   마피아42에서 가져올 구조 비교
  *
  * n은 인원당 반복 횟수(기본 4000). 결과 해석은 docs/design/balance-review.md.
  */
 import { Role, Team } from "../../src/types/Game.types.ts";
 import { STANDARD_RULES, BLITZ_RULES, SILENCE_RULES } from "../../src/domain/RuleSet.ts";
 import { roleDef, ROLE_DEFS } from "../../src/domain/Roles.ts";
+import { ChatChannel } from "../../src/domain/chat/ChatChannel.ts";
 import { playGame, deckFor, seedOf } from "./engine.mjs";
 
 const WHICH = process.argv[2] || "win";
@@ -30,16 +32,16 @@ function countHeader(lo, hi, pad) {
 }
 
 /** 한 규칙·인원·모델의 시민 승률 */
-function winRate(rules, p, model) {
+function winRate(rules, p, model, opts) {
 	let w = 0;
-	for (let s = 0; s < N; s++) if (playGame(rules, p, seedOf(p, s), model).winner === Team.CITIZEN) w++;
+	for (let s = 0; s < N; s++) if (playGame(rules, p, seedOf(p, s), model, opts).winner === Team.CITIZEN) w++;
 	return w / N;
 }
 
 function rows(sets, lo, hi, model, pad) {
-	for (const [name, rules] of sets) {
+	for (const [name, rules, opts] of sets) {
 		let line = name.padEnd(pad);
-		for (let p = lo; p <= hi; p++) line += (pct(winRate(rules, p, model)) + "%").padStart(8);
+		for (let p = lo; p <= hi; p++) line += (pct(winRate(rules, p, model, opts)) + "%").padStart(8);
 		console.log(line);
 	}
 }
@@ -196,7 +198,60 @@ function variants() {
 	}
 }
 
-const MODES = { win, disguise, impact, falseclear, police, variants };
+/* ---------- mafia42: 마피아42에서 가져올 만한 구조를 반사실로 ---------- */
+function mafia42() {
+	const base = STANDARD_RULES;
+	// 마피아42의 인원별 마피아 수: 4~7인 1명, 8~10인 2명, 11~12인 3명.
+	// 우리와 다른 칸은 7인 하나뿐이다
+	const tbl = {
+		...base,
+		deck: { ...base.deck, mafiaTeamSize: [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 3, 3] },
+	};
+	const HEAD = [
+		["현행", base, undefined],
+		["A 인원표 7인 2→1", tbl, undefined],
+		["B 찬반 q=0.5 재지목0", base, { confirmVote: 0.5 }],
+		["B 찬반 q=0.5 재지목1", base, { confirmVote: 0.5, confirmRetries: 1 }],
+		["B 찬반 q=0.0 재지목0", base, { confirmVote: 0 }],
+		["B 찬반 q=0.0 재지목1", base, { confirmVote: 0, confirmRetries: 1 }],
+	];
+	const TAIL = [
+		["C 사기꾼 밀담 제외", base, undefined],
+		["A+C", tbl, undefined],
+		["A+C+B(0.5,재지목1)", tbl, { confirmVote: 0.5, confirmRetries: 1 }],
+	];
+	for (const model of ["C", "D", "B"]) {
+		console.log("\n### 표준전 시민 승률 · 모델 " + MODEL_NAME[model] + " (n=" + N + ")");
+		console.log(countHeader(4, 12, 26));
+		rows(HEAD, 4, 12, model, 26);
+		// C안은 규칙이 아니라 직업 정의를 건드린다. 그 자리에서 바꿔 재고 되돌린다.
+		// 사기꾼은 nightAction이 없어서 밀담을 빼도 덱 구성은 그대로다 — 밤 담합과
+		// 낮 몰표에서만 빠진다
+		ROLE_DEFS[Role.CON_ARTIST].nightChat = null;
+		rows(TAIL, 4, 12, model, 26);
+		ROLE_DEFS[Role.CON_ARTIST].nightChat = ChatChannel.MAFIA;
+	}
+
+	// A안은 7인의 마피아 자리를 하나로 줄인다. 자리가 하나면 mafiaPool을 아예
+	// 뽑지 않으므로 그 인원의 위장 직업 구성이 통째로 바뀐다 — 승률만 보면
+	// 무엇이 움직였는지 알 수 없어 같이 적는다
+	console.log("\n### 위장 직업(짐승인간·사기꾼) 등장률 (n=" + N + ")");
+	console.log(countHeader(4, 12, 26));
+	for (const [name, rules] of [["현행", base], ["A 인원표 7인 2→1", tbl]]) {
+		let line = name.padEnd(26);
+		for (let p = 4; p <= 12; p++) {
+			let c = 0;
+			for (let s = 0; s < N; s++) {
+				const d = deckFor(rules, p, seedOf(p, s));
+				if (d.indexOf(Role.BEAST) >= 0 || d.indexOf(Role.CON_ARTIST) >= 0) c++;
+			}
+			line += (pct(c / N) + "%").padStart(8);
+		}
+		console.log(line);
+	}
+}
+
+const MODES = { win, disguise, impact, falseclear, police, variants, mafia42 };
 const fn = MODES[WHICH];
 if (!fn) {
 	console.log("모드: " + Object.keys(MODES).join(" | "));

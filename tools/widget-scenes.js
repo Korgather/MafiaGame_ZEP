@@ -130,6 +130,9 @@ const CUT_SIZE = [480, 320];
 /** Assets.ts의 WidgetSize.PROFILE과 같은 값 */
 const PROFILE_SIZE = [300, 340];
 
+/** Assets.ts의 WidgetSize.JUDGEMENT와 같은 값 */
+const JUDGEMENT_SIZE = [380, 320];
+
 /** ChatChannel.ts의 CHANNEL_DEFS와 같은 값 */
 const CHANNEL_DEFS = {
 	GLOBAL: { label: "전체", glyph: "🌐", placeholder: "전체에게 보내기" },
@@ -200,7 +203,45 @@ const SCENES = [
 				alive: true,
 				deaths: [],
 				spectating: false,
+				// 밤에는 조절할 토론 시간이 없다
+				timeVote: false,
 			},
+		],
+	},
+	/*
+	 * 낮의 토론 시간 조절.
+	 *
+	 * 이 장면이 없으면 ±15초 묶음은 어느 화면에서도 그려지지 않는다 —
+	 * 다른 낮 장면은 전부 죽었거나 관전이라 서버가 timeVote: false를 준다.
+	 *
+	 * timer 메시지까지 이어 붙인 이유는 그 갈래가 여기에만 있기 때문이다.
+	 * 위젯은 평소 자기 시계를 돌리고, 서버가 남은 시간을 되보내는 경우는
+	 * 누군가 ±15초를 눌렀을 때 하나뿐이다.
+	 */
+	{
+		label: "낮 — 토론 시간 조절 (쓰고 나면 사라진다)",
+		file: "phase.html",
+		size: [340, 300],
+		messages: [
+			{
+				type: "init",
+				phase: "day",
+				turn: 2,
+				total: 6,
+				aliveCount: 5,
+				timer: 75,
+				role: "경찰",
+				team: "citizen",
+				alive: true,
+				note: "토론 시간입니다.",
+				deaths: [],
+				spectating: false,
+				timeVote: true,
+			},
+			// 옆사람이 15초를 늘렸다. 나는 아직 안 썼으므로 버튼은 남는다
+			{ type: "timer", timer: 90, timeVote: true },
+			// 이번엔 내가 썼다. 여기서 묶음이 사라진다
+			{ type: "timer", timer: 75, timeVote: false },
 		],
 	},
 	{
@@ -223,6 +264,8 @@ const SCENES = [
 				note: "당신은 죽었습니다. 관전 중입니다.",
 				deaths: ["☠️ 박민수 님이 죽었습니다.", "💖 의사가 누군가를 살려냈습니다."],
 				spectating: false,
+				// 유령은 토론 시간을 조절하지 못한다
+				timeVote: false,
 			},
 		],
 	},
@@ -246,6 +289,7 @@ const SCENES = [
 				// 이 한 값이 "관전 종료" 버튼을 띄운다. 관전자에게는 대기실
 				// 위젯이 없어 이 버튼이 유일한 퇴장 경로다
 				spectating: true,
+				timeVote: false,
 			},
 		],
 	},
@@ -457,11 +501,37 @@ const SCENES = [
 			{ type: "init", myNum: 3, seats: SEATS, timer: 17, picked: 0 },
 			{ type: "progress", voted: 2, alive: 5 },
 		],
-		// 유령은 한 자리도 누를 수 없다 — locked가 tile 전체를 disabled로 만든다
-		expect: { 'button[disabled=""]': SEATS.length },
+		// 유령은 한 자리도 누를 수 없다 — locked가 tile 전체를 disabled로 만든다.
+		// '투표 없음' 칸도 함께 잠기므로 사람 수보다 하나 많다. 그 칸을 locked에서
+		// 빼면 유령이 스킵 한 표를 넣을 수 있게 되고, 그 순간 여기가 걸린다
+		expect: { 'button[disabled=""]': SEATS.length + 1 },
+	},
+	/*
+	 * 재지목된 낮의 투표.
+	 *
+	 * 앞 라운드에서 2번이 찬반투표로 부결됐다. 같은 낮에 두 번 단상에 세우지
+	 * 않으므로 그 칸만 잠기고 배지가 붙는다 — 사망(회색)과 같은 모양이면
+	 * "죽은 줄 알았는데 살아 있다"가 되므로 이유를 글자로 남긴다.
+	 *
+	 * 3번은 원래 사망이라 잠긴 칸이 둘이다. rejected 갈래를 지우면 하나로
+	 * 줄어 이 장면이 빨개진다.
+	 *
+	 * picked를 -1로 준 것도 의도다. 재접속 복원은 Number(data.picked) || null로
+	 * 하는데, 스킵의 대상 번호가 0이었다면 그 표는 복원되지 않고 조용히
+	 * 사라졌을 것이다. -1이라 살아난다.
+	 */
+	{
+		label: "투표 — 재지목 (부결된 사람은 다시 못 고른다)",
+		file: "vote.html",
+		size: [340, 380],
+		messages: [
+			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: -1, rejected: [2] },
+			{ type: "progress", voted: 1, alive: 5 },
+		],
+		expect: { 'button[disabled=""]': 2, ".badge": 1 },
 	},
 	{
-		label: "개표 — 처형 발생",
+		label: "개표 — 단상에 오른 사람",
 		file: "vote.html",
 		size: [340, 380],
 		messages: [
@@ -469,11 +539,109 @@ const SCENES = [
 				type: "result",
 				myNum: 4,
 				seats: SEATS.map((seat, i) => ({ ...seat, votes: [1, 3, 0, 0, 1, 0][i] })),
-				executed: 2,
-				message: "☠️ 이영희 님이 처형되었습니다.",
+				// 예전 이름은 executed였다. 이제 이 칸은 처형된 사람이 아니라
+				// 최후의 반론으로 넘어가는 사람이다 — 죽는지는 찬반투표가 정한다
+				nominee: 2,
+				message: "🎤 이영희 님이 단상에 올랐습니다.",
 				timer: 7,
 			},
 		],
+	},
+	/*
+	 * 최후의 반론과 찬반투표 — 개표와 처형 사이의 두 단계.
+	 *
+	 * 한 위젯이 네 가지 화면을 그린다. 단계(반론/찬반) × 내가 단상 위인가로
+	 * 갈리고, 갈리는 것은 버튼이 눌리는지와 아래 한 줄뿐이다. 그 한 줄이
+	 * 이 화면에서 사람이 실제로 읽는 전부라, 네 갈래를 다 열어 본다.
+	 */
+	{
+		label: "반론 — 듣는 쪽 (아직 못 누른다)",
+		file: "judgement.html",
+		size: JUDGEMENT_SIZE,
+		messages: [
+			{
+				type: "defense",
+				myNum: 4,
+				nominee: 2,
+				nomineeName: "2번 이영희",
+				timer: 15,
+				picked: "NONE",
+				canJudge: false,
+			},
+			{ type: "judge-progress", voted: 0, voters: 4 },
+		],
+		/*
+		 * 두 버튼이 소스에 disabled로 박혀 있는지 본다.
+		 *
+		 * 런타임 잠금(el.disabled = !canJudge)은 여기서 못 본다 — 검사기의
+		 * DOM은 소스를 한 번 파싱한 것이라 프로퍼티 대입이 속성으로 되비치지
+		 * 않는다. 그래서 이 줄이 지키는 것은 "기본값이 잠김인가" 하나다.
+		 *
+		 * 그게 실제로 중요하다. init 메시지가 늦거나 오지 않으면 화면에는
+		 * 마크업 그대로가 남는데, 기본값을 풀어 두면 아무 판단도 없는 상태의
+		 * 찬성 버튼이 눌리는 채로 떠 있게 된다.
+		 */
+		expect: { 'button[disabled=""]': 2 },
+	},
+	{
+		// 이름이 가장 긴 표본을 여기 둔다. 단상 이름은 한 줄짜리 큰 글씨라
+		// 폭이 넘치면 잘려야 하는데, 그 처리를 지우면 상자 밖으로 흐른다
+		label: "반론 — 단상에 오른 본인",
+		file: "judgement.html",
+		size: JUDGEMENT_SIZE,
+		messages: [
+			{
+				type: "defense",
+				myNum: 5,
+				nominee: 5,
+				nomineeName: "5번 최지훈매우긴이름입니다",
+				timer: 15,
+				picked: "NONE",
+				canJudge: false,
+			},
+			{ type: "judge-progress", voted: 0, voters: 4 },
+		],
+	},
+	{
+		// 재접속으로 화면을 다시 연 사람. 이미 넣은 찬성이 살아나야 한다
+		label: "찬반 — 고를 수 있는 사람 (찬성을 이미 눌렀다)",
+		file: "judgement.html",
+		size: JUDGEMENT_SIZE,
+		messages: [
+			{
+				type: "judge",
+				myNum: 4,
+				nominee: 2,
+				nomineeName: "2번 이영희",
+				timer: 5,
+				picked: "AGREE",
+				canJudge: true,
+			},
+			{ type: "judge-progress", voted: 3, voters: 4 },
+		],
+		// 잠금이 풀렸는지는 여기서 셀 수 없다(위 장면 주석). 대신 O/X 두 짝이
+		// 그대로 있는지를 본다 — 한쪽만 남으면 반대표를 넣을 길이 사라진다
+		expect: { ".judge-btn": 2 },
+	},
+	{
+		label: "찬반 — 단상에 오른 본인 (분모가 0)",
+		file: "judgement.html",
+		size: JUDGEMENT_SIZE,
+		messages: [
+			{
+				type: "judge",
+				myNum: 2,
+				nominee: 2,
+				nomineeName: "2번 이영희",
+				timer: 5,
+				picked: "NONE",
+				canJudge: false,
+			},
+			// 나머지가 전부 끊긴 순간. 실제로 나올 수 있는 값이고, 나누기 전에
+			// 걸러내지 않으면 진행률 막대 폭이 NaN%가 된다
+			{ type: "judge-progress", voted: 0, voters: 0 },
+		],
+		expect: { 'button[disabled=""]': 2 },
 	},
 	{
 		label: "결과 — 진 쪽이 보는 화면",

@@ -44,13 +44,22 @@ import {
 	spawnInLobby,
 } from "./Stage.ts";
 import {
+	beginDefense,
+	beginJudgement,
+	broadcastJudgeProgress,
+	openJudgementView,
+	resolveJudgement,
+} from "./Trial.ts";
+import {
 	beginDay,
 	beginVote,
 	beginVoteResult,
 	broadcastVoteProgress,
+	canRevote,
 	openDayView,
 	openVoteResultView,
 	openVoteView,
+	resumeDay,
 } from "./Voting.ts";
 import { closeCard, closeCut, closeMain } from "./Widgets.ts";
 
@@ -156,9 +165,16 @@ function advanceGame(room: Room, dt: number): void {
  * 단계 전이표. 이 switch가 게임 규칙의 전부다.
  *
  * 승패 판정은 사망이 발생할 수 있었던 단계 직후에만 한다.
- * 밤은 resolveNight이, 투표는 beginVoteResult가 사망을 만든다.
- * 투표 결과 화면은 7초간 그대로 보여준 뒤 판정한다 —
- * 처형 즉시 판정하면 결과를 읽기도 전에 화면이 넘어간다.
+ * 밤은 resolveNight이, 낮은 resolveJudgement가 사망을 만든다.
+ * 개표(VOTE_RESULT)는 더 이상 사람을 죽이지 않는다 — 마피아42처럼
+ * 최다 득표자를 단상에 세우고, 반론과 찬반투표를 거쳐야 처형된다.
+ *
+ * 낮 한 번의 흐름은 이렇게 갈라진다.
+ *
+ *   DAY → VOTE → VOTE_RESULT ─┬─ 단상 없음 → NIGHT
+ *                             └─ 단상 있음 → DEFENSE → JUDGEMENT ─┬─ 처형 → NIGHT
+ *                                                                 └─ 부결 ─┬─ DAY(재지목)
+ *                                                                          └─ NIGHT
  */
 function advancePhase(room: Room): void {
 	switch (room.phase) {
@@ -179,7 +195,17 @@ function advancePhase(room: Room): void {
 			beginVoteResult(room);
 			break;
 		case GamePhase.VOTE_RESULT:
-			if (!finishIfDecided(room)) beginNight(room);
+			// 단상에 오른 사람이 없으면(동률·스킵·무득표·정치인) 곧장 밤이다.
+			// 아무도 죽지 않았으니 승패도 바뀌지 않지만, 판정은 남겨 둔다 —
+			// 밤에 죽은 사람 때문에 이미 갈렸을 수 있고 그 판정 자리가 여기다
+			if (room.nominee !== 0) beginDefense(room);
+			else if (!finishIfDecided(room)) beginNight(room);
+			break;
+		case GamePhase.DEFENSE:
+			beginJudgement(room);
+			break;
+		case GamePhase.JUDGEMENT:
+			advanceAfterTrial(room);
 			break;
 		case GamePhase.GAME_OVER:
 			returnToLobby(room);
@@ -194,6 +220,23 @@ function advancePhase(room: Room): void {
 	// 전이 switch 바로 옆에 두는 이유는, 단계를 추가하는 사람이 채팅 권한
 	// 갱신을 따로 기억하지 않아도 되게 하기 위해서다.
 	Chat.refreshRoom(room);
+}
+
+/**
+ * 찬반투표가 끝난 뒤 어디로 갈 것인가.
+ *
+ * 처형됐으면 규칙 그대로 곧장 밤이다. 부결되면 낮으로 돌아가는데, 그것도
+ * 상한(canRevote)까지다. 상한을 넘기면 밤으로 넘긴다 — 반대만 눌러서
+ * 낮을 무한히 늘이는 판을 막는 것이 목적이지, 재지목 자체를 막는 것이
+ * 아니다. tools/balance로 재 보면 재지목 1회는 승률을 거의 바꾸지 않는다.
+ */
+function advanceAfterTrial(room: Room): void {
+	if (resolveJudgement(room)) {
+		if (!finishIfDecided(room)) beginNight(room);
+		return;
+	}
+	if (canRevote(room)) resumeDay(room);
+	else beginNight(room);
 }
 
 /**
@@ -227,6 +270,11 @@ export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		case GamePhase.VOTE_RESULT:
 			openVoteResultView(room, player, seat);
 			break;
+		// 반론과 찬반은 같은 화면이다. 어느 쪽인지는 room.phase를 보고 정한다
+		case GamePhase.DEFENSE:
+		case GamePhase.JUDGEMENT:
+			openJudgementView(room, player, seat);
+			break;
 		case GamePhase.GAME_OVER:
 			openWinView(room, player, seat);
 			break;
@@ -254,6 +302,7 @@ export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): voi
 export function refreshProgress(room: Room): void {
 	if (room.phase === GamePhase.NIGHT) broadcastNightProgress(room);
 	else if (room.phase === GamePhase.VOTE) broadcastVoteProgress(room);
+	else if (room.phase === GamePhase.JUDGEMENT) broadcastJudgeProgress(room);
 }
 
 /**

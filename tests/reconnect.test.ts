@@ -281,22 +281,22 @@ describe("재접속", () => {
 		);
 	});
 
-	it("투표 결과 발표 중에 돌아오면 처형 직전의 개표판을 그대로 받는다", () => {
+	it("개표 발표 중에 돌아오면 그 개표판을 그대로 받는다", () => {
 		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target); // → NIGHT
 		finishPhase(target); // → DAY
 		finishPhase(target); // → VOTE
 
-		// 마피아를 처형하면 개표 화면 대신 승패 화면으로 넘어간다
+		// 마피아를 올리면 이어지는 재판에서 판이 끝나 개표판을 볼 시간이 없다
 		const victim = seatsWithRole(target, Role.CITIZEN)[0];
-		const aliveBefore = target.seats.filter(seat => seat.alive).length;
+		const aliveCount = target.seats.filter(seat => seat.alive).length;
 		for (const seat of target.seats) {
 			if (seat.index !== victim.index) vote(playerOf(seat), victim.index);
 		}
 
-		finishPhase(target); // → VOTE_RESULT (처형 발생)
-		assert.equal(victim.alive, false, "최다 득표자가 처형되지 않았습니다");
+		finishPhase(target); // → VOTE_RESULT (단상 지목. 처형은 아직이다)
+		assert.equal(target.nominee, victim.index, "최다 득표자가 단상에 오르지 않았습니다");
 
 		const player = players.filter(p => seatOf(p).index !== victim.index)[0];
 		disconnect(player);
@@ -309,12 +309,54 @@ describe("재접속", () => {
 		assert.ok(board, "개표판을 받지 못했습니다");
 		assert.equal(
 			(board.seats as unknown[]).length,
-			aliveBefore,
-			"처형된 사람이 개표판에서 빠졌습니다 — 남들과 다른 화면을 보고 있습니다"
+			aliveCount,
+			"개표판의 인원이 다릅니다 — 남들과 다른 화면을 보고 있습니다"
 		);
-		// 개표 결과는 room.voteRecord에 남는다. 다시 집계하면 kill()이 이미
-		// 0으로 만든 처형자의 득표가 사라져 돌아온 사람만 다른 숫자를 본다
-		assert.equal(board.executed, victim.index);
+		// 개표 결과는 room.voteRecord에 남는다. 여기서 다시 집계하면 곧이어
+		// resetVotes가 0으로 되돌린 득표를 돌아온 사람만 빈 칸으로 보게 된다
+		assert.equal(board.nominee, victim.index);
+	});
+
+	/**
+	 * 재판 중에 돌아오면 재판 화면을 받는다.
+	 *
+	 * 반론과 찬반은 합쳐야 20초라 끊겼다 돌아오는 사이에 통째로 지나갈 수
+	 * 있다. 그 사이에 투표 화면이 뜨면 이미 지나간 지목을 다시 하려 들고,
+	 * 아무것도 안 뜨면 자기 이름이 단상에 올라가 있는 줄도 모른 채 처형된다.
+	 */
+	it("찬반투표 중에 돌아오면 O/X 화면을 그대로 받는다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // → NIGHT
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		for (const seat of target.seats) {
+			if (seat.index !== victim.index) vote(playerOf(seat), victim.index);
+		}
+		finishPhase(target); // → VOTE_RESULT
+		finishPhase(target); // → DEFENSE
+		finishPhase(target); // → JUDGEMENT
+
+		const player = players.filter(p => seatOf(p).index !== victim.index)[0];
+		disconnect(player);
+		reconnect(player);
+
+		const widget = freshMain(player);
+		assert.equal(widget.fileName, WidgetFile.JUDGEMENT);
+		const view = widget.lastOfType("judge");
+		assert.ok(view, "찬반 화면을 받지 못했습니다");
+		assert.equal(view.nominee, victim.index);
+		assert.equal(view.canJudge, true, "돌아온 생존자가 찬반을 고를 수 없습니다");
+
+		// 단상 본인은 자기를 처형할지 고를 수 없다
+		const nominee = playerOf(victim);
+		disconnect(nominee);
+		reconnect(nominee);
+		const mine = freshMain(nominee).lastOfType("judge");
+		assert.ok(mine, "단상에 오른 사람이 찬반 화면을 받지 못했습니다");
+		assert.equal(mine.canJudge, false, "단상 본인이 자기 처형에 표를 넣을 수 있습니다");
 	});
 
 	it("승패 연출 중에 돌아오면 결과 화면을 받는다", () => {

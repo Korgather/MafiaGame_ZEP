@@ -22,19 +22,30 @@ import { MAX_PLAYERS, ROOM_COUNT } from "../src/constants/GameConfig.ts";
 
 describe("표준전", () => {
 	/**
-	 * TICK_TOCK_AT만 이동 전(9)과 다르다. 째깍 소리 파일이 그보다 짧아서
-	 * 시계가 마감보다 먼저 멈췄기 때문에, 파일의 째깍 배치 길이(5초)에
-	 * 맞춰 내렸다 — 속도전은 원래 5였으므로 이제 둘이 같다.
+	 * 마피아42의 진행 시간을 그대로 옮긴 값이다. 상수를 참조하면 "같이
+	 * 틀리는" 테스트가 되므로 여기서도 리터럴로 박아 둔다.
+	 *
+	 * 옮기기 전 값(NIGHT 22 / DAY_PER_ALIVE 10 / DAY_MAX 60 / VOTE 17)과
+	 * 다른 이유는 하나씩 있다.
+	 *   - 낮이 제일 중요하다. tools/balance/report.mjs로 재면 "낮에 조사
+	 *     결과가 공유되는가"만으로 시민 승률이 25~30%p 갈리는데, 옛 60초는
+	 *     11인 판의 165초짜리 토론을 3분의 1로 자르고 있었다.
+	 *   - DEFENSE·JUDGEMENT는 새로 생긴 단계다. 이 둘이 시민에게서 가져가는
+	 *     몫(같은 시뮬레이션에서 10~20%p)을 되돌려주는 자리가 위의 낮이다.
+	 *   - TICK_TOCK_AT만 이동 전(9)보다 낮다. 째깍 소리 파일이 그보다 짧아서
+	 *     시계가 마감보다 먼저 멈췄기 때문에 파일 길이(5초)에 맞춰 내렸다.
 	 */
-	it("타이밍이 이동 전 값과 같다", () => {
+	it("타이밍이 마피아42 규칙과 같다", () => {
 		assert.deepEqual(STANDARD_RULES.timing, {
 			START_COUNTDOWN: 10,
 			ROLE_REVEAL: 9,
-			NIGHT: 22,
-			DAY_PER_ALIVE: 10,
-			DAY_MAX: 60,
-			VOTE: 17,
+			NIGHT: 25,
+			DAY_PER_ALIVE: 15,
+			DAY_MAX: 180,
+			VOTE: 15,
 			VOTE_RESULT: 7,
+			DEFENSE: 15,
+			JUDGEMENT: 5,
 			GAME_OVER: 16,
 			TICK_TOCK_AT: 5,
 		});
@@ -55,18 +66,32 @@ describe("표준전", () => {
 		// 이 문장은 이제 방에 들어올 때마다 화면에 나간다(Lobby.join).
 		// 죽은 텍스트일 때는 6~12명이라고 적혀 있어도 아무도 못 봤지만,
 		// 지금은 4명으로 시작할 수 있는 방이 "6명부터"라고 말하는 셈이다
-		assert.equal(STANDARD_RULES.summary, "기본 규칙. 4~12명, 5~10분");
+		// 분(分)도 함께 본다. 낮이 60초에서 180초로 늘고 반론·찬반 20초가
+		// 붙으면서 한 판이 실제로 두 배 가까이 길어졌다 — 화면에 나가는
+		// 문장이 옛 길이를 그대로 말하면 방에 들어온 사람이 속는다
+		assert.equal(STANDARD_RULES.summary, "기본 규칙. 4~12명, 5~20분");
 		assert.equal(STANDARD_RULES.minPlayers, 4);
 	});
 });
 
 describe("속도전", () => {
 	it("한 판이 표준전의 절반 이하로 끝난다", () => {
-		// 6인 기준 한 라운드(밤+낮+투표+개표)의 길이를 비교한다.
-		// 낮은 DAY_PER_ALIVE * 생존자와 DAY_MAX 중 작은 쪽이다
+		// 6인 기준 한 라운드(밤+낮+투표+개표+반론+찬반)의 길이를 비교한다.
+		// 낮은 DAY_PER_ALIVE * 생존자와 DAY_MAX 중 작은 쪽이다.
+		//
+		// 반론과 찬반을 더하는 것이 중요하다. 빼고 재면 속도전이 그 두
+		// 단계를 표준전과 같은 길이로 두어도 이 테스트가 초록으로 지나가는데,
+		// 그러면 "3분 단판"이라고 적어 놓고 한 판이 4분을 넘긴다
 		const round = (rules: typeof STANDARD_RULES, alive: number): number => {
 			const day = Math.min(rules.timing.DAY_PER_ALIVE * alive, rules.timing.DAY_MAX);
-			return rules.timing.NIGHT + day + rules.timing.VOTE + rules.timing.VOTE_RESULT;
+			return (
+				rules.timing.NIGHT +
+				day +
+				rules.timing.VOTE +
+				rules.timing.VOTE_RESULT +
+				rules.timing.DEFENSE +
+				rules.timing.JUDGEMENT
+			);
 		};
 		assert.ok(round(BLITZ_RULES, 6) * 2 <= round(STANDARD_RULES, 6));
 	});
@@ -173,6 +198,41 @@ describe("침묵전의 낮", () => {
 			assert.equal(access.freeText, false, phase);
 			assert.equal(access.write, true, phase);
 		}
+	});
+
+	it("단상에 오른 사람도 침묵전에서는 문구로만 반론한다", () => {
+		// 반론은 이 판에서 가장 말이 무거운 자리다. PHRASES_ONLY_PHASES에서
+		// DEFENSE를 빼면 침묵전인데 단상 위 한 명만 자유롭게 타이핑하게 된다.
+		//
+		// nominee를 켜는 것이 이 테스트의 요점이다. 끄면 앞선 DEFENSE 분기가
+		// 먼저 잡아 write=false가 되므로, 뒤에 있는 침묵전 분기를 지워도
+		// 초록으로 지나간다
+		const onStand = { ...silentDay, phase: GamePhase.DEFENSE, nominee: true };
+		assert.equal(accessOf(onStand, ChatChannel.ROOM).write, true);
+		assert.equal(accessOf(onStand, ChatChannel.ROOM).freeText, false);
+
+		// 찬반 5초는 잠그지 않는다. 다만 좁히기는 한다
+		const judging = { ...silentDay, phase: GamePhase.JUDGEMENT };
+		assert.equal(accessOf(judging, ChatChannel.ROOM).write, true);
+		assert.equal(accessOf(judging, ChatChannel.ROOM).freeText, false);
+	});
+
+	it("반론 중에는 나머지가 표준전에서도 잠긴다", () => {
+		// 침묵전만의 규칙이 아니다. 단상에 오른 사람 혼자 쓰는 15초라는 것이
+		// 이 단계가 존재하는 이유이므로, 자유 채팅 방에서도 같아야 한다
+		const freeDefense = {
+			...silentDay,
+			chatMode: "free" as const,
+			phase: GamePhase.DEFENSE,
+		};
+		const listener = accessOf(freeDefense, ChatChannel.ROOM);
+		assert.equal(listener.read, true);
+		assert.equal(listener.write, false);
+		assert.equal(listener.note, "최후의 반론 중입니다. 단상에 오른 사람만 말할 수 있습니다");
+
+		const speaker = accessOf({ ...freeDefense, nominee: true }, ChatChannel.ROOM);
+		assert.equal(speaker.write, true);
+		assert.equal(speaker.freeText, true);
 	});
 
 	it("마피아 밀담은 침묵전에서도 자유롭다", () => {

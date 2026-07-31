@@ -68,6 +68,8 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 		note: nightNote(room, seat),
 		deaths: [],
 		spectating: false,
+		// 시간 조절은 낮에만 한다. 밤은 능력을 쓰는 시간이고 길이가 고정이다
+		timeVote: false,
 	};
 }
 

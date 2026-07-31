@@ -4,7 +4,7 @@
  * Seat의 모양이 바뀌면 여기 한 곳만 고치면 된다. 파일마다 사본을 두면
  * 필드 하나를 더할 때마다 네 곳이 함께 밀린다.
  */
-import { Role } from "../../src/types/Game.types.ts";
+import { Judgement, Role } from "../../src/types/Game.types.ts";
 import type { Seat } from "../../src/types/Game.types.ts";
 import { ROLE_DEFS } from "../../src/domain/Roles.ts";
 
@@ -20,6 +20,8 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		ready: false,
 		votedFor: 0,
 		voteCount: 0,
+		judgement: Judgement.NONE,
+		timeVoteSpent: false,
 		healed: false,
 		attackedBy: [],
 		armored: ROLE_DEFS[role].survivesFirstAttack === true,

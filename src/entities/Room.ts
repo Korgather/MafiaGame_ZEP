@@ -11,7 +11,7 @@
  */
 import type { Room, Seat, VoteRecord } from "../types/Game.types.ts";
 import type { RevealView, SeatView } from "../types/Widget.types.ts";
-import { GamePhase, Role, Team } from "../types/Game.types.ts";
+import { GamePhase, Judgement, Role, Team } from "../types/Game.types.ts";
 import { KICK } from "../constants/GameConfig.ts";
 import { roomOrigin } from "../constants/RoomLayout.ts";
 import { roleDef, roleName } from "../domain/Roles.ts";
@@ -19,7 +19,7 @@ import { rulesForRoom } from "../domain/RuleSet.ts";
 
 /** 아직 개표가 없었을 때의 값 */
 function emptyVoteRecord(): VoteRecord {
-	return { board: [], executed: 0, message: "" };
+	return { board: [], nominee: 0, message: "" };
 }
 
 export function createRoom(num: number): Room {
@@ -37,6 +37,9 @@ export function createRoom(num: number): Room {
 		total: 0,
 		winner: null,
 		voteRecord: emptyVoteRecord(),
+		nominee: 0,
+		rejected: [],
+		voteRound: 0,
 		nightReport: [],
 		nightIntents: [],
 		nightReveals: [],
@@ -61,6 +64,8 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		ready: false,
 		votedFor: 0,
 		voteCount: 0,
+		judgement: Judgement.NONE,
+		timeVoteSpent: false,
 		healed: false,
 		attackedBy: [],
 		armored: false,
@@ -96,6 +101,8 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.usedSkill = false;
 	seat.votedFor = 0;
 	seat.voteCount = 0;
+	seat.judgement = Judgement.NONE;
+	seat.timeVoteSpent = false;
 	seat.healed = false;
 	seat.attackedBy = [];
 	seat.blocked = false;
@@ -258,6 +265,11 @@ export function withdrawKicks(room: Room, voterId: string): void {
  */
 export function resetRound(room: Room): void {
 	room.voteRecord = emptyVoteRecord();
+	// 단상과 부결 명단은 하루짜리다. 남기면 어제 부결된 사람이 오늘도
+	// 지목 대상에서 빠진다
+	room.nominee = 0;
+	room.rejected = [];
+	room.voteRound = 0;
 	// 지난밤의 지목은 남겨두면 다음 밤에 그대로 다시 적용된다
 	room.nightIntents = [];
 	// 정상 경로에서는 이미 비어 있다. 게임이 중간에 리셋된 경우를 위한 것이다
@@ -270,6 +282,7 @@ export function resetRound(room: Room): void {
 		seat.noteText = "";
 		seat.votedFor = 0;
 		seat.voteCount = 0;
+		seat.judgement = Judgement.NONE;
 		seat.healed = false;
 		seat.attackedBy = [];
 		// 지우지 않으면 한 번 막힌 사람이 남은 판 내내 막힌 채로 있는다
@@ -290,6 +303,9 @@ export function resetRoom(room: Room): void {
 	room.total = 0;
 	room.winner = null;
 	room.voteRecord = emptyVoteRecord();
+	room.nominee = 0;
+	room.rejected = [];
+	room.voteRound = 0;
 	room.nightReport = [];
 	room.nightIntents = [];
 	// 정상 경로에서는 배달이 이미 비웠다. 사고 복구로 밤 도중에 방이 끝나면

@@ -48,6 +48,14 @@ export interface ChatContext {
 	 * 그래서 이 값은 표시용 구분이 아니라 밸런스 값이다. alive와 나눠 둔다.
 	 */
 	readonly spectating: boolean;
+	/**
+	 * 지금 단상에 올라 있는 본인인가.
+	 *
+	 * 최후의 반론은 단상에 오른 사람 혼자 말하는 시간이다. 좌석 번호를
+	 * 넘기고 여기서 room.nominee와 비교할 수도 있었지만, 그러면 이 표가
+	 * 방 상태를 알아야 한다 — 지금은 "나는 어떤 사람인가"만 받는다.
+	 */
+	readonly nominee: boolean;
 	/** 마피아 밀담 참가자인가 (마피아 본인 + 합류한 스파이) */
 	readonly mafiaChat: boolean;
 	/** 유령의 목소리를 듣는 직업인가 (영매) */
@@ -109,6 +117,10 @@ const PHRASES_ONLY_PHASES: readonly GamePhase[] = [
 	GamePhase.DAY,
 	GamePhase.VOTE,
 	GamePhase.VOTE_RESULT,
+	// 반론과 찬반도 토론의 일부다. 빼면 침묵전에서 단상에 오른 사람만
+	// 갑자기 자유롭게 타이핑하게 되는데, 그 자리가 하필 가장 말이 무거운 자리다
+	GamePhase.DEFENSE,
+	GamePhase.JUDGEMENT,
 ];
 
 /** 방 밖(월드 로비)에 서 있는 사람의 기본 상태 */
@@ -118,6 +130,7 @@ export const LOOSE_CONTEXT: ChatContext = {
 	phase: GamePhase.LOBBY,
 	alive: true,
 	spectating: false,
+	nominee: false,
 	mafiaChat: false,
 	ghostChat: false,
 	chatMode: "free",
@@ -166,17 +179,30 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		// 의미가 없어진다 — 밤이 정보 비대칭을 만드는 유일한 시간이다.
 		if (ctx.phase === GamePhase.NIGHT) return locked("밤에는 방 채팅이 잠깁니다");
 		/*
-		 * 침묵전. 좁히는 단계는 낮·투표·개표 셋뿐이다.
+		 * 최후의 반론. 단상에 오른 사람 말고는 아무도 말하지 않는다.
 		 *
-		 * 여기까지 내려왔다는 것은 단계가 LOBBY·DAY·VOTE·VOTE_RESULT 중 하나다.
+		 * 이 단계의 값이 여기서 나온다 — 처형 직전 15초를 혼자 쓰게 해 주는
+		 * 것이 마피아42 규칙의 요점이고, 그 사이 다른 사람이 끼어들면 반론이
+		 * 아니라 그냥 짧은 낮이 된다. 읽기는 열어 둔다(locked).
+		 *
+		 * 이어지는 찬반투표(JUDGEMENT)는 잠그지 않는다. 5초짜리라 어차피
+		 * 대화가 되지 않고, "O 눌러" 한마디까지 막을 이유는 없다.
+		 */
+		if (ctx.phase === GamePhase.DEFENSE && !ctx.nominee) {
+			return locked("최후의 반론 중입니다. 단상에 오른 사람만 말할 수 있습니다");
+		}
+		/*
+		 * 침묵전. 좁히는 단계는 낮·투표·개표·반론·찬반 다섯이다.
+		 *
+		 * 여기까지 내려왔다는 것은 단계가 LOBBY이거나 그 다섯 중 하나다.
 		 * GAME_OVER·ROLE_REVEAL·NIGHT은 위에서 이미 돌아갔다. 그래서
 		 * 조건을 chatMode 하나로 두면 대기실까지 함께 좁혀지는데,
 		 * 대기실을 뺀 이유는 분명하다.
 		 *   - 대기실: 좁혀도 지키는 것이 없다. started가 false인 동안 전체 채널이
 		 *     OPEN이라(위 GLOBAL 분기) 기다리는 사람들은 거기서 그대로 떠든다.
 		 *     방 탭만 잠그는 것은 규칙이 아니라 불편이다.
-		 * 남은 셋은 이 모드의 제약이 값을 갖는 자리(토론과 투표)이고, 셋 다 그
-		 * 상황에 맞는 문구셋이 준비되어 있다.
+		 * 남은 다섯은 이 모드의 제약이 값을 갖는 자리(토론과 투표)이고, 다섯 다
+		 * 그 상황에 맞는 문구셋이 준비되어 있다.
 		 *
 		 * 자리도 그대로 둔다 — 위 GAME_OVER·NIGHT 분기를 지난 뒤라야 종료 후
 		 * 복기와 밤 잠금이 표준전과 같게 남는다.

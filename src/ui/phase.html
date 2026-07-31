@@ -71,6 +71,46 @@
 				font-size: var(--t-sm);
 				color: var(--mafia);
 			}
+
+			/*
+			 * ±15초. 타이머 오른쪽에 세로로 붙인다.
+			 *
+			 * 가로로 놓으면 머리말이 [직업칩][생존][타이머][−][+]가 되어
+			 * 좁은 폭에서 직업 칩이 줄어든다 — 이 화면에서 가장 자주 읽는
+			 * 것이 직업 칩이다. 세로로 쌓으면 폭은 34px 하나만 더 든다.
+			 *
+			 * 한 낮에 한 번뿐인 버튼이라 다 쓰면 통째로 사라진다. 비활성으로
+			 * 남기면 "왜 안 눌리지"를 매번 다시 확인하게 된다.
+			 */
+			.time-vote {
+				display: flex;
+				flex-direction: column;
+				gap: 2px;
+				flex: 0 0 auto;
+			}
+
+			.time-vote button {
+				min-width: 34px;
+				padding: 1px var(--s1);
+				font: inherit;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				font-variant-numeric: tabular-nums;
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				cursor: pointer;
+				transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+			}
+			.time-vote button:hover {
+				color: var(--ink);
+				border-color: var(--accent);
+			}
+			.time-vote button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
 		</style>
 	</head>
 	<body>
@@ -81,6 +121,18 @@
 					<span class="hd-sub" id="alive">생존 -/-</span>
 				</div>
 				<div class="timer" id="timer"></div>
+
+				<!--
+					토론 시간 조절. 마피아42와 같은 규칙이다 — 연장과 단축이
+					횟수를 공유하고, 한 낮에 딱 한 번 누를 수 있다.
+
+					낮에 살아 있는 사람에게만 보인다. 밤 화면과 관전 화면은
+					서버가 timeVote: false로 보내므로 이 묶음이 뜨지 않는다.
+				-->
+				<div class="time-vote hidden" id="timevote">
+					<button type="button" id="tplus" aria-label="토론 시간 15초 연장">+15</button>
+					<button type="button" id="tminus" aria-label="토론 시간 15초 단축">−15</button>
+				</div>
 			</div>
 
 			<div class="stage">
@@ -116,6 +168,26 @@
 				Parent.send({ type: "spectate-quit" });
 			});
 
+			/**
+			 * 시간 조절 버튼을 켜고 끈다.
+			 *
+			 * 누른 직후 바로 숨긴다. 서버도 timeVote: false를 담은 timer를
+			 * 되보내지만 그 사이 한 번 더 누를 수 있고, 두 번째 누름은 서버가
+			 * 막아 "이미 조절했습니다"만 뜬다 — 눌리는데 아무 일도 안 나는
+			 * 버튼이 되면 첫 번째가 먹혔는지 알 수 없다.
+			 */
+			function paintTimeVote(on) {
+				qs("#timevote").classList.toggle("hidden", !on);
+			}
+
+			function sendTime(delta) {
+				paintTimeVote(false);
+				Parent.send({ type: "time", delta });
+			}
+
+			qs("#tplus").addEventListener("click", () => sendTime(15));
+			qs("#tminus").addEventListener("click", () => sendTime(-15));
+
 			Parent.on({
 				init(data) {
 					const night = data.phase === "night";
@@ -145,6 +217,18 @@
 					const deaths = Array.isArray(data.deaths) ? data.deaths : [];
 					qs("#deaths").innerHTML = html`${deaths.map(line => html`<span>${line}</span>`)}`;
 
+					paintTimeVote(data.timeVote === true);
+					startTimer(qs("#timer"), data.timer);
+				},
+
+				/**
+				 * 남은 시간이 바깥에서 바뀌었다.
+				 *
+				 * 위젯은 자기 시계를 돌리므로 평소에는 서버가 매 초 보내지
+				 * 않는다. 누군가 ±15초를 눌렀을 때만 한 번 맞춘다.
+				 */
+				timer(data) {
+					paintTimeVote(data.timeVote === true);
 					startTimer(qs("#timer"), data.timer);
 				},
 			});

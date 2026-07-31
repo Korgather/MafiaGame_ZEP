@@ -338,6 +338,8 @@ function spectateView(room: Room): PhasePayload {
 		note: SPECTATE_NOTE,
 		deaths: room.nightReport,
 		spectating: true,
+		// 판 바깥에서 남의 토론 시간을 늘릴 수는 없다
+		timeVote: false,
 	};
 }
 

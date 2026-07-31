@@ -24,6 +24,7 @@ import {
 	finishPhase,
 	joinRoom,
 	passPeacefulFirstNight,
+	passTrial,
 	playerOf,
 	resetWorld,
 	room,
@@ -157,10 +158,10 @@ describe("효과음 배선", () => {
 		silence(players);
 		finishPhase(target); // DAY → VOTE
 		for (const player of players) vote(player, executed.index);
-		finishPhase(target); // VOTE → 개표·처형
+		passTrial(target); // 개표 → 반론 → 찬반(전원 찬성) → 처형
 
 		assert.equal(executed.alive, false);
-		// 개표 화면을 다 같이 보는 중이라 방의 소리다. 죽은 사람도 화면을 본다
+		// 재판 결과를 다 같이 보는 중이라 방의 소리다. 죽은 사람도 화면을 본다
 		assert.equal(listeners(players, Sound.EXECUTE), players.length);
 	});
 });

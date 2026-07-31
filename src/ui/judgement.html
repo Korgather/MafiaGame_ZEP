@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>찬반 투표</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 최후의 반론 + 찬반투표.
+			 *
+			 * 두 단계가 한 파일인 이유는 화면이 같기 때문이다 — 단상에 오른
+			 * 사람 하나와 O/X 두 개. 반론에서는 버튼이 잠겨 있고 찬반에서
+			 * 풀린다. 파일을 나누면 15초 뒤에 위젯이 통째로 갈리면서 이름이
+			 * 한 번 깜빡이고, 보는 사람은 "다른 사람으로 바뀌었나"를 다시
+			 * 확인해야 한다. 실제로 정해지는 것은 버튼이 눌리는지 하나뿐이다.
+			 *
+			 * vote.html과 나눈 이유는 반대다. 저쪽은 사람 목록에서 하나를
+			 * 고르는 화면이고 여기는 이미 정해진 한 사람에 대한 예/아니오다.
+			 * 격자가 필요 없고, 격자를 그리면 "다른 사람도 고를 수 있나"로
+			 * 읽힌다.
+			 */
+			.stand {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: var(--s1);
+				flex: 1 1 auto;
+				min-height: 0;
+				text-align: center;
+			}
+
+			.stand-mark {
+				font-size: var(--t-2xl);
+				line-height: 1;
+			}
+
+			.stand-name {
+				max-width: 100%;
+				font-size: var(--t-xl);
+				font-weight: 800;
+				letter-spacing: -0.02em;
+			}
+
+			.stand-sub {
+				font-size: var(--t-sm);
+				color: var(--ink-2);
+			}
+
+			/*
+			 * O/X. 둘의 폭이 같아서 화면이 어느 쪽으로도 손을 유도하지 않는다.
+			 *
+			 * 기호를 글자보다 크게 두는 것은 5초짜리 단계이기 때문이다 —
+			 * "찬성"과 "반대"는 한 글자 차이라 급할 때 잘못 읽는다. O와 X는
+			 * 멀리서도 모양이 다르다.
+			 */
+			.judge-btn {
+				flex-direction: column;
+				gap: 0;
+				min-height: 56px;
+			}
+
+			.judge-btn .mark {
+				font-size: var(--t-lg);
+				font-weight: 800;
+				line-height: 1.15;
+			}
+
+			/*
+			 * 고른 쪽.
+			 *
+			 * 다른 화면처럼 색으로 표시할 수 없다. 이 두 버튼은 누르기 전부터
+			 * 초록과 빨강이라 "골라서 켜진 것"과 "원래 그 색인 것"이 구분되지
+			 * 않는다. 바깥에 링을 하나 두르는 쪽이 두 상태를 확실히 가른다.
+			 */
+			.judge-btn.picked {
+				box-shadow: 0 0 0 2px var(--accent);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel">
+			<div class="hd">
+				<div class="hd-title grow">
+					<span id="heading">최후의 반론</span>
+					<span class="hd-sub" id="sub"></span>
+				</div>
+				<div class="timer" id="timer"></div>
+			</div>
+
+			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
+
+			<div class="stand">
+				<div class="stand-mark" id="mark" aria-hidden="true">🎤</div>
+				<div class="stand-name ellip" id="name"></div>
+				<div class="stand-sub" id="standsub"></div>
+			</div>
+
+			<!--
+				반론 단계에서도 이 두 버튼을 잠긴 채로 보여준다. 숨겼다가
+				15초 뒤에 띄우면 화면이 갑자기 자라면서 손이 이미 가 있던
+				자리가 버튼이 된다 — 5초짜리 단계에서 그 사고는 되돌릴 수 없다.
+			-->
+			<div class="foot" id="buttons">
+				<button type="button" class="btn ok grow judge-btn" id="agree" data-pick="AGREE" disabled>
+					<span class="mark" aria-hidden="true">O</span><span>찬성</span>
+				</button>
+				<button
+					type="button"
+					class="btn danger grow judge-btn"
+					id="oppose"
+					data-pick="OPPOSE"
+					disabled
+				>
+					<span class="mark" aria-hidden="true">X</span><span>반대</span>
+				</button>
+			</div>
+
+			<p class="note" id="note" role="status" aria-live="polite"></p>
+		</div>
+
+		<!--@shared-->
+		<script>
+			/* Game.types.ts의 Judgement와 같은 값이어야 한다 */
+			const NONE = "NONE";
+			const AGREE = "AGREE";
+			const OPPOSE = "OPPOSE";
+
+			let picked = NONE;
+			/* 서버가 정한다. 산 사람이면서 단상 위가 아닐 때만 참이다 */
+			let canJudge = false;
+
+			function paintPicked() {
+				for (const el of qsa(".judge-btn")) {
+					el.classList.toggle("picked", el.dataset.pick === picked);
+				}
+			}
+
+			function pickNote() {
+				if (picked === AGREE) return "찬성했습니다. 다시 누르면 취소됩니다.";
+				if (picked === OPPOSE) return "반대했습니다. 다시 누르면 취소됩니다.";
+				return "고르지 않으면 반대로 셉니다.";
+			}
+
+			qs("#buttons").addEventListener("click", event => {
+				const el = event.target.closest(".judge-btn");
+				if (!el || el.disabled || !canJudge) return;
+
+				// 같은 버튼을 다시 누르면 취소. 투표 화면의 타일과 같은 규칙이다.
+				// 취소는 NONE 그대로 보낸다 — 서버는 찬성도 반대도 아닌 값을
+				// 전부 취소로 받으므로(Trial.bindJudgementWidget) 따로 약속한
+				// 값이 필요 없다
+				picked = picked === el.dataset.pick ? NONE : el.dataset.pick;
+				paintPicked();
+				Parent.send({ type: "judge", pick: picked });
+				qs("#note").textContent = pickNote();
+			});
+
+			/**
+			 * 두 단계가 같은 화면을 쓴다. 바뀌는 것은 문구와 잠금뿐이다.
+			 *
+			 * 이 함수를 defense와 judge 두 이름으로 등록한다. 다른 위젯처럼
+			 * init 하나로 받고 단계를 따로 실어 보낼 수도 있지만, 이 파일은
+			 * vote.html과 같은 꼴이다 — 거기서도 투표와 개표가 init/result로
+			 * 나뉘어 있고 서버는 어느 화면을 열지를 type으로 말한다.
+			 */
+			function paint(data, judging) {
+				const nominee = Number(data.nominee) || 0;
+				const mine = (Number(data.myNum) || 0) === nominee;
+
+				canJudge = data.canJudge === true;
+				picked = data.picked === AGREE || data.picked === OPPOSE ? data.picked : NONE;
+
+				qs("#heading").textContent = judging ? "찬반 투표" : "최후의 반론";
+				qs("#mark").textContent = judging ? "🗳️" : "🎤";
+				qs("#name").textContent = data.nomineeName || `${nominee}번`;
+				qs("#standsub").textContent = judging ? "이 사람을 처형할까요?" : "해명을 듣는 중입니다";
+
+				for (const el of qsa(".judge-btn")) el.disabled = !canJudge;
+				paintPicked();
+
+				qs("#note").textContent = canJudge
+					? pickNote()
+					: judging
+						? mine
+							? "당신을 처형할지 정하는 중입니다. 결과를 기다리세요."
+							: "👻 유령은 찬반을 고를 수 없습니다."
+						: mine
+							? "지금 해명하세요. 이 시간에 말할 수 있는 사람은 당신뿐입니다."
+							: "듣는 시간입니다. 곧 찬성과 반대를 고릅니다.";
+
+				startTimer(qs("#timer"), data.timer);
+			}
+
+			Parent.on({
+				// 최후의 반론. 단상에 오른 사람만 말하고 나머지는 듣는다
+				defense(data) {
+					paint(data, false);
+				},
+
+				// 찬반투표. 여기서 O/X가 풀린다
+				judge(data) {
+					paint(data, true);
+				},
+
+				/*
+				 * 몇 명이 눌렀는가.
+				 *
+				 * 찬성·반대 숫자는 오지 않는다(Trial.judgeProgress). 5초 안에
+				 * 앞사람 표를 보고 따라가는 판이 되면 반론이 의미를 잃는다.
+				 *
+				 * 키를 따옴표로 감싸야 한다 — Parent.on은 handlers[data.type]로
+				 * 찾으므로 이름이 메시지 타입과 글자 그대로 같아야 한다
+				 */
+				"judge-progress"(data) {
+					const done = Number(data.voted) || 0;
+					const total = Number(data.voters) || 0;
+					// 분모가 0인 순간이 있다. 단상 위 한 명만 남기고 전부 접속이
+					// 끊기면 그렇고, 나누기 전에 걸러내지 않으면 폭이 NaN%가 된다
+					qs("#progress").style.width = total > 0 ? Math.round((done / total) * 100) + "%" : "0%";
+					qs("#sub").textContent = total > 0 ? `${done}/${total} 결정` : "";
+				},
+			});
+		</script>
+	</body>
+</html>

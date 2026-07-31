@@ -15,7 +15,7 @@ import type { SeatView } from "../types/Widget.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import type { VoteResult } from "../domain/Vote.ts";
-import { tallyVotes, VoteOutcome } from "../domain/Vote.ts";
+import { SKIP_VOTE, tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
 import { aliveSeats, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
@@ -23,9 +23,29 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
-import { DeathCause, kill } from "./Death.ts";
 import { beginDayStage } from "./Stage.ts";
 import { bindMessage, identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
+
+/**
+ * 한 낮에 지목 투표를 몇 번까지 돌리는가. 2 = 첫 투표 + 재지목 한 번.
+ *
+ * 찬반투표가 부결되면 낮으로 돌아가는데, 상한이 없으면 반대만 눌러
+ * 낮을 무한히 늘일 수 있다. 값이 2인 이유는 tools/balance로 재 봤기
+ * 때문이다 — 재지목 1회는 시민 승률을 거의 바꾸지 않는다(11인 21.1%→20.7%).
+ * 비싼 것은 찬반투표라는 관문 자체지 몇 번 돌리느냐가 아니다.
+ */
+const MAX_VOTE_ROUNDS = 2;
+
+/** 시간 조절 버튼 한 번의 크기(초). 연장은 +, 단축은 - */
+const TIME_STEP = 15;
+
+/**
+ * 시간을 줄여도 남겨 두는 최소 시간(초).
+ *
+ * 0까지 줄이면 누른 사람만 다음 단계를 예상하고 나머지는 문장을 쓰다 만다.
+ * 째깍 사운드가 울리는 구간(TICK_TOCK_AT)만큼은 남긴다.
+ */
+const MIN_DAY_LEFT = 5;
 
 /** 생존자 수에 비례하는 토론 시간 */
 function dayDuration(room: Room, aliveCount: number): number {
@@ -38,6 +58,11 @@ export function beginDay(room: Room): void {
 	room.phase = GamePhase.DAY;
 	room.phaseTimer = dayDuration(room, aliveSeats(room).length);
 	room.tickTockPlayed = false;
+
+	// 시간 조절권은 하루에 하나다. 부결로 낮이 다시 열려도(resumeDay)
+	// 새로 주지 않는다 — 재지목은 같은 낮이고, 두 번 주면 한 사람이
+	// 하루에 30초를 늘릴 수 있다
+	for (const seat of room.seats) seat.timeVoteSpent = false;
 
 	beginDayStage(room);
 	playSound(room, Sound.MORNING);
@@ -69,9 +94,29 @@ export function beginDay(room: Room): void {
 	// GameFlow.advancePhase가 모든 전이 뒤에 한 번 부른다.
 }
 
+/**
+ * 찬반투표가 부결돼 다시 열리는 낮.
+ *
+ * 처음 낮의 절반만 준다. 규칙은 "다시 낮 토론으로 돌아간다"까지만 정하고
+ * 길이를 말하지 않는데, 온전한 한 낮을 다시 주면 12인 판의 하루가 6분이
+ * 된다. 절반이면 "한 명은 아니었으니 다시 고르자"에 필요한 만큼은 되고
+ * 판이 늘어지지는 않는다.
+ *
+ * 아침 사운드도 아침 컷도 다시 틀지 않는다. 새 아침이 아니라 같은 낮이다.
+ * 무대(beginDayStage)도 이미 낮 상태 그대로다.
+ */
+export function resumeDay(room: Room): void {
+	room.phase = GamePhase.DAY;
+	room.phaseTimer = Math.floor(dayDuration(room, aliveSeats(room).length) / 2);
+	room.tickTockPlayed = false;
+
+	Chat.say(room, "🌞 처형이 무산되어 토론을 이어갑니다. 곧 다시 투표합니다.");
+	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
+}
+
 /** 한 사람의 아침 화면 */
 export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	openPhase(player, {
+	const widget = openPhase(player, {
 		type: "init",
 		phase: "day",
 		turn: room.turnCount,
@@ -83,6 +128,68 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		// 밤사이 무슨 일이 있었는지는 채팅이 아니라 화면에 남는다
 		deaths: room.nightReport,
 		spectating: false,
+		// 죽은 사람에게는 버튼을 그리지 않는다. 남은 사람들의 시간이다
+		timeVote: seat.alive && !seat.timeVoteSpent,
+	});
+	if (seat.alive) bindTimeWidget(widget);
+}
+
+/**
+ * 낮 화면의 ±15초 버튼.
+ *
+ * 위젯이 버튼을 숨기는 것은 안내일 뿐 방어가 아니다. 이미 썼는지, 지금이
+ * 낮인지, 살아 있는지는 전부 서버가 다시 본다.
+ */
+function bindTimeWidget(widget: ScriptWidget): void {
+	bindMessage(widget, "day", (sender, data) => {
+		if (messageType(data) !== "time") return;
+
+		const found = locate(sender.id);
+		if (!found) return;
+		const room = found.room;
+		const seat = found.seat;
+
+		if (room.phase !== GamePhase.DAY) return;
+		if (!seat.alive) return;
+		if (seat.timeVoteSpent) {
+			label(sender, "이번 낮에는 이미 시간을 조절했습니다.");
+			return;
+		}
+
+		// 연장과 단축이 횟수를 공유한다 — 값은 딱 두 개뿐이다
+		const delta = asInt(field(data, "delta"));
+		if (delta !== TIME_STEP && delta !== -TIME_STEP) return;
+		if (delta < 0 && room.phaseTimer <= MIN_DAY_LEFT) {
+			label(sender, "더 줄일 시간이 없습니다.");
+			return;
+		}
+
+		seat.timeVoteSpent = true;
+		const next = room.phaseTimer + delta;
+		room.phaseTimer = next < MIN_DAY_LEFT ? MIN_DAY_LEFT : next;
+
+		// 누가 늘렸는지를 남긴다. 시간이 갑자기 바뀌면 조작으로 보이고,
+		// 누구인지 알면 그 자체가 토론 재료가 된다("왜 늘렸지?")
+		Chat.say(
+			room,
+			delta > 0
+				? `⏳ ${participantLabel(seat)}가 토론 시간을 ${TIME_STEP}초 늘렸습니다.`
+				: `⏩ ${participantLabel(seat)}가 토론 시간을 ${TIME_STEP}초 줄였습니다.`
+		);
+		broadcastDayTimer(room);
+	});
+}
+
+/**
+ * 바뀐 남은 시간을 모두의 화면에 다시 싣는다.
+ *
+ * 위젯은 자기 시계를 따로 돌린다(서버가 매 초 보내면 사람 수만큼 메시지가
+ * 난다). 그래서 시간이 바깥에서 바뀐 순간에는 한 번 맞춰 줘야 한다.
+ */
+function broadcastDayTimer(room: Room): void {
+	const payload = { type: "timer", timer: room.phaseTimer, timeVote: false };
+	forEachPlayer(room, (player, seat) => {
+		updateMain(player, { ...payload, timeVote: seat.alive && !seat.timeVoteSpent });
 	});
 }
 
@@ -90,6 +197,7 @@ export function beginVote(room: Room): void {
 	room.phase = GamePhase.VOTE;
 	room.phaseTimer = room.ruleSet.timing.VOTE;
 	room.tickTockPlayed = false;
+	room.voteRound++;
 
 	// 표는 이번 투표에서만 유효하다
 	for (const seat of room.seats) {
@@ -101,9 +209,19 @@ export function beginVote(room: Room): void {
 	centerLabel(room, "투표가 시작되었습니다.");
 	// 중앙 라벨은 몇 초 뒤 사라진다. 늦게 화면을 본 사람과 재접속한 사람에게는
 	// 채팅 기록만 남으므로, 사라지는 안내는 항상 남는 안내와 짝을 이룬다
-	Chat.say(room, "🗳️ 투표가 시작되었습니다. 처형할 사람을 고르세요.");
+	Chat.say(
+		room,
+		room.voteRound > 1
+			? "🗳️ 다시 투표합니다. 방금 부결된 사람은 고를 수 없습니다."
+			: "🗳️ 투표가 시작되었습니다. 처형할 사람을 고르거나 '투표 없음'을 누르세요."
+	);
 
 	forEachPlayer(room, (player, seat) => openVoteView(room, player, seat));
+}
+
+/** 이번 낮에 이미 부결된 번호인가. 같은 사람을 다시 단상에 세우지 않는다 */
+function isRejected(room: Room, num: number): boolean {
+	return room.rejected.indexOf(num) >= 0;
 }
 
 /**
@@ -119,6 +237,7 @@ export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void
 		seats: seatViews(room),
 		timer: room.phaseTimer,
 		picked: seat.votedFor,
+		rejected: room.rejected,
 	});
 	if (canVote(seat)) bindVoteWidget(widget);
 	sendVoteProgress(room, player);
@@ -152,8 +271,11 @@ function voteWeight(voter: Seat): number {
 /** 이미 넣은 표를 회수한다. 표를 바꿀 수 있으려면 어디에 줬는지를 알아야 한다 */
 function withdrawVote(room: Room, voter: Seat): void {
 	if (voter.votedFor === 0) return;
-	const previous = seatAt(room, voter.votedFor);
-	if (previous) previous.voteCount -= voteWeight(voter);
+	// 스킵은 표를 받는 좌석이 없다. votedFor만 비우면 집계에서 빠진다
+	if (voter.votedFor !== SKIP_VOTE) {
+		const previous = seatAt(room, voter.votedFor);
+		if (previous) previous.voteCount -= voteWeight(voter);
+	}
 	voter.votedFor = 0;
 }
 
@@ -180,16 +302,27 @@ function bindVoteWidget(widget: ScriptWidget): void {
 			return;
 		}
 
-		// target이 없으면 기권 (같은 사람을 다시 눌러 취소한 경우)
+		// target이 없으면 기권 (같은 사람을 다시 눌러 취소한 경우),
+		// SKIP_VOTE면 "투표 없음" — 셋 다 다른 선택이다
 		const choice = asInt(field(data, "target"));
-		const target = choice === null ? null : seatAt(room, choice);
-		if (choice !== null && (!target || !target.alive)) return;
+		const skip = choice === SKIP_VOTE;
+		const target = choice === null || skip ? null : seatAt(room, choice);
+		if (choice !== null && !skip) {
+			if (!target || !target.alive) return;
+			if (isRejected(room, target.index)) {
+				label(sender, "방금 부결된 사람은 다시 고를 수 없습니다.");
+				return;
+			}
+		}
 
 		withdrawVote(room, voter);
 		if (target) {
 			voter.votedFor = target.index;
 			target.voteCount += voteWeight(voter);
 			label(sender, `${participantLabel(target)}에게 투표했습니다.`);
+		} else if (skip) {
+			voter.votedFor = SKIP_VOTE;
+			label(sender, "'투표 없음'을 골랐습니다.");
 		} else {
 			label(sender, "기권했습니다.");
 		}
@@ -218,7 +351,8 @@ function voteProgress(room: Room): { type: "progress"; voted: number; alive: num
 		// 합치면 재접속한 사람의 표를 거절하게 된다.
 		if (!canVote(seat) || !seat.connected) continue;
 		alive++;
-		if (seat.votedFor > 0) voted++;
+		// 스킵도 낸 표다(votedFor === SKIP_VOTE). "아직 안 냈다"는 0 하나뿐이다
+		if (seat.votedFor !== 0) voted++;
 	}
 	return { type: "progress", voted, alive };
 }
@@ -233,27 +367,30 @@ export function broadcastVoteProgress(room: Room): void {
 	forEachPlayer(room, player => updateMain(player, payload));
 }
 
+/**
+ * 개표. 여기서 죽는 사람은 없다 — 최다 득표자를 단상에 세울 뿐이다.
+ *
+ * 처형이 확정되는 자리는 찬반투표(JUDGEMENT) 끝이다. 개표와 처형을
+ * 갈라놓은 것이 마피아42 규칙의 핵심이고, 지목당한 사람에게 마지막으로
+ * 말할 기회를 주기 때문에 "표가 몰렸다 = 죽는다"가 성립하지 않는다.
+ */
 export function beginVoteResult(room: Room): void {
 	room.phase = GamePhase.VOTE_RESULT;
 	room.phaseTimer = room.ruleSet.timing.VOTE_RESULT;
 	room.tickTockPlayed = true; // 결과 발표 중에는 째깍 사운드를 울리지 않는다
 
-	// 판을 먼저 남긴다. 아래 kill이 처형자를 좌석에서 죽이면 집계가 달라진다.
 	const result = tallyVotes(room.seats);
+	const nominee =
+		result.outcome === VoteOutcome.EXECUTE && result.target ? result.target.index : 0;
+	room.nominee = nominee;
 	room.voteRecord = {
 		board: result.board,
-		executed: result.outcome === VoteOutcome.EXECUTE && result.target ? result.target.index : 0,
+		nominee,
 		message: outcomeMessage(result),
 	};
 
 	forEachPlayer(room, (player, seat) => openVoteResultView(room, player, seat));
-
-	// 처형은 kill이 직접 알린다(마피아였는지까지 밝히므로). 나머지는 여기서.
-	if (result.outcome === VoteOutcome.EXECUTE) {
-		if (result.target) kill(room, result.target, DeathCause.EXECUTION);
-	} else {
-		Chat.announce(room, room.voteRecord.message);
-	}
+	Chat.announce(room, room.voteRecord.message);
 }
 
 /**
@@ -262,19 +399,29 @@ export function beginVoteResult(room: Room): void {
  * 기존에는 이 문구가 switch 안에서 say()로 직접 나갔다. 채팅으로만 나가니
  * 결과 화면에는 숫자 막대만 있고 "그래서 어떻게 됐는가"가 없었다.
  * 문자열을 값으로 만들면 화면과 채팅이 같은 문장을 쓴다.
+ *
+ * EXECUTE가 더 이상 사망을 뜻하지 않으므로 문구도 "단상에 올랐다"까지만
+ * 말한다. 처형 문구는 resolveJudgement가 쓴다.
  */
 function outcomeMessage(result: VoteResult): string {
 	const name = result.target ? participantLabel(result.target) : "";
 	switch (result.outcome) {
+		case VoteOutcome.SKIPPED:
+			return "🕊️ '투표 없음'이 가장 많아 오늘은 아무도 단상에 오르지 않습니다.";
 		case VoteOutcome.NO_VOTES:
-			return "🕊️ 아무도 표를 받지 않아 처형이 무산되었습니다.";
+			return "🕊️ 아무도 표를 받지 않아 단상이 비었습니다.";
 		case VoteOutcome.TIE:
-			return "🕊️ 동률이 나와 아무도 처형되지 않았습니다.";
+			return "🕊️ 동률이 나와 아무도 단상에 오르지 않습니다.";
 		case VoteOutcome.IMMUNE:
-			return `🎖️ ${name}는 정치인이라 처형되지 않았습니다.`;
+			return `🎖️ ${name}는 정치인이라 단상에 오르지 않습니다.`;
 		case VoteOutcome.EXECUTE:
-			return `☠️ ${name}가 처형되었습니다.`;
+			return `⚖️ ${name}가 최다 득표로 단상에 올랐습니다.`;
 	}
+}
+
+/** 부결 뒤 다시 지목 투표를 돌릴 수 있는가 — 판정은 Trial.resolveJudgement */
+export function canRevote(room: Room): boolean {
+	return room.voteRound < MAX_VOTE_ROUNDS;
 }
 
 /**
@@ -299,7 +446,7 @@ export function openVoteResultView(room: Room, player: ScriptPlayer, seat: Seat)
 		type: "result",
 		myNum: seat.index,
 		seats: resultSeats(room),
-		executed: room.voteRecord.executed,
+		nominee: room.voteRecord.nominee,
 		message: room.voteRecord.message,
 		timer: room.phaseTimer,
 	});

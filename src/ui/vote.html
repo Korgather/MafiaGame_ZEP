@@ -23,7 +23,13 @@
 			 * 격자는 auto-fill이라 인원수와 무관하다.
 			 */
 
-			/* 개표에서 처형된 사람 */
+			/*
+			 * 개표에서 단상에 오른 사람.
+			 *
+			 * 예전에는 이 칸이 곧 처형된 사람이었다. 이제는 최다 득표자일
+			 * 뿐이고, 죽는지는 최후의 반론과 찬반투표를 거쳐야 정해진다.
+			 * 흔들림은 그대로 둔다 — 지목당한 순간의 무게는 달라지지 않았다.
+			 */
 			.tile.out {
 				border-color: var(--danger);
 				background: var(--mafia-dim);
@@ -41,6 +47,47 @@
 				75% {
 					transform: translateX(4px);
 				}
+			}
+
+			/*
+			 * '투표 없음'. 사람 타일과 같은 격자에 있지만 한 줄을 통째로 쓴다.
+			 *
+			 * 사람들 사이에 정사각 칸으로 끼워 넣으면 4번과 6번 사이에 얼굴
+			 * 없는 칸이 하나 있는 모양이 되어, 번호를 세며 누르는 사람이 한 칸씩
+			 * 밀려 누른다. 아래 한 줄로 빼면 "사람을 고르거나, 아무도 고르지
+			 * 않거나"라는 두 갈래가 그대로 보인다.
+			 */
+			.tile.skip {
+				grid-column: 1 / -1;
+				flex-direction: row;
+				gap: var(--s2);
+				aspect-ratio: auto;
+				padding: var(--s2);
+			}
+
+			.tile.skip .cap {
+				width: auto;
+				font-size: var(--t-sm);
+				font-weight: 700;
+				color: var(--ink-2);
+			}
+
+			.tile.skip.picked .cap {
+				color: var(--ink);
+			}
+
+			/*
+			 * 방금 부결된 사람. 같은 낮에 두 번 단상에 세우지 않는다.
+			 *
+			 * 사망과 같은 회색으로 두면 "죽은 줄 알았는데 살아 있다"가 되므로
+			 * 배지로 이유를 적는다 — 눌리지 않는 칸에는 항상 이유가 있어야 한다.
+			 */
+			.tile.barred {
+				opacity: 0.55;
+			}
+
+			.tile.barred .badge {
+				color: var(--ink-3);
 			}
 
 			/* 득표 막대. 숫자 하나보다 상대 비교가 빠르다 */
@@ -82,10 +129,15 @@
 			let myNum = 0;
 			let myPick = null;
 			let locked = false;
+			/* 이번 낮에 찬반투표에서 부결된 번호들. 다시 고를 수 없다 */
+			let barred = [];
 
 			/* 막대 하나가 차는 시간과 타일 사이 간격(ms) */
 			const BAR_MS = 600;
 			const STAGGER = 90;
+
+			/* '투표 없음'의 대상 번호. 서버의 Vote.SKIP_VOTE와 같은 값이어야 한다 */
+			const SKIP = -1;
 
 			/**
 			 * 사람 타일 하나.
@@ -95,18 +147,44 @@
 			 */
 			function tile(seat, extra) {
 				const mine = seat.num === myNum;
+				const out = barred.indexOf(seat.num) >= 0;
 				const caption = mine ? "나" : seat.alive ? seat.name || "" : "사망";
 				const classes =
-					"tile" + (mine ? " me" : "") + (seat.alive ? "" : " dead") + (extra ? " " + extra : "");
+					"tile" +
+					(mine ? " me" : "") +
+					(seat.alive ? "" : " dead") +
+					(out ? " barred" : "") +
+					(extra ? " " + extra : "");
 
 				return html`<button
 					type="button"
 					class="${classes}"
 					data-num="${seat.num}"
-					${flag(locked || !seat.alive, "disabled")}
-					aria-label="${seat.num}번 ${seat.name || ""}"
+					${flag(locked || !seat.alive || out, "disabled")}
+					aria-label="${seat.num}번 ${seat.name || ""}${out ? " (부결됨)" : ""}"
 				>
 					<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
+					${out ? html`<span class="badge">부결</span>` : ""}
+				</button>`;
+			}
+
+			/**
+			 * '투표 없음' 칸.
+			 *
+			 * 기권(아무것도 안 누르기)과 다른 선택이다. 기권은 판단을 남에게
+			 * 미루는 것이고 이쪽은 "오늘은 아무도 죽이지 말자"는 한 표다.
+			 * 단서가 없는 날 무고한 시민을 죽이지 않고 밤으로 넘기는 길이다.
+			 */
+			function skipTile() {
+				return html`<button
+					type="button"
+					class="tile skip"
+					data-num="${SKIP}"
+					${flag(locked, "disabled")}
+					aria-label="투표 없음 — 오늘은 아무도 처형하지 않습니다"
+				>
+					<span class="num" aria-hidden="true">🚫</span
+					><span class="cap ellip">투표 없음</span>
 				</button>`;
 			}
 
@@ -121,9 +199,9 @@
 			}
 
 			function pickNote() {
-				return myPick === null
-					? "기권했습니다. 다시 고를 수 있습니다."
-					: `${myPick}번을 지목했습니다. 다시 누르면 취소됩니다.`;
+				if (myPick === null) return "기권했습니다. 다시 고를 수 있습니다.";
+				if (myPick === SKIP) return "'투표 없음'을 골랐습니다. 다시 누르면 취소됩니다.";
+				return `${myPick}번을 지목했습니다. 다시 누르면 취소됩니다.`;
 			}
 
 			qs("#grid").addEventListener("click", event => {
@@ -147,15 +225,18 @@
 					// 막지만, 눌리는 버튼을 남기면 실제로 투표된 것처럼 보인다
 					const ghost = seats(data).some(seat => seat.num === myNum && !seat.alive);
 					locked = ghost;
-					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다
+					// 재지목이면 방금 부결된 번호가 실려 온다. 첫 투표에서는 빈 배열이다
+					barred = Array.isArray(data.rejected) ? data.rejected : [];
+					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다.
+					// SKIP(-1)도 그대로 살아난다 — 0만 "아직 안 찍음"이다
 					myPick = Number(data.picked) || null;
 					qs("#heading").textContent = ghost ? "투표할 수 없습니다" : "누구를 처형할까요";
-					qs("#grid").innerHTML = html`${seats(data).map(seat => tile(seat))}`;
+					qs("#grid").innerHTML = html`${seats(data).map(seat => tile(seat))}${skipTile()}`;
 					paintPick();
 					qs("#note").textContent = ghost
 						? "👻 유령은 투표할 수 없습니다."
 						: myPick === null
-							? "고르지 않으면 기권입니다."
+							? "고르지 않으면 기권입니다. 단서가 없으면 '투표 없음'도 한 표입니다."
 							: pickNote();
 					startTimer(qs("#timer"), data.timer);
 				},
@@ -179,7 +260,7 @@
 					const top = list.reduce((max, seat) => Math.max(max, Number(seat.votes) || 0), 0);
 
 					qs("#grid").innerHTML = html`${list.map(seat =>
-						tile(seat, seat.num === data.executed ? "out" : null)
+						tile(seat, seat.num === data.nominee ? "out" : null)
 					)}`;
 
 					/*
@@ -196,7 +277,7 @@
 					list.forEach((seat, i) => {
 						const el = qs(`.tile[data-num="${seat.num}"]`);
 						if (!el) return;
-						if (seat.num === data.executed) outTile = el;
+						if (seat.num === data.nominee) outTile = el;
 						const votes = Number(seat.votes) || 0;
 						el.insertAdjacentHTML(
 							"beforeend",

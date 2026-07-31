@@ -26,7 +26,7 @@ import type { ChatMessage } from "../../src/domain/chat/ChatMessage.ts";
 import { resetGlobalLog } from "../../src/services/ChatService.ts";
 import type { PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
 import type { ChatChannelView } from "../../src/types/Widget.types.ts";
-import { GamePhase, Role } from "../../src/types/Game.types.ts";
+import { GamePhase, Judgement, Role } from "../../src/types/Game.types.ts";
 
 let nextPlayerId = 1;
 
@@ -404,6 +404,40 @@ export function setReady(player: FakePlayer, ready = true): void {
  */
 export function vote(player: FakePlayer, targetIndex: number | null = null): void {
 	send(player, { type: "vote", target: targetIndex });
+}
+
+/** 찬반 위젯이 보내는 메시지. AGREE·OPPOSE 외의 값은 서버가 취소로 받는다 */
+export function judge(player: FakePlayer, pick: Judgement): void {
+	send(player, { type: "judge", pick });
+}
+
+/**
+ * 투표가 끝난 판을 재판 끝까지 밀어 결론을 낸다.
+ *
+ * 예전에는 개표 단계가 곧 처형이라 finishPhase 한 번이면 끝났다. 지금은
+ * VOTE → VOTE_RESULT → DEFENSE → JUDGEMENT → 결론 네 걸음이고, 중간에
+ * 산 사람 전원이 O나 X를 눌러야 한다. 이 절차를 테스트마다 다시 쓰면
+ * 한 걸음만 빠져도 "처형되지 않았다"로만 터져서 원인이 안 보인다.
+ *
+ * pick이 AGREE면 만장일치 찬성이라 반드시 처형되고, OPPOSE면 부결되어
+ * 낮으로 돌아가거나(재지목 가능) 밤으로 넘어간다. 접속이 끊긴 사람은
+ * 누를 수 없지만 과반의 분모에는 남는다(Trial.judgementPassed) — 그래서
+ * 이 헬퍼로 처형을 만들려면 전원이 접속해 있어야 한다.
+ */
+export function passTrial(target: Room, pick: Judgement = Judgement.AGREE): void {
+	assert.equal(target.phase, GamePhase.VOTE, "투표 단계에서 불러야 합니다");
+	finishPhase(target); // VOTE → VOTE_RESULT
+	assert.notEqual(target.nominee, 0, "단상에 오른 사람이 없어 재판이 열리지 않습니다");
+	finishPhase(target); // VOTE_RESULT → DEFENSE
+	finishPhase(target); // DEFENSE → JUDGEMENT
+	assert.equal(target.phase, GamePhase.JUDGEMENT, "찬반투표에 도착하지 못했습니다");
+
+	for (const seat of target.seats) {
+		if (!seat.alive || !seat.connected || seat.index === target.nominee) continue;
+		judge(playerOf(seat), pick);
+	}
+
+	finishPhase(target); // JUDGEMENT → 처형 또는 부결
 }
 
 /**

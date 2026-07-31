@@ -35,10 +35,14 @@ export const GamePhase = {
 	NIGHT: "NIGHT",
 	/** 낮. 토론 */
 	DAY: "DAY",
-	/** 투표 */
+	/** 지목 투표 */
 	VOTE: "VOTE",
-	/** 투표 결과 공개 */
+	/** 지목 결과 공개. 여기서 죽는 사람은 없다 — 단상에 세울 뿐이다 */
 	VOTE_RESULT: "VOTE_RESULT",
+	/** 최후의 반론. 단상에 오른 사람만 말한다 */
+	DEFENSE: "DEFENSE",
+	/** 찬반투표. 처형이 확정되는 유일한 자리 */
+	JUDGEMENT: "JUDGEMENT",
 	/** 승패 확정 후 연출 */
 	GAME_OVER: "GAME_OVER",
 } as const;
@@ -96,6 +100,22 @@ export type Team = (typeof Team)[keyof typeof Team];
  * playerId로만 플레이어를 가리킨다. 접속이 끊겨도 좌석은 남으므로
  * 재접속 복구와 종료 시 직업 공개가 자연스럽게 가능해진다.
  */
+/**
+ * 찬반투표에서 고른 것.
+ *
+ * 불리언 두 개(agreed·opposed)로 두면 둘 다 false인 상태가 "안 눌렀다"와
+ * "취소했다" 양쪽을 뜻하게 되고, 둘 다 true인 상태를 타입이 막지 못한다.
+ */
+export const Judgement = {
+	/** 아직 안 눌렀다. 기권이며 집계에서는 반대로 센다 */
+	NONE: "NONE",
+	/** 찬성(O) — 처형 */
+	AGREE: "AGREE",
+	/** 반대(X) — 생존 */
+	OPPOSE: "OPPOSE",
+} as const;
+export type Judgement = (typeof Judgement)[keyof typeof Judgement];
+
 export interface Seat {
 	readonly playerId: string;
 	/** 게임 시작 시 부여되는 참가 번호(1..N). 대기실에서는 0 */
@@ -120,6 +140,22 @@ export interface Seat {
 	votedFor: number;
 	/** 이번 투표에서 받은 표 수 */
 	voteCount: number;
+	/**
+	 * 이번 찬반투표에서 고른 것. DEFENSE에 들어갈 때 NONE으로 초기화된다.
+	 *
+	 * votedFor와 합치지 않는다 — 지목 투표는 대상을 고르는 일이고 찬반은
+	 * 예/아니오라 값의 종류가 다르다. 한 필드로 겸하면 재지목이 일어난 낮에
+	 * 앞 단계의 흔적이 뒤 단계로 새어 나온다.
+	 */
+	judgement: Judgement;
+	/**
+	 * 이번 낮에 토론 시간 조절(연장·단축)을 이미 썼는가.
+	 *
+	 * 연장과 단축이 횟수를 공유하므로 방향별로 나누지 않는다. 낮이 시작될
+	 * 때마다 false로 돌아가고, 재지목으로 낮이 다시 열려도 마찬가지다 —
+	 * 부결시킨 쪽에게 다시 토론할 시간을 주는 것이 재지목의 취지다.
+	 */
+	timeVoteSpent: boolean;
 	/** 이번 밤에 의사가 치료한 대상인가 */
 	healed: boolean;
 	/**
@@ -195,8 +231,15 @@ export interface Seat {
 export interface VoteRecord {
 	/** [참가번호, 득표수] */
 	board: Array<[number, number]>;
-	/** 처형된 참가 번호. 처형이 없었으면 0 */
-	executed: number;
+	/**
+	 * 단상에 오른 참가 번호. 아무도 안 올랐으면 0.
+	 *
+	 * **처형 확정이 아니다.** 예전에는 이 값이 곧 처형된 사람이었지만,
+	 * 최후의 반론과 찬반투표가 들어오면서 개표는 지목까지만 하고 죽음은
+	 * JUDGEMENT가 정한다. 이름이 executed로 남아 있으면 화면과 코드가
+	 * 반론 중인 사람을 이미 죽은 사람으로 그린다.
+	 */
+	nominee: number;
 	/** 결과 화면에 띄우는 한 줄 */
 	message: string;
 }
@@ -278,6 +321,30 @@ export interface Room {
 	 * 셋이 항상 같은 집계에서 나오므로 따로 두면 어긋날 수 있다.
 	 */
 	voteRecord: VoteRecord;
+	/**
+	 * 지금 단상에 오른 참가 번호. 아무도 없으면 0.
+	 *
+	 * voteRecord.nominee와 값이 같아 보이지만 사는 기간이 다르다 —
+	 * voteRecord는 다음 개표까지 화면에 남는 기록이고, 이쪽은 DEFENSE와
+	 * JUDGEMENT가 누구를 다루는 중인지를 가리키는 현재 상태다. 찬반이
+	 * 끝나면 0으로 돌아간다.
+	 */
+	nominee: number;
+	/**
+	 * 이번 낮에 찬반투표에서 부결된 참가 번호들.
+	 *
+	 * 재지목 때 다시 올라오지 못하게 막는다. 같은 사람을 두 번 올리면
+	 * 재지목이 "표를 더 모을 때까지 반복"이 되어 부결에 뜻이 없어진다.
+	 * 밤으로 넘어갈 때 비운다.
+	 */
+	rejected: number[];
+	/**
+	 * 이번 낮에 지목 투표를 몇 번 돌렸는가. 첫 투표가 1이다.
+	 *
+	 * 부결이 무한히 반복되면 밤이 오지 않는다. 상한은 Voting의
+	 * MAX_VOTE_ROUNDS이고, 여기 도달하면 부결되어도 밤으로 넘어간다.
+	 */
+	voteRound: number;
 	/**
 	 * 지난 밤에 일어난 일 (아침 화면이 그대로 보여준다).
 	 *

@@ -89,8 +89,18 @@ export function deckFor(rules, playerCount, seed) {
  * 80라운드에서 끊는다. 실제 게임에는 라운드 제한이 없지만(GameFlow), 표결이
  * 계속 동률이면 밤 사망자도 없는 상태가 이어질 수 있어 측정 쪽에서 막는다.
  * 이 상한에 닿는 판의 비율 자체가 읽을 만한 신호다.
+ *
+ * opts.confirmVote — 마피아42식 찬반투표를 붙인다(기본: 없음, 현행 규칙).
+ * 값은 "근거 없는 지목에 시민이 찬성표를 줄 확률"이다. 최다 득표가 나온 뒤
+ * 한 번 더 묻는 관문이라, 지목 단계까지는 현행과 똑같이 굴러간다.
+ *
+ * opts.confirmRetries — 부결된 낮에 다시 지목할 수 있는 횟수(기본 0).
+ * 이 값이 승패를 가른다. 0이면 부결이 곧 그 낮의 종료라 밤 한 번을 그냥
+ * 내주는 셈이고, 1이면 부결 비용이 0에 가까워진다.
  */
-export function playGame(rules, playerCount, seed, model) {
+export function playGame(rules, playerCount, seed, model, opts) {
+	const confirmVote = opts && typeof opts.confirmVote === "number" ? opts.confirmVote : null;
+	const confirmRetries = opts && typeof opts.confirmRetries === "number" ? opts.confirmRetries : 0;
 	const rng = mulberry32(seed);
 	const deck = buildRoleDeck(rules.deck, playerCount, rng);
 	const seats = deck.map((r, i) => makeSeat(i + 1, r));
@@ -186,39 +196,70 @@ export function playGame(rules, playerCount, seed, model) {
 		if (w) return { winner: w, rounds: rounds + 1, deck, falseClear, defected };
 
 		/* ===== 낮 투표 ===== */
-		const voters = alive();
-		const cNonChat = voters.filter(s => !inMafiaChat(s));
-		const mafiaVote = cNonChat.length > 0 ? pick(cNonChat, rng) : null;
+		// 찬반투표가 부결되면 그 낮으로 돌아와 다시 지목한다. 부결된 사람은
+		// 그 낮 동안 후보에서 빠진다 — 빼지 않으면 같은 사람이 다시 최다 득표를
+		// 받아 재지목이 아무 일도 하지 않는 되풀이가 된다.
+		// 재지목 횟수가 0이면 이 반복문은 한 바퀴만 돌고, 현행과 완전히 같다.
+		const rejected = [];
+		for (let attempt = 0; attempt <= confirmRetries; attempt++) {
+			for (const s of seats) { s.votedFor = 0; s.voteCount = 0; }
+			const voters = alive();
+			const pool0 = voters.filter(s => rejected.indexOf(s.index) < 0);
+			const cNonChat = pool0.filter(s => !inMafiaChat(s));
+			const mafiaVote = cNonChat.length > 0 ? pick(cNonChat, rng) : null;
 
-		let consensus = null;
-		if (model !== "A") {
-			const km = voters.filter(s => known[s.index] === "MAFIA");
-			if (km.length > 0) consensus = km[0];
-			else {
-				const pool = voters.filter(s => known[s.index] !== "CITIZEN");
-				consensus = pool.length > 0 ? pick(pool, rng) : null;
+			let consensus = null;
+			if (model !== "A") {
+				const km = pool0.filter(s => known[s.index] === "MAFIA");
+				if (km.length > 0) consensus = km[0];
+				else {
+					const pool = pool0.filter(s => known[s.index] !== "CITIZEN");
+					consensus = pool.length > 0 ? pick(pool, rng) : null;
+				}
 			}
-		}
 
-		for (const v of voters) {
-			let t = null;
-			if (inMafiaChat(v)) t = mafiaVote;
-			else if (model === "A") t = pick(voters.filter(o => o.index !== v.index), rng);
-			else if (consensus && consensus.index !== v.index) t = consensus;
-			else {
-				const rest = voters.filter(o => o.index !== v.index);
-				t = rest.length > 0 ? pick(rest, rng) : null;
+			for (const v of voters) {
+				let t = null;
+				if (inMafiaChat(v)) t = mafiaVote;
+				else if (model === "A") t = pick(pool0.filter(o => o.index !== v.index), rng);
+				else if (consensus && consensus.index !== v.index) t = consensus;
+				else {
+					const rest = pool0.filter(o => o.index !== v.index);
+					t = rest.length > 0 ? pick(rest, rng) : null;
+				}
+				if (!t) continue;
+				v.votedFor = t.index;
+				t.voteCount += roleDef(v.role).voteWeight || 1;
 			}
-			if (!t) continue;
-			v.votedFor = t.index;
-			t.voteCount += roleDef(v.role).voteWeight || 1;
-		}
 
-		const res = tallyVotes(seats);
-		// 처형은 진영을 공개한다(services/Death.ts). 모든 모델이 이 정보는 받는다
-		if (res.outcome === VoteOutcome.EXECUTE && res.target) {
+			const res = tallyVotes(seats);
+			// 최다 득표가 안 나온 낮은 찬반투표까지 가지 않는다
+			if (res.outcome !== VoteOutcome.EXECUTE || !res.target) break;
+
+			let confirmed = true;
+			if (confirmVote !== null) {
+				// 최다 득표자를 두고 한 번 더 묻는다. 밀담은 자기 편이면 반대하고,
+				// 시민은 근거가 있으면 찬성, 없으면 confirmVote 확률로만 찬성한다.
+				// 지목당한 본인은 빠진다(최후의 반론을 하는 자리라 표를 던지지 않는다)
+				const sure = known[res.target.index] === "MAFIA";
+				const shield = inMafiaChat(res.target);
+				let yes = 0, no = 0;
+				for (const v of alive()) {
+					if (v.index === res.target.index) continue;
+					let agree;
+					if (inMafiaChat(v)) agree = !shield;
+					else if (model === "A") agree = rng() < 0.5;
+					else agree = sure || rng() < confirmVote;
+					if (agree) yes++; else no++;
+				}
+				confirmed = yes > no;
+			}
+			if (!confirmed) { rejected.push(res.target.index); continue; }
+
+			// 처형은 진영을 공개한다(services/Death.ts). 모든 모델이 이 정보는 받는다
 			known[res.target.index] = res.target.team === Team.MAFIA ? "MAFIA" : "CITIZEN";
 			killSeat(res.target);
+			break;
 		}
 		w = evaluateWinner(seats);
 		if (w) return { winner: w, rounds: rounds + 1, deck, falseClear, defected };

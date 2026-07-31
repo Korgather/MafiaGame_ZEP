@@ -25,6 +25,20 @@ const QUICK_WORLD: string[] = ["안녕하세요", "같이 하실 분?", "ㅋㅋ�
 const QUICK_LOBBY: string[] = ["준비 완료", "잠깐만요", "한 명만 더!"];
 const QUICK_DAY: string[] = ["투표해주세요", "저는 시민입니다", "의심됩니다", "정보 있어요"];
 const QUICK_VOTE: string[] = ["투표했습니다", "기권합니다", "다시 생각해보죠"];
+/**
+ * 최후의 반론. 단상에 오른 사람만 본다.
+ *
+ * 15초 안에 타이핑으로 해명하기는 어렵고, 이 자리에서 하는 말은 대개
+ * 정해져 있다 — 아니라고 말하거나, 근거를 대거나, 다른 사람을 가리킨다.
+ */
+const QUICK_DEFENSE: string[] = [
+	"저는 시민입니다",
+	"저를 믿어주세요",
+	"정보 있어요, 살려주세요",
+	"저 말고 다른 사람이 수상합니다",
+];
+/** 찬반투표 5초. 버튼은 위젯에 있고 여기는 이유를 한 줄 붙이는 자리다 */
+const QUICK_JUDGE: string[] = ["찬성합니다", "반대합니다", "잘 모르겠습니다"];
 const QUICK_MAFIA: string[] = ["이 사람 칩시다", "오늘은 넘기죠", "제가 갈게요"];
 const QUICK_GHOST: string[] = ["누가 죽였는지 봤어요", "억울합니다", "잘 싸웠습니다"];
 const QUICK_NONE: string[] = [];
@@ -79,6 +93,10 @@ export function quickFor(ctx: ChatContext): string[] {
 	// 밤에 마피아가 아니면 말할 곳 자체가 없다 — 칩을 띄우면 눌러도 아무 일이 없다
 	if (ctx.phase === GamePhase.NIGHT) return ctx.mafiaChat ? QUICK_MAFIA : QUICK_NONE;
 	if (ctx.phase === GamePhase.LOBBY) return QUICK_LOBBY;
+	// 반론 중에 말할 수 있는 사람은 단상 위 한 명뿐이다. 나머지에게 칩을
+	// 내밀면 눌러도 아무 일이 없다 — 밤의 비마피아와 같은 이유로 비운다
+	if (ctx.phase === GamePhase.DEFENSE) return ctx.nominee ? QUICK_DEFENSE : QUICK_NONE;
+	if (ctx.phase === GamePhase.JUDGEMENT) return QUICK_JUDGE;
 	if (ctx.phase === GamePhase.VOTE || ctx.phase === GamePhase.VOTE_RESULT) return QUICK_VOTE;
 	if (ctx.phase === GamePhase.DAY) {
 		return ctx.chatMode === "phrasesOnly" ? QUICK_SILENCE_DAY : QUICK_DAY;

@@ -36,6 +36,20 @@ export interface Timing {
 	/** 투표 결과 공개 시간(초) */
 	readonly VOTE_RESULT: number;
 	/**
+	 * 최후의 반론 시간(초).
+	 *
+	 * 최다 득표자 혼자 말하는 구간이다. 짧으면 변론이 성립하지 않고
+	 * 길면 나머지 전원이 듣기만 하는 시간이 늘어난다.
+	 */
+	readonly DEFENSE: number;
+	/**
+	 * 찬반투표 시간(초).
+	 *
+	 * 반론을 듣고 O/X 하나를 누르는 시간이라 짧다. 여기서 결정을 미루면
+	 * 기권이 되고, 기권은 반대로 센다(Voting의 judgementPassed).
+	 */
+	readonly JUDGEMENT: number;
+	/**
 	 * 승패 연출 후 대기실 복귀까지(초).
 	 *
 	 * 5초는 결과 화면이 이미지 한 장이던 시절의 값이다. 이제 전원의 정체가
@@ -195,10 +209,17 @@ export const STANDARD_RULES: RuleSet = {
 	displayName: "표준전",
 	// 하한은 6이 아니라 4다(아래 minPlayers). 이 문장이 방에 들어올 때마다
 	// 화면에 나가기 시작했으므로 틀린 수를 그대로 둘 수 없다
-	summary: "기본 규칙. 4~12명, 5~10분",
+	summary: "기본 규칙. 4~12명, 5~20분",
+	// 이 표는 마피아42의 진행 시간을 그대로 옮긴 것이다(밤 25 / 낮 생존자×15 /
+	// 지목 15 / 반론 15 / 찬반 5). 그중 낮이 밸런스에서 제일 큰 손잡이다 —
+	// tools/balance/report.mjs로 재면 "낮에 조사 결과가 공유되는가"만으로
+	// 시민 승률이 25~30%p 갈리는데, 옛 DAY_MAX 60초는 11인 판 165초짜리
+	// 토론을 60초로 자르고 있었다. 찬반투표가 시민에게서 가져가는 몫을
+	// 되돌려주는 자리도 여기다
 	timing: {
-		START_COUNTDOWN: 10, ROLE_REVEAL: 9, NIGHT: 22,
-		DAY_PER_ALIVE: 10, DAY_MAX: 60, VOTE: 17, VOTE_RESULT: 7,
+		START_COUNTDOWN: 10, ROLE_REVEAL: 9, NIGHT: 25,
+		DAY_PER_ALIVE: 15, DAY_MAX: 180, VOTE: 15, VOTE_RESULT: 7,
+		DEFENSE: 15, JUDGEMENT: 5,
 		GAME_OVER: 16, TICK_TOCK_AT: 5,
 	},
 	deck: {
@@ -282,6 +303,11 @@ export const STANDARD_RULES: RuleSet = {
  *
  * 짐승인간을 넣지 않았다 — 이 모드의 목적은 경찰의 확정 정보를 남겨
  * "조사해서 잡는다"는 기본 흐름을 배우게 하는 것이다.
+ *
+ * 표준전이 마피아42 시간표를 받을 때 이 모드는 따라가지 않았다. 낮
+ * 생존자×15초는 8인 판에서 120초여서 "3분 단판"이 성립하지 않는다.
+ * 반론·찬반만 절반 길이로 넣는다 — 그 두 단계는 규칙이지 여유가 아니라서
+ * 빼면 두 모드의 진행 자체가 달라진다.
  */
 export const BLITZ_RULES: RuleSet = {
 	id: "blitz",
@@ -290,6 +316,7 @@ export const BLITZ_RULES: RuleSet = {
 	timing: {
 		START_COUNTDOWN: 7, ROLE_REVEAL: 6, NIGHT: 12,
 		DAY_PER_ALIVE: 5, DAY_MAX: 25, VOTE: 10, VOTE_RESULT: 4,
+		DEFENSE: 8, JUDGEMENT: 4,
 		GAME_OVER: 10, TICK_TOCK_AT: 5,
 	},
 	deck: {

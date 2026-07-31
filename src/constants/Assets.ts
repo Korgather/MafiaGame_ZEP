@@ -90,6 +90,8 @@ export const WidgetFile = {
 	PHASE: "phase.html",
 	/** 투표 + 개표. init / result 메시지로 갈린다 */
 	VOTE: "vote.html",
+	/** 최후의 반론 + 찬반투표. defense / judge 메시지로 갈린다 */
+	JUDGEMENT: "judgement.html",
 	GAME_OVER: "gameOver.html",
 	/** 통합 채팅. 접속해 있는 내내 떠 있는 유일한 위젯 */
 	CHAT: "chat.html",
@@ -190,6 +192,13 @@ export const WidgetSize = {
 	CARD_BOOK: { width: 360, height: 480, mobile: 54 },
 	/** 사람 8명을 타일로 그린다. PHASE보다 높아야 한다 */
 	VOTE: { width: 400, height: 400, mobile: 46 },
+	/**
+	 * 최후의 반론 / 찬반투표.
+	 *
+	 * 단상에 오른 사람 하나와 O/X 두 버튼뿐이라 목록이 없다. VOTE보다 낮고
+	 * PHASE보다 높다 — 읽을 것(반론 안내)과 누를 것(O/X)이 함께 있다.
+	 */
+	JUDGEMENT: { width: 380, height: 320, mobile: 36 },
 	/** 전원의 직업 공개 목록이 들어간다 */
 	GAME_OVER: { width: 380, height: 420, mobile: 46 },
 	/** 밤/아침: 읽을 것만 있고 조작이 없다 */

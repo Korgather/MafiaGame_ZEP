@@ -105,6 +105,9 @@ function contextOf(playerId: string): ChatContext {
 		// 로비 채팅이 통째로 잠긴다. 진행 중일 때만 좌석 값을 믿는다.
 		alive: !room.started || seat.alive,
 		spectating: false,
+		// 단상은 한 번에 한 자리다. 아무도 안 올랐으면 nominee가 0이라
+		// 어느 좌석과도 같지 않다(좌석 번호는 1부터다)
+		nominee: room.nominee === seat.index,
 		mafiaChat: inMafiaChat(seat),
 		ghostChat: hearsGhosts(seat),
 		chatMode: room.ruleSet.chatMode,
@@ -128,6 +131,8 @@ function spectatorContext(playerId: string): ChatContext {
 		// 죽은 것이 아니라 애초에 참가하지 않았다. 유령 채널은 spectating이 막는다
 		alive: false,
 		spectating: true,
+		// 판 안에 좌석이 없으니 단상에도 오를 수 없다
+		nominee: false,
 		mafiaChat: false,
 		ghostChat: false,
 		chatMode: watching.room.ruleSet.chatMode,

@@ -68,6 +68,7 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
 		phase: GamePhase.DAY,
 		alive: true,
 		spectating: false,
+		nominee: false,
 		mafiaChat: false,
 		ghostChat: false,
 		chatMode: "free",
