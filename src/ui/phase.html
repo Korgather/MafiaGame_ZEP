@@ -9,52 +9,64 @@
 			/*
 			 * 밤/낮 진행 화면.
 			 *
-			 * 기존에는 night.html과 morning.html 두 파일이었는데, 배경 이미지
-			 * URL과 타이머 색 되돌림 값(#fff vs #484848)만 달랐다. 둘 다
-			 * <img>를 깔고 그 위에 position:absolute로 글자를 얹었다.
-			 * 이미지는 width:100%로 늘어나는데 글자 오프셋은 px 고정이라,
-			 * 위젯 폭이 조금만 달라지면 "총인원 8명, 생존 6명"이 그림 밖으로
-			 * 밀려났다. 모바일에서 특히 그랬다.
+			 * 배경은 CSS 그라디언트고 글자는 흐름 배치다(.panel.night/.day).
+			 * 예전처럼 <img> 위에 position:absolute로 얹지 않으므로 어떤
+			 * 폭에서도 겹치지 않는다.
 			 *
-			 * 이제 배경은 CSS 그라디언트고 글자는 흐름 배치다. 어떤 폭에서도
-			 * 겹치지 않는다.
+			 * 개정에서 바뀐 것
+			 * ---------------
+			 * 1. 머리말이 신분 줄(.idbar) + 지시 줄(.lead) 두 층이 됐다.
+			 *    가장 큰 글씨가 "밤"이라는 상태 이름에서 "기다리세요"·"토론하세요"
+			 *    라는 명령문으로 바뀐다 — 처음 하는 사람은 상태는 알아도 할 일을
+			 *    몰랐다. 문구는 서버가 보낸다(PhasePayload.lead).
+			 * 2. 직업 칩 옆에 능력 한 줄(abilityLine)이 상시 붙는다. 21종에서는
+			 *    이름만으로 자기가 무엇을 할 수 있는지 알 수 없다.
+			 * 3. 타이머가 링에서 큰 숫자 + 전체 폭 선(.timeline)으로 바뀌었다.
+			 *    그리는 쪽은 shared.js의 startTimer 하나다.
+			 * 4. note가 .lead-sub로 올라갔다. 이 화면에는 진행률 문구가 없어서
+			 *    둘째 줄이 비어 있었고, 아래 한 줄로 두면 무대와 겹쳐 읽혔다.
 			 *
-			 * 그리고 여기에 "내 직업"을 상시 노출한다. 예전에는 직업 카드가
-			 * 5초 뜨고 사라진 뒤로 자기 직업을 다시 확인할 방법이 없었다.
-			 * 초보자가 가장 많이 헤매던 지점이다.
+			 * 세로 예산: 다섯 층 합이 203px이라 모바일 24%면 충분하다
+			 * (WidgetSize.PHASE.mobile을 28 → 24로 낮추는 요청과 짝이다).
 			 */
 			.stage {
 				display: flex;
 				flex-direction: column;
-				align-items: center;
 				justify-content: center;
 				gap: var(--s2);
 				flex: 1 1 auto;
 				min-height: 0;
-				text-align: center;
+			}
+
+			.sky-row {
+				display: flex;
+				align-items: center;
+				gap: var(--s2);
 			}
 
 			.sky {
-				font-size: var(--t-2xl);
+				font-size: var(--t-xl);
 				line-height: 1;
 			}
 
 			.turn {
-				font-size: var(--t-xl);
+				font-size: var(--t-lg);
 				font-weight: 800;
-				letter-spacing: -0.02em;
+				letter-spacing: -0.01em;
 			}
 
 			/* 생존/전체를 막대로도 보여준다. 숫자만 있으면 비율이 안 읽힌다 */
 			.alive-bar {
 				display: flex;
 				gap: 3px;
-				justify-content: center;
+				margin-left: auto;
 				flex-wrap: wrap;
+				justify-content: flex-end;
 			}
 
 			.alive-bar i {
-				width: 14px;
+				display: block;
+				width: 13px;
 				height: 6px;
 				border-radius: 99px;
 				background: var(--ok);
@@ -64,20 +76,9 @@
 				background: var(--dead);
 			}
 
-			.deaths {
-				display: flex;
-				flex-direction: column;
-				gap: 2px;
-				font-size: var(--t-sm);
-				color: var(--mafia);
-			}
-
 			/*
-			 * ±15초. 타이머 오른쪽에 세로로 붙인다.
-			 *
-			 * 가로로 놓으면 머리말이 [직업칩][생존][타이머][−][+]가 되어
-			 * 좁은 폭에서 직업 칩이 줄어든다 — 이 화면에서 가장 자주 읽는
-			 * 것이 직업 칩이다. 세로로 쌓으면 폭은 34px 하나만 더 든다.
+			 * ±15초. 타이머 오른쪽에 세로로 붙인다. 가로로 놓으면 좁은 폭에서
+			 * 직업 칩이 줄어드는데, 이 화면에서 가장 자주 읽는 것이 그 칩이다.
 			 *
 			 * 한 낮에 한 번뿐인 버튼이라 다 쓰면 통째로 사라진다. 비활성으로
 			 * 남기면 "왜 안 눌리지"를 매번 다시 확인하게 된다.
@@ -90,12 +91,13 @@
 			}
 
 			.time-vote button {
-				min-width: 34px;
-				padding: 1px var(--s1);
+				min-width: 36px;
+				padding: 2px var(--s1);
 				font: inherit;
 				font-size: var(--t-xs);
 				font-weight: 700;
 				font-variant-numeric: tabular-nums;
+				white-space: nowrap;
 				color: var(--ink-2);
 				background: var(--surface-2);
 				border: 1px solid var(--line);
@@ -115,19 +117,23 @@
 	</head>
 	<body>
 		<div class="panel" id="panel">
-			<div class="hd">
-				<div class="hd-title grow">
-					<span class="chip" id="myrole">직업</span>
-					<span class="hd-sub" id="alive">생존 -/-</span>
+			<div class="idbar">
+				<span class="chip" id="myrole">직업</span>
+				<span class="ability" id="ability"></span>
+				<span class="stat" id="alive">생존 -/-</span>
+			</div>
+
+			<div class="lead">
+				<div class="lead-text">
+					<div class="lead-title" id="lead">기다리세요</div>
+					<div class="lead-sub" id="note" role="status" aria-live="polite"></div>
 				</div>
-				<div class="timer" id="timer"></div>
+				<div class="clock" id="timer"></div>
 
 				<!--
-					토론 시간 조절. 마피아42와 같은 규칙이다 — 연장과 단축이
-					횟수를 공유하고, 한 낮에 딱 한 번 누를 수 있다.
-
-					낮에 살아 있는 사람에게만 보인다. 밤 화면과 관전 화면은
-					서버가 timeVote: false로 보내므로 이 묶음이 뜨지 않는다.
+					토론 시간 조절. 연장과 단축이 횟수를 공유하고, 한 낮에 딱
+					한 번 누를 수 있다. 낮에 살아 있는 사람에게만 보인다 —
+					밤 화면과 관전 화면은 서버가 timeVote: false로 보낸다.
 				-->
 				<div class="time-vote hidden" id="timevote">
 					<button type="button" id="tplus" aria-label="토론 시간 15초 연장">+15</button>
@@ -135,14 +141,16 @@
 				</div>
 			</div>
 
-			<div class="stage">
-				<div class="sky" id="sky" aria-hidden="true">🌙</div>
-				<div class="turn" id="turn">밤</div>
-				<div class="alive-bar" id="bar" aria-hidden="true"></div>
-				<div class="deaths" id="deaths"></div>
-			</div>
+			<div class="timeline" aria-hidden="true"><i></i></div>
 
-			<p class="note" id="note" role="status" aria-live="polite"></p>
+			<div class="stage">
+				<div class="sky-row">
+					<span class="sky" id="sky" aria-hidden="true">🌙</span>
+					<span class="turn" id="turn">밤</span>
+					<span class="alive-bar" id="bar" aria-hidden="true"></span>
+				</div>
+				<div class="stack hidden" id="deaths"></div>
+			</div>
 
 			<!--
 				관전자에게만 보이는 나가기. 관전자는 좌석이 없어 대기실 위젯이
@@ -199,23 +207,34 @@
 							? "밤"
 							: "아침";
 
-					// 칩 문구는 서버가 완성해서 보낸다. 전에는 "죽으면 유령"이라는
-					// 규칙이 여기에만 있어서, 같은 칩을 쓰는 roleAction 위젯은 그
-					// 규칙을 몰랐다. 이제 "유령"도 "관전"도 서버가 골라 보낸다.
+					// 칩 문구는 서버가 완성해서 보낸다(identityOf). 죽으면 직업이
+					// 아니라 "유령"이 찍히고, 관전자는 "관전"이 찍힌다.
+					// glyph와 abilityLine도 같은 곳에서 온다 — 위젯은 직업이
+					// 몇 종인지도, 무슨 능력이 있는지도 알 필요가 없다
 					const role = qs("#myrole");
-					role.textContent = data.role || "";
+					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
 					role.classList.add(
 						data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen"
 					);
+					qs("#ability").textContent = data.abilityLine || "";
+
+					// 지시 줄. 서버가 보내지 않으면 단계 이름으로 물러난다 —
+					// 빈 줄이 남는 것보다 낫다
+					qs("#lead").textContent = data.lead || (night ? "기다리세요" : "토론하세요");
 
 					qs("#quit").hidden = !data.spectating;
 
 					paintAlive(data.aliveCount, data.total);
 					qs("#note").textContent = data.note || "";
 
-					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다
+					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다.
+					// 빈 목록이면 상자째 숨긴다 — 왼쪽 붉은 선만 남으면
+					// "무슨 일이 있었는데 글이 안 떴나"로 읽힌다
 					const deaths = Array.isArray(data.deaths) ? data.deaths : [];
-					qs("#deaths").innerHTML = html`${deaths.map(line => html`<span>${line}</span>`)}`;
+					qs("#deaths").classList.toggle("hidden", deaths.length === 0);
+					qs("#deaths").innerHTML = html`${deaths.map(
+						line => html`<span class="${line.indexOf("☠") >= 0 ? "" : "good"}">${line}</span>`
+					)}`;
 
 					paintTimeVote(data.timeVote === true);
 					startTimer(qs("#timer"), data.timer);

@@ -1,42 +1,65 @@
 /*
- * 위젯 공통 디자인 시스템.
- *
- * 기존에는 위젯 11개가 각자 CSS를 처음부터 다시 썼다. 같은 의미의 색이
- * 파일마다 다른 값이었고(#484848 / #333333 / #3c3030 / #563d3d …
- * 총 26종), 타이머 글꼴 크기는 화면마다 20px·35px·18px로 제각각이었다.
- * 한 화면의 톤을 바꾸면 나머지 열 개가 어긋났다.
+ * 위젯 공통 디자인 시스템 — 개정안 (촛불).
  *
  * 이 파일이 유일한 출처다. tools/build-widgets.js가 각 위젯 HTML의
- * <!--@theme--> 자리에 인라인한다. ZEP 위젯은 iframe이라 외부 CSS 링크의
- * 해석 기준을 신뢰할 수 없어서, 소스는 나누되 산출물은 자기완결로 만든다.
+ * <!--@theme--> 자리에 인라인한다.
+ *
+ * 개정에서 바뀐 것 (요약)
+ * ----------------------
+ * 1. 바닥을 한 단 내리고(#14100f → #100c0b) --ink-3를 한 단 올렸다.
+ *    기존 --ink-3(#7d6e68)는 bg 위 4.0:1로 AA 미달이었다. 지금 4.69:1.
+ * 2. --mafia / --citizen은 테두리·막대 전용이 되고, 칩 *글자*는 새로 생긴
+ *    --mafia-ink / --citizen-ink를 쓴다. 기존에는 --mafia를 --mafia-dim 위에
+ *    얹어 2.9:1이었다.
+ * 3. --accent의 뜻을 좁혔다: "누를 수 있는 것 + 남은 시간"만. 경고는
+ *    --danger로 간다. --warn은 --accent와 값도 뜻도 겹쳐서 삭제했다.
+ * 4. 단계 바탕색을 토큰으로 뺐다. 전에는 .panel 규칙 안에 하드코딩이라
+ *    컷(cut.html)이 같은 색을 다시 적고 있었다.
+ * 5. 새 공통 컴포넌트 다섯: .idbar(신분 줄) / .lead(지시 줄) /
+ *    .clock(숫자 타이머) / .timeline(전체 폭 시간 선) / .stack(사건 목록).
+ *    타이머를 44px 링에서 숫자+선으로 바꾼 이유는 폭이다 — 위젯이 96% 폭일
+ *    때 링은 오른쪽 끝 구석에 박혀 시야 밖이고, 링 안에 들어가는 숫자는
+ *    18px이 한계다. 선은 폭이 넓어질수록 같이 길어진다.
  */
 
 /* ---------- 토큰 ---------- */
 :root {
 	/* 표면: 뒤로 갈수록 어두워진다 */
-	--bg: #14100f;
-	--surface: #201a19;
-	--surface-2: #2d2523;
-	--surface-3: #3b312e;
-	--line: #4a3d39;
+	--bg: #100c0b;
+	--surface: #1c1614;
+	--surface-2: #29211e;
+	--surface-3: #382d29;
+	--line: #4a3b35;
 
 	/* 글자 */
-	--ink: #f5efe9;
-	--ink-2: #b9aaa2;
-	--ink-3: #7d6e68;
+	--ink: #f6f0ea;
+	--ink-2: #bfaea4;
+	--ink-3: #8a7970;
 
-	/* 진영 */
-	--mafia: #e04b4b;
-	--mafia-dim: #6d2424;
-	--citizen: #57a8e0;
-	--citizen-dim: #24475f;
+	/*
+	 * 진영. -dim은 배경, 기본값은 테두리·막대, -ink는 그 위에 얹는 글자다.
+	 * 셋을 나누지 않으면 칩 하나를 칠할 때마다 대비를 다시 재게 된다.
+	 */
+	--mafia: #e8554f;
+	--mafia-dim: #5e1f1d;
+	--mafia-ink: #ff8a85;
+	--citizen: #56a9e0;
+	--citizen-dim: #1e3f57;
+	--citizen-ink: #8ec9f5;
 
 	/* 상태 */
-	--accent: #e0b355; /* 상호작용 가능·강조 */
+	--accent: #e6b44f; /* 누를 수 있는 것 + 남은 시간. 그 밖에는 쓰지 않는다 */
 	--ok: #5fbf7f;
-	--warn: #e0b355;
-	--danger: #e04b4b;
+	--danger: #e8554f;
 	--dead: #5a4a45;
+
+	/* 단계 바탕 */
+	--night-1: #1a1d33;
+	--night-2: #0c0d17;
+	--day-1: #3a2c17;
+	--day-2: #17110c;
+	--vote-1: #2b2036;
+	--vote-2: #140f1a;
 
 	/* 간격: 4px 배수 */
 	--s1: 4px;
@@ -44,14 +67,17 @@
 	--s3: 12px;
 	--s4: 16px;
 	--s5: 24px;
+	--s6: 32px;
 
-	/* 타이포: 위젯 폭에 따라 늘어난다 */
+	/* 타이포: 위젯 폭에 따라 늘어난다. 고정 px로 되돌리지 말 것 */
 	--t-xs: clamp(10px, 2.6vw, 12px);
 	--t-sm: clamp(11px, 3vw, 13px);
 	--t-md: clamp(13px, 3.5vw, 15px);
-	--t-lg: clamp(15px, 4.2vw, 18px);
+	--t-lg: clamp(15px, 4.2vw, 19px);
 	--t-xl: clamp(19px, 5.5vw, 24px);
 	--t-2xl: clamp(24px, 7vw, 34px);
+	/* 타이머 숫자 한 자리 전용. 기존 최대 34px으로는 96% 폭에서 작다 */
+	--t-3xl: clamp(28px, 9vw, 40px);
 
 	--r1: 6px;
 	--r2: 10px;
@@ -91,11 +117,7 @@ body {
 }
 
 body {
-	/*
-	 * 웹폰트를 쓰지 않는다. 기존 대기실은 jsdelivr에서 폰트 2종을 받았는데,
-	 * 폰트가 도착하기 전까지 목록이 다른 글꼴로 그려졌다가 튀었고(FOUT)
-	 * CDN이 막힌 환경에서는 영영 오지 않았다. 시스템 한글 글꼴로 충분하다.
-	 */
+	/* 웹폰트를 쓰지 않는다. FOUT이 나고, CDN이 막힌 환경에서는 영영 오지 않는다 */
 	font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
 		"Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;
 	font-size: var(--t-md);
@@ -109,118 +131,158 @@ body {
 }
 
 /* ---------- 판 ---------- */
-/*
- * 모든 위젯은 panel 하나로 시작한다. 기존에는 화면마다 배경 처리가 달라서
- * (이미지 / 반투명 검정 / 없음) 같은 게임인데 화면이 바뀔 때마다
- * 다른 앱처럼 보였다.
- */
 .panel {
 	display: flex;
 	flex-direction: column;
 	width: 100%;
 	height: 100%;
-	padding: var(--s3);
+	padding: var(--s3) var(--s3) var(--s3);
 	gap: var(--s2);
-	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	background: linear-gradient(165deg, var(--surface) 0%, var(--bg) 100%);
 	border: 1px solid var(--line);
 	border-radius: var(--r3);
 	box-shadow: var(--shadow);
 	overflow: hidden;
 }
 
-/* 단계별 분위기. 배경만 갈아끼우고 구조는 같다 */
+/*
+ * 단계별 분위기. 배경만 갈아끼우고 구조는 같다.
+ * 세 톤의 색차를 기존보다 두 배 넘게 벌렸다 — 전에는 셋이 서로 가까워서
+ * 단계가 바뀐 것이 눈에 "바뀌었다"로 오지 않았다.
+ */
 .panel.night {
-	background: linear-gradient(160deg, #1b2340 0%, #0d1020 100%);
+	background: linear-gradient(165deg, var(--night-1) 0%, var(--night-2) 100%);
+	border-color: #3b4160;
 }
 .panel.day {
-	background: linear-gradient(160deg, #40331b 0%, #1a1410 100%);
+	background: linear-gradient(165deg, var(--day-1) 0%, var(--day-2) 100%);
+	border-color: #5a4626;
 }
 .panel.vote {
-	background: linear-gradient(160deg, #2b2036 0%, #140f1a 100%);
+	background: linear-gradient(165deg, var(--vote-1) 0%, var(--vote-2) 100%);
+	border-color: #4a3a5a;
 }
 
-/* ---------- 머리말 ---------- */
-.hd {
+/* ---------- 신분 줄 ---------- */
+/*
+ * 모든 메인 위젯의 첫 줄. [직업 칩][능력 한 줄][오른쪽 상태].
+ *
+ * 능력 한 줄이 여기 상시 있는 이유: 직업 카드는 몇 초 뜨고 사라지는데,
+ * 21종에서는 직업 *이름*만으로 자기가 무엇을 할 수 있는지 알 수 없다.
+ * 문구는 서버가 완성해서 보낸다(Identity.abilityLine).
+ */
+.idbar {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	gap: var(--s2);
+	flex: 0 0 auto;
+	min-width: 0;
+}
+
+.idbar .ability {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--t-xs);
+	color: var(--ink-3);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* 생존 n/m · 진행률 · 결정 수 — 화면마다 다른 것이 온다 */
+.idbar .stat {
+	flex: 0 0 auto;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-2);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* ---------- 지시 줄 ---------- */
+/*
+ * 화면에서 가장 큰 글씨가 명령문이다 — "처형할 대상을 선택하세요".
+ * 전에는 가장 큰 글씨가 "밤"·"투표" 같은 상태 이름이라, 처음 하는 사람은
+ * 상태는 알아도 할 일은 몰랐다.
+ *
+ * 둘째 줄(.lead-sub)에 무엇이 오는지는 화면이 정한다. 진행률 문구가
+ * 지시 줄에 오는 화면은 진행률이 쓰고 note는 .note로 내려가며, 그렇지
+ * 않은 화면은 note가 이 자리를 쓴다. 같은 글이 한 화면에 두 번 나오지
+ * 않게 하기 위한 규칙이다.
+ */
+.lead {
+	display: flex;
+	align-items: flex-end;
 	gap: var(--s2);
 	flex: 0 0 auto;
 }
 
-.hd-title {
-	display: flex;
-	align-items: center;
-	gap: var(--s2);
+.lead-text {
+	flex: 1 1 auto;
 	min-width: 0;
-	font-size: var(--t-lg);
-	font-weight: 700;
-	letter-spacing: -0.01em;
 }
 
-.hd-sub {
+.lead-title {
+	font-size: var(--t-lg);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1.25;
+	word-break: keep-all;
+}
+
+.lead-sub {
+	margin-top: 3px;
 	font-size: var(--t-xs);
 	color: var(--ink-3);
-	white-space: nowrap;
+	word-break: keep-all;
+}
+
+/* 진행률이 이 자리를 쓸 때. 숫자는 읽히라고 있는 것이라 색을 준다 */
+.lead-sub.count {
+	color: var(--accent);
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 타이머 ---------- */
 /*
- * 기존에는 4개 파일이 toHHMMSS를 각자 갖고 있었고 90초를 "00:01:30"으로
- * 표시했다. 시(時) 자리는 이 게임에서 영원히 00이다.
- * 여기서는 남은 초만 크게 보여주고, 링으로 진행률을 함께 그린다.
+ * 남은 초를 큰 숫자 하나로. 기존 44px 링을 대신한다.
+ *
+ * 기존 toHHMMSS가 90초를 "00:01:30"으로 그리던 것을 고친 판단(초만 크게)은
+ * 그대로 두고, 그 숫자를 담는 그릇만 바꾼다. 진행률은 옆의 링이 아니라
+ * 아래 .timeline이 전체 폭으로 그린다.
  */
-.timer {
-	position: relative;
+.clock {
+	display: flex;
+	align-items: baseline;
+	gap: 2px;
 	flex: 0 0 auto;
-	display: grid;
-	place-items: center;
-	width: 44px;
-	height: 44px;
 	font-variant-numeric: tabular-nums;
-	font-size: var(--t-lg);
-	font-weight: 700;
+}
+
+.clock .n {
+	font-size: var(--t-3xl);
+	font-weight: 800;
+	line-height: 0.9;
 	color: var(--ink);
 }
 
-.timer svg {
-	position: absolute;
-	inset: 0;
-	transform: rotate(-90deg);
-}
-
-.timer circle {
-	fill: none;
-	stroke-width: 3;
-	stroke-linecap: round;
-}
-
-.timer .track {
-	stroke: var(--surface-3);
-}
-
-.timer .bar {
-	stroke: var(--accent);
-	transition: stroke-dashoffset 1s linear, stroke var(--dur) var(--ease);
+.clock .u {
+	font-size: var(--t-xs);
+	color: var(--ink-2);
 }
 
 /* 마지막 10초 */
-.timer.urgent .bar {
-	stroke: var(--danger);
-}
-.timer.urgent {
+.clock.urgent .n {
 	color: var(--danger);
 	animation: pulse 1s var(--ease) infinite;
 }
 
 /*
- * 마지막 3초. 색은 그대로 두고 박동만 빨라진다.
- *
- * 10초 내내 같은 속도로 뛰면 그 급함이 배경음이 되어, 정작 끝나는 순간이
- * 눈에 띄지 않는다. 단계가 실제로 넘어가기 직전에 한 번 더 단이 있어야
- * "지금 눌러야 한다"가 읽힌다.
+ * 마지막 3초. 색은 그대로 두고 박동만 빨라진다. 10초 내내 같은 속도로
+ * 뛰면 그 급함이 배경음이 되어, 정작 끝나는 순간이 눈에 띄지 않는다.
  */
-.timer.critical {
+.clock.critical .n {
 	animation: pulse 420ms var(--ease) infinite;
 }
 
@@ -235,12 +297,33 @@ body {
 }
 
 /*
- * 진행률 막대 — "몇 명이 마쳤는가".
- *
- * 투표에만 있던 것을 여기로 올렸다. 밤 지목도 같은 것이 필요한데(그쪽이
- * 더 급하다: 밤에는 서로 무엇을 하는지 보이지 않는다) 두 위젯이 각자
- * 4px 막대를 그리기 시작하면 색과 두께가 어긋나는 것이 시간 문제다.
- * 차 오르는 비율은 각 위젯이 계산해서 i의 width로 준다.
+ * 남은 시간 선. 위젯 폭 전체를 쓴다 — 96% 폭에서도 380px에서도
+ * 같은 비율을 같은 길이감으로 보여주는 유일한 방법이다.
+ */
+.timeline {
+	flex: 0 0 auto;
+	height: 3px;
+	border-radius: 99px;
+	background: var(--surface-2);
+	overflow: hidden;
+}
+
+.timeline i {
+	display: block;
+	height: 100%;
+	width: 100%;
+	border-radius: 99px;
+	background: var(--accent);
+	transition: width 1s linear, background var(--dur) var(--ease);
+}
+
+.timeline.urgent i {
+	background: var(--danger);
+}
+
+/*
+ * 진행률 막대 — "몇 명이 마쳤는가". 남은 시간(.timeline)과 다른 값이라
+ * 색도 다르다. 둘이 같은 화면에 있으면 같은 색으로 두 가지를 말하게 된다.
  */
 .progress {
 	flex: 0 0 auto;
@@ -254,8 +337,33 @@ body {
 	display: block;
 	height: 100%;
 	width: 0;
-	background: var(--accent);
+	background: var(--ok);
 	transition: width var(--dur) var(--ease);
+}
+
+/* ---------- 머리말 (대기실·프로필·카드처럼 신분이 없는 화면) ---------- */
+.hd {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s2);
+	flex: 0 0 auto;
+}
+
+.hd-title {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s2);
+	min-width: 0;
+	font-size: var(--t-lg);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+}
+
+.hd-sub {
+	font-size: var(--t-xs);
+	color: var(--ink-3);
+	white-space: nowrap;
 }
 
 /* ---------- 본문 ---------- */
@@ -285,14 +393,33 @@ body {
 	background: transparent;
 }
 
+/* ---------- 사건 목록 ---------- */
 /*
- * 판 아래의 버튼 줄.
- *
- * 대기실과 카드가 같은 네 줄을 각자 갖고 있었고 프로필이 세 번째 사용처가
- * 되는 자리에서 올렸다. 세 벌이 되는 순간 버튼 사이 간격을 바꾸는 일이
- * "세 파일을 똑같이 고치는 일"이 되고, 그 셋은 언젠가 어긋난다 — 이 시트가
- * 처음 생긴 이유가 정확히 그것이다.
+ * 밤사이 일어난 일. 왼쪽 굵은 선 하나로 "이건 방금 벌어진 일"임을 표시한다.
+ * 전에는 채팅으로만 흘러가 놓치기 쉬웠다.
  */
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: var(--s2) var(--s3);
+	background: rgba(0, 0, 0, 0.25);
+	border-left: 2px solid var(--danger);
+	border-radius: 0 var(--r2) var(--r2) 0;
+}
+
+.stack span {
+	font-size: var(--t-sm);
+	color: var(--mafia-ink);
+	word-break: keep-all;
+}
+
+/* 살린 쪽·막은 쪽은 죽은 쪽과 색이 갈려야 한다 */
+.stack span.good {
+	color: #8fd6a8;
+}
+
+/* ---------- 푸터 ---------- */
 .foot {
 	display: flex;
 	gap: var(--s2);
@@ -301,9 +428,13 @@ body {
 
 /* ---------- 버튼 ---------- */
 /*
- * 기존 조작 요소는 전부 <div onclick>이었다. 키보드로 도달할 수 없고
- * 포커스 링도 없어서 마우스가 없으면 게임 자체가 불가능했다.
- * 위젯 HTML은 전부 <button>을 쓰고, 모양은 이 클래스가 준다.
+ * 조작 요소는 전부 <button>. <div onclick> 금지 — 키보드로 도달할 수 없고
+ * 포커스 링도 없으면 마우스가 없는 사람은 게임 자체가 불가능하다.
+ *
+ * white-space:nowrap이 새로 붙었다. 이 시트는 웹폰트를 쓰지 않아 기기마다
+ * 다른 한글 시스템 글꼴로 그려지는데, "나가기"의 여유 폭이 0px이라
+ * 글꼴이 조금만 넓으면 두 줄로 접힌다. .chip/.tab/.quick/.chat-fold에는
+ * 이미 있었고 .btn만 빠져 있었다.
  */
 .btn {
 	display: inline-flex;
@@ -315,6 +446,7 @@ body {
 	font: inherit;
 	font-size: var(--t-sm);
 	font-weight: 600;
+	white-space: nowrap;
 	color: var(--ink);
 	background: var(--surface-2);
 	border: 1px solid var(--line);
@@ -343,7 +475,7 @@ body {
 }
 
 .btn.primary {
-	color: #14100f;
+	color: var(--bg);
 	background: var(--accent);
 	border-color: var(--accent);
 }
@@ -368,16 +500,8 @@ body {
 }
 
 /*
- * 기호 하나짜리 버튼. 채팅의 ☺·➤와 대기실의 📖이 같은 것을 쓴다.
- *
- * 채팅 섹션에 있던 것을 여기로 옮겼다. 대기실이 두 번째 사용처가 되는 순간
- * "채팅의 부품"이라는 자리가 거짓이 됐고, 그대로 두면 다음 사람이 채팅과
- * 무관한 화면에서 이 클래스를 찾지 못해 똑같은 것을 다시 만든다.
- *
- * 최소 크기를 .btn과 같은 34px로 맞춘다. 그러지 않으면 글자 크기만큼만
- * 커져서(27px) 손가락으로 누르기 어렵다 — 실제로 채팅의 보내기 버튼이
- * 그 크기였다. 44px(모바일 권장)까지 키우지 않는 이유는 채팅 입력줄이
- * 그만큼 세로를 더 먹기 때문이고, 이 화면의 다른 모든 버튼이 34px다.
+ * 기호 하나짜리 버튼. 최소 크기를 .btn과 같은 34px로 맞춘다 — 글자 크기만큼만
+ * 커지면(27px) 손가락으로 누르기 어렵다.
  */
 .icon-btn {
 	display: inline-flex;
@@ -392,6 +516,7 @@ body {
 	color: var(--ink-2);
 	background: transparent;
 	border: none;
+	border-radius: var(--r1);
 	cursor: pointer;
 }
 .icon-btn:hover {
@@ -404,15 +529,14 @@ body {
 
 /* ---------- 참가자 타일 ---------- */
 /*
- * 밤 지목·투표가 같은 격자를 쓴다. 예전에는 밤은 4열 정사각 타일,
- * 투표는 3열 30px 막대로 서로 다른 화면이었다. 같은 동작(사람 하나를
- * 고른다)이면 같은 모양이어야 무엇을 누르는지 배우는 비용이 한 번이다.
+ * 밤 지목·투표·도감이 같은 격자를 쓴다. 같은 동작(하나를 고른다)이면 같은
+ * 모양이어야 무엇을 누르는지 배우는 비용이 한 번이다.
  */
 .grid {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: var(--s2);
-	align-content: start;
+	align-content: center;
 }
 
 @media (max-width: 340px) {
@@ -467,6 +591,10 @@ body {
 	font-size: var(--t-xs);
 	font-weight: 500;
 	color: var(--ink-3);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	text-align: center;
 }
 
 /* 나 */
@@ -477,7 +605,7 @@ body {
 	color: var(--ok);
 }
 
-/* 죽은 사람 */
+/* 죽은 사람 (무덤을 고르는 직업에서는 "이 화면에서 못 고른다"는 뜻) */
 .tile:disabled,
 .tile.dead {
 	cursor: default;
@@ -495,11 +623,21 @@ body {
 	border-color: var(--mafia);
 	box-shadow: 0 0 0 2px var(--mafia) inset;
 }
+.tile.picked .cap {
+	color: var(--mafia-ink);
+}
 
-/* 같은 팀(마피아 채팅) */
+/*
+ * 같은 팀(마피아). 캡션은 다른 타일과 똑같이 이름이다 —
+ * SeatView에 직업이 없고, 넣으면 그 필드 하나가 밤의 비밀을 통째로 옮긴다.
+ * 색 외의 신호는 🔻 배지가 맡는다.
+ */
 .tile.ally {
 	border-color: var(--mafia);
 	background: color-mix(in srgb, var(--mafia-dim) 60%, var(--surface-2));
+}
+.tile.ally .cap {
+	color: var(--mafia-ink);
 }
 
 /* 타일 위 배지: 상태를 글자로도 남긴다 (색만으로 구분하지 않기 위해) */
@@ -514,12 +652,13 @@ body {
 /* 득표수 */
 .tile .tally {
 	position: absolute;
-	bottom: 2px;
+	bottom: 3px;
 	left: 0;
 	right: 0;
 	font-size: var(--t-xs);
 	font-weight: 700;
 	color: var(--accent);
+	text-align: center;
 }
 
 /* ---------- 칩 ---------- */
@@ -527,27 +666,32 @@ body {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--s1);
-	padding: 2px var(--s2);
+	flex: 0 0 auto;
+	padding: 3px var(--s2);
 	font-size: var(--t-xs);
-	font-weight: 700;
+	font-weight: 800;
 	white-space: nowrap;
+	color: var(--ink-2);
 	border: 1px solid var(--line);
 	border-radius: 99px;
 	background: var(--surface-2);
 }
 
 .chip.mafia {
-	color: var(--mafia);
+	color: var(--mafia-ink);
 	border-color: var(--mafia);
 	background: var(--mafia-dim);
 }
 .chip.citizen {
-	color: var(--citizen);
+	color: var(--citizen-ink);
 	border-color: var(--citizen);
 	background: var(--citizen-dim);
 }
+/* 유령·관전. 진영을 말하지 않는다 */
 .chip.dead {
-	color: var(--ink-3);
+	color: var(--ink-2);
+	border-color: var(--dead);
+	background: var(--surface-2);
 }
 
 /* ---------- 안내 문구 ---------- */
@@ -563,7 +707,6 @@ body {
 	color: var(--ink);
 }
 
-/* 상태가 바뀔 때 문구가 갈아끼워지는 것을 눈이 따라가도록 */
 .note.flash {
 	animation: flash var(--dur) var(--ease);
 }
@@ -577,16 +720,11 @@ body {
 
 /* ---------- 채팅 ---------- */
 /*
- * 채팅은 접속해 있는 내내 떠 있는 유일한 위젯이라 다른 화면과 규칙이 다르다.
- *
- * 1. 두 가지 모습으로 산다 — 펼친 창(.chat)과 접힌 막대(.chat-mini).
- *    위젯은 iframe이라 투명해도 그 자리의 클릭을 먹는다. 그래서 접기는
- *    CSS로 내용을 숨기는 것이 아니라 더 작은 위젯으로 다시 여는 것이고
- *    (WidgetSize.CHAT_BAR), 두 모습이 한 파일 안에 함께 있어야 한다.
- *
- * 2. .panel을 쓰지 않는다. panel은 여닫히는 화면의 문법(머리말·본문·안내)인데
- *    채팅은 늘 떠 있는 도구다. 여백을 panel만큼 주면 세로 320px 중 실제로
- *    글이 보이는 자리가 절반으로 줄어든다.
+ * 채팅은 접속해 있는 내내 떠 있는 유일한 위젯이라 규칙이 다르다.
+ * 1. 두 모습으로 산다 — 펼친 창(.chat)과 접힌 막대(.chat-mini). 접기는
+ *    CSS로 숨기는 것이 아니라 더 작은 위젯으로 다시 여는 것이다.
+ * 2. .panel을 쓰지 않는다. 여백을 panel만큼 주면 320px 중 글이 보이는
+ *    자리가 절반으로 줄어든다.
  */
 .chat {
 	display: flex;
@@ -594,14 +732,13 @@ body {
 	width: 100%;
 	height: 100%;
 	min-height: 0;
-	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	background: linear-gradient(165deg, var(--surface) 0%, var(--bg) 100%);
 	border: 1px solid var(--line);
 	border-radius: var(--r2);
 	box-shadow: var(--shadow);
 	overflow: hidden;
 }
 
-/* 탭 줄 */
 .chat-head {
 	display: flex;
 	align-items: stretch;
@@ -663,7 +800,6 @@ body {
 	font-size: 9px;
 }
 
-/* 미확인 개수 */
 .badge-n {
 	min-width: 15px;
 	padding: 0 4px;
@@ -671,28 +807,15 @@ body {
 	font-weight: 700;
 	line-height: 15px;
 	text-align: center;
-	color: #14100f;
+	color: var(--bg);
 	background: var(--accent);
 	border-radius: 99px;
 }
 
 /*
- * 접기 버튼.
- *
- * 전에는 글리프 ▾ 하나가 투명한 배경 위에 --ink-3(흐린 회색)으로 떠 있었다.
- * 데스크톱에서는 겨우 읽혔지만 모바일에서는 "여기를 누를 수 있다"는 신호가
- * 전혀 아니었다 — 탭 줄 오른쪽 끝의 장식으로 보였다.
- *
- * 그래서 셋을 바꾼다.
- *   1. 글자를 붙인다("접기"). 글리프만으로는 무엇이 일어날지 알 수 없다.
- *   2. 테두리와 배경을 준다. 눌리는 것과 아닌 것이 색으로 갈린다.
- *   3. 손가락이 닿을 크기를 준다(min-height 40px, min-width 44px).
- *
- * 이 높이가 머리말 전체의 높이가 된다(.chat-head가 stretch다) — 위아래
- * 여백까지 더해 45px. 세로 320px 중 17px쯤을 더 쓰는 셈인데, 진짜 과녁은
- * 이 버튼이 아니라 머리말 한 줄 전체이고(chat.html의 .chat-head 리스너)
- * 그 줄이 45px면 손가락 기준(44px)을 넘긴다. 누를 수 없는 버튼은 없는 것과
- * 같으므로 이쪽이 남는 장사다.
+ * 접기 버튼. 글리프 ▾ 하나로는 "여기를 누를 수 있다"가 전해지지 않아
+ * 글자·테두리·손가락 크기(40×44) 셋을 준다. 진짜 과녁은 이 버튼이 아니라
+ * 머리말 한 줄 전체다(chat.html의 .chat-head 리스너).
  */
 .chat-fold {
 	display: inline-flex;
@@ -723,7 +846,6 @@ body {
 	outline-offset: -2px;
 }
 
-/* 기록 */
 .chat-body {
 	position: relative;
 	display: flex;
@@ -755,7 +877,6 @@ body {
 	color: var(--ink-3);
 }
 
-/* 직업 배지는 마피아·유령 탭에서만 온다 (ChannelDef.revealsRole) */
 .msg .chip {
 	padding: 0 var(--s1);
 	font-size: 9px;
@@ -765,7 +886,6 @@ body {
 	padding: var(--s1) var(--s2);
 	border-radius: var(--r1);
 	background: var(--surface-2);
-	/* 서버 안내는 여러 줄일 수 있다 (/도움말) */
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -775,7 +895,7 @@ body {
 	align-items: flex-end;
 }
 .msg.mine .txt {
-	color: #14100f;
+	color: var(--bg);
 	background: var(--accent);
 }
 
@@ -788,8 +908,7 @@ body {
 
 /*
  * 누구의 말도 아닌 줄은 가운데에 눕는다. 사람의 발언과 같은 말풍선을 주면
- * "시스템이 알려준 사실"과 "누가 주장한 말"이 눈으로 구분되지 않는다 —
- * 마피아 게임에서 그 둘을 헷갈리면 판이 뒤집힌다.
+ * "시스템이 알려준 사실"과 "누가 주장한 말"이 눈으로 구분되지 않는다.
  */
 .msg.sys,
 .msg.evt,
@@ -821,15 +940,9 @@ body {
 }
 
 /*
- * 표가 딸린 줄 (ChatMessage.rows) — 전원의 직업, 명령어 목록, 신고.
- *
- * 위의 알약을 그대로 쓰면 여러 줄이 99px 곡률 안에서 가운데로 몰려
- * 표가 표로 보이지 않는다. 이름 길이가 제각각이라 줄마다 시작점이 달라지고,
- * 무엇보다 알약 하나가 "한 마디"라는 신호를 준다 — 표는 한 마디가 아니다.
- *
- * 그래서 가운데가 아니라 폭 전체를 쓰고, 왼쪽에 이름 오른쪽에 값으로 갈라
- * 눈이 세로로 훑을 수 있게 한다. 앞의 .msg.sys/.evt/.ntc와 같은 특이도라
- * 반드시 그 뒤에 와야 가운데 정렬을 덮는다.
+ * 표가 딸린 줄 (ChatMessage.rows). 알약으로 두면 표가 표로 보이지 않는다 —
+ * 폭 전체를 쓰고 왼쪽 이름 / 오른쪽 값으로 갈라 눈이 세로로 훑게 한다.
+ * 위 .sys/.evt/.ntc와 같은 특이도라 반드시 그 뒤에 와야 한다.
  */
 .msg.card {
 	align-self: stretch;
@@ -844,18 +957,8 @@ body {
 }
 
 /*
- * 나 한 사람 앞으로 온 줄 (ChatMessage.to) — 귓속말과 개인 안내.
- *
- * 이것이 없을 때 개인 안내는 kind가 정하는 모습으로 나갔고, tell()이 쓰는
- * kind는 SYSTEM이다. 즉 이 시트에서 가장 작고 흐린 글씨였다 — 흘려보내도
- * 되는 잡담과 나에게만 온 편지가 같은 모습이었다. 귓속말이 "안 보인다"는
- * 말이 나온 자리가 여기고, 발언이 막힌 이유·차단 결과·신고 접수도 모두
- * 같은 길로 나가므로 한 곳을 고치면 함께 보인다.
- *
- * 가운데 정렬을 되돌리는 이유: 가운데는 "모두에게 알린다"의 신호다.
- * 나에게만 온 줄이 그 자리에 있으면 방송처럼 읽힌다.
- *
- * 위의 .msg.sys/.ntc와 같은 특이도라 반드시 그 뒤에 와야 한다 (.card와 같은 이유).
+ * 나 한 사람 앞으로 온 줄 (ChatMessage.to). 가운데는 "모두에게 알린다"의
+ * 신호라, 나에게만 온 줄이 그 자리에 있으면 방송처럼 읽힌다.
  */
 .msg.pm {
 	align-self: stretch;
@@ -914,7 +1017,8 @@ body {
 	font: inherit;
 	font-size: var(--t-xs);
 	font-weight: 700;
-	color: #14100f;
+	white-space: nowrap;
+	color: var(--bg);
 	background: var(--accent);
 	border: none;
 	border-radius: 99px;
@@ -953,17 +1057,9 @@ body {
 }
 
 /*
- * 빠른 메시지.
- *
- * 가로 스크롤이었다. 스크롤막대까지 감춰 뒀으므로 넘친 칩은 눌러볼 수 없는
- * 정도가 아니라 있는 줄도 모른다. 문구가 서넛일 때는 넘칠 일이 없어서 오래
- * 들키지 않았는데, 침묵전의 낮은 여덟이고 그 모드는 자유 입력이 막혀 있어서
- * 칩이 곧 말할 수 있는 전부다. 330px 폭에서 재보니 한 줄로 늘어선 여덟 개가
- * 669px을 요구했고 온전히 보이는 것은 앞의 넷뿐이었다 — 어휘의 절반이 없다.
- *
- * 그래서 줄바꿈으로 바꾼다. 여덟 개가 세 줄(76px)을 차지해 대화 영역이
- * 212 → 164px로 줄지만, 자리를 나눠 주는 쪽이 없는 셈 치는 쪽보다 낫다.
- * roleAction.html의 .choices도 같은 이유로 가로 스크롤을 쓰지 않는다.
+ * 빠른 메시지. 줄바꿈이다 — 가로 스크롤이면 넘친 칩은 있는 줄도 모른다.
+ * 침묵전의 낮은 여덟 개이고 그 모드는 자유 입력이 막혀 있어서 칩이 곧
+ * 말할 수 있는 전부다.
  */
 .quick {
 	display: flex;
@@ -1027,7 +1123,6 @@ body {
 	outline-offset: -2px;
 }
 
-
 /* 접힌 막대: 위젯 전체가 버튼 하나다 */
 .chat-mini {
 	display: flex;
@@ -1039,8 +1134,9 @@ body {
 	font: inherit;
 	font-size: var(--t-sm);
 	font-weight: 700;
+	white-space: nowrap;
 	color: var(--ink-2);
-	background: linear-gradient(160deg, var(--surface) 0%, var(--bg) 100%);
+	background: linear-gradient(165deg, var(--surface) 0%, var(--bg) 100%);
 	border: 1px solid var(--line);
 	border-radius: 99px;
 	box-shadow: var(--shadow);

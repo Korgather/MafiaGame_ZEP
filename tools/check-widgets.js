@@ -137,7 +137,6 @@ function element(node, doc) {
 		textContent: "",
 		value: "",
 		placeholder: "",
-		disabled: "disabled" in attrs,
 		scrollTop: 0,
 		scrollHeight: 0,
 		clientHeight: 0,
@@ -198,6 +197,22 @@ function element(node, doc) {
 		// Tab·↑↓은 마우스만큼 자주 쓰는 조작이라 눌러보지 않으면 검사가 반쪽이다
 		addEventListener(type, handler) {
 			if (type === "keydown") doc.keys.push({ el, handler });
+		},
+		/*
+		 * disabled는 반사되는 속성이다. 브라우저에서 el.disabled = true 는
+		 * disabled="" 를 붙이고 false 는 그 속성을 지운다.
+		 *
+		 * 스텁이 이걸 흉내내지 않으면 잠긴 버튼을 button[disabled=""] 로
+		 * 세는 장면이 프로퍼티로 잠근 버튼을 못 본다 — 잠금이 통째로
+		 * 빠져도 검사는 초록이다. 위젯 셋이 이 방식으로 잠근다
+		 * (vote의 '투표 없음', judgement의 찬반, roleAction의 못 고를 자리).
+		 */
+		get disabled() {
+			return "disabled" in attrs;
+		},
+		set disabled(on) {
+			if (on) attrs.disabled = "";
+			else delete attrs.disabled;
 		},
 		setAttribute(name, value) {
 			attrs[name.toLowerCase()] = String(value);

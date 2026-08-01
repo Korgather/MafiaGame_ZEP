@@ -15,10 +15,17 @@
 			 * 한 번 깜빡이고, 보는 사람은 "다른 사람으로 바뀌었나"를 다시
 			 * 확인해야 한다. 실제로 정해지는 것은 버튼이 눌리는지 하나뿐이다.
 			 *
-			 * vote.html과 나눈 이유는 반대다. 저쪽은 사람 목록에서 하나를
-			 * 고르는 화면이고 여기는 이미 정해진 한 사람에 대한 예/아니오다.
-			 * 격자가 필요 없고, 격자를 그리면 "다른 사람도 고를 수 있나"로
-			 * 읽힌다.
+			 * 개정에서 바뀐 것
+			 * ---------------
+			 * 1. 신분 줄이 생겼다(요청 2번의 Identity 확장). 오른쪽 stat 자리에는
+			 *    생존 수가 아니라 judge-progress의 voted/voters가 온다 —
+			 *    JudgementPayload에는 seats가 없어서 생존 수를 셀 수 없다.
+			 * 2. 머리말이 상태 이름("최후의 반론"·"찬반 투표")에서 명령문
+			 *    ("해명을 들으세요"·"처형할까요?")으로 바뀐다. 서버가 보낸다
+			 *    (JudgementPayload.lead). 상태 이름은 이 화면에 이미 단상 글리프와
+			 *    이름으로 나와 있어서, 가장 큰 글씨를 거기에 쓰면 5초 안에
+			 *    무엇을 눌러야 하는지가 어디에도 없다.
+			 * 3. note가 지시 줄 둘째 줄로 올라갔다(진행률이 신분 줄에 있으므로).
 			 */
 			.stand {
 				display: flex;
@@ -32,7 +39,7 @@
 			}
 
 			.stand-mark {
-				font-size: var(--t-2xl);
+				font-size: var(--t-xl);
 				line-height: 1;
 			}
 
@@ -68,6 +75,24 @@
 			}
 
 			/*
+			 * 잠긴 동안(반론 단계)에는 채운 색을 벗고 테두리만 남긴다.
+			 *
+			 * .btn:disabled의 opacity만으로는 "지금 못 누른다"와 "곧 열린다"가
+			 * 구분되지 않는다. 테두리 색은 그대로 두므로 어느 쪽이 찬성인지는
+			 * 미리 익힐 수 있고, 채움이 들어오는 순간이 곧 "지금 누르세요"다.
+			 */
+			.judge-btn:disabled {
+				opacity: 0.55;
+				background: transparent;
+			}
+			.judge-btn.ok:disabled {
+				color: var(--ok);
+			}
+			.judge-btn.danger:disabled {
+				color: var(--mafia-ink);
+			}
+
+			/*
 			 * 고른 쪽.
 			 *
 			 * 다른 화면처럼 색으로 표시할 수 없다. 이 두 버튼은 누르기 전부터
@@ -80,15 +105,22 @@
 		</style>
 	</head>
 	<body>
-		<div class="panel">
-			<div class="hd">
-				<div class="hd-title grow">
-					<span id="heading">최후의 반론</span>
-					<span class="hd-sub" id="sub"></span>
-				</div>
-				<div class="timer" id="timer"></div>
+		<div class="panel vote">
+			<div class="idbar">
+				<span class="chip" id="myrole">직업</span>
+				<span class="ability" id="ability"></span>
+				<span class="stat" id="sub"></span>
 			</div>
 
+			<div class="lead">
+				<div class="lead-text">
+					<div class="lead-title" id="heading">해명을 들으세요</div>
+					<div class="lead-sub" id="note" role="status" aria-live="polite"></div>
+				</div>
+				<div class="clock" id="timer"></div>
+			</div>
+
+			<div class="timeline" aria-hidden="true"><i></i></div>
 			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
 
 			<div class="stand">
@@ -116,8 +148,6 @@
 					<span class="mark" aria-hidden="true">X</span><span>반대</span>
 				</button>
 			</div>
-
-			<p class="note" id="note" role="status" aria-live="polite"></p>
 		</div>
 
 		<!--@shared-->
@@ -172,7 +202,17 @@
 				canJudge = data.canJudge === true;
 				picked = data.picked === AGREE || data.picked === OPPOSE ? data.picked : NONE;
 
-				qs("#heading").textContent = judging ? "찬반 투표" : "최후의 반론";
+				// 신분 줄. 단상 위 본인도 자기 직업을 보고 있어야 한다 —
+				// 해명할 말을 고르는 근거가 그것이다
+				const role = qs("#myrole");
+				role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+				role.className =
+					"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
+				qs("#ability").textContent = data.abilityLine || "";
+
+				// 가장 큰 글씨는 할 일이다. 서버가 보내지 않으면 단계에 맞는
+				// 기본 명령문으로 물러난다
+				qs("#heading").textContent = data.lead || (judging ? "처형할까요?" : "해명을 들으세요");
 				qs("#mark").textContent = judging ? "🗳️" : "🎤";
 				qs("#name").textContent = data.nomineeName || `${nominee}번`;
 				qs("#standsub").textContent = judging ? "이 사람을 처형할까요?" : "해명을 듣는 중입니다";

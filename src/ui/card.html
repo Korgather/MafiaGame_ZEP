@@ -9,22 +9,24 @@
 			/*
 			 * 카드 위젯 — 직업 공개 · 첫 안내 · 직업 도감이 한 파일에 산다.
 			 *
-			 * 옛날 이야기: 직업 하나당 HTML 파일 하나였다(7개). 일곱 파일은
-			 * background-image URL 한 줄을 빼면 바이트 단위로 같았고, 그중 셋은
-			 * 그림을 base64로 품어 148KB였다. 나머지 넷은 imgur를 봤다.
-			 * 그림에는 직업 이름 말고 아무 정보도 없어서, 카드가 떠 있는 동안
-			 * "나는 무엇이고 무엇을 해야 하는가"를 알려주지 못했다.
-			 *
-			 * 지금 셋을 한 파일에 두는 이유도 같은 판단의 연장이다. 셋의 화면은
-			 * 같다 — 글리프 하나, 제목 한 줄, 설명 한 문단, 덧붙임 한 문단.
-			 * 다른 것은 "몇 장인가"와 "장을 어떻게 넘기는가"뿐이라서, 파일을
-			 * 나누면 카드 모양을 고칠 때마다 세 곳을 똑같이 고쳐야 한다.
-			 * 그 셋이 어긋나는 것이 정확히 예전 일곱 파일에서 벌어진 일이다.
-			 *
-			 * 넘기는 방식은 nav 하나가 정한다.
+			 * 셋의 화면은 같다 — 글리프 하나, 제목 한 줄, 설명 한 문단,
+			 * 덧붙임 한 문단. 다른 것은 "몇 장인가"와 "장을 어떻게 넘기는가"뿐이다.
 			 *   none  — 한 장. 넘길 것이 없다 (직업 공개)
-			 *   steps — 앞으로만 넘긴다. 점으로 어디쯤인지 보여준다 (첫 안내)
+			 *   steps — 앞으로만 넘긴다. 점으로 어디쯤인지 (첫 안내)
 			 *   grid  — 목록에서 골라 들어가고 목록으로 돌아온다 (직업 도감)
+			 *
+			 * 개정에서 가장 크게 바뀐 것: 도감 목록이 정사각 격자에서
+			 * 한 줄에 한 직업인 목록이 됐다.
+			 *
+			 * 정사각 타일은 글리프와 이름 두 조각만 담는다. 직업이 21종이 되면
+			 * "무슨 능력인가"가 빠진 채 21개의 네모가 늘어서고, 그중 하나를
+			 * 고르려면 전부 한 번씩 열어봐야 한다. 한 줄에 글리프·이름·능력
+			 * 한 줄을 함께 두면 목록에서 훑고 필요한 것만 연다. 24종이 되어도
+			 * 줄만 늘어난다.
+			 *
+			 * 능력 한 줄은 CardView.summary다(RoleDef.summary). ability를 위젯이
+			 * 자르지 않는 이유는 길이가 제각각이기 때문이다 — 군인의 ability는
+			 * 46자라 어디서 잘라도 문장 중간이다.
 			 */
 
 			/* ---------- 카드 한 장 ---------- */
@@ -62,15 +64,9 @@
 			}
 
 			/*
-			 * 직업 공개(nav=none)만 제대로 뒤집는다.
-			 *
-			 * 한 장뿐이라 넘길 것이 없는 화면이고, 판에서 가장 긴장되는 순간이다.
-			 * 안내·도감은 장을 넘길 때마다 도니까 같은 연출을 주면 멀미가 난다.
-			 *
-			 * 뒷면을 그린 두 면짜리 카드를 쓰지 않은 이유: #card는 도감에서
-			 * hidden으로 껐다 켜지는 엘리먼트라 앞뒤를 만들려면 래퍼를 하나 더
-			 * 끼우고 paint()의 flip 대상도 바꿔야 한다. rotateY(-90deg)는 화면에서
-			 * 두께가 0이라 "엎어져 있다가 앞면으로 떨어진다"로 똑같이 읽힌다.
+			 * 직업 공개(nav=none)만 제대로 뒤집는다. 한 장뿐이라 넘길 것이 없는
+			 * 화면이고, 판에서 가장 긴장되는 순간이다. 안내·도감은 장을 넘길
+			 * 때마다 도니까 같은 연출을 주면 멀미가 난다.
 			 */
 			.card.solo {
 				animation: flip 620ms var(--ease);
@@ -110,7 +106,7 @@
 				letter-spacing: -0.02em;
 			}
 
-			.ability {
+			.ability-text {
 				font-size: var(--t-md);
 				color: var(--ink);
 				word-break: keep-all;
@@ -143,40 +139,22 @@
 			}
 
 			/* ---------- 도감 목록 ---------- */
-			/*
-			 * 참가자 타일(.tile)을 그대로 쓴다. 밤 지목·투표와 같은 격자라서
-			 * "네모를 누르면 그것이 열린다"를 새로 배울 필요가 없다.
-			 * 진영은 테두리 색으로만 구분한다 — 도감에서는 아직 적이 아니라
-			 * 사전 항목이라 지목 화면만큼 세게 칠할 이유가 없다.
-			 */
 			#list {
 				display: flex;
 				flex-direction: column;
-				gap: var(--s2);
+				gap: 5px;
 				flex: 1 1 auto;
 				min-height: 0;
 			}
 
-			.tile.mafia {
-				border-color: var(--mafia);
-			}
-			.tile.citizen {
-				border-color: var(--citizen);
-			}
-			.tile .num {
-				font-size: var(--t-xl);
-			}
-			.tile .cap {
-				color: var(--ink-2);
-			}
-
-			/* 진영 구분선 */
+			/* 진영 구분선. 서버가 마피아 팀을 앞에 몰아서 보낸다(Guide.roleBook) */
 			.sect {
 				display: flex;
 				align-items: center;
 				gap: var(--s2);
+				flex: 0 0 auto;
 				font-size: var(--t-xs);
-				font-weight: 700;
+				font-weight: 800;
 				color: var(--ink-3);
 			}
 			.sect::after {
@@ -184,6 +162,79 @@
 				flex: 1 1 auto;
 				height: 1px;
 				background: var(--line);
+			}
+			.sect.mafia {
+				color: var(--mafia-ink);
+			}
+			.sect.mafia::after {
+				background: var(--mafia-dim);
+			}
+			.sect.citizen {
+				color: var(--citizen-ink);
+			}
+			.sect.citizen::after {
+				background: var(--citizen-dim);
+			}
+
+			/* 직업 한 줄 */
+			.rolerow {
+				display: flex;
+				align-items: center;
+				gap: var(--s3);
+				flex: 0 0 auto;
+				padding: 7px var(--s2);
+				font: inherit;
+				text-align: left;
+				color: var(--ink);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-left: 3px solid var(--line);
+				border-radius: var(--r2);
+				cursor: pointer;
+				transition: background var(--dur) var(--ease);
+			}
+			.rolerow:hover {
+				background: var(--surface-3);
+			}
+			.rolerow:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+			.rolerow.mafia {
+				border-left-color: var(--mafia);
+			}
+			.rolerow.citizen {
+				border-left-color: var(--citizen);
+			}
+
+			.rolerow .g {
+				flex: 0 0 auto;
+				font-size: var(--t-lg);
+				line-height: 1;
+			}
+
+			/*
+			 * 이름 칸. 고정 폭(flex-basis)으로 두면 "테러리스트"·"자경단원" 같은
+			 * 5자 이름에서 줄이 접힌다 — 시스템 한글 글꼴이 기기마다 달라서
+			 * 어떤 값을 골라도 어딘가에서는 좁다. 최소 폭만 주고 나머지는
+			 * 능력 한 줄에게 넘긴다(그쪽은 ellipsis가 받는다).
+			 */
+			.rolerow .nm {
+				flex: 0 0 auto;
+				min-width: 62px;
+				font-size: var(--t-sm);
+				font-weight: 800;
+				white-space: nowrap;
+			}
+
+			.rolerow .sm {
+				flex: 1 1 auto;
+				min-width: 0;
+				font-size: var(--t-xs);
+				color: var(--ink-2);
+				overflow: hidden;
+				white-space: nowrap;
+				text-overflow: ellipsis;
 			}
 
 			/* ---------- 몇 장 중 몇 번째인가 ---------- */
@@ -225,7 +276,7 @@
 						<div class="role" id="role"></div>
 						<span class="chip hidden" id="team"></span>
 					</div>
-					<div class="ability" id="ability"></div>
+					<div class="ability-text" id="ability"></div>
 					<div class="tip" id="tip"></div>
 					<div class="fuse hidden" id="fusebar" aria-hidden="true"><i id="fuse"></i></div>
 				</div>
@@ -258,35 +309,45 @@
 
 			const TEAM_LABEL = { mafia: "마피아 팀", citizen: "시민 팀" };
 
+			/** 진영별 장수. 머리말이 "적이 몇인가"에 먼저 답하게 한다 */
+			function countTeam(team) {
+				let n = 0;
+				for (const card of cards) {
+					if (card.team === team) n++;
+				}
+				return n;
+			}
+
 			function paintList() {
 				/*
-				 * 서버가 마피아 팀을 앞에 몰아서 보낸다(domain/Guide.ts의 roleBook).
-				 * 위젯은 팀이 바뀌는 자리에 구분선을 넣고 격자를 새로 열 뿐이다 —
-				 * 여기서 다시 정렬하면 순서를 정하는 곳이 둘이 되고, 둘은 언젠가
-				 * 어긋난다.
+				 * 서버가 마피아 팀을 앞에 몰아서 보낸다(Guide.roleBook).
+				 * 위젯은 팀이 바뀌는 자리에 구분선을 넣을 뿐이다 — 여기서 다시
+				 * 정렬하면 순서를 정하는 곳이 둘이 되고, 둘은 언젠가 어긋난다.
 				 */
 				let out = "";
 				let team = "";
 				for (let i = 0; i < cards.length; i++) {
 					const card = cards[i];
+					const side = card.team === "mafia" ? "mafia" : "citizen";
 					if (card.team !== team) {
-						if (team) out += "</div>";
 						team = card.team;
-						out +=
-							html`<div class="sect">${TEAM_LABEL[team] || "그 밖"}</div>` +
-							'<div class="grid">';
+						out += html`<div class="sect ${side}">
+							${TEAM_LABEL[team] || "그 밖"} ${countTeam(team)}
+						</div>`;
 					}
+					// summary가 없으면 body로 물러난다. 서버가 아직 그 필드를
+					// 보내지 않아도 목록이 빈 줄로 뜨지 않게 하는 보루다
 					out += html`<button
-						class="tile ${card.team === "mafia" ? "mafia" : "citizen"}"
+						class="rolerow ${side}"
 						type="button"
 						data-i="${i}"
 						aria-label="${card.title} 설명 보기"
 					>
-						<span class="num" aria-hidden="true">${card.glyph}</span>
-						<span class="cap">${card.title}</span>
+						<span class="g" aria-hidden="true">${card.glyph}</span>
+						<span class="nm">${card.title}</span>
+						<span class="sm">${card.summary || card.body}</span>
 					</button>`;
 				}
-				if (team) out += "</div>";
 				qs("#list").innerHTML = out;
 			}
 
@@ -327,9 +388,8 @@
 				flip("#back", nav === "grid" && !listing);
 				flip("#book", steps && last && bookLink);
 				flip("#next", steps && !last);
-				// 닫기는 어느 화면에서도 사라지지 않는다. 도감 상세에서 감췄더니
-				// 다 읽은 사람이 목록으로 되돌아간 뒤에야 닫을 수 있었다 —
-				// 겹쳐 뜬 카드에서 가장 급한 일은 아래 화면으로 돌아가는 것이다
+				// 닫기는 어느 화면에서도 사라지지 않는다. 겹쳐 뜬 카드에서
+				// 가장 급한 일은 아래 화면으로 돌아가는 것이다
 				flip("#close", true);
 
 				qs("#close").textContent = steps ? (last ? "시작하기" : "건너뛰기") : "닫기";
@@ -350,7 +410,11 @@
 
 				if (nav === "grid") {
 					qs("#heading").textContent = "직업 도감";
-					qs("#sub").textContent = showList ? cards.length + "종" : "";
+					// 종수만으로는 "적이 몇인가"에 답하지 못한다. 도감을 여는
+					// 사람이 가장 먼저 세는 것이 그 수다
+					qs("#sub").textContent = showList
+						? `${cards.length}종 · 마피아 ${countTeam("mafia")} / 시민 ${countTeam("citizen")}`
+						: "";
 				} else if (nav === "steps") {
 					qs("#heading").textContent = "처음이신가요?";
 					qs("#sub").textContent = index + 1 + " / " + cards.length;
@@ -387,9 +451,9 @@
 			});
 
 			qs("#list").addEventListener("click", event => {
-				const tile = event.target.closest(".tile");
-				if (!tile) return;
-				index = Number(tile.dataset.i);
+				const row = event.target.closest(".rolerow");
+				if (!row) return;
+				index = Number(row.dataset.i);
 				listing = false;
 				paint();
 			});

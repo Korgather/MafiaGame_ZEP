@@ -9,26 +9,45 @@
 			/*
 			 * 게임 결과.
 			 *
-			 * 기존에는 winCitizen.html / winMafia.html 두 파일이었고, 내용은
-			 * imgur 이미지 <img> 한 줄이 전부였다(762바이트). 누가 마피아였는지
-			 * 끝나고도 알 수 없었다.
-			 *
 			 * 마피아류 게임에서 정체 공개는 결과 화면의 본체다. 한 판이 끝나고
 			 * "쟤가 마피아였어?"를 확인하는 순간이 다음 판을 시작하게 만든다.
-			 * 그게 없으면 매 판이 그냥 끝난다.
+			 *
+			 * 개정에서 바뀐 것
+			 * ---------------
+			 * 1. 머리말 "정체 공개"를 뺐다. 아래 목록 자체가 그 말을 하고 있고,
+			 *    그 자리는 처음 하는 사람이 먼저 읽어야 하는 "내가 이겼는가"에
+			 *    내주는 편이 낫다. 진영 이름만 크게 두면 자기 결과를 한 번 더
+			 *    번역해야 한다.
+			 * 2. 신분 줄을 쓰지 않는다. 이 화면은 team+winner로 승패를,
+			 *    RevealView로 정체를 이미 말하므로 직업 칩이 들어갈 자리가 없다.
+			 * 3. 정체 목록에 직업 글리프를 붙였다(RevealView.glyph). 도감·신분
+			 *    칩과 같은 어휘를 써야 "🔍이 경찰"이라는 것을 한 번만 배운다.
 			 */
 			.verdict {
 				display: flex;
-				flex-direction: column;
 				align-items: center;
-				gap: var(--s1);
+				justify-content: center;
+				gap: var(--s3);
 				flex: 0 0 auto;
-				padding: var(--s3) 0;
-				text-align: center;
+				padding: var(--s2) var(--s3);
+				border: 1px solid var(--line);
+				border-radius: var(--r2);
+				background: var(--surface-2);
+			}
+
+			.verdict.mafia {
+				color: var(--mafia-ink);
+				border-color: var(--mafia);
+				background: var(--mafia-dim);
+			}
+			.verdict.citizen {
+				color: var(--citizen-ink);
+				border-color: var(--citizen);
+				background: var(--citizen-dim);
 			}
 
 			.verdict .crown {
-				font-size: var(--t-2xl);
+				font-size: var(--t-xl);
 				line-height: 1;
 				animation: drop 500ms var(--ease);
 			}
@@ -46,13 +65,6 @@
 				letter-spacing: -0.02em;
 			}
 
-			.verdict.mafia .who {
-				color: var(--mafia);
-			}
-			.verdict.citizen .who {
-				color: var(--citizen);
-			}
-
 			/* 정체 공개 표. 한 줄에 한 명 */
 			.reveal {
 				display: flex;
@@ -64,7 +76,7 @@
 				display: flex;
 				align-items: center;
 				gap: var(--s2);
-				padding: var(--s1) var(--s2);
+				padding: 6px var(--s2);
 				font-size: var(--t-sm);
 				background: var(--surface-2);
 				border: 1px solid var(--line);
@@ -94,42 +106,65 @@
 
 			.rev .seat {
 				flex: 0 0 auto;
-				width: 20px;
-				font-weight: 700;
+				width: 18px;
+				font-weight: 800;
 				color: var(--ink-3);
 				text-align: right;
 			}
 
+			.rev .g {
+				flex: 0 0 auto;
+				font-size: var(--t-md);
+				line-height: 1;
+			}
+
 			.rev .job {
 				flex: 0 0 auto;
-				font-weight: 700;
+				font-weight: 800;
+				white-space: nowrap;
 			}
 			.rev.mafia .job {
-				color: var(--mafia);
+				color: var(--mafia-ink);
 			}
 			.rev.citizen .job {
-				color: var(--citizen);
+				color: var(--citizen-ink);
+			}
+
+			.rev .fate {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				white-space: nowrap;
+				color: var(--ink-3);
+			}
+			.rev .fate.alive {
+				color: var(--ok);
 			}
 		</style>
 	</head>
 	<body>
 		<div class="panel">
-			<div class="hd">
-				<div class="hd-title grow"><span id="heading">결과</span></div>
-				<div class="timer" id="timer"></div>
+			<div class="lead">
+				<div class="lead-text">
+					<!--
+						가장 큰 글씨가 "내가 이겼는가"다. 진영 이름(마피아 승리)은
+						아래 띠가 맡는다 — 그쪽은 판의 사실이고 이쪽은 나의 결과다.
+					-->
+					<div class="lead-title" id="note" role="status" aria-live="polite">게임 종료</div>
+					<div class="lead-sub" id="reason"></div>
+				</div>
+				<div class="clock" id="timer"></div>
 			</div>
 
-			<div class="verdict" id="verdict" role="status" aria-live="polite">
-				<div class="crown" id="crown" aria-hidden="true">🏆</div>
-				<div class="who" id="who">게임 종료</div>
-				<div class="hd-sub" id="reason"></div>
+			<div class="timeline" aria-hidden="true"><i></i></div>
+
+			<div class="verdict" id="verdict">
+				<span class="crown" id="crown" aria-hidden="true">🏆</span>
+				<span class="who" id="who">게임 종료</span>
 			</div>
 
 			<div class="body scroll">
 				<div class="reveal" id="reveal"></div>
 			</div>
-
-			<p class="note" id="note"></p>
 		</div>
 
 		<!--@shared-->
@@ -143,8 +178,9 @@
 				>
 					<span class="seat">${p.num}</span>
 					<span class="grow ellip">${p.name || ""}</span>
+					<span class="g" aria-hidden="true">${p.glyph || ""}</span>
 					<span class="job">${p.role || ""}</span>
-					<span class="hd-sub">${p.alive ? "생존" : "사망"}</span>
+					<span class="fate${p.alive ? " alive" : ""}">${p.alive ? "생존" : "사망"}</span>
 				</div>`;
 			}
 
@@ -152,18 +188,18 @@
 				init(data) {
 					const mafiaWon = data.winner === "mafia";
 					qs("#verdict").classList.add(mafiaWon ? "mafia" : "citizen");
-					qs("#crown").textContent = mafiaWon ? "🔪" : "🎉";
+					qs("#crown").textContent = mafiaWon ? "🔪" : "🕊️";
 					qs("#who").textContent = mafiaWon ? "마피아 승리" : "시민 승리";
 					qs("#reason").textContent = data.reason || "";
 
 					// 내가 이겼는지부터 알려준다. 진영 이름만으로는 방금 처음
 					// 해본 사람이 자기 결과를 바로 읽지 못한다
-					if (data.team) {
-						qs("#note").textContent =
-							data.team === data.winner ? "당신의 팀이 이겼습니다." : "당신의 팀이 졌습니다.";
-					}
+					qs("#note").textContent = data.team
+						? data.team === data.winner
+							? "당신의 팀이 이겼습니다"
+							: "당신의 팀이 졌습니다"
+						: "게임 종료";
 
-					qs("#heading").textContent = "정체 공개";
 					startTimer(qs("#timer"), data.timer);
 
 					const players = Array.isArray(data.players) ? data.players : [];

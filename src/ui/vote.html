@@ -7,28 +7,26 @@
 		<!--@theme-->
 		<style>
 			/*
-			 * 투표 + 개표.
+			 * 투표 + 개표. 한 파일이 두 메시지를 받는다 — init(투표) / result(개표).
+			 * 격자는 4열 auto라 인원수와 무관하다.
 			 *
-			 * 기존에는 vote.html과 voteResult.html 두 파일이었다. 둘 다 같은
-			 * 사람 목록을 그리는데 배치가 서로 달라서, 투표할 때 누르던 자리와
-			 * 결과에 나온 자리가 일치하지 않았다.
-			 *
-			 * voteResult.html은 더 심했다. 격자가
-			 *   grid-template-columns: 140px 140px; grid-template-rows: 30px 30px 30px
-			 * 로 못 박혀 있어서 정확히 6명일 때만 맞았다. 4명이면 아래 두 줄이
-			 * 비고, 8명이면 마지막 두 명이 컨테이너 밖으로 잘렸다. MAX_PLAYERS가
-			 * 8인데 화면은 6명 전용이었다.
-			 *
-			 * 이제 한 파일이 두 메시지를 받는다. init(투표) / result(개표).
-			 * 격자는 auto-fill이라 인원수와 무관하다.
+			 * 개정에서 바뀐 것
+			 * ---------------
+			 * 1. 신분 줄이 생겼다. 이 화면에도 직업이 보여야 한다는 요구는
+			 *    "자기 직업이 항상 보인다"의 일부인데, 투표 화면은 판에서 가장
+			 *    오래 떠 있는 화면 중 하나면서 유일하게 직업을 안 보여줬다.
+			 *    생존 n/m은 seats의 alive를 세서 만든다 — 추가 필드가 없다.
+			 * 2. '투표 없음'이 격자 안에서 푸터로 내려갔다. 격자 안에 있으면
+			 *    번호를 세며 누르는 눈과 손이 사람이 아닌 칸 하나를 통과해야
+			 *    하고, 마지막 줄 위치가 인원수에 따라 흔들린다. 푸터로 내리면
+			 *    "사람을 고른다"와 "아무도 고르지 않는다"가 자리로 갈린다.
+			 * 3. 진행률 문구가 지시 줄 둘째 줄로 올라갔다(전에는 hd-sub).
 			 */
 
 			/*
-			 * 개표에서 단상에 오른 사람.
-			 *
-			 * 예전에는 이 칸이 곧 처형된 사람이었다. 이제는 최다 득표자일
-			 * 뿐이고, 죽는지는 최후의 반론과 찬반투표를 거쳐야 정해진다.
-			 * 흔들림은 그대로 둔다 — 지목당한 순간의 무게는 달라지지 않았다.
+			 * 개표에서 단상에 오른 사람. 최다 득표자일 뿐이고, 죽는지는 최후의
+			 * 반론과 찬반투표를 거쳐야 정해진다. 흔들림은 그대로 둔다 —
+			 * 지목당한 순간의 무게는 달라지지 않았다.
 			 */
 			.tile.out {
 				border-color: var(--danger);
@@ -50,35 +48,7 @@
 			}
 
 			/*
-			 * '투표 없음'. 사람 타일과 같은 격자에 있지만 한 줄을 통째로 쓴다.
-			 *
-			 * 사람들 사이에 정사각 칸으로 끼워 넣으면 4번과 6번 사이에 얼굴
-			 * 없는 칸이 하나 있는 모양이 되어, 번호를 세며 누르는 사람이 한 칸씩
-			 * 밀려 누른다. 아래 한 줄로 빼면 "사람을 고르거나, 아무도 고르지
-			 * 않거나"라는 두 갈래가 그대로 보인다.
-			 */
-			.tile.skip {
-				grid-column: 1 / -1;
-				flex-direction: row;
-				gap: var(--s2);
-				aspect-ratio: auto;
-				padding: var(--s2);
-			}
-
-			.tile.skip .cap {
-				width: auto;
-				font-size: var(--t-sm);
-				font-weight: 700;
-				color: var(--ink-2);
-			}
-
-			.tile.skip.picked .cap {
-				color: var(--ink);
-			}
-
-			/*
 			 * 방금 부결된 사람. 같은 낮에 두 번 단상에 세우지 않는다.
-			 *
 			 * 사망과 같은 회색으로 두면 "죽은 줄 알았는데 살아 있다"가 되므로
 			 * 배지로 이유를 적는다 — 눌리지 않는 칸에는 항상 이유가 있어야 한다.
 			 */
@@ -88,6 +58,11 @@
 
 			.tile.barred .badge {
 				color: var(--ink-3);
+			}
+
+			/* 개표에서 득표수가 들어갈 자리를 아래에 비워 둔다 */
+			.tile.counted {
+				padding-bottom: 15px;
 			}
 
 			/* 득표 막대. 숫자 하나보다 상대 비교가 빠르다 */
@@ -103,18 +78,38 @@
 				transition-property: width;
 				transition-timing-function: var(--ease);
 			}
+
+			/* '투표 없음' 버튼. 폭 전체를 쓴다 */
+			.skip-btn {
+				flex: 1 1 auto;
+				gap: var(--s2);
+				font-weight: 700;
+				color: var(--ink-2);
+			}
+			.skip-btn.picked {
+				color: var(--ink);
+				background: var(--mafia-dim);
+				border-color: var(--mafia);
+			}
 		</style>
 	</head>
 	<body>
 		<div class="panel vote">
-			<div class="hd">
-				<div class="hd-title grow">
-					<span id="heading">투표</span>
-					<span class="hd-sub" id="sub"></span>
-				</div>
-				<div class="timer" id="timer"></div>
+			<div class="idbar">
+				<span class="chip" id="myrole">직업</span>
+				<span class="ability" id="ability"></span>
+				<span class="stat" id="alive"></span>
 			</div>
 
+			<div class="lead">
+				<div class="lead-text">
+					<div class="lead-title" id="heading">투표</div>
+					<div class="lead-sub count" id="sub"></div>
+				</div>
+				<div class="clock" id="timer"></div>
+			</div>
+
+			<div class="timeline" aria-hidden="true"><i></i></div>
 			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
 
 			<div class="body scroll">
@@ -122,6 +117,12 @@
 			</div>
 
 			<p class="note" id="note" role="status" aria-live="polite"></p>
+
+			<div class="foot" id="foot">
+				<button type="button" class="btn skip-btn" id="skip">
+					<span aria-hidden="true">🚫</span>투표 없음 — 오늘은 아무도 처형하지 않습니다
+				</button>
+			</div>
 		</div>
 
 		<!--@shared-->
@@ -163,28 +164,8 @@
 					${flag(locked || !seat.alive || out, "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}${out ? " (부결됨)" : ""}"
 				>
-					<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
+					<span class="num">${seat.num}</span><span class="cap">${caption}</span>
 					${out ? html`<span class="badge">부결</span>` : ""}
-				</button>`;
-			}
-
-			/**
-			 * '투표 없음' 칸.
-			 *
-			 * 기권(아무것도 안 누르기)과 다른 선택이다. 기권은 판단을 남에게
-			 * 미루는 것이고 이쪽은 "오늘은 아무도 죽이지 말자"는 한 표다.
-			 * 단서가 없는 날 무고한 시민을 죽이지 않고 밤으로 넘기는 길이다.
-			 */
-			function skipTile() {
-				return html`<button
-					type="button"
-					class="tile skip"
-					data-num="${SKIP}"
-					${flag(locked, "disabled")}
-					aria-label="투표 없음 — 오늘은 아무도 처형하지 않습니다"
-				>
-					<span class="num" aria-hidden="true">🚫</span
-					><span class="cap ellip">투표 없음</span>
 				</button>`;
 			}
 
@@ -192,10 +173,23 @@
 				return Array.isArray(data.seats) ? data.seats : [];
 			}
 
+			/**
+			 * 생존 n/m. 서버가 따로 보내지 않는다 — seats에 alive가 이미 있어서
+			 * 세면 나오고, 새 필드는 언젠가 목록과 어긋난다.
+			 */
+			function paintAlive(list) {
+				let alive = 0;
+				for (const seat of list) {
+					if (seat.alive) alive++;
+				}
+				qs("#alive").textContent = `생존 ${alive}/${list.length}`;
+			}
+
 			function paintPick() {
 				for (const el of qsa(".tile")) {
 					el.classList.toggle("picked", Number(el.dataset.num) === myPick);
 				}
+				qs("#skip").classList.toggle("picked", myPick === SKIP);
 			}
 
 			function pickNote() {
@@ -204,18 +198,32 @@
 				return `${myPick}번을 지목했습니다. 다시 누르면 취소됩니다.`;
 			}
 
-			qs("#grid").addEventListener("click", event => {
-				const el = event.target.closest(".tile");
-				if (!el || el.disabled || locked) return;
-
-				const num = Number(el.dataset.num);
-				// 같은 사람을 다시 누르면 취소. 기존에는 한 번 누르면 되돌릴 수
+			/**
+			 * 한 표를 넣거나 되돌린다. 격자와 '투표 없음' 버튼이 같이 쓴다 —
+			 * 둘이 각자 보내면 취소 규칙이 두 벌이 되고, 그 둘은 언젠가 어긋난다.
+			 */
+			function choose(num) {
+				if (locked) return;
+				// 같은 대상을 다시 누르면 취소. 기존에는 한 번 누르면 되돌릴 수
 				// 없었고, 눌렸다는 표시조차 없어서 오조작을 알 방법이 없었다
 				myPick = myPick === num ? null : num;
 				paintPick();
 				Parent.send({ type: "vote", target: myPick });
 				qs("#note").textContent = pickNote();
+			}
+
+			qs("#grid").addEventListener("click", event => {
+				const el = event.target.closest(".tile");
+				if (!el || el.disabled) return;
+				choose(Number(el.dataset.num));
 			});
+
+			/*
+			 * '투표 없음'. 기권(아무것도 안 누르기)과 다른 선택이다. 기권은
+			 * 판단을 남에게 미루는 것이고 이쪽은 "오늘은 아무도 죽이지 말자"는
+			 * 한 표다 — 단서가 없는 날 무고한 시민을 죽이지 않고 넘기는 길이다.
+			 */
+			qs("#skip").addEventListener("click", () => choose(SKIP));
 
 			Parent.on({
 				init(data) {
@@ -223,15 +231,26 @@
 					// 화면을 다시 여는 경로는 재접속뿐이라 산 사람은 계속 찍을 수
 					// 있어야 한다. 잠기는 쪽은 유령 하나다 — 서버도 Voting.canVote로
 					// 막지만, 눌리는 버튼을 남기면 실제로 투표된 것처럼 보인다
-					const ghost = seats(data).some(seat => seat.num === myNum && !seat.alive);
+					const list = seats(data);
+					const ghost = list.some(seat => seat.num === myNum && !seat.alive);
 					locked = ghost;
 					// 재지목이면 방금 부결된 번호가 실려 온다. 첫 투표에서는 빈 배열이다
 					barred = Array.isArray(data.rejected) ? data.rejected : [];
 					// 재접속으로 화면을 다시 열었을 때 이미 넣은 표를 복원한다.
 					// SKIP(-1)도 그대로 살아난다 — 0만 "아직 안 찍음"이다
 					myPick = Number(data.picked) || null;
+
+					const role = qs("#myrole");
+					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.className =
+						"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
+					qs("#ability").textContent = data.abilityLine || "";
+					paintAlive(list);
+
 					qs("#heading").textContent = ghost ? "투표할 수 없습니다" : "누구를 처형할까요";
-					qs("#grid").innerHTML = html`${seats(data).map(seat => tile(seat))}${skipTile()}`;
+					qs("#grid").innerHTML = html`${list.map(seat => tile(seat))}`;
+					qs("#foot").classList.remove("hidden");
+					qs("#skip").disabled = locked;
 					paintPick();
 					qs("#note").textContent = ghost
 						? "👻 유령은 투표할 수 없습니다."
@@ -252,15 +271,29 @@
 				result(data) {
 					locked = true;
 					myNum = Number(data.myNum) || 0;
-					qs("#heading").textContent = "개표";
-					qs("#sub").textContent = "";
-					qs("#progress").style.width = "100%";
-
 					const list = seats(data);
+
+					const role = qs("#myrole");
+					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.className =
+						"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
+					qs("#ability").textContent = data.abilityLine || "";
+					paintAlive(list);
+
+					qs("#heading").textContent = "개표";
+					qs("#progress").style.width = "100%";
+					// 개표에는 진행률 문구가 없다. 빈 자리에 서버가 보낸 결과 한 줄을
+					// 올린다 — 아래 note에 두면 같은 글이 화면에 두 번 남는다
+					qs("#sub").textContent = data.message || "";
+					qs("#sub").classList.remove("count");
+					qs("#note").textContent = "";
+					// 고를 것이 없는 화면에서 '투표 없음'은 자리만 차지한다
+					qs("#foot").classList.add("hidden");
+
 					const top = list.reduce((max, seat) => Math.max(max, Number(seat.votes) || 0), 0);
 
 					qs("#grid").innerHTML = html`${list.map(seat =>
-						tile(seat, seat.num === data.nominee ? "out" : null)
+						tile(seat, "counted" + (seat.num === data.nominee ? " out" : ""))
 					)}`;
 
 					/*
@@ -269,8 +302,7 @@
 					 *
 					 * 막대는 폭 0으로 심고 실제 폭은 다음 프레임에 준다. 최종
 					 * 폭을 처음부터 박아 넣으면 브라우저에게는 한 번도 바뀐 적
-					 * 없는 값이라 transition이 걸리지 않는다 — CSS에 600ms가
-					 * 적혀 있었는데도 막대는 자란 적 없이 완성된 채로 떴다.
+					 * 없는 값이라 transition이 걸리지 않는다.
 					 */
 					const bars = [];
 					let outTile = null;
@@ -301,7 +333,6 @@
 						for (const entry of bars) entry.el.style.width = entry.width + "%";
 					});
 
-					qs("#note").textContent = data.message || "";
 					startTimer(qs("#timer"), data.timer);
 				},
 			});

@@ -9,28 +9,22 @@
 			/*
 			 * 밤에 누구를 지목할 것인가. 그것 하나만 한다.
 			 *
-			 * 기존 roleAction.html의 문제 셋:
+			 * 무엇을 하라는 문구는 서버가 보낸다(prompt). 직업 이름을 switch하지
+			 * 않으므로 직업이 21종이든 24종이든 이 파일은 그대로다.
 			 *
-			 * 1. 직업별 문구를 한국어 문자열 switch로 골랐다.
-			 *      switch (_myRole) { case "영매": ... case "경찰": ... }
-			 *    직업을 추가하면 서버뿐 아니라 이 파일도 고쳐야 했고,
-			 *    직업 이름을 바꾸면 조용히 기본 분기로 떨어졌다.
-			 *    이제 무엇을 하라는 문구는 서버가 보낸다.
-			 *
-			 * 2. 밤 채팅이 이 화면에 얹혀 있었다. 그래서 채팅은 밤에만,
-			 *    그것도 이 위젯이 열린 사람에게만 존재했고 위젯이 닫히는 순간
-			 *    대화가 통째로 사라졌다. 자동 스크롤은 붙이기 *전에* 높이를 재고
-			 *    붙인 *뒤에* 그 값으로 내려서 늘 한 줄씩 어긋나 있었다.
-			 *    채팅은 chat.html로 독립했고 이 파일에서 그 코드는 전부 사라졌다.
-			 *
-			 * 3. 아이콘 6종을 base64로 품어 132KB였다. 그중 일부는 그려지지도
-			 *    않는 자리에 있었다.
+			 * 개정에서 바뀐 것
+			 * ---------------
+			 * 1. 머리말이 신분 줄 + 지시 줄 두 층이 됐다. prompt가 이제 hd-sub
+			 *    (12px 흐린 글씨)가 아니라 화면에서 가장 큰 글씨다 — 이 화면에서
+			 *    사람이 읽어야 하는 단 한 줄이 그것이기 때문이다.
+			 * 2. 직업 칩 옆에 능력 한 줄(abilityLine)이 붙는다.
+			 * 3. 진행률(acted/total)이 지시 줄 둘째 줄로 올라간다. 4px 막대는
+			 *    남고, 글자는 "몇 명 남았는가"까지 말한다 — 밤에는 서로 무엇을
+			 *    하는지 보이지 않아 이 값이 낮보다 급하다.
+			 * 4. 동료 타일의 캡션은 다른 타일과 똑같이 이름이다. SeatView에
+			 *    직업이 없고, 넣으면 그 한 필드가 밤의 비밀을 통째로 옮긴다.
+			 *    같은 편이라는 사실은 🔻 배지와 적색 테두리가 말한다.
 			 */
-
-			/* 지목이 전부이므로 격자가 화면을 다 쓴다 */
-			.body .grid {
-				align-content: center;
-			}
 
 			/*
 			 * 지목이 확정된 순간.
@@ -64,8 +58,8 @@
 			.choices {
 				display: flex;
 				flex-direction: column;
+				justify-content: center;
 				gap: var(--s1);
-				padding: var(--s2);
 				overflow-y: auto;
 			}
 
@@ -93,15 +87,21 @@
 	</head>
 	<body>
 		<div class="panel night">
-			<div class="hd">
-				<div class="hd-title grow">
-					<span class="chip" id="myrole">직업</span>
-					<span class="hd-sub ellip" id="prompt"></span>
-				</div>
-				<span class="chip" id="tally"></span>
-				<div class="timer" id="timer"></div>
+			<div class="idbar">
+				<span class="chip" id="myrole">직업</span>
+				<span class="ability" id="ability"></span>
+				<span class="stat" id="tally"></span>
 			</div>
 
+			<div class="lead">
+				<div class="lead-text">
+					<div class="lead-title" id="prompt"></div>
+					<div class="lead-sub count" id="progresstext"></div>
+				</div>
+				<div class="clock" id="timer"></div>
+			</div>
+
+			<div class="timeline" aria-hidden="true"><i></i></div>
 			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
 
 			<div class="body" id="body">
@@ -116,9 +116,6 @@
 		<script>
 			let myNum = 0;
 			let picked = null;
-			// 이번 밤에 확정된 지목 전부. 접선한 스파이만 둘이 되고 나머지는 하나다.
-			// 하나짜리 변수로는 둘째 지목이 첫째의 표시를 지우고 앉는다
-			let picks = [];
 			let canPick = false;
 			// 내 칸을 잠그는가. 건달처럼 자기 지목이 확정된 헛턴인 직업만 참이다
 			let noSelf = false;
@@ -148,7 +145,9 @@
 					(mine ? " me" : "") +
 					(pickable(seat) ? "" : " dead") +
 					(seat.ally ? " ally" : "");
-				// 마피아 팀원은 직업까지 보인다. 배지로 색 외의 표시도 남긴다
+				// 마피아 팀원은 배지로 알린다. 캡션은 다른 칸과 똑같이 이름이다 —
+				// 직업을 찍으려면 SeatView에 없는 필드가 필요하고, 그 필드는
+				// 밤에 알아야 할 것보다 훨씬 많은 것을 옮긴다
 				const badge = seat.ally && !mine ? html`<span class="badge">🔻</span>` : "";
 
 				return html`<button
@@ -156,9 +155,9 @@
 					class="${classes}"
 					data-num="${seat.num}"
 					${flag(!pickable(seat) || (mine && noSelf), "disabled")}
-					aria-label="${seat.num}번 ${seat.name || ""}"
+					aria-label="${seat.num}번 ${seat.name || ""}${seat.ally ? " (같은 편)" : ""}"
 				>
-					${badge}<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
+					${badge}<span class="num">${seat.num}</span><span class="cap">${caption}</span>
 				</button>`;
 			}
 
@@ -180,14 +179,14 @@
 				init(data) {
 					myNum = Number(data.myNum) || 0;
 					picked = null;
-					picks = [];
 					// 격자를 그리기 전에 정해야 한다. tile()이 이 두 값을 읽는다
 					noSelf = !!data.noSelf;
 					targetsDead = !!data.targetsDead;
 
 					const role = qs("#myrole");
-					role.textContent = data.role || "";
+					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
 					role.classList.add(data.team === "mafia" ? "mafia" : "citizen");
+					qs("#ability").textContent = data.abilityLine || "";
 					qs("#prompt").textContent = data.prompt || "";
 
 					const seats = Array.isArray(data.seats) ? data.seats : [];
@@ -220,6 +219,15 @@
 					const tally = qs("#tally");
 					tally.textContent = total > 0 ? `${done}/${total}` : "";
 					tally.setAttribute("aria-label", `${total}명 중 ${done}명 지목 완료`);
+					// 막대와 분수만으로는 "몇 명을 더 기다리는가"가 안 읽힌다.
+					// 남은 수를 글자로 적으면 기다릴지 말지를 바로 정할 수 있다
+					const leftCount = total - done;
+					qs("#progresstext").textContent =
+						total > 0
+							? leftCount > 0
+								? `${done}/${total} 지목 완료 · ${leftCount}명 남음`
+								: `${total}명 모두 지목했습니다`
+							: "";
 				},
 
 				/*
@@ -236,39 +244,34 @@
 					qs("#choices").innerHTML = html`${options.map(
 						(text, i) => html`<button type="button" data-index="${i}">${text}</button>`
 					)}`;
-					qs("#note").textContent = `${Number(data.num) || 0}번에게 보낼 문구를 고르세요.`;
+					// 이 화면에서는 지시 줄이 그 문장을 받는다. 아래 note에 두면
+					// 화면에서 가장 큰 글씨가 지난 단계의 지목 안내로 남는다
+					const num = Number(data.num) || 0;
+					qs("#prompt").textContent = `${num}번에게 보낼 문구를 고르세요.`;
+					qs("#note").textContent = "";
 				},
 
 				// 서버가 지목을 받아들였을 때만 표시가 바뀐다. 기존에는 누른 즉시
 				// 빨간 테두리를 그려서, 서버가 거절해도 화면은 선택된 것처럼 보였다
-				//
-				// again이 참이면 한 칸을 더 받는다(접선한 스파이의 추가 첩보).
-				// 자격을 위젯이 스스로 따지지 않는 이유는, 그러려면 접선 여부를
-				// 위젯에 내려보내야 하고 그 값 하나가 곧 "내가 만난 사람이
-				// 마피아였다"는 답이기 때문이다. 판단은 서버가 하고 위젯은 결과만
-				// 받는다
 				selectResponse(data) {
 					picked = Number(data.num);
-					if (picks.indexOf(picked) < 0) picks.push(picked);
-					const again = data.again === true;
-					canPick = again;
+					canPick = false;
 					for (const el of qsa(".tile")) {
-						const isPick = picks.indexOf(Number(el.dataset.num)) >= 0;
+						const isPick = Number(el.dataset.num) === picked;
 						el.classList.toggle("picked", isPick);
-						// 이미 고른 사람은 다시 눌러도 서버가 거절한다. 열어 두면
-						// 같은 칸을 두 번 눌러 능력을 버리는 길이 생긴다
-						el.disabled = isPick || !again;
+						if (!isPick) el.disabled = true;
 					}
 					// 격자 전체를 물린다. 비활성 타일만으로는 "내 차례가 끝났다"가
 					// 아니라 "왜 안 눌리지"로 읽힌다
-					qs("#grid").classList.toggle("locked", !again);
+					qs("#grid").classList.add("locked");
 					// 문구를 고르고 온 경우다. 목록을 치우고 격자를 되돌려 놓아야
 					// 누구를 골랐는지가 화면에 남는다
 					qs("#choices").classList.add("hidden");
 					qs("#grid").classList.remove("hidden");
-					qs("#note").textContent = again
-						? `✔ ${picked}번을 지목했습니다. 한 명을 더 조사할 수 있습니다.`
-						: `✔ ${picks.join("번, ")}번을 지목했습니다.`;
+					qs("#note").textContent = `✔ ${picked}번을 지목했습니다.`;
+					// 할 일이 끝났다는 것을 가장 큰 글씨가 말해야 한다. 지목
+					// 안내가 그대로 남아 있으면 아직 눌러야 하는 것처럼 보인다
+					qs("#prompt").textContent = "지목했습니다 — 기다리세요";
 				},
 			});
 		</script>

@@ -55,12 +55,32 @@ const BOOK = roleBook();
  * 보낸다(prompt는 nightPrompt, note는 nightNotice). 여기서도 같은 자리에서
  * 꺼내야 문구를 다듬은 순간 미리보기가 따라 바뀐다.
  */
-function nightAction(role) {
+/**
+ * 산 사람의 신분 줄.
+ *
+ * identityOf(Widgets.ts)가 좌석에서 조립하는 것과 같은 다섯 값이다. 화면 위쪽
+ * 한 줄에 늘 붙어 있고, 이제 다섯 위젯이 전부 이것을 받는다(Identity를 상속한
+ * 페이로드 넷 + PhasePayload).
+ *
+ * glyph와 abilityLine을 빠뜨려도 위젯은 그려진다 — 기호 자리가 비고 능력 줄이
+ * 빈 칸이 된다. 그래서 미리보기에서만 조용히 빠져 있기 쉬운 값이고, 한 곳에서
+ * 꺼내는 것이 그걸 막는 유일한 방법이다.
+ */
+function idOf(role) {
 	const def = ROLE_DEFS[role];
 	return {
 		role: def.displayName,
 		team: def.team,
 		alive: true,
+		glyph: def.glyph,
+		abilityLine: def.summary,
+	};
+}
+
+function nightAction(role) {
+	const def = ROLE_DEFS[role];
+	return {
+		...idOf(role),
 		prompt: def.nightPrompt || "",
 		// Night.ts가 실어 보내는 두 값이다. 여기서 빠뜨리면 미리보기의 격자만
 		// 서버와 다른 규칙으로 잠긴다 — 실제로 무덤을 고르는 직업의 화면이
@@ -86,7 +106,7 @@ function noTurnNote(role, over) {
 		{ role, alive: true, usedSkill: false, usesSpent: 0, borrowedRole: null },
 		over
 	);
-	return { role: ROLE_DEFS[role].displayName, team: ROLE_DEFS[role].team, note: nightActionBlockedReason(seat, 0) };
+	return { ...idOf(role), note: nightActionBlockedReason(seat, 0) };
 }
 
 /** 이름이 길거나 죽었거나 — 레이아웃이 깨지기 쉬운 표본 */
@@ -99,14 +119,70 @@ const SEATS = [
 	{ num: 6, name: "한가영", alive: true },
 ];
 
+/**
+ * 종료 화면의 직업 공개 한 줄(RevealView).
+ *
+ * 이름과 기호를 ROLE_DEFS에서 꺼낸다 — Room.revealViews가 그렇게 만든다.
+ * 손으로 적으면 기호를 바꾼 순간 미리보기만 옛 그림을 계속 보여준다.
+ *
+ * team은 따로 받는다. 판이 끝난 시점의 진영은 직업표의 값과 다를 수 있다 —
+ * 스파이는 접선하면 마피아로 넘어가고, 도굴꾼은 남의 직업을 물려받는다.
+ */
+function reveal(num, name, role, alive, team) {
+	const def = ROLE_DEFS[role];
+	return { num, name, role: def.displayName, glyph: def.glyph, team: team || def.team, alive };
+}
+
 const REVEAL = [
-	{ num: 1, name: "김철수", role: "시민", team: "citizen", alive: false },
-	{ num: 2, name: "이영희", role: "마피아", team: "mafia", alive: true },
-	{ num: 3, name: "박민수", role: "의사", team: "citizen", alive: false },
-	{ num: 4, name: "정수연", role: "경찰", team: "citizen", alive: true },
-	{ num: 5, name: "최지훈매우긴이름입니다", role: "스파이", team: "mafia", alive: true },
-	{ num: 6, name: "한가영", role: "영매", team: "citizen", alive: false },
+	reveal(1, "김철수", Role.CITIZEN, false),
+	reveal(2, "이영희", Role.MAFIA, true),
+	reveal(3, "박민수", Role.DOCTOR, false),
+	reveal(4, "정수연", Role.POLICE, true),
+	// 접선을 끝낸 스파이. 직업표에는 시민으로 적혀 있지만 판이 끝난 진영은 마피아다
+	reveal(5, "최지훈매우긴이름입니다", Role.SPY, true, "mafia"),
+	reveal(6, "한가영", Role.SHAMAN, false),
 ];
+
+/**
+ * 서버가 glyph를 아직 보내지 않던 시절의 같은 목록.
+ *
+ * 위젯은 기호 자리를 비워 두고 이름만 그린다. 필드를 새로 늘릴 때마다
+ * "안 보내면 어떻게 되는가"를 한 장면으로 남겨 둔다 — 위젯과 서버는 함께
+ * 배포되지 않고, 옛 서버가 새 위젯에 말을 거는 순간이 반드시 있다.
+ */
+const REVEAL_NO_GLYPH = REVEAL.map(row => ({
+	num: row.num,
+	name: row.name,
+	role: row.role,
+	team: row.team,
+	alive: row.alive,
+}));
+
+/*
+ * 죽은 사람과 관전자의 신분 줄.
+ *
+ * 서버가 조립하는 것과 같은 값이다 — 유령은 identityOf(Widgets.ts)의 죽은
+ * 분기, 관전은 spectateView(Lobby.ts)가 손으로 적는 세 값이다. 직업 이름과
+ * 기호는 ROLE_DEFS에서 꺼내 오는데 이 둘은 그럴 수 없다. 직업이 아니라서
+ * 직업표에 자리가 없고, 서버 쪽 상수는 내보내지 않는다.
+ *
+ * 능력 줄이 특히 중요하다. 죽으면 서버가 직업을 감추는데(role이 "유령"으로
+ * 바뀐다) 능력 줄만 남으면 그 한 줄이 직업을 그대로 불어 버린다.
+ */
+const GHOST = {
+	role: "유령",
+	team: "citizen",
+	alive: false,
+	glyph: "👻",
+	abilityLine: "유령끼리 이야기할 수 있습니다",
+};
+const SPECTATOR = {
+	role: "관전",
+	team: "citizen",
+	alive: false,
+	glyph: "👁",
+	abilityLine: "볼 수만 있습니다",
+};
 
 /**
  * 정원을 꽉 채운 대기실 좌석 목록.
@@ -212,6 +288,8 @@ const SCENES = [
 				timer: 22,
 				...noTurnNote(Role.POLITICIAN),
 				alive: true,
+				// 이 밤에 누를 것이 없는 산 사람. 낮을 준비하며 기다리는 것이 할 일이다
+				lead: "기다리세요",
 				deaths: [],
 				spectating: false,
 				// 밤에는 조절할 토론 시간이 없다
@@ -241,9 +319,8 @@ const SCENES = [
 				total: 6,
 				aliveCount: 5,
 				timer: 75,
-				role: "경찰",
-				team: "citizen",
-				alive: true,
+				...idOf(Role.POLICE),
+				lead: "토론하세요",
 				note: "토론 시간입니다.",
 				deaths: [],
 				spectating: false,
@@ -269,9 +346,8 @@ const SCENES = [
 				timer: 40,
 				// 칩 문구는 서버(identityOf)가 고른다. 죽으면 직업이 아니라 "유령"이
 				// 찍히므로 장면도 서버가 실제로 보내는 값을 그대로 쓴다
-				role: "유령",
-				team: "citizen",
-				alive: false,
+				...GHOST,
+				lead: "지켜보세요",
 				note: "당신은 죽었습니다. 관전 중입니다.",
 				deaths: ["☠️ 박민수 님이 죽었습니다.", "💖 의사가 누군가를 살려냈습니다."],
 				spectating: false,
@@ -292,9 +368,8 @@ const SCENES = [
 				total: 6,
 				aliveCount: 5,
 				timer: 40,
-				role: "관전",
-				team: "citizen",
-				alive: false,
+				...SPECTATOR,
+				lead: "지켜보세요",
 				note: "관전 중입니다. 이번 판이 끝나면 자리에 앉습니다.",
 				deaths: ["☠️ 박민수 님이 죽었습니다."],
 				// 이 한 값이 "관전 종료" 버튼을 띄운다. 관전자에게는 대기실
@@ -319,10 +394,29 @@ const SCENES = [
 		],
 	},
 	{
-		label: "카드 — 직업 도감 (12종)",
+		label: "카드 — 직업 도감 (21종)",
 		file: "card.html",
 		size: [360, 480],
 		messages: [{ type: "init", cards: BOOK, nav: "grid", timer: 0, bookLink: false }],
+	},
+	/*
+	 * 같은 목록에 안내 카드를 넣어 본다.
+	 *
+	 * 도감(BOOK)만으로는 목록의 두 갈래를 밟지 못한다. 직업 카드는 요약이 늘
+	 * 있고 진영도 늘 있기 때문이다. 안내 카드는 둘 다 없다 — summary가 ""이고
+	 * team이 null이다.
+	 *
+	 * 그래서 이 장면만 보는 것: 한 줄이 요약 대신 본문으로 물러나 말줄임으로
+	 * 끊기는지, 진영 구분선이 "그 밖"으로 뜨는지. 둘 중 하나가 깨지면 목록은
+	 * 빈 줄이 늘어선 화면이 되는데, 도감 검사는 그대로 초록으로 통과한다.
+	 */
+	{
+		label: "카드 — 목록에서 요약도 진영도 없는 카드",
+		file: "card.html",
+		size: [360, 480],
+		messages: [
+			{ type: "init", cards: GUIDE_CARDS.slice(), nav: "grid", timer: 0, bookLink: false },
+		],
 	},
 	{
 		label: "밤 지목 — 마피아",
@@ -475,8 +569,43 @@ const SCENES = [
 				// 문장은 도메인이 고른다
 				...noTurnNote(Role.VIGILANTE, { usesSpent: 1 }),
 				alive: true,
+				lead: "기다리세요",
 				deaths: [],
 				spectating: false,
+			},
+		],
+	},
+	/*
+	 * 새 세 값이 오지 않는 밤.
+	 *
+	 * 위젯과 서버는 함께 배포되지 않는다. 옛 서버가 새 위젯에 말을 거는 순간이
+	 * 반드시 있고, 그때 화면이 비어 보이면 안 된다 — 기호 자리는 비고, 능력 줄은
+	 * 빈 칸이 되고, 지시문은 위젯이 단계를 보고 고른 기본값이 대신 뜬다.
+	 *
+	 * 이 장면이 없으면 세 개의 || 오른쪽은 아무도 본 적 없는 코드가 된다. 그리고
+	 * 그 자리가 깨질 때 사라지는 것이 화면에서 가장 큰 글씨다.
+	 */
+	{
+		label: "밤 — 서버가 지시문·기호·능력 줄을 안 보낼 때",
+		file: "phase.html",
+		size: [340, 300],
+		messages: [
+			{
+				type: "init",
+				phase: "night",
+				turn: 1,
+				total: 6,
+				aliveCount: 6,
+				timer: 22,
+				// 안내 문구는 도메인에서 꺼내고 새 세 값만 일부러 뺀다.
+				// idOf/noTurnNote를 그대로 쓰면 세 값이 따라와 이 갈래가 사라진다
+				role: ROLE_DEFS[Role.POLITICIAN].displayName,
+				team: ROLE_DEFS[Role.POLITICIAN].team,
+				alive: true,
+				note: noTurnNote(Role.POLITICIAN).note,
+				deaths: [],
+				spectating: false,
+				timeVote: false,
 			},
 		],
 	},
@@ -527,7 +656,7 @@ const SCENES = [
 		file: "vote.html",
 		size: [340, 380],
 		messages: [
-			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0 },
+			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0, ...idOf(Role.CITIZEN) },
 			{ type: "progress", voted: 3, alive: 5 },
 		],
 	},
@@ -536,7 +665,7 @@ const SCENES = [
 		file: "vote.html",
 		size: [340, 380],
 		messages: [
-			{ type: "init", myNum: 3, seats: SEATS, timer: 17, picked: 0 },
+			{ type: "init", myNum: 3, seats: SEATS, timer: 17, picked: 0, ...GHOST },
 			{ type: "progress", voted: 2, alive: 5 },
 		],
 		// 유령은 한 자리도 누를 수 없다 — locked가 tile 전체를 disabled로 만든다.
@@ -563,7 +692,15 @@ const SCENES = [
 		file: "vote.html",
 		size: [340, 380],
 		messages: [
-			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: -1, rejected: [2] },
+			{
+				type: "init",
+				myNum: 4,
+				seats: SEATS,
+				timer: 17,
+				picked: -1,
+				rejected: [2],
+				...idOf(Role.DOCTOR),
+			},
 			{ type: "progress", voted: 1, alive: 5 },
 		],
 		expect: { 'button[disabled=""]': 2, ".badge": 1 },
@@ -582,7 +719,55 @@ const SCENES = [
 				nominee: 2,
 				message: "🎤 이영희 님이 단상에 올랐습니다.",
 				timer: 7,
+				...idOf(Role.POLICE),
 			},
+		],
+	},
+	/*
+	 * 아무도 단상에 오르지 않은 개표.
+	 *
+	 * 전원이 '투표 없음'을 골랐거나 동수로 갈린 낮이다. 서버는 그때 nominee를
+	 * 0으로 준다(VoteResultPayload). 실제로 나오는 값인데 위 장면은 늘 누군가
+	 * 올라와 있어서, 이 화면을 밟는 것은 이 장면뿐이다.
+	 *
+	 * 두 곳이 걸린다. 처형 흔들림을 걸 타일이 없고(0번 좌석은 없다), 최고 득표가
+	 * 0이라 막대 폭이 0/0이 된다. 둘 중 하나에서 방어가 빠지면 개표 화면이
+	 * 그 자리에서 멈추거나 막대 폭이 NaN%가 된다.
+	 */
+	{
+		label: "개표 — 아무도 오르지 않았다 (분모 0)",
+		file: "vote.html",
+		size: [340, 380],
+		messages: [
+			{
+				type: "result",
+				myNum: 4,
+				seats: SEATS.map(seat => ({ ...seat, votes: 0 })),
+				nominee: 0,
+				message: "아무도 지목되지 않았습니다.",
+				timer: 7,
+				...idOf(Role.POLICE),
+			},
+		],
+	},
+	/*
+	 * 능력 줄이 가장 긴 직업으로 보는 투표.
+	 *
+	 * 신분 줄은 한 줄이다 — 직업 칩과 능력 줄과 진행률이 그 한 줄을 나눠 쓴다.
+	 * 투표 위젯이 그 줄을 가진 화면 중 가장 좁으므로(340px), 여기서 넘치지
+	 * 않으면 다른 곳에서도 넘치지 않는다.
+	 *
+	 * 연인의 요약이 21종 중 가장 길다. 말줄임 처리를 지우면 능력 줄이 진행률
+	 * 숫자를 밀어내고, 그 숫자는 "몇 명이 아직 안 찍었는가"라 투표 화면에서
+	 * 가장 자주 읽히는 값이다.
+	 */
+	{
+		label: "투표 — 능력 줄이 가장 긴 직업(연인)",
+		file: "vote.html",
+		size: [340, 380],
+		messages: [
+			{ type: "init", myNum: 6, seats: SEATS, timer: 17, picked: 2, ...idOf(Role.LOVER) },
+			{ type: "progress", voted: 4, alive: 5 },
 		],
 	},
 	/*
@@ -603,6 +788,8 @@ const SCENES = [
 				nominee: 2,
 				nomineeName: "2번 이영희",
 				timer: 15,
+				...idOf(Role.POLICE),
+				lead: "해명을 들으세요",
 				picked: "NONE",
 				canJudge: false,
 			},
@@ -634,6 +821,10 @@ const SCENES = [
 				nominee: 5,
 				nomineeName: "5번 최지훈매우긴이름입니다",
 				timer: 15,
+				// 단상에 오른 본인. 신분 줄은 남의 눈에 보이지 않으므로 마피아도
+				// 자기 화면에서는 자기 직업을 그대로 본다
+				...idOf(Role.MAFIA),
+				lead: "해명하세요",
 				picked: "NONE",
 				canJudge: false,
 			},
@@ -652,6 +843,8 @@ const SCENES = [
 				nominee: 2,
 				nomineeName: "2번 이영희",
 				timer: 5,
+				...idOf(Role.POLICE),
+				lead: "처형할까요?",
 				picked: "AGREE",
 				canJudge: true,
 			},
@@ -672,12 +865,45 @@ const SCENES = [
 				nominee: 2,
 				nomineeName: "2번 이영희",
 				timer: 5,
+				...idOf(Role.MAFIA),
+				lead: "판결을 기다리세요",
 				picked: "NONE",
 				canJudge: false,
 			},
 			// 나머지가 전부 끊긴 순간. 실제로 나올 수 있는 값이고, 나누기 전에
 			// 걸러내지 않으면 진행률 막대 폭이 NaN%가 된다
 			{ type: "judge-progress", voted: 0, voters: 0 },
+		],
+		expect: { 'button[disabled=""]': 2 },
+	},
+	/*
+	 * 찬반 단계인데 누를 수 없는 사람 — 건달에게 협박당했다.
+	 *
+	 * 위 네 장면으로 갈리지 않는 다섯째 사람이다. canJudge는 단상 본인과
+	 * 똑같이 false인데 할 일은 다르다. 본인은 판결을 기다리고, 이 사람은
+	 * 자기 몫이 반대로 세어지는 것을 보고만 있다(judgementPassed).
+	 *
+	 * 그 차이를 canJudge로는 만들 수 없어서 서버가 문구를 정한다
+	 * (Trial.judgementLead). 네 갈래 중 이것이 마지막이고, 나머지 셋은
+	 * 위 장면들이 하나씩 들고 있다.
+	 */
+	{
+		label: "찬반 — 협박당해 누를 수 없는 사람",
+		file: "judgement.html",
+		size: JUDGEMENT_SIZE,
+		messages: [
+			{
+				type: "judge",
+				myNum: 4,
+				nominee: 2,
+				nomineeName: "2번 이영희",
+				timer: 5,
+				...idOf(Role.CITIZEN),
+				lead: "지켜보세요",
+				picked: "NONE",
+				canJudge: false,
+			},
+			{ type: "judge-progress", voted: 2, voters: 4 },
 		],
 		expect: { 'button[disabled=""]': 2 },
 	},
@@ -693,6 +919,30 @@ const SCENES = [
 				reason: "마피아 수가 시민 수와 같아졌습니다.",
 				timer: 14,
 				players: REVEAL,
+			},
+		],
+	},
+	/*
+	 * 같은 화면을 기호 없이 본다.
+	 *
+	 * 직업 공개 줄에 기호가 붙은 것은 이번 재설계부터다. 서버가 안 보내면
+	 * 위젯은 그 자리를 비우고 이름만 그린다 — 21줄이 나란히 설 때 기호는
+	 * 훑어 읽기를 돕는 것이고, 없어도 읽을 수는 있어야 한다.
+	 *
+	 * 이긴 쪽으로 두었다. 승패 머리말의 다른 갈래도 함께 밟힌다.
+	 */
+	{
+		label: "결과 — 기호 없는 공개 줄 (이긴 쪽)",
+		file: "gameOver.html",
+		size: [340, 460],
+		messages: [
+			{
+				type: "init",
+				winner: "mafia",
+				team: "mafia",
+				reason: "마피아 수가 시민 수와 같아졌습니다.",
+				timer: 14,
+				players: REVEAL_NO_GLYPH,
 			},
 		],
 	},
