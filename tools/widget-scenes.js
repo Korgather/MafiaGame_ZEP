@@ -120,6 +120,19 @@ const SEATS = [
 ];
 
 /**
+ * 최대 인원. 진행 화면의 번호 줄이 한 줄에 들어가지 않는 유일한 표본이다.
+ *
+ * 이름을 손으로 적지 않는 것은 이 표본을 쓰는 화면이 num과 alive만 읽기
+ * 때문이다(phase.html의 paintRoster). 죽은 번호를 5·10·11·12에 흩어 두면
+ * 취소선이 줄의 가운데와 끝에 함께 나타난다 — 접히는 자리가 어디든 한쪽
+ * 층에는 죽은 칸이 있다.
+ */
+const MANY_SEATS = [];
+for (let i = 1; i <= 12; i++) {
+	MANY_SEATS.push({ num: i, name: `${i}번 참가자`, alive: i !== 5 && i < 10 });
+}
+
+/**
  * 종료 화면의 직업 공개 한 줄(RevealView).
  *
  * 이름과 기호를 ROLE_DEFS에서 꺼낸다 — Room.revealViews가 그렇게 만든다.
@@ -232,7 +245,14 @@ const CHANNEL_DEFS = {
 function tab(id, over) {
 	const def = CHANNEL_DEFS[id];
 	return Object.assign(
-		{ id, label: def.label, glyph: def.glyph, write: false, unread: 0, placeholder: def.placeholder },
+		{
+			id,
+			label: def.label,
+			glyph: def.glyph,
+			write: false,
+			unread: 0,
+			placeholder: def.placeholder,
+		},
 		over
 	);
 }
@@ -285,6 +305,7 @@ const SCENES = [
 				turn: 2,
 				total: 6,
 				aliveCount: 5,
+				seats: SEATS,
 				timer: 22,
 				...noTurnNote(Role.POLITICIAN),
 				alive: true,
@@ -318,6 +339,7 @@ const SCENES = [
 				turn: 2,
 				total: 6,
 				aliveCount: 5,
+				seats: SEATS,
 				timer: 75,
 				...idOf(Role.POLICE),
 				lead: "토론하세요",
@@ -343,6 +365,7 @@ const SCENES = [
 				turn: 2,
 				total: 6,
 				aliveCount: 4,
+				seats: SEATS,
 				timer: 40,
 				// 칩 문구는 서버(identityOf)가 고른다. 죽으면 직업이 아니라 "유령"이
 				// 찍히므로 장면도 서버가 실제로 보내는 값을 그대로 쓴다
@@ -355,6 +378,42 @@ const SCENES = [
 				timeVote: false,
 			},
 		],
+		// 판 바깥 표시. alive: false 하나로 붙으므로 관전자도 같은 값을 받는다
+		expect: { ".panel.watching": 1 },
+	},
+	/*
+	 * 열두 명.
+	 *
+	 * 번호 줄이 한 줄에 들어가지 않는 유일한 장면이다. 접힌 층이 머리말이나
+	 * 타이머를 밀어내지 않는지 — .stage가 flex: 1 1 auto라 무대에서 가져가야
+	 * 한다 — 여기서만 눈으로 볼 수 있다.
+	 *
+	 * expect가 세는 것은 두 가지다. 칸이 인원수만큼 있는가(12), 그리고 죽은
+	 * 칸이 죽은 사람 수만큼인가(4). 뒤쪽이 없으면 취소선 규칙이 지워져도
+	 * 미리보기는 멀쩡한 줄을 계속 보여준다.
+	 */
+	{
+		label: "낮 — 열두 명, 번호 줄이 접힌다",
+		file: "phase.html",
+		size: [340, 300],
+		messages: [
+			{
+				type: "init",
+				phase: "day",
+				turn: 4,
+				total: 12,
+				aliveCount: 8,
+				seats: MANY_SEATS,
+				timer: 96,
+				...idOf(Role.CITIZEN),
+				lead: "토론하세요",
+				note: "투표 전까지 이야기를 나누세요.",
+				deaths: ["☠️ 10번 참가자가 죽었습니다."],
+				spectating: false,
+				timeVote: true,
+			},
+		],
+		expect: { ".roster i": 12, ".roster i.gone": 4, ".panel.watching": 0 },
 	},
 	{
 		label: "관전 — 게임 중 난입한 사람",
@@ -367,6 +426,7 @@ const SCENES = [
 				turn: 1,
 				total: 6,
 				aliveCount: 5,
+				seats: SEATS,
 				timer: 40,
 				...SPECTATOR,
 				lead: "지켜보세요",
@@ -378,6 +438,9 @@ const SCENES = [
 				timeVote: false,
 			},
 		],
+		// 관전자는 죽은 것이 아니라 좌석이 없는 사람인데(SPECTATOR는 alive: false를
+		// 함께 보낸다) 화면에서 할 수 있는 일은 유령과 같다. 같은 표시를 받는다
+		expect: { ".panel.watching": 1 },
 	},
 	{
 		label: "카드 — 직업 공개",
@@ -434,7 +497,10 @@ const SCENES = [
 	{
 		label: "카드 — 채팅 도움말 (도감이 아닌 목록)",
 		file: "card.html",
-		size: [360, 480],
+		// 도감(360×480)이 아니라 카드 크기다. 격자를 쓴다는 것과 화면을 크게
+		// 덮어도 된다는 것이 같은 말이 아니라는 것이 이 장면이 선 이유이므로,
+		// 상자도 실제로 열리는 크기여야 한다
+		size: [320, 400],
 		messages: [
 			{
 				type: "init",
@@ -493,6 +559,56 @@ const SCENES = [
 				timer: 22,
 			},
 			{ type: "progress", acted: 0, total: 3 },
+		],
+	},
+	{
+		// 마피아 팀에게만 오는 메시지(allies)를 걸어보는 유일한 장면이다.
+		// 공용 SEATS는 동료가 하나뿐이고 그게 나라서(2번), 여기서는 셋으로
+		// 만든다 — 동료가 둘 이상이 아니면 "누가 어디를 노리는가"라는 이
+		// 화면의 질문 자체가 생기지 않는다
+		label: "밤 지목 — 동료가 노리는 칸(마피아 셋)",
+		file: "roleAction.html",
+		size: [360, 440],
+		messages: [
+			{
+				type: "init",
+				myNum: 2,
+				...nightAction(Role.MAFIA),
+				seats: [
+					{ num: 1, name: "김철수", alive: true },
+					{ num: 2, name: "이영희", alive: true, ally: true },
+					{ num: 3, name: "박민수", alive: false },
+					{ num: 4, name: "정수연", alive: true },
+					{ num: 5, name: "최지훈매우긴이름입니다", alive: true, ally: true },
+					{ num: 6, name: "한가영", alive: true, ally: true },
+				],
+				timer: 22,
+			},
+			{ type: "progress", acted: 1, total: 3 },
+			// 팀이 갈렸다. 이 화면이 있으라고 만든 순간이 정확히 여기다
+			{
+				type: "allies",
+				picks: [
+					{ from: 5, to: 1 },
+					{ from: 6, to: 4 },
+				],
+			},
+			// 나도 4번으로 붙는다. 격자가 잠기고, 잠긴 뒤에도 1번 칸의 표시가
+			// 회색에 묻히지 않아야 한다(.grid.locked .tile.aimed)
+			{ type: "selectResponse", num: 4 },
+			{ type: "progress", acted: 2, total: 3 },
+			// 5번이 옮겨 와 한 칸에 둘이 모인다("🔻5,6"). 1번 칸의 표시는
+			// 지워져야 한다 — 지우는 길이 없으면 지나간 지목이 밤새 남는다.
+			// 내 지목(2→4)은 picked가 이미 말하므로 위젯이 걸러 낸다
+			{
+				type: "allies",
+				picks: [
+					{ from: 5, to: 4 },
+					{ from: 6, to: 4 },
+					{ from: 2, to: 4 },
+				],
+			},
+			{ type: "progress", acted: 3, total: 3 },
 		],
 	},
 	{
@@ -626,6 +742,7 @@ const SCENES = [
 				turn: 3,
 				total: 6,
 				aliveCount: 4,
+				seats: SEATS,
 				timer: 22,
 				// 총알을 다 쓴 자경단원. maxUses를 넘겼다는 사실만 주면
 				// 문장은 도메인이 고른다
@@ -719,7 +836,9 @@ const SCENES = [
 		size: [340, 380],
 		messages: [
 			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0, ...idOf(Role.CITIZEN) },
-			{ type: "progress", voted: 3, alive: 5 },
+			// done은 표를 낸 사람의 번호다. 나(4번)는 아직 안 냈으므로 빠져 있다 —
+			// 내 칸만 체크가 없는 화면이 곧 "남은 사람은 나다"라는 신호다
+			{ type: "progress", voted: 3, alive: 5, done: [1, 2, 5] },
 		],
 	},
 	{
@@ -728,7 +847,7 @@ const SCENES = [
 		size: [340, 380],
 		messages: [
 			{ type: "init", myNum: 3, seats: SEATS, timer: 17, picked: 0, ...GHOST },
-			{ type: "progress", voted: 2, alive: 5 },
+			{ type: "progress", voted: 2, alive: 5, done: [1, 5] },
 		],
 		// 유령은 한 자리도 누를 수 없다 — locked가 tile 전체를 disabled로 만든다.
 		// '투표 없음' 칸도 함께 잠기므로 사람 수보다 하나 많다. 그 칸을 locked에서
@@ -763,7 +882,9 @@ const SCENES = [
 				rejected: [2],
 				...idOf(Role.DOCTOR),
 			},
-			{ type: "progress", voted: 1, alive: 5 },
+			// 2번이 든 이유는 부결된 사람도 투표는 한다는 것이다. 그 칸에는
+			// 부결 배지와 완료 체크가 함께 뜨므로 둘의 자리가 겹치면 여기서 보인다
+			{ type: "progress", voted: 2, alive: 5, done: [2, 4] },
 		],
 		expect: { 'button[disabled=""]': 2, ".badge": 1 },
 	},
@@ -829,7 +950,7 @@ const SCENES = [
 		size: [340, 380],
 		messages: [
 			{ type: "init", myNum: 6, seats: SEATS, timer: 17, picked: 2, ...idOf(Role.LOVER) },
-			{ type: "progress", voted: 4, alive: 5 },
+			{ type: "progress", voted: 4, alive: 5, done: [1, 2, 5, 6] },
 		],
 	},
 	/*
@@ -967,7 +1088,38 @@ const SCENES = [
 			},
 			{ type: "judge-progress", voted: 2, voters: 4 },
 		],
-		expect: { 'button[disabled=""]': 2 },
+		// 살아 있는 사람이므로 회색 처리는 붙지 않아야 한다. 협박은 판에서
+		// 빠지는 것이 아니라 표가 반대로 세어지는 것이고, 그는 낮에 여전히
+		// 말할 수 있다 — 화면째 색을 빼면 그 사실이 뒤집힌다
+		expect: { 'button[disabled=""]': 2, ".panel.watching": 0 },
+	},
+	/*
+	 * 유령이 보는 찬반 화면.
+	 *
+	 * 위 다섯 갈래는 전부 살아 있는 사람이었다. 유령에게는 O/X가 이 판이
+	 * 끝날 때까지 열리지 않는데, 이 화면은 반론 단계에도 잠긴 버튼을 그대로
+	 * 보여주기 때문에 "곧 열린다"와 구분되지 않았다. 찬반으로 넘어가도
+	 * 버튼이 그대로인 것을 보고 화면이 멈춘 줄 아는 사람이 나왔다.
+	 */
+	{
+		label: "찬반 — 유령이 보는 화면 (영영 안 열린다)",
+		file: "judgement.html",
+		size: JUDGEMENT_SIZE,
+		messages: [
+			{
+				type: "judge",
+				myNum: 3,
+				nominee: 2,
+				nomineeName: "2번 이영희",
+				timer: 5,
+				...GHOST,
+				lead: "지켜보세요",
+				picked: "NONE",
+				canJudge: false,
+			},
+			{ type: "judge-progress", voted: 2, voters: 4 },
+		],
+		expect: { 'button[disabled=""]': 2, ".panel.watching": 1 },
 	},
 	{
 		label: "결과 — 진 쪽이 보는 화면",
@@ -1055,7 +1207,14 @@ const SCENES = [
 					// 운영자·비로그인 유저는 레벨 대신 칭호가 그대로 들어온다.
 					// 위젯이 "Lv."를 덧붙이지 않는지 이 두 줄이 지킨다.
 					{ id: "p2", name: "이영희", rank: "운영자", runCount: 0, ready: false, kickCount: 1 },
-					{ id: "p3", name: "박민수", rank: "비로그인 유저", runCount: 9, ready: true, kickCount: 0 },
+					{
+						id: "p3",
+						name: "박민수",
+						rank: "비로그인 유저",
+						runCount: 9,
+						ready: true,
+						kickCount: 0,
+					},
 				],
 			},
 		],
@@ -1205,7 +1364,11 @@ const SCENES = [
 				focus: "",
 				myId: "p1",
 				lines: [
-					line(1, { channel: "ROOM", kind: "SYSTEM", text: "🤐 침묵전입니다. 정해진 문구로만 말할 수 있습니다." }),
+					line(1, {
+						channel: "ROOM",
+						kind: "SYSTEM",
+						text: "🤐 침묵전입니다. 정해진 문구로만 말할 수 있습니다.",
+					}),
 					line(2, {
 						channel: "ROOM",
 						senderId: "p4",
@@ -1282,7 +1445,11 @@ const SCENES = [
 						to: "p1",
 						text: "🚫 조금 빠릅니다. 잠시 후 다시 보내세요.",
 					}),
-					line(5, { channel: "GLOBAL", kind: "NOTICE", text: "🎭 3번 방에서 게임이 시작되었습니다." }),
+					line(5, {
+						channel: "GLOBAL",
+						kind: "NOTICE",
+						text: "🎭 3번 방에서 게임이 시작되었습니다.",
+					}),
 				],
 			},
 		],

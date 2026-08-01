@@ -32,6 +32,7 @@ import type { FakePlayer } from "./helpers/Harness.ts";
 import {
 	activeChannel,
 	cardShown,
+	cardWidget,
 	chat,
 	chatChannels,
 	chatLines,
@@ -901,6 +902,29 @@ describe("채팅 명령어", () => {
 		for (const mark of ["/귓속말", "/차단", "/도감", "Tab", "↑ ↓", "Esc"]) {
 			assert.ok(titles.indexOf(mark) >= 0, `도움말에 "${mark}"가 없습니다`);
 		}
+	});
+
+	/*
+	 * 도움말은 도감과 같은 격자를 쓰지만 크기는 물려받지 않는다.
+	 *
+	 * 도감이 세로 예산(46%)을 넘는 유일한 화면인 이유는 21종을 겹쳐 읽고 곧
+	 * 닫는다는 것이었다. 도움말은 명령어를 보면서 채팅을 치는 화면이라 그
+	 * 예외가 맞지 않는데, 크기를 nav로 정하던 동안에는 격자를 쓴다는 이유
+	 * 하나로 조용히 같은 크기를 받았다 — 도움말이 그 채팅창을 덮었다.
+	 *
+	 * 두 카드를 함께 여는 이유는 절대값 하나만 보면 부족하기 때문이다.
+	 * "도움말이 400px"라는 검사는 CARD가 커지는 날 함께 커지고 나서도
+	 * 통과한다. 지켜야 하는 것은 둘의 관계다.
+	 */
+	it("도움말은 도감보다 작게 열린다", () => {
+		const player = connect("손님");
+
+		chat(player, "/도움말");
+		const help = cardWidget(player).height;
+		chat(player, "/도감");
+		const book = cardWidget(player).height;
+
+		assert.ok(help < book, `도움말(${help}) 이 도감(${book}) 보다 작지 않습니다`);
 	});
 
 	it("운영자 명령은 도움말에도 실리지 않는다", () => {

@@ -50,6 +50,39 @@
 			}
 
 			/*
+			 * 동료가 노리는 칸. 마피아 채팅에 있는 사람만 이 표시를 받는다.
+			 *
+			 * 진행률은 인원수뿐이라 "셋 중 둘이 골랐다"까지만 말한다. 그 둘이
+			 * 같은 사람을 노리는지 서로 다른 사람을 노리는지가 밤에 팀이 정해야
+			 * 하는 전부인데, 그것만 화면에 없어서 번호를 채팅으로 되풀어
+			 * 확인하다 시간이 끝났다.
+			 *
+			 * 자리가 아래인 이유는 위가 이미 차 있다는 것이다 — 오른쪽 위에
+			 * 동료 배지(🔻)가 있고, 노리는 대상이 동료인 밤(자멸)에는 둘이 한
+			 * 타일에 함께 뜬다.
+			 */
+			.tile .by {
+				position: absolute;
+				bottom: 2px;
+				left: 0;
+				right: 0;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				line-height: 1;
+				color: var(--mafia-ink);
+			}
+
+			/*
+			 * 잠긴 격자에서도 동료가 노리는 칸은 물러나지 않는다. 내가 고른
+			 * 다음이 곧 동료를 보는 시간이라, 여기서 함께 회색이 되면 이 표시가
+			 * 정작 필요한 동안 읽을 수 없다.
+			 */
+			.grid.locked .tile.aimed {
+				opacity: 1;
+				filter: none;
+			}
+
+			/*
 			 * 문구 고르기. 격자와 자리를 바꿔서 뜬다.
 			 *
 			 * 채팅창의 .quick과 같은 일을 하지만 가로 스크롤을 쓰지 않는다 —
@@ -158,7 +191,36 @@
 					aria-label="${seat.num}번 ${seat.name || ""}${seat.ally ? " (같은 편)" : ""}"
 				>
 					${badge}<span class="num">${seat.num}</span><span class="cap">${caption}</span>
+					<span class="by"></span>
 				</button>`;
+			}
+
+			/**
+			 * 동료들이 지금 노리는 칸에 그 동료의 번호를 적는다.
+			 *
+			 * 격자를 다시 그리지 않는 이유는 손이다 — 이 메시지는 남이 지목할
+			 * 때마다 오고, 그때 innerHTML을 갈아 치우면 누르려던 버튼이 손
+			 * 아래에서 새것으로 바뀐다. 그래서 미리 넣어 둔 빈 칸(.by)의
+			 * 글자만 바꾼다.
+			 *
+			 * 내 지목은 빼고 그린다. 내 것은 picked 표시가 이미 말하므로
+			 * 한 칸에 같은 사실이 두 번 적히는 것을 막는다.
+			 */
+			function paintAllies(picks) {
+				// 대상 번호 → 그를 고른 동료들. 둘이 같은 사람을 노리면 "2,6"이
+				// 되고, 그 한 칸이 곧 "팀의 표가 모였다"다
+				const by = {};
+				for (const pick of picks) {
+					const from = Number(pick.from) || 0;
+					const to = Number(pick.to) || 0;
+					if (!from || !to || from === myNum) continue;
+					by[to] = by[to] ? by[to] + "," + from : String(from);
+				}
+				for (const el of qsa(".tile")) {
+					const list = by[Number(el.dataset.num)] || "";
+					el.querySelector(".by").textContent = list ? "🔻" + list : "";
+					el.classList.toggle("aimed", !!list);
+				}
 			}
 
 			qs("#grid").addEventListener("click", event => {
@@ -228,6 +290,18 @@
 								? `${done}/${total} 지목 완료 · ${leftCount}명 남음`
 								: `${total}명 모두 지목했습니다`
 							: "";
+				},
+
+				/*
+				 * 동료들이 지금 누구를 노리는가. 마피아 채팅에 있는 사람에게만
+				 * 온다 — 시민 화면에는 이 메시지가 도달하지 않는다.
+				 *
+				 * 진행률과 갈라 오는 이유가 그것이다. 저쪽은 방 전원이 받으므로
+				 * 인원수만 담을 수 있고, 이쪽은 팀 안에서만 도는 값이라 번호를
+				 * 담을 수 있다.
+				 */
+				allies(data) {
+					paintAllies(Array.isArray(data.picks) ? data.picks : []);
 				},
 
 				/*

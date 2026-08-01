@@ -1014,6 +1014,16 @@ body {
 				background: var(--mafia-dim);
 				border-color: var(--mafia);
 			}
+			.tile.cast::after {
+				content: "✓";
+				position: absolute;
+				top: 2px;
+				left: 4px;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				line-height: 1;
+				color: var(--ok);
+			}
 		</style>
 	</head>
 	<body>
@@ -1244,6 +1254,12 @@ function paintAlive(list) {
  qs("#alive").textContent = `생존 ${alive}/${list.length}`;
 }
 
+function paintCast(nums) {
+ for (const el of qsa(".tile")) {
+  el.classList.toggle("cast", nums.indexOf(Number(el.dataset.num)) >= 0);
+ }
+}
+
 function paintPick() {
  for (const el of qsa(".tile")) {
   el.classList.toggle("picked", Number(el.dataset.num) === myPick);
@@ -1298,10 +1314,11 @@ Parent.on({
   startTimer(qs("#timer"), data.timer);
  },
  progress(data) {
-  const done = Number(data.voted) || 0;
+  const count = Number(data.voted) || 0;
   const total = Number(data.alive) || 1;
-  qs("#progress").style.width = Math.round(done / total * 100) + "%";
-  qs("#sub").textContent = `${done}/${total} 투표 완료`;
+  qs("#progress").style.width = Math.round(count / total * 100) + "%";
+  qs("#sub").textContent = `${count}/${total} 투표 완료`;
+  paintCast(Array.isArray(data.done) ? data.done : []);
  },
  result(data) {
   locked = true;

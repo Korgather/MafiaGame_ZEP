@@ -985,26 +985,45 @@ body {
 				line-height: 1;
 			}
 			.turn {
+				flex: 0 0 auto;
 				font-size: var(--t-lg);
 				font-weight: 800;
 				letter-spacing: -0.01em;
+				white-space: nowrap;
 			}
-			.alive-bar {
+			.roster {
 				display: flex;
 				gap: 3px;
 				margin-left: auto;
 				flex-wrap: wrap;
 				justify-content: flex-end;
+				min-width: 0;
 			}
-			.alive-bar i {
-				display: block;
-				width: 13px;
-				height: 6px;
-				border-radius: 99px;
+			.roster i {
+				min-width: 16px;
+				padding: 0 2px;
+				font-size: var(--t-xs);
+				font-style: normal;
+				font-weight: 700;
+				font-variant-numeric: tabular-nums;
+				line-height: 1.45;
+				text-align: center;
+				color: var(--bg);
 				background: var(--ok);
+				border-radius: var(--r1);
 			}
-			.alive-bar i.gone {
-				background: var(--dead);
+			.roster i.gone {
+				color: var(--ink-2);
+				background: var(--surface-2);
+				text-decoration: line-through;
+			}
+			.panel.watching {
+				box-shadow:
+					inset 0 0 0 2px var(--dead),
+					var(--shadow);
+			}
+			.panel.watching .stage {
+				filter: saturate(0.3);
 			}
 			.time-vote {
 				display: flex;
@@ -1064,7 +1083,7 @@ body {
 				<div class="sky-row">
 					<span class="sky" id="sky" aria-hidden="true">🌙</span>
 					<span class="turn" id="turn">밤</span>
-					<span class="alive-bar" id="bar" aria-hidden="true"></span>
+					<span class="roster" id="roster" aria-hidden="true"></span>
 				</div>
 				<div class="stack hidden" id="deaths"></div>
 			</div>
@@ -1225,12 +1244,18 @@ const Parent = function() {
 }();
 </script>
 		<script>
-function paintAlive(alive, total) {
- const pips = [];
- for (let i = 0; i < total; i++) {
-  pips.push(html`<i class="${i < alive ? "" : "gone"}"></i>`);
+function paintRoster(seats, alive, total) {
+ const marks = [];
+ if (seats.length > 0) {
+  for (const seat of seats) {
+   marks.push(html`<i class="${seat.alive ? "" : "gone"}">${seat.num}</i>`);
+  }
+ } else {
+  for (let i = 0; i < total; i++) {
+   marks.push(html`<i class="${i < alive ? "" : "gone"}">·</i>`);
+  }
  }
- qs("#bar").innerHTML = html`${pips}`;
+ qs("#roster").innerHTML = html`${marks}`;
  qs("#alive").textContent = `생존 ${alive}/${total}`;
 }
 
@@ -1268,7 +1293,8 @@ Parent.on({
   qs("#ability").textContent = data.abilityLine || "";
   qs("#lead").textContent = data.lead || (night ? "기다리세요" : "토론하세요");
   qs("#quit").hidden = !data.spectating;
-  paintAlive(data.aliveCount, data.total);
+  qs("#panel").classList.toggle("watching", data.spectating === true || data.alive === false);
+  paintRoster(Array.isArray(data.seats) ? data.seats : [], data.aliveCount, data.total);
   qs("#note").textContent = data.note || "";
   const deaths = Array.isArray(data.deaths) ? data.deaths : [];
   qs("#deaths").classList.toggle("hidden", deaths.length === 0);

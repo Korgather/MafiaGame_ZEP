@@ -50,30 +50,81 @@
 			}
 
 			.turn {
+				flex: 0 0 auto;
 				font-size: var(--t-lg);
 				font-weight: 800;
 				letter-spacing: -0.01em;
+				white-space: nowrap;
 			}
 
-			/* 생존/전체를 막대로도 보여준다. 숫자만 있으면 비율이 안 읽힌다 */
-			.alive-bar {
+			/*
+			 * 살아 있는 번호 명단.
+			 *
+			 * 전에는 이 자리에 익명의 막대가 인원수만큼 있었다. 비율은 읽혔지만
+			 * "누가 남았는가"가 없었고, 그것을 아는 화면은 투표 격자뿐인데
+			 * 격자는 투표 단계에만 열린다 — 정작 이야기를 나누는 낮 토론 동안
+			 * 사람들은 채팅에서 "3번 죽었나?"를 되물어 확인했다.
+			 *
+			 * 죽은 번호를 지우지 않고 남기는 것은 투표 격자와 같은 이유다.
+			 * 자리가 밀리면 어제 3번이 있던 곳에 오늘 다른 사람이 온다.
+			 *
+			 * 12명이면 한 줄에 다 들어가지 않아 한 층(약 20px)이 늘어난다.
+			 * .stage가 flex: 1 1 auto라 그만큼을 무대에서 가져간다 — 머리말과
+			 * 타이머는 밀리지 않는다.
+			 */
+			.roster {
 				display: flex;
 				gap: 3px;
 				margin-left: auto;
 				flex-wrap: wrap;
 				justify-content: flex-end;
+				min-width: 0;
 			}
 
-			.alive-bar i {
-				display: block;
-				width: 13px;
-				height: 6px;
-				border-radius: 99px;
+			.roster i {
+				min-width: 16px;
+				padding: 0 2px;
+				font-size: var(--t-xs);
+				font-style: normal;
+				font-weight: 700;
+				font-variant-numeric: tabular-nums;
+				line-height: 1.45;
+				text-align: center;
+				color: var(--bg);
 				background: var(--ok);
+				border-radius: var(--r1);
 			}
 
-			.alive-bar i.gone {
-				background: var(--dead);
+			/*
+			 * 죽은 번호. 취소선까지 두는 것은 색만으로 가르면 작은 글씨에서
+			 * 초록과 회색이 붙어 보이기 때문이다 — 이 줄은 화면에서 가장 작다.
+			 */
+			.roster i.gone {
+				color: var(--ink-2);
+				background: var(--surface-2);
+				text-decoration: line-through;
+			}
+
+			/*
+			 * 볼 수만 있는 화면 (유령 · 관전자).
+			 *
+			 * 지금까지 산 사람의 화면과 갈리는 것은 직업 칩 한 개와 지시문 한
+			 * 줄이었다. 둘 다 작은 글씨라, 관전으로 들어온 사람은 자기 화면이
+			 * 남들과 같은 줄 알고 무대를 눌러 보다 "이 게임 고장났나"를 물었다.
+			 * 색을 빼고 테두리를 둘러 화면 전체가 한 번에 그 사실을 말한다.
+			 *
+			 * box-shadow에 var(--shadow)를 함께 적는 이유는 .panel이 이미 그
+			 * 값을 쓰고 있어서다. 안쪽 테두리만 적으면 판이 배경에서 떠 보이는
+			 * 그림자가 사라진다.
+			 */
+			.panel.watching {
+				box-shadow:
+					inset 0 0 0 2px var(--dead),
+					var(--shadow);
+			}
+
+			.panel.watching .stage {
+				filter: saturate(0.3);
 			}
 
 			/*
@@ -147,7 +198,12 @@
 				<div class="sky-row">
 					<span class="sky" id="sky" aria-hidden="true">🌙</span>
 					<span class="turn" id="turn">밤</span>
-					<span class="alive-bar" id="bar" aria-hidden="true"></span>
+					<!--
+						살아 있는 번호. 옆의 stat이 "생존 4/5"를 글자로 읽어
+						주므로 여기는 화면에서 빼둔다 — 스크린 리더가 번호
+						열둘을 하나씩 읽으면 정작 남은 시간에 닿지 못한다.
+					-->
+					<span class="roster" id="roster" aria-hidden="true"></span>
 				</div>
 				<div class="stack hidden" id="deaths"></div>
 			</div>
@@ -162,13 +218,25 @@
 
 		<!--@shared-->
 		<script>
-			/** 생존자를 채운 막대, 사망자를 비운 막대로 그린다 */
-			function paintAlive(alive, total) {
-				const pips = [];
-				for (let i = 0; i < total; i++) {
-					pips.push(html`<i class="${i < alive ? "" : "gone"}"></i>`);
+			/**
+			 * 살아 있는 번호를 그대로, 죽은 번호는 지워서 적는다.
+			 *
+			 * 목록이 비어 오는 경우(옛 서버·재생 오류)에는 인원수만큼 익명
+			 * 칸을 그린다. 번호를 모르는 채로 비율만 남는 것이 예전 화면이라,
+			 * 물러나도 지금보다 나빠지지는 않는다.
+			 */
+			function paintRoster(seats, alive, total) {
+				const marks = [];
+				if (seats.length > 0) {
+					for (const seat of seats) {
+						marks.push(html`<i class="${seat.alive ? "" : "gone"}">${seat.num}</i>`);
+					}
+				} else {
+					for (let i = 0; i < total; i++) {
+						marks.push(html`<i class="${i < alive ? "" : "gone"}">·</i>`);
+					}
 				}
-				qs("#bar").innerHTML = html`${pips}`;
+				qs("#roster").innerHTML = html`${marks}`;
 				qs("#alive").textContent = `생존 ${alive}/${total}`;
 			}
 
@@ -224,7 +292,21 @@
 
 					qs("#quit").hidden = !data.spectating;
 
-					paintAlive(data.aliveCount, data.total);
+					/*
+					 * 볼 수만 있는 사람인가. 관전자와 유령을 한 상태로 묶는다 —
+					 * 둘의 차이는 이 판에 좌석이 있었느냐뿐이고, 지금 할 수 있는
+					 * 일은 똑같이 없다. 그 사실을 화면 전체가 말하게 한다.
+					 */
+					qs("#panel").classList.toggle(
+						"watching",
+						data.spectating === true || data.alive === false
+					);
+
+					paintRoster(
+						Array.isArray(data.seats) ? data.seats : [],
+						data.aliveCount,
+						data.total
+					);
 					qs("#note").textContent = data.note || "";
 
 					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다.

@@ -739,7 +739,24 @@ describe("클래식 회귀 · 투표와 재판", () => {
 				if (payload.type !== "progress") continue;
 				progressSeen++;
 				const keys = Object.keys(payload).sort();
-				assert.deepEqual(keys, ["alive", "type", "voted"], "투표 현황에 득표가 실렸습니다");
+				assert.deepEqual(
+					keys,
+					["alive", "done", "type", "voted"],
+					"투표 현황에 득표가 실렸습니다"
+				);
+
+				/*
+				 * done은 표를 '낸' 사람의 번호다(좌석 격자의 체크 표시).
+				 * 대상이 아니므로 이 규칙을 어기지 않지만, 어기기는 쉽다 —
+				 * 같은 형태의 number[] 한 줄이면 실시간 개표가 되어버린다.
+				 *
+				 * 이 판에서 표를 받은 사람은 1번뿐이고 1번은 표를 내지
+				 * 않았다. 그러니 1번이 여기 나타나는 유일한 경로는 대상
+				 * 번호가 섞여 들어오는 것이다.
+				 */
+				const done = payload.done as number[];
+				assert.equal(done.length, payload.voted, "체크 수와 낸 사람 수가 어긋납니다");
+				assert.equal(done.indexOf(1), -1, "투표 현황에 대상 번호가 실렸습니다");
 			}
 		}
 		assert.ok(progressSeen > 0, "투표 현황이 한 번도 나가지 않았습니다");

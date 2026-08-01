@@ -91,6 +91,31 @@
 				background: var(--mafia-dim);
 				border-color: var(--mafia);
 			}
+
+			/*
+			 * 표를 낸 사람. 무엇을 냈는지는 오지 않는다 — 개표까지 감추는 것은
+			 * "누구에게"이고, "냈다"는 감출 이유가 없었는데 함께 감춰져 있었다.
+			 * 숫자 진행률만 있던 동안은 마지막 한 명이 누구인지 아무도 몰라서
+			 * 방 전체가 남은 시간을 잠자코 흘려보냈다.
+			 *
+			 * ::after로 그리는 이유는 갱신 경로다. 표가 오갈 때마다 오는 것은
+			 * progress 하나뿐이고 그때 격자를 다시 그리지 않으므로(다시 그리면
+			 * 누르던 손 아래에서 버튼이 바뀐다), 클래스 토글만으로 켜지고
+			 * 꺼지는 표시여야 한다.
+			 *
+			 * 자리가 왼쪽인 것은 부결 배지가 오른쪽 위에 있기 때문이다.
+			 * 부결된 사람도 투표는 하므로 둘은 실제로 한 타일에 함께 뜬다.
+			 */
+			.tile.cast::after {
+				content: "✓";
+				position: absolute;
+				top: 2px;
+				left: 4px;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				line-height: 1;
+				color: var(--ok);
+			}
 		</style>
 	</head>
 	<body>
@@ -185,6 +210,20 @@
 				qs("#alive").textContent = `생존 ${alive}/${list.length}`;
 			}
 
+			/**
+			 * 이미 표를 낸 사람에게 체크를 켠다. nums에 든 것은 번호뿐이고
+			 * 대상은 오지 않는다 — 서버가 아예 싣지 않는다(VoteProgressPayload).
+			 *
+			 * 내 타일도 예외를 두지 않는다. 내가 냈는지는 picked 표시로 이미
+			 * 아는데, 남들 눈에 내가 낸 것으로 보이는지는 그것과 다른 사실이고
+			 * 협박·기권 시비가 붙는 자리가 바로 거기다.
+			 */
+			function paintCast(nums) {
+				for (const el of qsa(".tile")) {
+					el.classList.toggle("cast", nums.indexOf(Number(el.dataset.num)) >= 0);
+				}
+			}
+
 			function paintPick() {
 				for (const el of qsa(".tile")) {
 					el.classList.toggle("picked", Number(el.dataset.num) === myPick);
@@ -260,12 +299,13 @@
 					startTimer(qs("#timer"), data.timer);
 				},
 
-				// 투표한 사람 수만 갱신한다. 누가 누구를 찍었는지는 개표까지 감춘다
+				// 누가 냈는지까지 갱신한다. 누구를 찍었는지는 개표까지 감춘다
 				progress(data) {
-					const done = Number(data.voted) || 0;
+					const count = Number(data.voted) || 0;
 					const total = Number(data.alive) || 1;
-					qs("#progress").style.width = Math.round((done / total) * 100) + "%";
-					qs("#sub").textContent = `${done}/${total} 투표 완료`;
+					qs("#progress").style.width = Math.round((count / total) * 100) + "%";
+					qs("#sub").textContent = `${count}/${total} 투표 완료`;
+					paintCast(Array.isArray(data.done) ? data.done : []);
 				},
 
 				result(data) {

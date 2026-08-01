@@ -85,23 +85,75 @@ function parseNodes(html, parent) {
 	return roots;
 }
 
-const SELECTOR = /^([.#]?)([\w-]+)(?:\[([\w-]+)="([^"]*)"\])?$/;
+/** 한 항을 이루는 조각들: 태그 · .class · #id · [attr="value"] */
+const TOKEN = /([\w-]+)|\.([\w-]+)|#([\w-]+)|\[([\w-]+)="([^"]*)"\]/g;
+
+/**
+ * 항 하나를 읽는다. 조각은 몇 개든 이어 붙을 수 있다 —
+ * `.panel.watching`, `button[disabled=""]`, `i.gone`.
+ *
+ * 읽지 못하면 null을 돌려준다. 부르는 쪽이 선택자 전체를 알고 있어야
+ * 오류 문구에 원문을 실을 수 있어서, 여기서 던지지 않는다.
+ */
+function parseTerm(term) {
+	const out = { tag: "", id: "", classes: [], attrs: [] };
+	let at = 0;
+	let m;
+	TOKEN.lastIndex = 0;
+	while ((m = TOKEN.exec(term))) {
+		// 조각 사이에 검사기가 모르는 문자가 끼어 있으면 여기서 멈춘다
+		if (m.index !== at) break;
+		at = TOKEN.lastIndex;
+		if (m[1]) out.tag = m[1].toLowerCase();
+		else if (m[2]) out.classes.push(m[2]);
+		else if (m[3]) out.id = m[3];
+		else out.attrs.push([m[4].toLowerCase(), m[5]]);
+	}
+	return at === term.length ? out : null;
+}
+
+/**
+ * 선택자를 항 목록으로 읽는다. 결합자는 공백(자손) 하나만 안다 —
+ * `>`나 `,`를 쓰는 위젯이 아직 없고, 모르는 것은 던져서 알린다.
+ */
+function parseSelector(selector) {
+	const terms = [];
+	for (const part of selector.trim().split(/\s+/)) {
+		const term = parseTerm(part);
+		// 못 읽는 선택자는 조용히 빈 결과를 돌려주면 안 된다. 이 검사기가
+		// 못 따라간 것인지 위젯이 틀린 것인지 구분되지 않기 때문이다.
+		if (!term) throw new Error(`검사기가 읽지 못한 선택자: ${selector}`);
+		terms.push(term);
+	}
+	if (terms.length === 0) throw new Error(`빈 선택자`);
+	return terms;
+}
+
+function matchesTerm(node, term) {
+	if (term.tag && node.tag !== term.tag) return false;
+	if (term.id && node.attrs.id !== term.id) return false;
+	if (term.classes.length > 0) {
+		const has = (node.attrs.class || "").split(/\s+/);
+		for (const name of term.classes) if (!has.includes(name)) return false;
+	}
+	for (const pair of term.attrs) if (node.attrs[pair[0]] !== pair[1]) return false;
+	return true;
+}
 
 function matches(node, selector) {
-	const m = SELECTOR.exec(selector.trim());
-	// 못 읽는 선택자는 조용히 null을 돌려주면 안 된다. 이 검사기가
-	// 못 따라간 것인지 위젯이 틀린 것인지 구분되지 않기 때문이다.
-	if (!m) throw new Error(`검사기가 읽지 못한 선택자: ${selector}`);
-	const [, kind, name, attr, value] = m;
-
-	if (kind === "#") {
-		if (node.attrs.id !== name) return false;
-	} else if (kind === ".") {
-		if (!(node.attrs.class || "").split(/\s+/).includes(name)) return false;
-	} else if (node.tag !== name.toLowerCase()) {
-		return false;
+	const terms = parseSelector(selector);
+	// 오른쪽 항이 이 노드에 맞아야 하고, 나머지는 조상 사슬 어딘가에서
+	// 순서대로 만나면 된다. 실제 CSS는 여기서 역추적까지 하지만,
+	// 위젯의 선택자는 `.roster i` 정도라 이 근사로 충분하다.
+	if (!matchesTerm(node, terms[terms.length - 1])) return false;
+	let at = terms.length - 2;
+	let up = node.parent;
+	while (at >= 0) {
+		if (!up) return false;
+		if (matchesTerm(up, terms[at])) at--;
+		up = up.parent;
 	}
-	return !attr || node.attrs[attr] === value;
+	return true;
 }
 
 function walk(nodes, visit) {

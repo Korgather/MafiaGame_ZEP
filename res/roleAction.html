@@ -979,6 +979,20 @@ body {
 				opacity: 0.45;
 				filter: grayscale(1);
 			}
+			.tile .by {
+				position: absolute;
+				bottom: 2px;
+				left: 0;
+				right: 0;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				line-height: 1;
+				color: var(--mafia-ink);
+			}
+			.grid.locked .tile.aimed {
+				opacity: 1;
+				filter: none;
+			}
 			.choices {
 				display: flex;
 				flex-direction: column;
@@ -1213,7 +1227,23 @@ function tile(seat) {
 					aria-label="${seat.num}번 ${seat.name || ""}${seat.ally ? " (같은 편)" : ""}"
 				>
 					${badge}<span class="num">${seat.num}</span><span class="cap">${caption}</span>
+					<span class="by"></span>
 				</button>`;
+}
+
+function paintAllies(picks) {
+ const by = {};
+ for (const pick of picks) {
+  const from = Number(pick.from) || 0;
+  const to = Number(pick.to) || 0;
+  if (!from || !to || from === myNum) continue;
+  by[to] = by[to] ? by[to] + "," + from : String(from);
+ }
+ for (const el of qsa(".tile")) {
+  const list = by[Number(el.dataset.num)] || "";
+  el.querySelector(".by").textContent = list ? "🔻" + list : "";
+  el.classList.toggle("aimed", !!list);
+ }
 }
 
 qs("#grid").addEventListener("click", event => {
@@ -1264,6 +1294,9 @@ Parent.on({
   tally.setAttribute("aria-label", `${total}명 중 ${done}명 지목 완료`);
   const leftCount = total - done;
   qs("#progresstext").textContent = total > 0 ? leftCount > 0 ? `${done}/${total} 지목 완료 · ${leftCount}명 남음` : `${total}명 모두 지목했습니다` : "";
+ },
+ allies(data) {
+  paintAllies(Array.isArray(data.picks) ? data.picks : []);
  },
  phrases(data) {
   const options = Array.isArray(data.options) ? data.options : [];

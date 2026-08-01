@@ -50,7 +50,7 @@ import { tagOf } from "../infrastructure/PlayerTag.ts";
 export function bindMessage(
 	widget: ScriptWidget,
 	scope: string,
-	handler: (sender: ScriptPlayer, data: unknown) => void,
+	handler: (sender: ScriptPlayer, data: unknown) => void
 ): void {
 	// 관문 자체는 등록해야 한다. 파일 단위로 규칙을 끄면 같은 규칙에 들어 있는
 	// undefined 인자 검사까지 함께 꺼지므로 이 한 줄만 예외로 둔다.
@@ -277,6 +277,19 @@ export interface PhasePayload extends Identity {
 	turn: number;
 	total: number;
 	aliveCount: number;
+	/**
+	 * 참가자 전원. 이 화면은 번호만 쓴다(num·alive).
+	 *
+	 * aliveCount만으로는 "넷 남았다"까지고 "누가 넷인가"가 없었다. 그 넷이
+	 * 누구인지는 투표 격자에만 있는데 격자는 투표 단계에만 열리므로, 정작
+	 * 이야기를 나누는 낮 토론 동안 화면에는 익명의 막대 넷이 있었다 —
+	 * 사람들은 채팅에서 "3번 죽었나?"를 되물어 확인했다.
+	 *
+	 * 이름까지 담긴 SeatView를 그대로 쓰는 것은 seatViews 하나로 밤·투표·이
+	 * 화면이 같은 목록을 받게 하려는 것이다(Room.seatViews의 주석). 이름은
+	 * 어차피 격자에서 전원에게 보이는 값이라 여기 실려도 새는 것이 없다.
+	 */
+	seats: SeatView[];
 	timer: number;
 	note: string;
 	/**
@@ -347,6 +360,15 @@ export interface VoteProgressPayload {
 	type: "progress";
 	voted: number;
 	alive: number;
+	/**
+	 * 표를 낸 좌석의 참가 번호. 대상은 담지 않는다.
+	 *
+	 * "냈다"와 "누구에게 냈다"는 다른 정보이고, 개표까지 감춰야 하는 것은
+	 * 뒤쪽뿐이다. 앞쪽까지 함께 감추던 동안 화면에 있는 것은 n/m 두 숫자여서,
+	 * 마지막 한 명을 기다리는 방이 그 한 명이 누구인지 알 수 없었다 — 재촉할
+	 * 대상이 없으니 전원이 남은 시간을 그냥 흘려보냈다.
+	 */
+	done: number[];
 }
 
 /** 최후의 반론 / 찬반투표 화면. 두 단계가 같은 judgement.html을 쓴다 */
@@ -447,6 +469,39 @@ export interface NightActionPayload extends Identity {
 	targetsDead: boolean;
 	timer: number;
 	note: string;
+}
+
+/** 동료 한 명의 현재 지목. from이 to를 고르고 있다 */
+export interface AllyPick {
+	/** 지목한 동료의 참가 번호 */
+	from: number;
+	/** 그가 고른 대상의 참가 번호 */
+	to: number;
+}
+
+/**
+ * 동료들이 지금 누구를 고르고 있는가. 마피아 채팅에 있는 사람에게만 간다.
+ *
+ * 밤 진행률(acted/total)과 갈라 두는 이유가 수신자다. 진행률은 방 전원에게
+ * 가는 값이라 인원수만 담을 수 있고, 그래서 마피아 셋이 서로 다른 사람을
+ * 노린 밤에도 화면에 있는 것은 "3/5"였다 — 팀이 한 명에게 표를 모으려고
+ * 채팅으로 번호를 되풀어 확인하다 밤이 끝나는 일이 실제로 나왔다.
+ *
+ * 이 payload는 팀 밖으로 한 칸도 나가지 않는다. 위젯은 클라이언트에서 도는
+ * 코드라 도달한 데이터는 읽힌다고 봐야 하고, 시민 화면에 이것이 닿으면
+ * from 목록이 곧 마피아 명단이다. 그래서 보내는 자리는 inMafiaChat 관문
+ * 뒤 한 곳뿐이다(Night.broadcastNightProgress).
+ */
+export interface AllyPickPayload {
+	type: "allies";
+	/**
+	 * 지목한 동료 → 대상. 아직 아무도 안 골랐으면 빈 배열이다.
+	 *
+	 * 받는 사람 자기 것도 들어 있다 — 팀 전원이 같은 값을 받아야 계산이 한
+	 * 번이면 되기 때문이다. 자기 지목은 이미 picked 표시가 말하므로 위젯이
+	 * myNum으로 걸러 낸다.
+	 */
+	picks: AllyPick[];
 }
 
 /**
@@ -825,11 +880,20 @@ export function openChat(player: ScriptPlayer, payload: ChatPayload): ScriptWidg
  * 그대로 살아 있고 카드만 위에 뜬다. 반대로 단계가 바뀌면 그 단계가
  * closeCard로 이 자리를 회수하므로, 밤이 되었는데 도감이 지목 화면을
  * 덮고 있는 일은 생기지 않는다.
+ *
+ * 크기를 인자로 받는다. 전에는 nav === "grid"면 CARD_BOOK으로 정했는데,
+ * 격자를 쓴다는 것과 화면을 크게 덮어도 된다는 것은 같은 말이 아니다 —
+ * 도움말이 같은 격자를 쓰기 시작하자 도감의 예외(예산 46%를 넘는 54%)를
+ * 함께 물려받았고, 그래서 명령어를 보면서 채팅을 치려는 화면이 그 채팅창을
+ * 덮었다. 어느 크기가 맞는지는 카드의 모양이 아니라 그 카드를 여는 이유가
+ * 정하므로, 부르는 쪽(Cards)이 답한다.
  */
-export function openCard(player: ScriptPlayer, payload: CardPayload): ScriptWidget {
+export function openCard(
+	player: ScriptPlayer,
+	payload: CardPayload,
+	size: WidgetBox
+): ScriptWidget {
 	closeCard(player);
-	// 도감만 격자가 들어가 더 크다. 나머지는 카드 한 장 크기로 충분하다
-	const size = payload.nav === "grid" ? WidgetSize.CARD_BOOK : WidgetSize.CARD;
 	const widget = open(
 		player,
 		WidgetFile.CARD,

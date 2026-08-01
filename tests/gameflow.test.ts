@@ -362,7 +362,7 @@ describe("모드별 정원", () => {
 			// 쓴다. 일곱 명까지는 그 조건에 닿지 않아야 한다
 			assert.ok(
 				(init.data as unknown[]).length < (init.minPlayers as number),
-				"일곱 명뿐인데 화면이 시작을 예고합니다",
+				"일곱 명뿐인데 화면이 시작을 예고합니다"
 			);
 		});
 
@@ -542,7 +542,14 @@ describe("밤 단계", () => {
 
 		const firstNight = mainWidget(playerOf(vigilante)).lastOfType("init");
 		assert.ok(firstNight, "첫 밤 화면이 payload 없이 열렸습니다");
-		assert.equal(firstNight.seats, undefined, "첫 밤에 지목 격자가 열렸습니다");
+		// 격자가 열렸는지는 위젯 종류로 가른다. 진행 화면도 좌석 목록을 싣게
+		// 됐으므로(PhasePayload.seats — 낮에 누가 살아 있는지 보여주는 번호 줄)
+		// payload에 seats가 있는지로는 더 이상 구분되지 않는다
+		assert.equal(
+			mainWidget(playerOf(vigilante)).fileName,
+			WidgetFile.PHASE,
+			"첫 밤에 지목 격자가 열렸습니다"
+		);
 		assert.ok(
 			String(firstNight.note).indexOf("첫 밤") >= 0,
 			`격자를 감추면서 이유를 알리지 않았습니다: ${firstNight.note}`
@@ -555,7 +562,12 @@ describe("밤 단계", () => {
 
 		const secondNight = mainWidget(playerOf(vigilante)).lastOfType("init");
 		assert.ok(secondNight, "둘째 밤 화면이 payload 없이 열렸습니다");
-		assert.ok(secondNight.seats, "낮을 보냈는데도 지목 격자가 열리지 않았습니다");
+		assert.equal(
+			mainWidget(playerOf(vigilante)).fileName,
+			WidgetFile.ROLE_ACTION,
+			"낮을 보냈는데도 지목 격자가 열리지 않았습니다"
+		);
+		assert.ok(secondNight.seats, "지목 격자가 대상 목록 없이 열렸습니다");
 
 		send(playerOf(vigilante), { type: "select", num: victim.index });
 		assert.deepEqual(
@@ -645,8 +657,13 @@ describe("밤 단계", () => {
 		// 7인인 이유는 클래식의 firstNightPeacefulUpTo가 6이기 때문이다.
 		// 6인 이하로 잡으면 첫 밤에 아무도 죽지 않아 이 테스트가 무의미해진다.
 		startGame(7, 1, [
-			Role.REPORTER, Role.MAFIA, Role.DOCTOR, Role.POLICE,
-			Role.CITIZEN, Role.CITIZEN, Role.CITIZEN,
+			Role.REPORTER,
+			Role.MAFIA,
+			Role.DOCTOR,
+			Role.POLICE,
+			Role.CITIZEN,
+			Role.CITIZEN,
+			Role.CITIZEN,
 		]);
 		const target = room(1);
 		finishPhase(target); // ROLE_REVEAL → NIGHT
@@ -864,10 +881,7 @@ describe("투표", () => {
 		const voter = target.seats[1];
 		disconnect(playerOf(gone));
 		assert.equal(gone.connected, false, "이탈이 좌석에 반영되지 않았습니다");
-		assert.equal(
-			playerOf(voter).lastLabel(),
-			`${gone.index}번 참가자의 접속이 끊겼습니다.`
-		);
+		assert.equal(playerOf(voter).lastLabel(), `${gone.index}번 참가자의 접속이 끊겼습니다.`);
 
 		vote(playerOf(voter), target.seats[2].index);
 
@@ -879,6 +893,34 @@ describe("투표", () => {
 			MIN_PLAYERS - 1,
 			"끊긴 사람이 분모에 남아 진행률이 100%에 닿을 수 없습니다"
 		);
+	});
+
+	/**
+	 * 진행률에 "누가 냈는가"가 실린다. "누구에게 냈는가"는 실리지 않는다.
+	 *
+	 * 개표 전에 방 전원에게 가는 payload는 이것뿐이라 경계가 여기서 갈린다.
+	 * 앞쪽을 빼면 화면에 남는 것이 n/m 두 숫자여서 마지막 한 명이 누구인지
+	 * 아무도 찾을 수 없고, 뒤쪽이 새면 나중에 누르는 사람이 앞사람을 따라가
+	 * 게임 규칙 자체가 바뀐다.
+	 *
+	 * 스킵한 사람을 함께 넣는 이유는 그것도 낸 표라는 데 있다. 분자를 세는
+	 * 조건과 번호를 담는 조건이 갈리면 전원이 '투표 없음'을 고른 낮에
+	 * 진행률만 100%가 되고 체크는 하나도 켜지지 않는다.
+	 */
+	it("투표 진행률은 표를 낸 사람의 번호를 싣는다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+
+		const nominator = target.seats[0];
+		const skipper = target.seats[1];
+		const watcher = target.seats[2];
+		vote(playerOf(nominator), watcher.index);
+		vote(playerOf(skipper), SKIP_VOTE);
+
+		const progress = mainWidget(playerOf(watcher)).lastOfType("progress");
+		assert.ok(progress, "투표 진행률이 전달되지 않았습니다");
+		// 지목당한 watcher의 번호는 여기 없다. 표를 낸 것은 앞의 둘이다
+		assert.deepEqual(progress.done, [nominator.index, skipper.index]);
 	});
 });
 
@@ -921,7 +963,10 @@ describe("스킵 · 재판 · 시간 조절", () => {
 		// 반론도 찬반도 열리지 않는다. 세울 사람이 없는 재판은 시간만 쓴다
 		finishPhase(target);
 		assert.equal(target.phase, GamePhase.NIGHT);
-		assert.ok(target.seats.every(seat => seat.alive), "스킵한 낮에 누군가 죽었습니다");
+		assert.ok(
+			target.seats.every(seat => seat.alive),
+			"스킵한 낮에 누군가 죽었습니다"
+		);
 	});
 
 	/**
@@ -979,7 +1024,11 @@ describe("스킵 · 재판 · 시간 조절", () => {
 	 * 처형이 안 되고, 동수 규칙이 무너지면 두 모드 중 하나가 조용히 다른
 	 * 모드의 규칙으로 돌아가고, 협박이 무너지면 건달의 능력이 통째로 사라진다.
 	 */
-	function standNominee(target: ReturnType<typeof room>, voters: readonly Seat[], nominee: Seat): void {
+	function standNominee(
+		target: ReturnType<typeof room>,
+		voters: readonly Seat[],
+		nominee: Seat
+	): void {
 		for (const seat of voters) vote(playerOf(seat), nominee.index);
 		finishPhase(target); // VOTE → VOTE_RESULT
 		assert.equal(target.nominee, nominee.index, "단상에 세우지 못했습니다");
@@ -1212,10 +1261,7 @@ describe("승패와 대기실 복귀", () => {
 		const revealed = result.players as Array<{ num: number; name: string }>;
 		assert.equal(revealed.length, MIN_PLAYERS);
 		assert.ok(revealed.every(player => player.name === `${player.num}번 참가자`));
-		assert.ok(
-			chatSaw(survivor, "전원의 직업"),
-			"종료 시 직업 공개가 없습니다"
-		);
+		assert.ok(chatSaw(survivor, "전원의 직업"), "종료 시 직업 공개가 없습니다");
 		/*
 		 * 표는 문자열이 아니라 구조로 내려간다.
 		 *
@@ -1283,9 +1329,7 @@ describe("승패와 대기실 복귀", () => {
 		while (target.phase !== GamePhase.GAME_OVER && guard++ < 10) {
 			if (target.phase === GamePhase.NIGHT) {
 				const mafia = seatsWithRole(target, Role.MAFIA)[0];
-				const victim = target.seats.filter(
-					seat => seat.alive && seat.role !== Role.MAFIA
-				)[0];
+				const victim = target.seats.filter(seat => seat.alive && seat.role !== Role.MAFIA)[0];
 				send(playerOf(mafia), { type: "select", num: victim.index });
 			}
 			finishPhase(target);
@@ -1453,7 +1497,11 @@ describe("밤 진행률", () => {
 		disconnect(away);
 		const shrunk = mainWidget(playerOf(mafia)).lastOfType("progress");
 		assert.ok(shrunk, "이탈이 남은 사람의 진행률에 전파되지 않았습니다");
-		assert.equal(shrunk.total, MIN_PLAYERS - 2, "끊긴 사람이 분모에 남아 막대가 끝까지 차지 않습니다");
+		assert.equal(
+			shrunk.total,
+			MIN_PLAYERS - 2,
+			"끊긴 사람이 분모에 남아 막대가 끝까지 차지 않습니다"
+		);
 
 		reconnect(away);
 		const restored = mainWidget(playerOf(mafia)).lastOfType("progress");
@@ -1461,6 +1509,175 @@ describe("밤 진행률", () => {
 		assert.equal(restored.total, MIN_PLAYERS - 1, "돌아온 사람이 분모로 복귀하지 않았습니다");
 	});
 });
+
+/**
+ * 밤에 동료가 무엇을 고르는 중인가.
+ *
+ * 진행률(acted/total)은 방 전원이 받는 값이라 인원수만 담을 수 있다. 마피아가
+ * 둘 이상인 판에서 팀이 정해야 하는 것은 "몇 명이 골랐는가"가 아니라 "같은
+ * 사람을 고르고 있는가"인데 그것만 화면에 없어서, 번호를 채팅으로 되풀어
+ * 확인하다 밤이 끝나는 일이 나왔다.
+ *
+ * 경계가 이 기능의 전부다. 같은 사실이 시민 편 화면에 한 번이라도 닿으면
+ * from 목록이 곧 마피아 명단이고, 위젯은 클라이언트에서 도는 코드라
+ * "받았지만 그리지 않는다"는 방어가 되지 않는다. 그래서 검사가 둘씩이다 —
+ * 팀에게 갔는가, 그리고 팀 밖으로 안 갔는가.
+ */
+describe("밤의 동료 지목 공유", () => {
+	/** 마피아 둘. 첫 밤이 무사여도 지목 자체는 첫 밤부터 할 수 있다 */
+	function openFirstNight() {
+		startGame(5, 1, [Role.MAFIA, Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		const mafias = seatsWithRole(target, Role.MAFIA);
+		return {
+			target,
+			first: mafias[0],
+			second: mafias[1],
+			police: seatsWithRole(target, Role.POLICE)[0],
+			citizen: seatsWithRole(target, Role.CITIZEN)[0],
+		};
+	}
+
+	it("동료의 지목은 마피아 화면에만 실린다", () => {
+		const { first, second, police, citizen } = openFirstNight();
+
+		send(playerOf(first), { type: "select", num: citizen.index });
+
+		const allies = mainWidget(playerOf(second)).lastOfType("allies");
+		assert.ok(allies, "동료의 지목이 팀에게 전달되지 않았습니다");
+		assert.deepEqual(allies.picks, [{ from: first.index, to: citizen.index }]);
+
+		// 경찰에게는 이 종류의 메시지가 아예 없어야 한다. 화면이 그리지 않는
+		// 것으로는 부족하다 — 도달한 payload는 위젯을 뜯어 읽을 수 있다
+		assert.equal(
+			mainWidget(playerOf(police)).lastOfType("allies"),
+			undefined,
+			"동료 지목이 시민 편 화면까지 갔습니다 — 그 목록이 곧 마피아 명단입니다"
+		);
+	});
+
+	it("늦게 연 화면에도 먼저 고른 동료가 실린다", () => {
+		const { first, second, citizen } = openFirstNight();
+
+		send(playerOf(first), { type: "select", num: citizen.index });
+
+		// 이 뒤로는 아무도 지목하지 않는다. 화면을 열 때 싣지 않으면 팀에서
+		// 마지막으로 돌아온 사람은 동료의 지목을 그 밤 동안 영영 못 본다
+		const away = playerOf(second);
+		disconnect(away);
+		reconnect(away);
+
+		const allies = mainWidget(away).lastOfType("allies");
+		assert.ok(allies, "다시 연 밤 화면이 동료의 지목 없이 열렸습니다");
+		assert.deepEqual(allies.picks, [{ from: first.index, to: citizen.index }]);
+	});
+
+	it("접선하지 않은 짐승인간의 지목은 마피아에게도 보이지 않는다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.BEAST, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const beast = seatsWithRole(target, Role.BEAST)[0];
+		const citizen = seatsWithRole(target, Role.CITIZEN)[0];
+
+		send(playerOf(beast), { type: "select", num: citizen.index });
+		send(playerOf(mafia), { type: "select", num: citizen.index });
+
+		const allies = mainWidget(playerOf(mafia)).lastOfType("allies");
+		assert.ok(allies, "마피아가 자기 지목조차 받지 못했습니다");
+		// 경계를 진영이 아니라 밤 채팅으로 잡는 이유가 이 한 줄이다. 접선 전
+		// 짐승인간은 팀과 말을 섞지 않는 사이인데, 그의 지목이 마피아 화면에
+		// 뜨는 순간 "이 방에 짐승인간이 있다"가 함께 새 나간다
+		assert.deepEqual(allies.picks, [{ from: mafia.index, to: citizen.index }]);
+		assert.equal(
+			mainWidget(playerOf(beast)).lastOfType("allies"),
+			undefined,
+			"짐승인간이 마피아의 지목을 받았습니다 — 접선 전에는 팀이 아닙니다"
+		);
+	});
+});
+
+/**
+ * 진행 화면이 함께 받는 좌석 목록.
+ *
+ * aliveCount는 "넷 남았다"까지만 말한다. 누가 그 넷인지는 투표 격자에만
+ * 있었고 격자는 투표 단계에만 열리므로, 정작 이야기를 가장 오래 나누는
+ * 낮 토론 동안 화면에는 익명의 인원수만 있었다 — 사람들은 채팅에서
+ * "3번 죽었나?"를 되물어 확인했다.
+ *
+ * 이 목록이 무엇을 담지 '않는가'도 함께 지킨다. SeatView에는 직업 칸이
+ * 없으므로 사망자의 직업은 구조적으로 새지 않지만, 동료 표시(ally)는
+ * 채울 수 있는 칸이라 실수로 채워질 수 있다.
+ */
+describe("진행 화면의 좌석 목록", () => {
+	/** SeatView 중 이 화면이 실제로 읽는 두 칸 */
+	type Marks = Array<{ num: number; alive: boolean; ally?: boolean }>;
+
+	function seatsOn(player: FakePlayer): Marks | undefined {
+		return mainWidget(player).lastOfType("init")?.seats as Marks | undefined;
+	}
+
+	it("낮 화면에 전원의 번호가 실린다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN, Role.SOLDIER]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // 첫 밤(무사) → DAY
+
+		const seats = seatsOn(playerOf(target.seats[0]));
+		assert.ok(seats, "낮 화면이 좌석 목록 없이 열렸습니다");
+		assert.deepEqual(
+			seats.map(seat => seat.num),
+			[1, 2, 3, 4, 5]
+		);
+		assert.ok(
+			seats.every(seat => seat.alive),
+			"아무도 죽지 않은 첫 낮인데 죽은 좌석이 있습니다"
+		);
+	});
+
+	it("죽은 사람은 목록에서 지워지지 않고 죽은 것으로 표시된다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN, Role.SOLDIER]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		passPeacefulFirstNight(target); // 둘째 밤
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		send(playerOf(mafia), { type: "select", num: victim.index });
+		finishPhase(target); // 밤 → 낮
+
+		assert.equal(victim.alive, false, "지목당한 좌석이 살아 있습니다");
+		const seats = seatsOn(playerOf(mafia));
+		assert.ok(seats, "낮 화면이 좌석 목록 없이 열렸습니다");
+		// 자리가 빠지면 남은 번호가 밀려 보인다. 죽은 번호를 남기는 것이
+		// 이 줄의 요점이다 — 사람들이 세는 것은 인원수가 아니라 번호다
+		assert.deepEqual(
+			seats.map(seat => seat.num),
+			[1, 2, 3, 4, 5]
+		);
+		const gone = seats.filter(seat => !seat.alive).map(seat => seat.num);
+		assert.deepEqual(gone, [victim.index]);
+	});
+
+	it("마피아의 낮 화면에도 동료 표시는 실리지 않는다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // 첫 밤(무사) → DAY
+
+		const seats = seatsOn(playerOf(seatsWithRole(target, Role.MAFIA)[0]));
+		assert.ok(seats, "낮 화면이 좌석 목록 없이 열렸습니다");
+		// 이 줄은 번호만 그린다. 동료를 표시할 자리가 없는데 값이 참으로
+		// 실려 있으면, 화면을 뜯어 읽는 것만으로 마피아 명단이 나온다.
+		// (seatViews는 allyTeam 없이 부르면 전원 false를 채운다 — 칸이
+		//  비어 있는 것과 달리 이 값은 누구도 가리키지 않는다)
+		assert.ok(
+			seats.every(seat => seat.ally !== true),
+			"낮 화면의 좌석 목록에 동료 표시가 실렸습니다"
+		);
+	});
+});
+
 /**
  * 시민의 익명 쪽지는 클릭이 두 번이다. 대상을 고르면 격자가 잠기는 대신
  * 문구 목록이 오고, 문구를 고르는 두 번째 클릭에서야 확정된다.

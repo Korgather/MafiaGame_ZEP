@@ -20,6 +20,7 @@ import { roleDef } from "../domain/Roles.ts";
 import { aliveSeats, enterPhase, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
+import type { VoteProgressPayload } from "./Widgets.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
@@ -142,6 +143,9 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		turn: room.turnCount,
 		total: room.total,
 		aliveCount: aliveSeats(room).length,
+		// 이 화면에서 가장 오래 머무는 단계가 낮 토론이다. 격자가 없는 동안
+		// 누가 살아 있는지를 여기서 본다
+		seats: seatViews(room),
 		timer: room.phaseTimer,
 		...identityOf(seat),
 		/*
@@ -339,7 +343,10 @@ function bindVoteWidget(widget: ScriptWidget): void {
 
 		if (room.phase !== GamePhase.VOTE) return;
 		if (!canVote(voter)) {
-			label(sender, voter.intimidated ? "협박당해 오늘은 투표할 수 없습니다." : "투표 권한이 없습니다.");
+			label(
+				sender,
+				voter.intimidated ? "협박당해 오늘은 투표할 수 없습니다." : "투표 권한이 없습니다."
+			);
 			return;
 		}
 
@@ -379,9 +386,11 @@ function bindVoteWidget(widget: ScriptWidget): void {
  * 뒤에 누르는 사람이 앞사람을 따라가게 되어 게임 규칙 자체가 바뀐다.
  * 반대로 "아직 몇 명 남았는가"를 모르면 화면만 보며 기다리게 된다.
  */
-function voteProgress(room: Room): { type: "progress"; voted: number; alive: number } {
+function voteProgress(room: Room): VoteProgressPayload {
 	let voted = 0;
 	let alive = 0;
+	// 표를 낸 사람의 번호. 대상은 담지 않는다 — 감춰야 하는 것은 "누구에게"다
+	const done: number[] = [];
 	for (const seat of room.seats) {
 		// 접속이 끊긴 좌석은 분모에서 뺀다. 남겨두면 그 한 칸이 절대 채워지지
 		// 않아 "아직 안 낸 사람이 있다"가 투표 시간 내내 떠 있는다.
@@ -393,9 +402,12 @@ function voteProgress(room: Room): { type: "progress"; voted: number; alive: num
 		if (!canVote(seat) || !seat.connected) continue;
 		alive++;
 		// 스킵도 낸 표다(votedFor === SKIP_VOTE). "아직 안 냈다"는 0 하나뿐이다
-		if (seat.votedFor !== 0) voted++;
+		if (seat.votedFor !== 0) {
+			voted++;
+			done.push(seat.index);
+		}
 	}
-	return { type: "progress", voted, alive };
+	return { type: "progress", voted, alive, done };
 }
 
 function sendVoteProgress(room: Room, player: ScriptPlayer): void {
@@ -421,8 +433,7 @@ export function beginVoteResult(room: Room): void {
 	room.tickTockPlayed = true; // 결과 발표 중에는 째깍 사운드를 울리지 않는다
 
 	const result = tallyVotes(room.seats);
-	const nominee =
-		result.outcome === VoteOutcome.EXECUTE && result.target ? result.target.index : 0;
+	const nominee = result.outcome === VoteOutcome.EXECUTE && result.target ? result.target.index : 0;
 	room.nominee = nominee;
 	room.voteRecord = {
 		board: result.board,

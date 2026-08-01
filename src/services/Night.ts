@@ -44,7 +44,7 @@ import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { DeathCause, kill, revive } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
-import type { PhasePayload } from "./Widgets.ts";
+import type { AllyPick, AllyPickPayload, PhasePayload } from "./Widgets.ts";
 import {
 	bindMessage,
 	closeCard,
@@ -73,6 +73,9 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 		turn: room.turnCount + 1,
 		total: room.total,
 		aliveCount: aliveSeats(room).length,
+		// 동료 표시는 넣지 않는다. 이 목록은 번호 한 줄로만 그려지므로
+		// 표시할 자리가 없고, 마피아는 애초에 이 화면이 아니라 지목 격자를 본다
+		seats: seatViews(room),
 		timer: room.phaseTimer,
 		...identityOf(seat),
 		/*
@@ -190,6 +193,10 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	});
 	bindNightWidget(widget);
 	updateMain(player, nightProgress(room));
+	// 늦게 연 화면에도 먼저 고른 동료가 보여야 한다. 이 위젯은 밤마다 한 번
+	// 열리고, 다음 갱신은 누군가 또 지목할 때다 — 팀에서 내가 마지막이면
+	// 그 "다음"이 오지 않으므로 여기서 안 보내면 영영 빈 격자를 본다
+	if (inMafiaChat(seat)) updateMain(player, allyPicks(room));
 }
 
 /**
@@ -222,15 +229,48 @@ function nightProgress(room: Room): { type: "progress"; acted: number; total: nu
 }
 
 /**
+ * 동료들의 현재 지목. 마피아 채팅에 있는 좌석만 담는다.
+ *
+ * 경계를 채팅과 똑같이 두는 이유는 짐승인간이다. 그는 마피아 팀이지만 밤에
+ * 팀과 말을 섞지 않으므로, 진영으로 경계를 잡으면 대화도 못 하는 사이에
+ * 서로의 지목만 보이는 화면이 된다 — 그리고 그의 지목이 마피아에게
+ * 보이는 순간 "이 방에 짐승인간이 있다"가 함께 새 나간다.
+ */
+function allyPicks(room: Room): AllyPickPayload {
+	const picks: AllyPick[] = [];
+	for (const seat of room.seats) {
+		if (!seat.alive || !inMafiaChat(seat)) continue;
+		const to = intentTarget(room.nightIntents, seat.index);
+		// 0은 "아직 아무것도 안 골랐다"다. 그대로 담으면 위젯이 없는 0번 칸을
+		// 찾다가 아무 표시도 못 하는 대신, 매번 헛수고를 한다
+		if (to === 0) continue;
+		picks.push({ from: seat.index, to: to });
+	}
+	return { type: "allies", picks: picks };
+}
+
+/**
  * 지목이 하나 확정될 때마다 방 전원에게. 차례가 없는 사람의 화면(phase)은
  * 이 메시지를 그리지 않고 흘려보낸다 — 투표 진행률도 같은 길을 쓴다.
  *
  * 접속이 끊기거나 돌아왔을 때도 분모가 바뀌므로 GameFlow.refreshProgress가
  * 이 함수를 부른다. 그래서 export다.
+ *
+ * 동료 지목이 이 길에 얹혀 가는 것은 두 값이 정확히 같은 순간에 바뀌기
+ * 때문이다. 지목이 기록되는 자리는 한 곳이고(bindNightWidget의 putIntent),
+ * 거기서 소모되지 않는 능력은 쪽지뿐인데 쪽지는 시민의 것이라 마피아
+ * 채팅에 없다 — 그래서 "분자가 오른다"와 "동료 지목이 바뀐다"가 어긋나지
+ * 않는다. 이 불변식은 tests/domain.test.ts의
+ * 「소모하지 않는 지목은 쪽지 하나뿐이다」가 지킨다.
  */
 export function broadcastNightProgress(room: Room): void {
 	const payload = nightProgress(room);
-	forEachPlayer(room, player => updateMain(player, payload));
+	const allies = allyPicks(room);
+	forEachPlayer(room, (player, seat) => {
+		updateMain(player, payload);
+		// 관문은 이 한 줄이다. 팀 밖으로 나가면 from 목록이 곧 마피아 명단이다
+		if (inMafiaChat(seat)) updateMain(player, allies);
+	});
 }
 
 function nightNotice(room: Room, seat: Seat): string {

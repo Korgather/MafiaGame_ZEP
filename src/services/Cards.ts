@@ -17,7 +17,8 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { Seat } from "../types/Game.types.ts";
-import { Sound } from "../constants/Assets.ts";
+import type { WidgetBox } from "../constants/Assets.ts";
+import { Sound, WidgetSize } from "../constants/Assets.ts";
 import { GUIDE_CARDS, cardForRole, roleBook } from "../domain/Guide.ts";
 import { playSoundTo } from "./Broadcast.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
@@ -27,9 +28,16 @@ import { messageType } from "../types/Widget.types.ts";
 import type { CardPayload } from "./Widgets.ts";
 import { bindMessage, closeCard, openCard } from "./Widgets.ts";
 
-/** 카드를 열고 조작을 받는다. 세 화면이 같은 규칙을 쓰도록 여기만 위젯을 만진다 */
-function show(player: ScriptPlayer, payload: CardPayload): void {
-	bindMessage(openCard(player, payload), "card", handleMessage);
+/**
+ * 카드를 열고 조작을 받는다. 네 화면이 같은 규칙을 쓰도록 여기만 위젯을 만진다.
+ *
+ * 크기를 받는 이유는 넷 중 하나(도감)만 세로 예산을 넘기기 때문이다.
+ * 기본값을 두지 않는다 — 카드를 하나 더 만드는 사람이 크기를 한 번은
+ * 생각하게 하려는 것이고, 그 판단을 빠뜨렸을 때 조용히 큰 쪽으로 붙는
+ * 것이 바로 도움말에서 일어난 일이다.
+ */
+function show(player: ScriptPlayer, payload: CardPayload, size: WidgetBox): void {
+	bindMessage(openCard(player, payload, size), "card", handleMessage);
 }
 
 function handleMessage(player: ScriptPlayer, data: unknown): void {
@@ -62,32 +70,40 @@ export function showRoleReveal(player: ScriptPlayer, seat: Seat, timer: number):
 	// 앞에 붙는 "🎭 게임 시작" 컷도 소리가 없어서 판이 열린 것을 화면으로만
 	// 알았다. 컷에 따로 소리를 더 얹지 않는 이유는 둘이 같은 순간이기 때문이다
 	playSoundTo(player, Sound.REVEAL);
-	show(player, {
-		type: "init",
-		cards: [cardForRole(seat.role)],
-		nav: "none",
-		timer,
-		bookLink: false,
-		// nav=none은 머리말 줄을 아예 숨긴다. 채워도 보이지 않는다
-		heading: "",
-	});
+	show(
+		player,
+		{
+			type: "init",
+			cards: [cardForRole(seat.role)],
+			nav: "none",
+			timer,
+			bookLink: false,
+			// nav=none은 머리말 줄을 아예 숨긴다. 채워도 보이지 않는다
+			heading: "",
+		},
+		WidgetSize.CARD
+	);
 }
 
 /** 규칙 요약 3장. 마지막 장에서 도감으로 이어진다 */
 export function showGuide(player: ScriptPlayer): void {
 	tagOf(player).guideSeen = true;
-	show(player, {
-		type: "init",
-		// readonly 배열을 그대로 넘기면 payload 타입이 맞지 않는다.
-		// 복사본을 주면 위젯 쪽 실수로 원본 안내가 바뀔 일도 없다.
-		cards: GUIDE_CARDS.slice(),
-		nav: "steps",
-		timer: 0,
-		bookLink: true,
-		// nav=steps의 머리말은 "처음이신가요? · 2 / 3"이라 장 번호와 한 몸이다.
-		// 그 조합은 위젯이 만든다
-		heading: "",
-	});
+	show(
+		player,
+		{
+			type: "init",
+			// readonly 배열을 그대로 넘기면 payload 타입이 맞지 않는다.
+			// 복사본을 주면 위젯 쪽 실수로 원본 안내가 바뀔 일도 없다.
+			cards: GUIDE_CARDS.slice(),
+			nav: "steps",
+			timer: 0,
+			bookLink: true,
+			// nav=steps의 머리말은 "처음이신가요? · 2 / 3"이라 장 번호와 한 몸이다.
+			// 그 조합은 위젯이 만든다
+			heading: "",
+		},
+		WidgetSize.CARD
+	);
 }
 
 /**
@@ -98,16 +114,23 @@ export function showGuide(player: ScriptPlayer): void {
  * 하는데 실제로 그러지 못했다 — 이 줄과 /도감의 안내가 오랫동안 "14종"이었다.
  */
 export function showBook(player: ScriptPlayer): void {
-	show(player, {
-		type: "init",
-		cards: roleBook(),
-		nav: "grid",
-		timer: 0,
-		bookLink: false,
-		// 도감은 이 위젯이 처음부터 알던 화면이라 머리말과 부제(종수·진영 수)를
-		// 위젯이 들고 있다. ""을 보내 그 기본값을 그대로 쓴다
-		heading: "",
-	});
+	show(
+		player,
+		{
+			type: "init",
+			cards: roleBook(),
+			nav: "grid",
+			timer: 0,
+			bookLink: false,
+			// 도감은 이 위젯이 처음부터 알던 화면이라 머리말과 부제(종수·진영 수)를
+			// 위젯이 들고 있다. ""을 보내 그 기본값을 그대로 쓴다
+			heading: "",
+			// 넷 중 유일하게 세로 예산(46%)을 넘는 화면이다. 21종 격자와 진영
+			// 구분선이 들어가서 CARD로는 목록이 두 줄만 보이고, 도감은 겹쳐 읽고
+			// 곧 닫는 것이라 게임 화면을 항구적으로 먹지 않는다
+		},
+		WidgetSize.CARD_BOOK
+	);
 }
 
 /**
@@ -122,14 +145,22 @@ export function showBook(player: ScriptPlayer): void {
  * 볼 수 있는 화면이 이미 있는데 새 위젯을 만들 이유가 없다.
  */
 export function showHelp(player: ScriptPlayer, cards: CardView[]): void {
-	show(player, {
-		type: "init",
-		cards,
-		nav: "grid",
-		timer: 0,
-		bookLink: false,
-		heading: "채팅 도움말",
-	});
+	show(
+		player,
+		{
+			type: "init",
+			cards,
+			nav: "grid",
+			timer: 0,
+			bookLink: false,
+			heading: "채팅 도움말",
+			// 도감과 같은 격자를 쓰지만 크기는 따라가지 않는다. 이 화면은 읽고
+			// 닫는 것이 아니라 보면서 채팅을 치는 것이고, 도감 크기(54%)는 그
+			// 채팅창을 덮는다. 도감이 큰 쪽을 받은 이유가 21종이라는 것이니
+			// 열 장짜리 목록에는 그 이유도 없다
+		},
+		WidgetSize.CARD
+	);
 }
 
 /**

@@ -1014,6 +1014,15 @@ body {
 			.judge-btn.picked {
 				box-shadow: 0 0 0 2px var(--accent);
 			}
+			.panel.watching {
+				box-shadow:
+					inset 0 0 0 2px var(--dead),
+					var(--shadow);
+			}
+			.panel.watching .stand,
+			.panel.watching .foot {
+				filter: saturate(0.3);
+			}
 		</style>
 	</head>
 	<body>
@@ -1259,7 +1268,8 @@ function paint(data, judging) {
  qs("#standsub").textContent = judging ? "이 사람을 처형할까요?" : "해명을 듣는 중입니다";
  for (const el of qsa(".judge-btn")) el.disabled = !canJudge;
  paintPicked();
- qs("#note").textContent = canJudge ? pickNote() : judging ? mine ? "당신을 처형할지 정하는 중입니다. 결과를 기다리세요." : "👻 유령은 찬반을 고를 수 없습니다." : mine ? "지금 해명하세요. 이 시간에 말할 수 있는 사람은 당신뿐입니다." : "듣는 시간입니다. 곧 찬성과 반대를 고릅니다.";
+ qs(".panel").classList.toggle("watching", data.alive === false);
+ qs("#note").textContent = canJudge ? pickNote() : judging ? mine ? "당신을 처형할지 정하는 중입니다. 결과를 기다리세요." : data.alive === false ? "👻 유령은 찬반을 고를 수 없습니다." : "협박당해 고를 수 없습니다. 던지지 못한 표는 반대로 셉니다." : mine ? "지금 해명하세요. 이 시간에 말할 수 있는 사람은 당신뿐입니다." : "듣는 시간입니다. 곧 찬성과 반대를 고릅니다.";
  startTimer(qs("#timer"), data.timer);
 }
 

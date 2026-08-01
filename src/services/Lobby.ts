@@ -33,6 +33,7 @@ import {
 	participantLabel,
 	removeSeat,
 	removeSpectator,
+	seatViews,
 	toggleKick,
 	withdrawKicks,
 } from "../entities/Room.ts";
@@ -361,6 +362,16 @@ function spectateView(room: Room): PhasePayload {
 		turn: night ? room.turnCount + 1 : room.turnCount,
 		total: room.total,
 		aliveCount: aliveSeats(room).length,
+		/*
+		 * 관전자가 받는 것도 참가자와 같은 목록이다. 번호와 생존 여부는
+		 * 격자에서 전원에게 보이는 값이고, 방 채팅을 읽을 수 있는 관전자는
+		 * 사망 소식도 이미 본다 — 여기서 새로 열리는 정보는 없다.
+		 *
+		 * 죽은 사람의 직업은 담지 않는다. 사망은 직업을 공개하지 않고
+		 * (Death.ts: 처형은 진영까지, 밤 사망은 이름까지), 관전자는 유령
+		 * 채팅에서도 같은 이유로 막혀 있다(ChatService).
+		 */
+		seats: seatViews(room),
 		timer: room.phaseTimer,
 		/*
 		 * 직업 칩 자리에 "지금 나는 무엇인가"를 넣는다. alive:false는 유령이라는
