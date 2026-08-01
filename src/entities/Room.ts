@@ -237,6 +237,7 @@ export function revealViews(room: Room): RevealView[] {
 			num: seat.index,
 			name: participantLabel(seat),
 			role: roleName(seat.role),
+			glyph: roleDef(seat.role).glyph,
 			team: seat.team,
 			alive: seat.alive,
 		}));

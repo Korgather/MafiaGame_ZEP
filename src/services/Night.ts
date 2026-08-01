@@ -75,6 +75,13 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 		aliveCount: aliveSeats(room).length,
 		timer: room.phaseTimer,
 		...identityOf(seat),
+		/*
+		 * 이 화면에 오는 사람은 이 밤에 누를 것이 없는 사람이다(지목할 사람은
+		 * roleAction을 본다). 그래도 산 사람과 죽은 사람의 할 일은 다르다 —
+		 * 산 사람은 밤을 넘기고 낮에 싸울 준비를 하고, 죽은 사람은 이 판이
+		 * 끝날 때까지 아무것도 하지 않는다. 아래 note가 그 이유를 적는다.
+		 */
+		lead: seat.alive ? "기다리세요" : "지켜보세요",
 		note: nightNote(room, seat),
 		deaths: [],
 		spectating: false,

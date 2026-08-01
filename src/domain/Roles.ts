@@ -136,6 +136,19 @@ export interface RoleDef {
 	readonly glyph: string;
 	/** 카드에 적는 능력 한 줄. "나는 무엇을 할 수 있는가" */
 	readonly ability: string;
+	/**
+	 * ability를 20자 안으로 줄인 것. 좁은 자리에 들어간다.
+	 *
+	 * 같은 사실을 두 번 적는 것처럼 보이지만 들어가는 자리가 다르다. ability는
+	 * 카드 한 장을 차지하는 문단이고 이쪽은 한 줄짜리 칸이다 — 직업 칩 옆의
+	 * 능력 줄(identityOf)과 도감 목록의 한 줄이 이 값을 쓴다. ability를 그대로
+	 * 넣으면 스파이·군인·짐승인간처럼 두 문장인 직업에서 줄이 넘쳐, 능력을
+	 * 상시 보여주려던 자리가 오히려 읽을 수 없는 줄이 된다.
+	 *
+	 * 자동으로 줄일 수는 없다. 앞 20자를 자르면 "밤마다 한 명을 마피아의"처럼
+	 * 목적어에서 끊긴다 — 무엇을 하는지가 빠진 채로 남는다.
+	 */
+	readonly summary: string;
 	/** 카드에 적는 요령 한 줄. "그래서 어떻게 이기는가" */
 	readonly tip: string;
 	/** 밤에 지목할 대상이 있으면 그 종류, 없으면 null */
@@ -358,6 +371,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.MAFIA,
 		glyph: "🔪",
 		ability: "밤마다 한 명을 처형합니다.",
+		summary: "밤마다 한 명을 죽입니다",
 		tip: "낮에는 시민인 척하세요. 마피아 수가 시민 수와 같아지면 이깁니다.",
 		nightAction: NightActionKind.ATTACK,
 		nightStep: NightStep.ATTACK,
@@ -375,6 +389,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "💉",
 		ability: "밤마다 한 명을 마피아의 공격에서 지킵니다.",
+		summary: "밤마다 한 명을 공격에서 지킵니다",
 		tip: "정체를 밝히면 다음 밤에 죽습니다. 조용히 지키세요.",
 		nightAction: NightActionKind.HEAL,
 		nightStep: NightStep.PROTECT,
@@ -390,6 +405,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🔍",
 		ability: "밤마다 한 명이 마피아인지 조사합니다.",
+		summary: "밤마다 한 명의 마피아 여부를 봅니다",
 		tip: "찾아냈다면 낮에 설득하세요. 다만 밝히는 순간 표적이 됩니다.",
 		nightAction: NightActionKind.INSPECT_TEAM,
 		nightStep: NightStep.INSPECT,
@@ -413,6 +429,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// 예전 문구는 "당신은 시민 팀입니다. 얻은 정보를 시민에게 흘리세요"였다.
 		// 규칙과 정반대였다 — 합류하면 team이 MAFIA로 바뀌므로, 시키는 대로
 		// 시민을 도와 시민이 이기면 스파이 본인은 패배로 기록된다.
+		summary: "둘째 밤부터 한 명의 직업을 알아냅니다",
 		tip: "마피아를 찾아내면 그 편이 되어 함께 이깁니다. 찾을 때까지는 시민입니다.",
 		nightAction: NightActionKind.INSPECT_ROLE,
 		nightStep: NightStep.INSPECT,
@@ -437,6 +454,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🔮",
 		ability: "밤마다 죽은 사람들과 대화하고, 그중 한 명을 성불시켜 직업을 봅니다.",
+		summary: "밤마다 죽은 사람 하나의 직업을 봅니다",
 		tip: "죽은 사람은 자기를 죽인 쪽을 압니다. 그 말을 낮에 전하세요.",
 		// 예전에는 지목이 없었다(대화만). 성불을 붙이면서 지목이 생겼는데,
 		// 대상이 사망자라 살아 있는 사람 격자를 그대로 쓸 수 없다 — targetsDead가
@@ -456,6 +474,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🎖️",
 		ability: "투표로 처형되지 않고, 당신의 표는 2표로 계산됩니다.",
+		summary: "처형되지 않고 표를 두 장 던집니다",
 		tip: "처형되지 않으니 앞에 나서서 토론을 이끄세요.",
 		nightAction: null,
 		nightStep: NightStep.AFTER,
@@ -475,6 +494,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🔫",
 		ability: "둘째 밤부터, 게임에 딱 한 번 한 명을 사살합니다.",
+		summary: "판에 한 번, 밤에 한 명을 사살합니다",
 		tip: "낮의 이야기를 듣고 쏘세요. 시민을 쏘면 책임을 지고 당신도 죽습니다.",
 		nightAction: NightActionKind.ATTACK,
 		nightStep: NightStep.ATTACK,
@@ -493,6 +513,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🪖",
 		ability: "밤에 받는 첫 공격을 한 번 버팁니다. 마피아 팀이 캐내려 하면 튕겨내고 누구였는지 알아냅니다.",
+		summary: "첫 공격을 한 번 버티고 범인을 압니다",
 		tip: "한 번은 버팁니다. 살아남았다면 그날 밤 누군가 당신을 노렸다는 뜻입니다.",
 		nightAction: null,
 		nightStep: NightStep.AFTER,
@@ -513,6 +534,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// 예전에는 밤 능력을 막는 직업이었다. 클래식의
 		// 건달은 낮을 막는다 — 협박당한 사람은 지목도 찬반도 하지 못하고,
 		// 찬반에서는 미응답이 반대표로 세어진다. 밤을 막는 자리는 마담이 잇는다.
+		summary: "밤마다 한 명의 다음 투표를 막습니다",
 		tip: "당신이 살아 있는 한 마피아는 좀처럼 이기지 못합니다. 대신 표적이 됩니다.",
 		nightAction: NightActionKind.INTIMIDATE,
 		// AFTER인 것이 핵심이다. 협박의 효과는 다음 낮에 나타나므로 밤의
@@ -538,6 +560,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "📰",
 		ability: "게임에 딱 한 번, 취재한 사람의 직업을 다음 아침 모두에게 공개합니다.",
+		summary: "판에 한 번, 한 명의 직업을 공개합니다",
 		tip: "한 번뿐입니다. 의견이 갈려 아무도 확신하지 못할 때 터뜨리세요.",
 		nightAction: NightActionKind.SCOOP,
 		nightStep: NightStep.AFTER,
@@ -556,6 +579,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		ability: "마피아와 같은 사람을 노리면 접선합니다. 접선한 뒤에는 밤마다 한 명을 물어 죽입니다.",
 		// 예전에는 처음부터 혼자 무는 독립 공격자였고, 조언도 "마피아와 겹치지
 		// 말라"였다. 클래식에서는 정확히 반대다 — 겹쳐야 합류한다.
+		summary: "마피아와 접선한 뒤 밤마다 뭅니다",
 		tip: "마피아가 노릴 만한 사람을 함께 노리세요. 접선 전에는 아무도 죽이지 못합니다.",
 		nightAction: NightActionKind.STALK,
 		// CONTACT(45)에 서는 이유는 NightStep 선언에 적었다. ATTACK 뒤라
@@ -583,6 +607,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.MAFIA,
 		glyph: "🎭",
 		ability: "경찰 조사에 시민으로 나옵니다. 조사당하면 다음 아침에 알게 됩니다.",
+		summary: "경찰 조사에 시민으로 나옵니다",
 		tip: "당당하게 조사를 요구하세요. 당신은 절대 마피아로 나오지 않습니다.",
 		nightAction: null,
 		nightStep: NightStep.AFTER,
@@ -602,6 +627,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// "밤에 쓸 능력"이 아니라 "직업 능력"이다. 시민의 익명 쪽지는 세지 않으므로
 		// 전자로 적으면 쪽지를 든 시민에게 '없습니다'가 나갈 때 설명이 거짓말이 된다
 		ability: "첫 밤에만, 한 명이 직업 능력을 가졌는지 봅니다.",
+		summary: "첫 밤에 한 명의 능력 유무를 봅니다",
 		tip: "진영은 알 수 없습니다. 언제 말할지가 당신의 유일한 선택입니다.",
 		nightAction: NightActionKind.INSPECT_ABILITY,
 		nightStep: NightStep.INSPECT,
@@ -622,6 +648,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.MAFIA,
 		glyph: "💋",
 		ability: "밤마다 한 명을 유혹해 그 밤의 능력과 다음 낮의 발언을 막습니다.",
+		summary: "밤마다 한 명의 능력과 발언을 막습니다",
 		tip: "경찰과 의사를 재우는 것이 가장 큽니다. 다음 낮에 조용해진 사람이 곧 정답입니다.",
 		nightAction: NightActionKind.SEDUCE,
 		// 건달이 비운 자리를 그대로 잇는다. 유혹은 그 밤의 다른 모든 능력보다
@@ -642,6 +669,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.MAFIA,
 		glyph: "🧤",
 		ability: "한 밤 동안 한 명의 능력을 훔치고, 다음 밤에 그 능력을 대신 씁니다.",
+		summary: "한 명의 능력을 훔쳐 다음 밤에 씁니다",
 		tip: "밤에 움직이지 않는 사람을 훔치면 다음 밤이 통째로 빕니다.",
 		nightAction: NightActionKind.STEAL,
 		// AFTER인 이유는 NightStep 선언에 적었다. SWAP(10)에 두면 유혹·협박보다
@@ -661,6 +689,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "💞",
 		ability: "연인이 누구인지 서로 압니다. 한쪽이 죽으면 다른 쪽도 따라 죽습니다.",
+		summary: "서로를 알고, 한쪽이 죽으면 함께 죽습니다",
 		tip: "서로를 확정 시민으로 쓸 수 있습니다. 다만 밝히는 순간 둘이 한 표적이 됩니다.",
 		nightAction: null,
 		// 지목이 없어도 CHAIN에 세운다. 짝의 죽음을 따라가는 것이 이 직업의
@@ -678,6 +707,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🔦",
 		ability: "밤마다 한 명을 미행해 그 사람이 누구를 지목했는지 봅니다.",
+		summary: "밤마다 한 명이 누구를 골랐는지 봅니다",
 		tip: "직업은 알 수 없습니다. 하지만 밤마다 누군가를 노리는 사람은 시민이 아닙니다.",
 		nightAction: NightActionKind.TRACK,
 		// 지목을 읽는 능력이므로 그 밤의 지목이 전부 등록된 뒤여야 한다
@@ -695,6 +725,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "⛏️",
 		ability: "처음 죽은 시민 편 사망자의 직업을 대신 갖습니다. 판에 한 번뿐입니다.",
+		summary: "처음 죽은 시민의 직업을 물려받습니다",
 		tip: "마피아 팀과 연인의 무덤은 파지 않습니다. 아무도 죽지 않은 밤에는 그대로 기다립니다. 무엇이 되었는지는 아침에 알려줍니다.",
 		// 지목이 없다. 그 밤의 사망자가 확정되는 순간 자동으로 일어난다 —
 		// 고를 것이 없는 능력에 격자를 띄우면 "고를 수 있다"는 거짓말이 된다.
@@ -715,6 +746,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "💣",
 		ability: "게임에 딱 한 번, 지목한 사람과 함께 자폭합니다.",
+		summary: "판에 한 번, 한 명과 함께 자폭합니다",
 		tip: "마피아라고 확신할 때만 쓰세요. 시민을 데려가면 두 명이 한꺼번에 줄어듭니다.",
 		nightAction: NightActionKind.MARK,
 		nightStep: NightStep.CHAIN,
@@ -734,6 +766,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "⛪",
 		ability: "게임에 딱 한 번, 죽은 사람 한 명을 되살립니다.",
+		summary: "판에 한 번, 죽은 한 명을 되살립니다",
 		tip: "되살릴 사람이 시민이어야 이득입니다. 영매가 성불시킨 혼령은 되살릴 수 없습니다.",
 		nightAction: NightActionKind.REVIVE,
 		nightStep: NightStep.REVIVE,
@@ -751,6 +784,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		team: Team.CITIZEN,
 		glyph: "🧑",
 		ability: "게임당 한 번, 한 명에게 익명 쪽지를 보냅니다.",
+		summary: "판에 한 번, 익명 쪽지를 보냅니다",
 		tip: "아는 것은 없지만 말을 옮길 수는 있습니다. 누구에게 언제 보낼지가 전부입니다.",
 		nightAction: NightActionKind.NOTE,
 		// AFTER인 것이 핵심이다. 쪽지는 아무것도 막지 않고 아무도 죽이지 않으므로

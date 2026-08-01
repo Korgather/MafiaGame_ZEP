@@ -26,7 +26,7 @@ import { ROLE_DEFS } from "./Roles.ts";
  * 이보다 늘리면 읽지 않고 넘기고, 줄이면 첫 밤에 무엇을 눌러야 할지 모른다.
  *
  * 초 단위 숫자를 한 글자도 적지 않았다. 룰셋의 타이밍을 조정하는 순간 이 문장이
- * 조용히 거짓말이 되는데, 화면마다 이미 남은 시간을 링으로 보여주고 있어서
+ * 조용히 거짓말이 되는데, 화면마다 이미 남은 시간을 큰 숫자로 보여주고 있어서
  * 여기 적어도 얻는 것이 없다. 안내는 규칙만 말하고 수치는 화면이 말한다.
  */
 export const GUIDE_CARDS: readonly CardView[] = [
@@ -35,6 +35,7 @@ export const GUIDE_CARDS: readonly CardView[] = [
 		title: "누가 마피아일까",
 		team: null,
 		body: "참가자 중 몇 명은 몰래 마피아입니다. 시민은 마피아를 모두 찾아내면 이기고, 마피아는 자기 수가 시민 수와 같아지면 이깁니다.",
+		summary: "",
 		note: "자기 직업은 시작할 때 나에게만 보입니다. 남의 직업은 아무도 모릅니다.",
 	},
 	{
@@ -42,14 +43,16 @@ export const GUIDE_CARDS: readonly CardView[] = [
 		title: "밤과 낮이 반복됩니다",
 		team: null,
 		body: "밤에는 능력이 있는 직업만 조용히 한 명을 지목합니다. 아침이 되면 밤에 일어난 일이 공개되고, 모두 모여 토론한 뒤 한 명을 투표로 처형합니다.",
+		summary: "",
 		note: "능력이 없는 직업은 밤에 할 일이 없습니다. 기다렸다가 낮에 토론으로 싸웁니다.",
 	},
 	{
 		glyph: "👀",
 		title: "화면 보는 법",
 		team: null,
-		body: "가운데 화면이 지금 무엇을 할 차례인지 알려줍니다. 사람 타일을 누르면 지목·투표가 되고, 오른쪽 위 링은 남은 시간입니다.",
-		note: "채팅창은 늘 떠 있습니다. 밤에는 같은 편끼리만 보이는 탭이 따로 생깁니다.",
+		body: "화면 맨 위 큰 글씨가 지금 할 일을 알려주고, 그 아래 첫 줄에 내 직업과 능력이 늘 붙어 있습니다. 사람 타일을 누르면 지목·투표가 됩니다.",
+		summary: "",
+		note: "큰 숫자가 남은 시간입니다. 채팅창은 늘 떠 있고, 밤에는 같은 편끼리만 보이는 탭이 생깁니다.",
 	},
 ];
 
@@ -61,6 +64,7 @@ export function cardForRole(role: Role): CardView {
 		title: def.displayName,
 		team: def.team,
 		body: def.ability,
+		summary: def.summary,
 		note: def.tip,
 	};
 }

@@ -272,6 +272,17 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 const SPECTATE_NOTE = "관전 중입니다. 이번 판이 끝나면 자리에 앉습니다.";
 
 /**
+ * 관전자의 신분 줄과 지시 줄.
+ *
+ * identityOf(Widgets.ts)가 좌석에서 조립하는 것과 같은 세 값을 여기서 손으로
+ * 적는다. 관전자에게는 직업이 없어서 그 함수를 쓸 수 없다 — 좌석 값을 만들어
+ * 넘기면 아무 직업이나 하나를 골라야 하고, 그 직업의 능력 줄이 화면에 뜬다.
+ */
+const SPECTATE_GLYPH = "👁";
+const SPECTATE_ABILITY = "볼 수만 있습니다";
+const SPECTATE_LEAD = "지켜보세요";
+
+/**
  * 진행 중인 방을 지켜본다. 좌석은 주지 않는다.
  *
  * 좌석과 같은 Seat 값을 만들되 room.spectators에 넣는 것이 전부다. 그래서
@@ -335,6 +346,9 @@ function spectateView(room: Room): PhasePayload {
 		role: "관전",
 		team: Team.CITIZEN,
 		alive: false,
+		glyph: SPECTATE_GLYPH,
+		abilityLine: SPECTATE_ABILITY,
+		lead: SPECTATE_LEAD,
 		note: SPECTATE_NOTE,
 		deaths: room.nightReport,
 		spectating: true,

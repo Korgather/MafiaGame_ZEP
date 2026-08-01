@@ -20,7 +20,7 @@ import { field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
-import { bindMessage, isStaleEvent, openJudgement, updateMain } from "./Widgets.ts";
+import { bindMessage, identityOf, isStaleEvent, openJudgement, updateMain } from "./Widgets.ts";
 
 /**
  * 최후의 반론. 단상에 오른 사람만 말한다.
@@ -91,6 +91,24 @@ function canPressJudge(room: Room, seat: Seat): boolean {
 	return canJudge(room, seat) && !seat.intimidated;
 }
 
+/**
+ * 이 화면에서 가장 큰 글씨로 찍히는 지시문.
+ *
+ * 네 사람이 같은 화면을 본다. 단상에 오른 본인, 판결을 누를 수 있는 사람,
+ * 협박당해 누를 수 없는 사람, 죽어서 보고만 있는 사람 — 위젯이 받는
+ * canJudge 하나로는 뒤의 셋이 구별되지 않는다(전부 false다). 그래서 문구를
+ * 서버가 정한다.
+ *
+ * 협박당한 사람에게 "지켜보세요"를 주는 것은 사실이 그렇기 때문이다.
+ * 그의 몫은 반대로 세어지지만(judgementPassed) 그가 할 수 있는 일은 없다.
+ * 이유는 위젯이 잠긴 O/X 옆에 적는다.
+ */
+function judgementLead(room: Room, seat: Seat, judging: boolean): string {
+	if (seat.index === room.nominee) return judging ? "판결을 기다리세요" : "해명하세요";
+	if (!judging) return "해명을 들으세요";
+	return canPressJudge(room, seat) ? "처형할까요?" : "지켜보세요";
+}
+
 /** 한 사람의 반론/찬반 화면. 두 단계가 같은 위젯을 쓴다 */
 export function openJudgementView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	const judging = room.phase === GamePhase.JUDGEMENT;
@@ -100,6 +118,8 @@ export function openJudgementView(room: Room, player: ScriptPlayer, seat: Seat):
 		nominee: room.nominee,
 		nomineeName: nomineeLabel(room),
 		timer: room.phaseTimer,
+		...identityOf(seat),
+		lead: judgementLead(room, seat, judging),
 		picked: seat.judgement,
 		canJudge: judging && canPressJudge(room, seat),
 	});

@@ -156,6 +156,14 @@ export interface CardView {
 	/** null이면 진영 칩을 숨긴다 (규칙 안내 카드에는 진영이 없다) */
 	team: Team | null;
 	body: string;
+	/**
+	 * body를 한 줄로 줄인 것 (RoleDef.summary). 도감 목록이 이 값을 쓴다.
+	 *
+	 * 안내 카드는 줄일 한 줄이 없어서 ""을 보낸다. 선택 항목으로 두면 그 셋이
+	 * undefined가 되는데, Jint에 undefined를 실어 보내지 않는 것이 이 코드베이스의
+	 * 규칙이다. 위젯은 빈 문자열을 받으면 body로 물러난다.
+	 */
+	summary: string;
 	note: string;
 }
 
@@ -164,6 +172,8 @@ export interface RevealView {
 	num: number;
 	name: string;
 	role: string;
+	/** 직업 기호. 21줄이 나란히 서면 이름만으로는 훑어 읽히지 않는다 */
+	glyph: string;
 	team: Team;
 	alive: boolean;
 }

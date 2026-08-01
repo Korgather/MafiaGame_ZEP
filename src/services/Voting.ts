@@ -144,6 +144,13 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		aliveCount: aliveSeats(room).length,
 		timer: room.phaseTimer,
 		...identityOf(seat),
+		/*
+		 * 협박당한 사람에게도 "토론하세요"다. 막힌 것은 투표뿐이고 말은
+		 * 할 수 있다 — 그것이 협박(INTIMIDATE)과 유혹(SEDUCE)의 차이다.
+		 * 무엇이 막혔는지는 아래 note가 말하고, 유혹당해 말까지 막힌
+		 * 사람에게는 채팅 입력창이 그 이유를 대신 적는다(ChatPermission).
+		 */
+		lead: seat.alive ? "토론하세요" : "지켜보세요",
 		note: dayNote(seat),
 		// 밤사이 무슨 일이 있었는지는 채팅이 아니라 화면에 남는다
 		deaths: room.nightReport,
@@ -259,6 +266,7 @@ export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void
 		myNum: seat.index,
 		seats: seatViews(room),
 		timer: room.phaseTimer,
+		...identityOf(seat),
 		picked: seat.votedFor,
 		rejected: room.rejected,
 	});
@@ -479,6 +487,7 @@ export function openVoteResultView(room: Room, player: ScriptPlayer, seat: Seat)
 		type: "result",
 		myNum: seat.index,
 		seats: resultSeats(room),
+		...identityOf(seat),
 		nominee: room.voteRecord.nominee,
 		message: room.voteRecord.message,
 		timer: room.phaseTimer,

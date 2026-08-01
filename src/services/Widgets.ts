@@ -18,7 +18,7 @@ import type {
 	SeatView,
 	WidgetLayout,
 } from "../types/Widget.types.ts";
-import { roleName } from "../domain/Roles.ts";
+import { roleDef } from "../domain/Roles.ts";
 import type { RuleSet } from "../domain/RuleSet.ts";
 import type { ZepAudience } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
@@ -226,7 +226,27 @@ interface Identity {
 	team: Team;
 	/** false면 유령 색으로 표시된다 */
 	alive: boolean;
+	/**
+	 * 칩 앞에 붙는 기호. 유령이면 👻, 관전이면 👁.
+	 *
+	 * 직업 카드가 쓰는 것과 같은 값(RoleDef.glyph)이다. 카드는 5초만 떠 있고
+	 * 이 칩은 판이 끝날 때까지 남으므로, 같은 기호를 두 곳에 두면 카드에서 본
+	 * 그림이 칩에 계속 붙어 있어 "내가 뭐였지"를 글자를 읽지 않고 알아본다.
+	 */
+	glyph: string;
+	/**
+	 * 칩 옆에 상시 붙는 능력 한 줄 (RoleDef.summary).
+	 *
+	 * 직업 이름만으로는 21종 중 무엇을 할 수 있는지 알 수 없다. 죽으면
+	 * 감춘다 — role이 "유령"으로 바뀌는데 능력 줄만 남으면 그 한 줄이
+	 * 직업을 그대로 불어버린다. 유령 화면을 옆에서 보는 사람에게도.
+	 */
+	abilityLine: string;
 }
+
+const GHOST_GLYPH = "👻";
+/** 유령은 판이 끝날 때까지 유령 채널에서 언제나 말할 수 있다 (ChatPermission) */
+const GHOST_ABILITY = "유령끼리 이야기할 수 있습니다";
 
 /**
  * 좌석에서 직업 칩을 만든다.
@@ -239,10 +259,13 @@ interface Identity {
  * 관전자 칩("관전")도 같은 자리에 들어갈 수 있게 된다.
  */
 export function identityOf(seat: Seat): Identity {
+	const def = roleDef(seat.role);
 	return {
-		role: seat.alive ? roleName(seat.role) : "유령",
+		role: seat.alive ? def.displayName : "유령",
 		team: seat.team,
 		alive: seat.alive,
+		glyph: seat.alive ? def.glyph : GHOST_GLYPH,
+		abilityLine: seat.alive ? def.summary : GHOST_ABILITY,
 	};
 }
 
@@ -256,6 +279,16 @@ export interface PhasePayload extends Identity {
 	aliveCount: number;
 	timer: number;
 	note: string;
+	/**
+	 * 가장 큰 글씨로 찍히는 지시문. "토론하세요" · "기다리세요".
+	 *
+	 * 예전에는 그 자리에 "밤"·"아침"이라는 상태 이름이 있었다. 상태는 하늘
+	 * 그림만 봐도 알지만 지금 무엇을 해야 하는지는 어디에도 없었고, 처음
+	 * 하는 사람은 밤에 아무거나 눌러 보다 시간을 보냈다. 서버가 정하는 것은
+	 * 위젯이 알 수 없는 것을 반영해야 하기 때문이다 — 죽었는가, 관전인가,
+	 * 단상에 오른 본인인가에 따라 같은 단계에서도 할 일이 다르다.
+	 */
+	lead: string;
 	/** 밤사이 일어난 일. 채팅으로 흘러가면 놓친다 */
 	deaths: string[];
 	/**
@@ -283,7 +316,7 @@ export interface PhaseTimerPayload {
 }
 
 /** 투표 화면 */
-export interface VotePayload {
+export interface VotePayload extends Identity {
 	type: "init";
 	myNum: number;
 	seats: SeatView[];
@@ -295,7 +328,7 @@ export interface VotePayload {
 }
 
 /** 개표 화면. 같은 vote.html이 받는다 */
-export interface VoteResultPayload {
+export interface VoteResultPayload extends Identity {
 	type: "result";
 	myNum: number;
 	seats: SeatView[];
@@ -317,7 +350,7 @@ export interface VoteProgressPayload {
 }
 
 /** 최후의 반론 / 찬반투표 화면. 두 단계가 같은 judgement.html을 쓴다 */
-export interface JudgementPayload {
+export interface JudgementPayload extends Identity {
 	/** defense = 반론 듣는 중, judge = O/X 누르는 중 */
 	type: "defense" | "judge";
 	myNum: number;
@@ -325,6 +358,14 @@ export interface JudgementPayload {
 	nominee: number;
 	nomineeName: string;
 	timer: number;
+	/**
+	 * 가장 큰 글씨로 찍히는 지시문. PhasePayload.lead와 같은 자리다.
+	 *
+	 * 이 화면에서 특히 필요하다. 단상에 오른 본인, 판결을 누르는 사람,
+	 * 협박당해 누를 수 없는 사람, 죽어서 보고만 있는 사람이 같은 화면을
+	 * 보는데 각자 할 일이 다르다 — canJudge 하나로는 그 넷을 가르지 못한다.
+	 */
+	lead: string;
 	/** 내가 고른 값 (Judgement). 재접속해도 표시가 남는다 */
 	picked: string;
 	/** O/X를 누를 수 있는가. 반론 단계·단상 본인·사망자는 false */
