@@ -14,7 +14,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { SFX_VOLUME, SPRITE_DEFS, Sound } from "../src/constants/Assets.ts";
+import { BGM_VOLUME, Bgm, SFX_VOLUME, SPRITE_DEFS, Sound } from "../src/constants/Assets.ts";
 import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
 
 // import.meta는 tsconfig의 module: CommonJS에서 막힌다. 테스트는 npm이
@@ -135,5 +135,53 @@ describe("효과음", () => {
 	 */
 	it("공통 볼륨이 ZEP이 받는 범위 안이다", () => {
 		assert.ok(SFX_VOLUME > 0 && SFX_VOLUME <= 1, `SFX_VOLUME이 0~1 밖입니다: ${SFX_VOLUME}`);
+	});
+});
+
+/**
+ * 배경음악. 효과음과 같은 것을 묻지만 빠지는 방식이 다르다.
+ *
+ * Screen.setScene은 파일이 없어도 예외를 던지지 않는다 — 곡 이름을 잘못
+ * 적으면 그 단계가 통째로 무음이 되고, 무음은 "아직 음악을 안 넣었나 보다"로
+ * 읽혀서 아무도 버그로 신고하지 않는다. 실제로 이 세 곡은 Assets.ts에
+ * 등록된 뒤 한동안 res에 없었다.
+ *
+ * 곡은 tools/make-bgm.py가 만든다. 파일을 지우고 다시 만들 수 있으므로
+ * 여기서 걸리면 그 스크립트를 돌리면 된다.
+ */
+describe("배경음악", () => {
+	it("등록한 곡이 모두 res에 있다", () => {
+		for (const [key, file] of Object.entries(Bgm)) {
+			assert.doesNotThrow(() => assertMp3(file), `${key}: ${file} (python tools/make-bgm.py)`);
+		}
+	});
+
+	/**
+	 * 효과음과 함께 검사하는 이유는 사운드 슬롯이다. Screen은 BGM을 "bgm"
+	 * 키로 틀고 효과음은 파일 이름을 키로 쓰는데(Broadcast.playSoundTo), 같은
+	 * 파일이 양쪽에 등록되면 한 소리가 두 슬롯에 들어간다. 그러면 효과음이
+	 * 끝날 때 BGM 슬롯이 함께 끊기거나 그 반대가 되고, 어느 쪽이든 원인을
+	 * 찾기 어려운 무음이 남는다.
+	 *
+	 * 곡끼리 겹치지 않아야 하는 이유는 더 단순하다. 밤과 낮이 같은 파일이면
+	 * setScene의 "같은 곡이면 다시 시작하지 않는다"가 두 단계를 한 장면으로
+	 * 취급해서, 아침이 와도 음악이 바뀌지 않는다.
+	 */
+	it("곡끼리도 효과음과도 파일이 겹치지 않는다", () => {
+		const seen: Record<string, string> = {};
+		for (const [key, file] of Object.entries(Sound)) seen[file] = `Sound.${key}`;
+		for (const [key, file] of Object.entries(Bgm)) {
+			assert.equal(seen[file], undefined, `Bgm.${key}가 ${seen[file]}와 ${file}을 함께 씁니다`);
+			seen[file] = `Bgm.${key}`;
+		}
+	});
+
+	/**
+	 * 배경음악은 효과음보다 작아야 한다. 같거나 크면 죽음·처형·조사 결과가
+	 * 음악에 묻히는데, 그 소리들은 화면을 보지 않아도 알아야 하는 정보다.
+	 */
+	it("공통 볼륨이 효과음보다 낮다", () => {
+		assert.ok(BGM_VOLUME > 0 && BGM_VOLUME <= 1, `BGM_VOLUME이 0~1 밖입니다: ${BGM_VOLUME}`);
+		assert.ok(BGM_VOLUME < SFX_VOLUME, `BGM_VOLUME(${BGM_VOLUME})이 SFX_VOLUME(${SFX_VOLUME}) 아래여야 합니다`);
 	});
 });

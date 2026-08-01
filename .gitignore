@@ -13,3 +13,6 @@ res/*.js
 
 # 위젯 미리보기 산출물 (npm run preview:ui 로 생성)
 /preview
+
+# 파이썬 바이트코드 (tools/make-bgm.py 실행 부산물)
+__pycache__/
