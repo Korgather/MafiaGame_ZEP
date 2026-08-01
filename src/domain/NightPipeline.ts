@@ -891,9 +891,11 @@ function chainLovers(seats: readonly Seat[], ledger: NightLedger): void {
  */
 function digGraves(seats: readonly Seat[], ledger: NightLedger): void {
 	for (const digger of seats) {
+		// 판에 한 번뿐인 근거가 이 줄이다. 아래에서 role을 바꿔 버리므로
+		// 파낸 도굴꾼은 다음 밤에 여기서 걸러진다 — usesSpent로 세지 않는
+		// 이유는 그 값이 이제 물려받은 직업의 잔여 횟수이기 때문이다
 		if (digger.role !== Role.GRAVEDIGGER) continue;
 		if (!digger.alive || digger.blocked) continue;
-		if (digger.usesSpent > 0) continue;
 		if (ledger.killed.indexOf(digger.index) >= 0) continue;
 		for (const index of ledger.killed) {
 			const victim = seatByIndex(seats, index);
@@ -910,7 +912,21 @@ function digGraves(seats: readonly Seat[], ledger: NightLedger): void {
 			// 종료 화면의 직업 공개도 "의사가 둘이었다"로 읽힌다.
 			// 파낸 무덤은 마피아 팀도 연인도 아니므로 남는 자리는 언제나 시민이다.
 			victim.role = Role.CITIZEN;
-			digger.usesSpent++;
+			/*
+			 * 사용 상태도 함께 넘어온다. 여기서 usesSpent를 올리면(예전에
+			 * 그랬다) 물려받은 능력이 판에 한 번뿐인 종류일 때 곧바로 다 쓴
+			 * 것이 되어 한 번도 쓰지 못한다 — maxUses가 1인 직업은 성직자·
+			 * 기자·자경단원·테러리스트에 시민의 쪽지까지라, 사실상 도굴로
+			 * 얻은 능력 대부분이 그 자리에서 사라졌다.
+			 *
+			 * "능력을 이어받는다"는 잔여 횟수까지 이어받는다는 뜻이다. 소생을
+			 * 쓰지 않고 죽은 성직자를 파내면 그 한 번은 도굴꾼의 것이 되고,
+			 * 이미 쓰고 죽었으면 남은 것이 없다. 무덤 쪽을 0으로 되돌리는 것은
+			 * 거기 남는 것이 무능력한 시민이어서다 — 성직자가 되살리면 그
+			 * 사람은 시민의 쪽지 한 장을 새로 든다.
+			 */
+			digger.usesSpent = victim.usesSpent;
+			victim.usesSpent = 0;
 			// 문구는 victim.role이 아니라 digger.role을 읽는다. 바로 위에서
 			// 무덤을 비웠으므로 victim.role은 이제 시민이다
 			ledger.reveals.push({

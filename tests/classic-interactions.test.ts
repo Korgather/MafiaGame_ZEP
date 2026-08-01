@@ -37,6 +37,7 @@ import type { NightSettlement } from "../src/domain/NightPipeline.ts";
 import {
 	NightOutcome,
 	hasExtraProbe,
+	hasNightTurn,
 	nightActionBlockedReason,
 } from "../src/domain/NightResolution.ts";
 import { VoteOutcome, tallyVotes } from "../src/domain/Vote.ts";
@@ -611,7 +612,9 @@ describe("클래식 상호작용 · 접선과 위임", () => {
 		const first = night(seats, [[1, 3]]);
 		assert.equal(outcomeOf(first, 3), NightOutcome.KILLED);
 		assert.equal(seats[1].role, Role.DOCTOR, "도굴꾼이 무덤을 파지 않았습니다");
-		assert.equal(seats[1].usesSpent, 1);
+		// 도굴 자체는 횟수를 태우지 않는다. 넘어오는 값은 무덤 주인의
+		// 남은 횟수이고, 의사는 아무것도 쓰지 않고 죽었다(23번이 이어 본다)
+		assert.equal(seats[1].usesSpent, 0, "도굴이 물려받은 능력을 태웠습니다");
 		assert.equal(revealsFor(first, 2).length, 1, "무엇이 되었는지 알려주지 않았습니다");
 		// 복제가 아니라 이전이다. 시체에 직업을 남겨 두면 같은 직업이 판에
 		// 둘이 되고, 성직자가 그를 되살리는 순간 진짜로 둘이 된다
@@ -764,5 +767,109 @@ describe("클래식 상호작용 · 승리 판정", () => {
 		// 승리 화면을 두 번 그리는 것만으로 승자가 뒤집힌다
 		assert.equal(evaluateWinner(wiped), Team.CITIZEN);
 		assert.equal(evaluateWinner(lone), Team.MAFIA);
+	});
+
+	it("22. 사망자는 밤의 비밀 대화를 듣고, 영매가 그것을 무덤에서 건져 온다", () => {
+		const dead = chatCtx({ seated: true, started: true, alive: false, phase: GamePhase.NIGHT });
+
+		// 죽은 시민은 밀담 참가자가 아니다(mafiaChat이 거짓이다). 그래도
+		// 읽는다 — 클래식의 기본 규칙이고, 아래 영매 경로의 출발점이 여기다
+		assert.equal(dead.mafiaChat, false);
+		assert.equal(accessOf(dead, ChatChannel.MAFIA).read, true, "사망자가 밀담을 듣지 못합니다");
+		assert.equal(accessOf(dead, ChatChannel.MAFIA).write, false, "사망자가 밀담에 끼어듭니다");
+		assert.equal(dead.loverChat, false);
+		assert.equal(accessOf(dead, ChatChannel.LOVER).read, true, "사망자가 연인의 대화를 듣지 못합니다");
+		assert.equal(accessOf(dead, ChatChannel.LOVER).write, false, "사망자가 연인 대화에 끼어듭니다");
+
+		// 들은 것을 옮길 곳이 있어야 이 규칙에 값이 생긴다
+		assert.equal(accessOf(dead, ChatChannel.GHOST).write, true, "사망자가 유령 채널에 말하지 못합니다");
+
+		// 살아 있는 영매가 밤에 그 채널을 읽는다. 세 줄이 이어져야
+		// "영매가 밀담 내용을 전달받는다"가 성립한다
+		const shaman = chatCtx({ seated: true, started: true, ghostChat: true, phase: GamePhase.NIGHT });
+		assert.equal(accessOf(shaman, ChatChannel.GHOST).read, true, "영매가 밤에 유령의 말을 듣지 못합니다");
+		// 영매 본인에게 밀담이 직접 열리지는 않는다. 산 사람이기 때문이고,
+		// 여기가 열리면 무덤을 거칠 이유가 사라져 영매가 경찰이 된다
+		assert.equal(accessOf(shaman, ChatChannel.MAFIA).read, false, "산 영매에게 밀담이 직접 열렸습니다");
+
+		// 죽은 마피아도 듣기만 한다. 무덤에서 팀에게 지시를 내리면
+		// 그 밤의 결정이 죽은 사람 손에 남는다
+		const deadMafia = chatCtx({
+			seated: true,
+			started: true,
+			alive: false,
+			mafiaChat: true,
+			phase: GamePhase.NIGHT,
+		});
+		assert.equal(accessOf(deadMafia, ChatChannel.MAFIA).write, false, "죽은 마피아가 밀담에 지시를 남깁니다");
+
+		// 낮에도 닫지 않는다. 밀담은 밤에만 오가므로 낮에 열어 두어도
+		// 보이는 것은 어젯밤 기록뿐이고, 그것은 이미 읽은 줄이다
+		const deadDay = chatCtx({ seated: true, started: true, alive: false, phase: GamePhase.DAY });
+		assert.equal(accessOf(deadDay, ChatChannel.MAFIA).read, true, "사망자가 낮에 어젯밤 밀담을 다시 읽지 못합니다");
+
+		// 살아 있는 일반 시민에게는 아무것도 새지 않는다
+		const alive = chatCtx({ seated: true, started: true, phase: GamePhase.NIGHT });
+		assert.equal(accessOf(alive, ChatChannel.MAFIA).read, false, "산 시민에게 밀담이 노출됩니다");
+		assert.equal(accessOf(alive, ChatChannel.LOVER).read, false, "산 시민에게 연인 대화가 노출됩니다");
+
+		// 관전자는 죽은 것이 아니라 앉지 않은 것이다. 여기를 열면 판이
+		// 끝나기도 전에 정보가 방 밖으로 나간다
+		const watcher = chatCtx({ seated: false, spectating: true, started: true, phase: GamePhase.NIGHT });
+		assert.equal(accessOf(watcher, ChatChannel.MAFIA).read, false, "관전자에게 밀담이 열렸습니다");
+		assert.equal(accessOf(watcher, ChatChannel.LOVER).read, false, "관전자에게 연인 대화가 열렸습니다");
+
+		// 방 밖에 서 있는 사람도 마찬가지다. LOOSE_CONTEXT의 alive가 참이라
+		// 사망자 줄에 걸리지 않고, mafiaChat이 거짓이라 그다음 줄에서 닫힌다
+		assert.equal(accessOf(LOOSE_CONTEXT, ChatChannel.MAFIA).read, false, "방 밖 사람에게 밀담이 열렸습니다");
+	});
+
+	it("23. 도굴꾼은 파낸 직업의 남은 횟수까지 이어받는다", () => {
+		// 13번은 의사를 파냈다. 의사의 치료에는 횟수 제한이 없어서, 도굴이
+		// 횟수를 태우는지 아닌지가 그 판에서는 드러나지 않는다. 판에 한 번뿐인
+		// 능력으로 물어야 답이 나온다 — 그런 직업은 성직자·기자·자경단원·
+		// 테러리스트에 시민의 쪽지까지, 도굴이 노릴 무덤 대부분이다
+		const seats = [
+			seat(1, Role.MAFIA),
+			seat(2, Role.GRAVEDIGGER),
+			seat(3, Role.REPORTER),
+			seat(4, Role.CITIZEN),
+		];
+		const first = night(seats, [[1, 3]]);
+		assert.equal(outcomeOf(first, 3), NightOutcome.KILLED);
+		assert.equal(seats[1].role, Role.REPORTER, "도굴꾼이 무덤을 파지 않았습니다");
+		assert.equal(seats[1].usesSpent, 0, "도굴이 물려받은 취재를 태웠습니다");
+		applyDeaths(first);
+
+		// 그 값이 옳아야 다음 밤에 능력이 실제로 돈다. 여기가 이 검사의 값이다 —
+		// 도굴이 횟수를 태우면 이름표만 기자인 시민이 하나 남는다
+		nextNight(seats);
+		night(seats, [[2, 4]]);
+		assert.equal(seats[3].scooped, true, "이어받은 취재가 돌지 않았습니다");
+		assert.equal(seats[1].usesSpent, 1);
+
+		// 이어받은 것은 한 번이었고, 그것으로 끝이다. 여기만 층이 다르다 —
+		// 파이프라인은 지목이 들어오면 실행할 뿐 횟수를 세지 않고, 횟수를 세어
+		// 격자를 닫는 것은 hasNightTurn이다. 그쪽에 물어야 이 규칙이 잡힌다
+		nextNight(seats);
+		assert.equal(hasNightTurn(seats[1], 2), false, "판에 한 번뿐인 취재가 두 번 돌았습니다");
+
+		// 반대쪽도 이어받는다. 이미 쓰고 죽은 능력은 새것으로 돌아오지 않는다 —
+		// 잔여 횟수를 그대로 잇는 것이 "이어받는다"이지, 다 쓴 것을 되살려
+		// 주는 뜻은 아니다
+		const spent = [
+			seat(1, Role.MAFIA),
+			seat(2, Role.GRAVEDIGGER),
+			seat(3, Role.REPORTER, { usesSpent: 1 }),
+		];
+		const dug = night(spent, [[1, 3]]);
+		assert.equal(outcomeOf(dug, 3), NightOutcome.KILLED);
+		assert.equal(spent[1].role, Role.REPORTER, "도굴꾼이 무덤을 파지 않았습니다");
+		assert.equal(spent[1].usesSpent, 1, "다 쓴 취재가 새것으로 돌아왔습니다");
+
+		// 무덤 쪽은 0으로 되돌린다. 거기 남는 것은 무능력한 시민이고,
+		// 성직자가 되살리면 시민의 쪽지 한 장을 새로 들어야 한다
+		assert.equal(spent[2].role, Role.CITIZEN, "파낸 무덤에 직업이 남았습니다");
+		assert.equal(spent[2].usesSpent, 0, "파낸 무덤에 쓴 흔적이 남았습니다");
 	});
 });

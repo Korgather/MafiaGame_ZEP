@@ -601,7 +601,9 @@ describe("클래식 회귀 · 직업 능력", () => {
 		const settled = night(seats, [[1, 3]]);
 		assert.equal(outcomeOf(settled, 3), NightOutcome.KILLED);
 		assert.equal(seats[1].role, Role.POLICE, "도굴꾼이 직업을 잇지 못했습니다");
-		assert.equal(seats[1].usesSpent, 1);
+		// 무덤 주인의 잔여 횟수를 그대로 잇는다. 경찰은 횟수 제한이 없어
+		// 0이고, 도굴 자체는 아무것도 태우지 않는다
+		assert.equal(seats[1].usesSpent, 0);
 		assert.equal(revealsFor(settled, 2).length, 1);
 
 		// 판에 한 번뿐이다. 다음 밤에 또 파도 직업이 바뀌지 않는다
@@ -1086,23 +1088,61 @@ describe("클래식 회귀 · 승리 판정", () => {
 		assert.equal(evaluateWinner(before), null);
 	});
 
-	it("47. 성직자의 소생이 승리 판정에 반영된다", () => {
-		// 이 프로젝트에는 "보류 중인 소생"이라는 상태가 없다. 파이프라인이
-		// REVIVE(58)를 승리 판정보다 먼저 돌리므로, 되살아난 좌석은 그 밤의
-		// 판정에 곧바로 들어간다
+	it("47. 쓰지 않은 소생이 남아 있으면 동률로 판을 끝내지 않는다", () => {
 		const seats = [
 			seat(1, Role.MAFIA),
 			seat(2, Role.PRIEST),
 			seat(3, Role.CITIZEN, { alive: false }),
 		];
-		// 소생 전이라면 마피아 1 대 시민 1이라 마피아가 이긴 판이다
-		assert.equal(evaluateWinner(seats), Team.MAFIA);
+		// 마피아 1 대 시민 1. 무게만 보면 마피아가 이긴 판이지만, 다음 밤에
+		// 3번이 일어나면 동률이 깨진다. 여기서 판을 끝내면 성직자는 능력을
+		// 써 볼 기회조차 받지 못한다
+		assert.equal(evaluateWinner(seats), null, "쓰지 않은 소생을 두고 판이 끝났습니다");
 
 		// 성직자(2번)가 죽어 있는 시민(3번)을 되살린다
 		const settled = night(seats, [[2, 3]], true);
 		assert.equal(outcomeOf(settled, 3), NightOutcome.REVIVED);
 		seats[2].alive = true;
 		assert.equal(evaluateWinner(seats), null, "되살아난 좌석이 판정에 들어가지 않았습니다");
+
+		// 다 쓴 뒤에는 미루지 않는다. 여기서도 참을 답하면 마피아가 시민을
+		// 다 죽여도 판이 끝나지 않는다
+		seats[2].alive = false;
+		assert.equal(seats[1].usesSpent, 1);
+		assert.equal(evaluateWinner(seats), Team.MAFIA, "다 쓴 소생이 판을 미뤘습니다");
+	});
+
+	it("47-2. 소생을 미루는 조건은 좁다", () => {
+		// 되살릴 시체가 없으면 능력이 남아 있어도 판을 미루지 않는다
+		const noGrave = [seat(1, Role.MAFIA), seat(2, Role.PRIEST)];
+		assert.equal(evaluateWinner(noGrave), Team.MAFIA, "빈 무덤을 두고 판을 미뤘습니다");
+
+		// 성불당한 혼령은 성직자가 고를 수 없다. 무덤으로 세면 아무도
+		// 이기지 못한 채 밤만 반복하는 판이 된다
+		const exorcised = [
+			seat(1, Role.MAFIA),
+			seat(2, Role.PRIEST),
+			seat(3, Role.CITIZEN, { alive: false, exorcised: true }),
+		];
+		assert.equal(evaluateWinner(exorcised), Team.MAFIA, "성불한 혼령을 소생 대상으로 세었습니다");
+
+		// 마피아가 이미 앞선 판은 소생 하나로 따라잡지 못한다
+		const behind = [
+			seat(1, Role.MAFIA),
+			seat(2, Role.MAFIA),
+			seat(3, Role.PRIEST),
+			seat(4, Role.CITIZEN, { alive: false }),
+		];
+		assert.equal(evaluateWinner(behind), Team.MAFIA, "열세인 판이 소생으로 미뤄졌습니다");
+
+		// 마피아 쪽 소생은 시민을 구하지 않는다. 도둑이 성직자의 능력을
+		// 훔쳐도 판은 그대로 끝나야 한다 - 훔친 것은 능력이지 진영이 아니다
+		const thief = [
+			seat(1, Role.MAFIA),
+			seat(2, Role.THIEF, { borrowedRole: Role.PRIEST }),
+			seat(3, Role.CITIZEN, { alive: false }),
+		];
+		assert.equal(evaluateWinner(thief), Team.MAFIA, "도둑이 빌린 소생이 판을 미뤘습니다");
 	});
 
 	it("48. 양쪽이 동시에 성립하면 우선순위가 일관되게 적용된다", () => {

@@ -256,8 +256,28 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 	}
 
 	if (channel === ChatChannel.MAFIA) {
+		/*
+		 * 죽은 사람은 밀담을 엿듣는다. 클래식의 기본 규칙이고, 영매의 값이
+		 * 여기서 나온다 — 무덤 쪽에서 밀담을 읽은 사람들이 유령 채널에
+		 * 그것을 옮기면, 살아 있는 영매가 밤에 그 채널을 읽는다.
+		 * 상호작용 22번이 이 경로를 끝에서 끝까지 고정한다.
+		 *
+		 * mafiaChat 검사보다 **위**에 두어야 한다. 죽은 시민은 밀담 참가자가
+		 * 아니라 아래 줄에서 NONE으로 걸리기 때문이다 — 순서를 뒤집으면 이
+		 * 규칙이 죽은 마피아에게만 남고, 그들이 읽는 것은 살아서 이미 알던
+		 * 이야기라 아무것도 달라지지 않는다.
+		 *
+		 * seated를 함께 묻는다. 관전자는 맨 위에서 이미 돌아갔지만 방 밖에
+		 * 서 있는 사람은 그렇지 않고, 그들의 alive는 LOOSE_CONTEXT의 참이라
+		 * 이 줄에 걸리지 않는다 — 그래도 "판에 앉았다가 죽은 사람"이 조건임을
+		 * 조건문 자체가 말하게 둔다.
+		 *
+		 * 단계를 묻지 않는 것은 위 잠금과 다른 점이다. 밀담은 밤에만 오가므로
+		 * 낮에 열어 두어도 보이는 것은 어젯밤 기록뿐이고, 그것은 죽은 사람이
+		 * 이미 읽은 줄이다.
+		 */
+		if (ctx.seated && !ctx.alive) return locked("죽은 뒤에는 밀담을 듣기만 합니다");
 		if (!ctx.mafiaChat) return NONE;
-		if (!ctx.alive) return locked("죽은 뒤에는 밀담에 낄 수 없습니다");
 		if (ctx.phase !== GamePhase.NIGHT) return locked("마피아 밀담은 밤에만 열립니다");
 		return OPEN;
 	}
@@ -272,11 +292,18 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 	 * 한 가지가 늘고, 빠뜨리면 새 채널이 조용히 옆 채널의 규칙을 물려받는다.
 	 */
 	if (channel === ChatChannel.LOVER) {
+		/*
+		 * 밀담과 같은 이유로 죽은 사람에게 읽기를 연다. 여기서 새는 것은
+		 * 마피아의 정체가 아니라 짝이 누구인가인데, 그 역시 영매가 무덤에서
+		 * 건져 오라고 만든 정보다.
+		 *
+		 * 쓰기를 계속 막는 이유는 따로 있다. 한쪽이 죽으면 그날 밤 다른 쪽도
+		 * 상심으로 따라 죽지만(NightPipeline의 chainLovers) 연쇄가 도는 것은
+		 * 밤의 끝이라, 그 사이에 죽은 쪽이 남은 짝에게 범인을 불러 줄 창이
+		 * 열린다. 듣는 것과 말하는 것은 다르다.
+		 */
+		if (ctx.seated && !ctx.alive) return locked("죽은 뒤에는 연인의 이야기를 듣기만 합니다");
 		if (!ctx.loverChat) return NONE;
-		// 한쪽이 죽으면 그날 밤 다른 쪽도 상심으로 따라 죽는다(NightPipeline의
-		// chainLovers). 그래도 잠금은 남겨 둔다 — 연쇄가 도는 것은 밤의 끝이고,
-		// 그 사이에 죽은 사람이 남은 연인에게 정보를 넘기는 창이 열린다
-		if (!ctx.alive) return locked("죽은 뒤에는 연인과 이야기할 수 없습니다");
 		if (ctx.phase !== GamePhase.NIGHT) return locked("연인의 대화는 밤에만 열립니다");
 		return OPEN;
 	}
