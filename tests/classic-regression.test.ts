@@ -539,9 +539,11 @@ describe("클래식 회귀 · 직업 능력", () => {
 			seat(3, Role.LOVER, { loverIndex: 2 }),
 		];
 		const settled = night(seats, [[1, 2]]);
-		assert.equal(outcomeOf(settled, 2), NightOutcome.KILLED);
-		assert.equal(outcomeOf(settled, 3), NightOutcome.HEARTBREAK);
-		// 좌석마다 결말은 하나뿐이다. 연쇄가 자기 자신을 되짚으면 여기서 터진다
+		// 공격받은 것은 2번이고 죽는 것은 3번이다
+		assert.equal(outcomeOf(settled, 2), NightOutcome.SPARED);
+		assert.equal(outcomeOf(settled, 3), NightOutcome.SACRIFICED);
+		// 좌석마다 결말은 하나뿐이다. 연쇄가 자기 자신을 되짚으면 여기서 터진다 —
+		// 대신 죽은 3번을 보고 2번에게 HEARTBREAK가 붙으면 희생이 없던 일이 된다
 		assert.equal(settled.casualties.length, 2);
 	});
 

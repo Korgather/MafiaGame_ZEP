@@ -99,6 +99,41 @@ function resetRound(seats) {
 
 function killSeat(s) { s.alive = false; s.attackedBy = []; s.healed = false; s.voteCount = 0; }
 
+function seatOf(seats, index) {
+	for (const s of seats) if (s.index === index) return s;
+	return null;
+}
+
+/**
+ * 낮의 처형이 잇는 연쇄. services/Death.ts의 kill(EXECUTION) 경로와 같다.
+ *
+ * 밤의 연쇄는 파이프라인이 결말 목록으로 만들어 주지만 낮은 만들 목록이 없어
+ * 처형 처리 안에서 끝난다. 여기를 비워 두면 측정 도구에서만 연인과
+ * 테러리스트가 아무 일도 하지 않아, 그 두 직업이 들어간 인원의 승률이
+ * 게임과 다른 숫자로 나온다.
+ */
+function executeSeat(seats, target) {
+	if (!target.alive) return;
+	killSeat(target);
+	// 폭탄이 먼저 터지고, 폭사한 사람의 연인이 뒤따른다(Death.detonate와 같은 순서)
+	if (target.markIndex !== 0) {
+		const mark = seatOf(seats, target.markIndex);
+		if (mark && mark.alive && mark.team !== target.team) {
+			killSeat(mark);
+			mournSeat(seats, mark);
+		}
+	}
+	mournSeat(seats, target);
+}
+
+/** 낮에 연인을 잃으면 뒤따른다. 밤의 공격은 희생이라 여기 오지 않는다 */
+function mournSeat(seats, s) {
+	if (s.loverIndex === 0) return;
+	const partner = seatOf(seats, s.loverIndex);
+	if (!partner || !partner.alive) return;
+	killSeat(partner);
+}
+
 /** NightResolution.noTurnReason과 같은 조건 — 한쪽만 바뀌면 측정이 규칙과 어긋난다 */
 function hasTurn(seat, turnCount) {
 	const def = roleDef(seat.role);
@@ -239,8 +274,17 @@ export function playGame(rules, playerCount, seed, model, opts) {
 			}
 		}
 
+		// 죽음이 아닌 결말(SAVED·SHIELDED·SPARED·REVIVED)만 빠진다. 밤의
+		// 연쇄는 파이프라인이 이미 이 목록으로 만들어 두었으므로 여기서
+		// 다시 잇지 않는다 — services/Night.resolveNight과 같은 구조다
 		for (const c of settle.casualties) {
-			if (c.outcome === NightOutcome.KILLED || c.outcome === NightOutcome.BACKFIRED) killSeat(c.seat);
+			const died =
+				c.outcome === NightOutcome.KILLED ||
+				c.outcome === NightOutcome.BACKFIRED ||
+				c.outcome === NightOutcome.BOMBED ||
+				c.outcome === NightOutcome.SACRIFICED ||
+				c.outcome === NightOutcome.HEARTBREAK;
+			if (died) killSeat(c.seat);
 		}
 		let w = evaluateWinner(seats);
 		if (w) return { winner: w, rounds: rounds + 1, deck, falseClear, defected };
@@ -317,7 +361,7 @@ export function playGame(rules, playerCount, seed, model, opts) {
 
 			// 처형은 진영을 공개한다(services/Death.ts). 모든 모델이 이 정보는 받는다
 			known[res.target.index] = res.target.team === Team.MAFIA ? "MAFIA" : "CITIZEN";
-			killSeat(res.target);
+			executeSeat(seats, res.target);
 			break;
 		}
 		w = evaluateWinner(seats);

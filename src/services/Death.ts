@@ -43,6 +43,11 @@ export const DeathCause = {
 	SUICIDE_BOMB: "SUICIDE_BOMB",
 	/** 연인이 죽어 뒤따랐다 */
 	SACRIFICE: "SACRIFICE",
+	/**
+	 * 연인이 공격받아 대신 죽었다. SACRIFICE와 방향이 반대다 —
+	 * 이쪽은 연인을 잃은 것이 아니라 살렸다.
+	 */
+	LOVER_SHIELD: "LOVER_SHIELD",
 } as const;
 export type DeathCause = (typeof DeathCause)[keyof typeof DeathCause];
 
@@ -114,12 +119,28 @@ function detonate(room: Room, seat: Seat): void {
 	mourn(room, mark);
 }
 
-/** 연인은 함께 죽는다. 밤이든 낮이든 같은 규칙이고, 낮 몫이 여기다 */
+/**
+ * 연인 한쪽이 낮에 죽으면 다른 쪽도 뒤따른다.
+ *
+ * 밤의 공격은 여기 오지 않는다. 그쪽은 짝이 대신 죽는 희생이고
+ * (NightResolution.resolveNightCasualties), 밤에만 몸받이가 되는 것이 규칙이다.
+ * 낮의 처형에는 대신 죽어 줄 자리가 없다 — 방이 이 사람을 지목해 세웠고,
+ * 그 자리에 다른 사람을 밀어 넣으면 투표 결과가 뒤집힌다.
+ *
+ * 낮에 둘을 한꺼번에 잃는 위험이 연인이라는 배치의 값이다.
+ */
 function mourn(room: Room, seat: Seat): void {
 	if (seat.loverIndex === 0) return;
 	const partner = seatAt(room, seat.loverIndex);
 	if (!partner || !partner.alive) return;
 	kill(room, partner, DeathCause.SACRIFICE);
+}
+
+/** 이 좌석의 연인 이름. 짝이 없으면 부를 이름도 없으니 빈 문자열이다 */
+function partnerLabel(room: Room, seat: Seat): string {
+	if (seat.loverIndex === 0) return "";
+	const partner = seatAt(room, seat.loverIndex);
+	return partner ? participantLabel(partner) : "";
 }
 
 function announce(room: Room, seat: Seat, cause: DeathCause): void {
@@ -143,12 +164,18 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 	// 자책(BACKFIRE)이 평범한 제거와 같은 문구인 것은 의도다. 다른 문구를
 	// 주면 그 한 줄이 "이 방에 자경단원이 있고 방금 헛짚었다"를 알린다.
 	// 왜 죽었는지는 죽은 본인에게만 따로 간다(Night.resolveNight).
+	//
+	// 희생(LOVER_SHIELD)만 상대의 이름을 함께 부른다. 규칙이 "두 연인의 정체와
+	// 희생 결과를 공개한다"를 요구하고, 이름 하나로는 마피아가 친 사람이 멀쩡히
+	// 살아 있는 이유가 설명되지 않는다. 이미 드러난 관계라서 감출 것도 없다.
 	const line =
 		cause === DeathCause.SUICIDE_BOMB
 			? `💥 ${name}가 폭발에 휘말려 죽었습니다.`
 			: cause === DeathCause.SACRIFICE
 				? `💔 ${name}가 연인을 잃고 뒤따랐습니다.`
-				: `☠️ ${name}가 죽었습니다.`;
+				: cause === DeathCause.LOVER_SHIELD
+					? `💔 ${name}가 연인 ${partnerLabel(room, seat)} 대신 죽었습니다.`
+					: `☠️ ${name}가 죽었습니다.`;
 	room.nightReport.push(line);
 	Chat.announce(room, line);
 }

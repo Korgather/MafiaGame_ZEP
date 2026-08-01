@@ -421,7 +421,13 @@ export function resolveNight(room: Room): void {
 				report(room, "🛡️ 누군가가 공격을 받았지만 버텨냈습니다.");
 				tellSeat(casualty.seat, "🛡️ 밤새 공격을 받았지만 버텨냈습니다. 방탄은 이제 남아 있지 않습니다.");
 				break;
-			case NightOutcome.BACKFIRED:
+			case NightOutcome.SPARED:
+					// 방에 나가는 줄은 짝의 사망(LOVER_SHIELD)이 낸다 — 거기서 두
+					// 이름이 함께 불리므로 여기서 한 줄 더 내면 같은 사건이 두 번
+					// 실린다. 이 결말은 살아남았다는 사실을 본인에게 알릴 뿐이다
+					tellSeat(casualty.seat, "💔 밤새 공격을 받았지만 연인이 대신 죽었습니다.");
+					break;
+				case NightOutcome.BACKFIRED:
 				// 자책의 이유는 방에 알리지 않는다 — 알리면 자경단원의 정체가
 				// 시체와 함께 공개된다. 사인은 따로 있지만 announce가 평범한
 				// 제거와 같은 문구를 내보내고, 본인에게만 왜 죽었는지 말해준다.
@@ -440,7 +446,12 @@ export function resolveNight(room: Room): void {
 			case NightOutcome.HEARTBREAK:
 				kill(room, casualty.seat, DeathCause.SACRIFICE);
 				break;
-			case NightOutcome.REVIVED:
+			case NightOutcome.SACRIFICED:
+					// 짝(SPARED)은 이 목록에 이미 살아남은 채로 들어와 있다.
+					// 여기서 죽는 것은 대신 나선 쪽뿐이다
+					kill(room, casualty.seat, DeathCause.LOVER_SHIELD);
+					break;
+				case NightOutcome.REVIVED:
 				// 유일하게 죽이지 않는 결말이다. 사망 목록에 실려 오는 이유는
 				// 파이프라인이 "이 밤에 좌석에 일어난 일"을 한 줄기로 내보내기
 				// 때문이고, 그 편이 순서(9단계 소생이 7단계 연쇄 뒤)를 지킨다

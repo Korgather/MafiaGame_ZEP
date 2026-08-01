@@ -92,13 +92,30 @@ function nextNight(seats: readonly Seat[]): void {
 	}
 }
 
+/**
+ * 그 결말이 죽음인가.
+ *
+ * 표로 두는 것은 완전성을 컴파일 단계에서 받아 내기 위해서다. "살아남는 결말
+ * 목록에 없으면 죽음"으로 적으면 새로 생긴 결말이 조용히 사망으로 떨어져,
+ * 살아남아야 할 사람이 테스트 안에서만 죽는다.
+ */
+const FATAL_OUTCOME: Record<NightOutcome, boolean> = {
+	KILLED: true,
+	SAVED: false,
+	SHIELDED: false,
+	BACKFIRED: true,
+	BOMBED: true,
+	HEARTBREAK: true,
+	SACRIFICED: true,
+	SPARED: false,
+	REVIVED: false,
+};
+
 /** 사망 결말을 실제 좌석에 반영한다. 파이프라인은 판정만 하고 좌석을 내리지 않는다 */
 function applyDeaths(settlement: NightSettlement): void {
 	for (const casualty of settlement.casualties) {
 		if (casualty.outcome === NightOutcome.REVIVED) casualty.seat.alive = true;
-		else if (casualty.outcome !== NightOutcome.SAVED && casualty.outcome !== NightOutcome.SHIELDED) {
-			casualty.seat.alive = false;
-		}
+		else if (FATAL_OUTCOME[casualty.outcome]) casualty.seat.alive = false;
 	}
 }
 
@@ -159,17 +176,18 @@ describe("클래식 상호작용 · 치료", () => {
 		assert.equal(bare[2].armored, false);
 	});
 
-	it("3. 치료받은 연인이 살면 다른 연인도 따라 죽지 않는다", () => {
+	it("3. 치료받은 연인이 살면 희생도 일어나지 않는다", () => {
 		const seats = [seat(1, Role.MAFIA), seat(2, Role.DOCTOR)].concat(lovers(3, 4));
 		const settled = night(seats, [[1, 3], [2, 3]]);
 		assert.equal(outcomeOf(settled, 3), NightOutcome.SAVED);
-		assert.equal(outcomeOf(settled, 4), null, "짝이 무사한데 연인이 뒤따랐습니다");
+		assert.equal(outcomeOf(settled, 4), null, "치료가 성공했는데 짝이 대신 죽었습니다");
 
-		// 대조군: 치료가 없으면 둘이 함께 간다
+		// 대조군: 치료가 없으면 짝이 대신 죽는다. 죽는 것은 공격받은 3번이
+		// 아니라 4번이고, 3번은 SPARED로 살아남는다
 		const bare = [seat(1, Role.MAFIA), seat(2, Role.DOCTOR)].concat(lovers(3, 4));
 		const fell = night(bare, [[1, 3]]);
-		assert.equal(outcomeOf(fell, 3), NightOutcome.KILLED);
-		assert.equal(outcomeOf(fell, 4), NightOutcome.HEARTBREAK);
+		assert.equal(outcomeOf(fell, 3), NightOutcome.SPARED);
+		assert.equal(outcomeOf(fell, 4), NightOutcome.SACRIFICED);
 	});
 
 	it("4. 치료받은 테러리스트가 살면 자폭도 일어나지 않는다", () => {
@@ -245,14 +263,41 @@ describe("클래식 상호작용 · 방탄과 연쇄", () => {
 		assert.equal(outcomeOf(night(together, [[2, 4]]), 4), NightOutcome.KILLED);
 	});
 
-	it("7. 연인 한쪽이 죽으면 다른 쪽이 뒤따른다", () => {
+	it("7. 연인 한쪽이 공격받으면 다른 쪽이 대신 죽는다", () => {
 		const seats = [seat(1, Role.MAFIA)].concat(lovers(2, 3)).concat([seat(4, Role.CITIZEN)]);
 		const settled = night(seats, [[1, 2]]);
-		assert.equal(outcomeOf(settled, 2), NightOutcome.KILLED);
-		assert.equal(outcomeOf(settled, 3), NightOutcome.HEARTBREAK);
-		// 뒤따른 쪽도 같은 밤의 결말 목록에 실려야 한다. 다음 밤으로 미루면
-		// 아침 방송에 한 명만 뜨고, 남은 한 명이 하루를 유령처럼 산다
+		assert.equal(outcomeOf(settled, 2), NightOutcome.SPARED, "공격받은 연인이 살아남지 못했습니다");
+		assert.equal(outcomeOf(settled, 3), NightOutcome.SACRIFICED);
+		// 대신 죽은 쪽도 같은 밤의 결말 목록에 실려야 한다. 다음 밤으로 미루면
+		// 아침 방송에 한 명만 뜨고, 남은 한 명이 하루를 유령처럼 산다.
+		// 둘뿐이라는 것도 함께 본다 — 살아남은 2번에게 결말이 하나 더 붙으면
+		// 연인 연쇄가 희생을 되돌린 것이다
 		assert.equal(settled.casualties.length, 2);
+	});
+
+	it("7-2. 두 연인이 같은 밤에 공격받으면 서로 대신할 수 없다", () => {
+		// 이 판정이 없으면 3번이 4번을 몸받이로 세우고 4번이 3번을 몸받이로
+		// 세워, 둘 다 죽으면서 둘 다 살아남은 기록이 만들어진다
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.MAFIA)].concat(lovers(3, 4));
+		const settled = night(seats, [[1, 3], [2, 4]]);
+		assert.equal(outcomeOf(settled, 3), NightOutcome.KILLED);
+		assert.equal(outcomeOf(settled, 4), NightOutcome.KILLED);
+		assert.equal(settled.casualties.length, 2);
+	});
+
+	it("7-3. 짝이 이미 그 밤의 결말을 받았으면 대신 죽지 않는다", () => {
+		// 의사가 4번을 살린 밤에 3번도 공격받았다. 4번에게는 이미 그 밤의
+		// 결말이 하나 붙어 있으므로 몸받이가 되지 않는다 — 한 좌석에 결말이
+		// 둘 붙으면 아침 방송이 같은 사람을 두 번 처리한다.
+		//
+		// 그래서 3번은 그대로 죽고, 짝을 잃은 4번이 뒤따른다. 밤에 연인 연쇄가
+		// 실제로 도는 유일한 경로이기도 하다
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.MAFIA), seat(5, Role.DOCTOR)].concat(
+			lovers(3, 4)
+		);
+		const settled = night(seats, [[1, 3], [2, 4], [5, 4]]);
+		assert.equal(outcomeOf(settled, 4), NightOutcome.SAVED, "의사가 살리지 못했습니다");
+		assert.equal(outcomeOf(settled, 3), NightOutcome.KILLED, "짝이 대신 죽었습니다");
 	});
 });
 
@@ -459,6 +504,9 @@ describe("클래식 상호작용 · 접선과 위임", () => {
 		assert.equal(seats[1].role, Role.DOCTOR, "도굴꾼이 무덤을 파지 않았습니다");
 		assert.equal(seats[1].usesSpent, 1);
 		assert.equal(revealsFor(first, 2).length, 1, "무엇이 되었는지 알려주지 않았습니다");
+		// 복제가 아니라 이전이다. 시체에 직업을 남겨 두면 같은 직업이 판에
+		// 둘이 되고, 성직자가 그를 되살리는 순간 진짜로 둘이 된다
+		assert.equal(seats[2].role, Role.CITIZEN, "파낸 무덤에 직업이 남았습니다");
 		applyDeaths(first);
 
 		// 이어받은 능력은 다음 밤부터 실제로 돈다. 직업 이름만 바뀌고
@@ -541,8 +589,8 @@ describe("클래식 상호작용 · 승리 판정", () => {
 	});
 
 	it("16. 같은 밤에 여럿이 죽어도 결말이 하나씩만 붙는다", () => {
-		// 한 밤에 세 갈래의 죽음이 겹친다: 마피아의 처형, 자경단원의 오인
-		// 사살, 그리고 그 둘이 부른 자폭과 연인 연쇄
+		// 한 밤에 네 갈래가 겹친다: 마피아의 처형, 자경단원의 오인 사살,
+		// 그 사살이 부른 자폭, 그리고 처형을 가로챈 연인의 희생
 		const seats = [
 			seat(1, Role.MAFIA),
 			seat(2, Role.TERRORIST, { markIndex: 1 }),
@@ -551,7 +599,7 @@ describe("클래식 상호작용 · 승리 판정", () => {
 			seat(5, Role.VIGILANTE),
 			seat(6, Role.CITIZEN),
 		];
-		const settled = night(seats, [[1, 2], [5, 3]]);
+		const settled = night(seats, [[1, 3], [5, 2]]);
 
 		const byIndex: Array<[number, string]> = [];
 		for (const casualty of settled.casualties) {
@@ -560,9 +608,9 @@ describe("클래식 상호작용 · 승리 판정", () => {
 		byIndex.sort((a, b) => a[0] - b[0]);
 		assert.deepEqual(byIndex, [
 			[1, NightOutcome.BOMBED],      // 표식해 둔 테러리스트와 함께
-			[2, NightOutcome.KILLED],      // 마피아가 쳤다
-			[3, NightOutcome.KILLED],      // 자경단원이 시민을 오인해 쐈다
-			[4, NightOutcome.HEARTBREAK],  // 3번의 연인
+			[2, NightOutcome.KILLED],      // 자경단원이 시민을 오인해 쐈다
+			[3, NightOutcome.SPARED],      // 마피아가 쳤지만 짝이 대신 죽었다
+			[4, NightOutcome.SACRIFICED],  // 3번 대신
 			[5, NightOutcome.BACKFIRED],   // 오인 사살의 책임
 		]);
 

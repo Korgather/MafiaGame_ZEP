@@ -50,6 +50,8 @@ const FATAL_OUTCOME: Record<NightOutcome, boolean> = {
 	BACKFIRED: true,
 	BOMBED: true,
 	HEARTBREAK: true,
+	SACRIFICED: true,
+	SPARED: false,
 	REVIVED: false,
 };
 

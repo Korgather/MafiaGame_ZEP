@@ -339,6 +339,25 @@ export const NightOutcome = {
 	BOMBED: "BOMBED",
 	/** 연인이 죽어 뒤따랐다 */
 	HEARTBREAK: "HEARTBREAK",
+	/**
+	 * 연인 대신 죽었다. 공격받은 것은 짝이고, 죽는 것은 이쪽이다.
+	 *
+	 * HEARTBREAK와 나눠 두는 이유는 아침 문구다. 뒤따라 죽은 사람에게는
+	 * "연인을 잃고 뒤따랐다"가 맞지만 몸받이가 된 사람에게는 정반대다 —
+	 * 그 사람은 연인을 잃은 것이 아니라 연인을 살렸다. 둘을 한 결말로 묶으면
+	 * 아침 방송이 살린 사람을 잃은 사람으로 부른다.
+	 */
+	SACRIFICED: "SACRIFICED",
+	/**
+	 * 연인이 대신 죽어 살아남았다. SACRIFICED의 반대편이고 언제나 짝을 이룬다.
+	 *
+	 * 죽음이 아닌데도 결말로 싣는 이유는 둘이다. 하나는 규칙이 "두 연인의 정체와
+	 * 희생 결과를 공개한다"를 요구하고, 공개하지 않으면 마피아가 친 사람이 멀쩡히
+	 * 살아 있는 이유를 아무도 설명할 수 없다는 것. 다른 하나는 밤의 연인 연쇄가
+	 * 이 표시를 보고 멈춘다는 것이다 — 표시가 없으면 짝의 죽음이 되돌아와
+	 * 살아남은 사람을 다시 죽여 희생이 없던 일이 된다.
+	 */
+	SPARED: "SPARED",
 	/** 성직자가 되살렸다. 유일하게 죽음이 아닌 결말이다 */
 	REVIVED: "REVIVED",
 } as const;
@@ -357,12 +376,47 @@ function seatByIndex(seats: readonly Seat[], index: number): Seat | null {
 }
 
 /**
+ * 이 좌석 대신 죽어 줄 연인. 없으면 null이고, 그러면 본인이 죽는다.
+ *
+ * 조건 넷이 각각 규칙 한 줄에 대응한다.
+ *
+ * 1. 짝이 있다 — 연인이 아니면 애초에 해당 없다.
+ * 2. 짝이 살아 있다 — "한 명이 이미 사망했다면 희생은 발동하지 않는다."
+ *    이 경우 남은 연인은 평범한 시민처럼 죽는다.
+ * 3. 짝도 같은 밤에 죽게 되지는 않았다 — 두 연인이 동시에 공격받으면
+ *    서로 대신할 수 없다. 이 줄이 없으면 A가 B를 몸받이로 삼고 B가 A를
+ *    몸받이로 삼아, 둘 다 죽으면서 둘 다 살아남은 기록이 만들어진다.
+ * 4. 짝에게 이 밤의 결말이 아직 없다 — 치료·방탄으로 버틴 좌석이나 이미
+ *    다른 쌍을 위해 죽은 좌석을 끌어오지 않는다. 한 좌석에 결말이 둘
+ *    붙으면 아침 방송이 같은 사람을 두 번 처리한다.
+ */
+function sacrificeFor(
+	seats: readonly Seat[],
+	victim: Seat,
+	doomed: readonly Seat[],
+	casualties: readonly NightCasualty[]
+): Seat | null {
+	if (victim.loverIndex === 0) return null;
+	const partner = seatByIndex(seats, victim.loverIndex);
+	if (!partner) return null;
+	if (!partner.alive) return null;
+	if (doomed.indexOf(partner) >= 0) return null;
+	if (hasCasualty(casualties, partner)) return null;
+	return partner;
+}
+
+/**
  * 밤이 끝났을 때 누가 죽고 누가 살아남았는지.
  * 실제 사망 처리(스프라이트·위젯·이름 변경)는 부작용이므로 서비스가 한다.
  */
 export function resolveNightCasualties(seats: readonly Seat[]): NightCasualty[] {
 	const casualties: NightCasualty[] = [];
 	const killed: Seat[] = [];
+	// 치료도 방탄도 막지 못해 죽게 된 좌석. 연인의 희생을 이 목록 위에서
+	// 판정하려고 따로 모은다 — 누가 죽게 되었는지가 전부 확정되어야
+	// "짝이 대신할 수 있는가"에 답할 수 있다. 한 좌석씩 즉시 죽이면
+	// 두 연인이 같은 밤에 공격받았을 때 먼저 처리된 쪽만 살아남는다
+	const doomed: Seat[] = [];
 
 	for (const seat of seats) {
 		if (!seat.alive) continue;
@@ -381,12 +435,34 @@ export function resolveNightCasualties(seats: readonly Seat[]): NightCasualty[] 
 			casualties.push({ seat, outcome: NightOutcome.SHIELDED });
 			continue;
 		}
-		casualties.push({ seat, outcome: NightOutcome.KILLED });
-		killed.push(seat);
+		doomed.push(seat);
+	}
+
+	// 연인의 희생. 밤의 공격으로 죽게 된 연인을 짝이 대신한다.
+	//
+	// 치료·방탄보다 뒤인 것은 규칙이 정한 순서다 — 앞에 두면 의사가 살린
+	// 연인 때문에 짝이 죽고, "치료가 성공하면 희생은 발생하지 않는다"가
+	// 깨진다. 위 루프가 healed·armored를 이미 걸러 냈으므로 여기 오는
+	// 좌석은 전부 막을 수단이 없었던 것들이다.
+	for (const victim of doomed) {
+		const partner = sacrificeFor(seats, victim, doomed, casualties);
+		if (partner) {
+			casualties.push({ seat: victim, outcome: NightOutcome.SPARED });
+			casualties.push({ seat: partner, outcome: NightOutcome.SACRIFICED });
+			killed.push(partner);
+			continue;
+		}
+		casualties.push({ seat: victim, outcome: NightOutcome.KILLED });
+		killed.push(victim);
 	}
 
 	// 자경단원의 자책은 "쐈다"가 아니라 "죽였다"에 걸린다. 의사가 살렸거나
 	// 군인이 버텼다면 시민은 멀쩡하므로 책임질 일도 없다.
+	//
+	// 연인이 대신 죽은 경우도 마찬가지로 걸리지 않는다. 자책 판정은 죽은
+	// 좌석을 공격한 사람을 찾는데, 대신 죽은 짝은 아무에게도 공격받지
+	// 않았으므로 그 자리가 비어 있다. 쏜 상대가 살아 있다는 점에서
+	// 치료·방탄과 같은 취급이고, 그래서 따로 적을 조건이 없다.
 	for (const victim of killed) {
 		if (victim.team === Team.MAFIA) continue;
 		for (const shooter of effectiveAttackers(seats, victim)) {

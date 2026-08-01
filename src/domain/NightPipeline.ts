@@ -627,7 +627,7 @@ function apply(
 			// 드물지만 있다 — 도둑이 능력을 훔치거나 도굴꾼이 성직자를
 			// 파내면 그 밤에 둘이 같은 무덤을 열 수 있고, 그대로 두면
 			// 한 사람이 두 번 되살아난 것으로 기록된다
-			if (wasRevived(ledger, target)) return false;
+			if (hasOutcome(ledger, target, NightOutcome.REVIVED)) return false;
 			// 성불한 혼령은 돌아오지 않는다. false를 돌려주어 횟수를 아낀다 —
 			// 성직자의 능력은 판에 한 번뿐이고, 헛짚었다고 잃으면 영매가
 			// 시민 편의 성직자를 실수로 봉인하는 사고가 판을 끝낸다
@@ -711,9 +711,13 @@ export function resolveNightIntents(
 				// 곧 "저 사람은 어젯밤 공격받았다"를 알려주는 신호가 된다
 				for (const casualty of resolveNightCasualties(seats)) {
 					ledger.casualties.push(casualty);
+					// SACRIFICED는 연인의 희생이다 — 공격받은 쪽은 SPARED로 살고
+					// 짝이 대신 죽는다. 대신 죽은 좌석도 오늘 밤의 사망자이므로
+					// killed에 들어가야 도굴꾼의 무덤 목록과 미행 결과가 그 죽음을 본다
 					const died =
 						casualty.outcome === NightOutcome.KILLED ||
-						casualty.outcome === NightOutcome.BACKFIRED;
+						casualty.outcome === NightOutcome.BACKFIRED ||
+						casualty.outcome === NightOutcome.SACRIFICED;
 					if (died) ledger.killed.push(casualty.seat.index);
 				}
 			}
@@ -772,17 +776,6 @@ export function resolveNightIntents(
 }
 
 /**
- * 연인은 함께 죽는다. 한쪽이 오늘 밤에 죽으면 다른 쪽도 오늘 밤에 죽는다.
- *
- * 고정점까지 도는 이유는 자폭이다 — 테러리스트가 연인 한 명을 안고 터지면
- * 그 짝이 죽고, 그 짝이 또 다른 쌍의 한쪽일 수도 있다(모드가 늘면). 한 바퀴는
- * 반드시 killed를 하나 이상 늘리므로 좌석 수를 넘겨 돌 수 없다.
- *
- * 낮의 처형으로 죽는 연인은 여기 오지 않는다. 그쪽은 kill()이 잇는다 —
- * 밤의 연쇄는 아침 방송에 실릴 결말 목록을 만들어야 해서 파이프라인의 일이고,
- * 낮의 연쇄는 만들 목록이 없어 처형 처리 안에서 끝난다.
- */
-/**
  * 폭탄을 안고 죽은 사람이 지목해 둔 적을 데려간다.
  *
  * 조건이 셋이다. 폭탄을 들고 있고(markIndex), 오늘 밤에 죽었고,
@@ -807,6 +800,26 @@ function detonateBombs(seats: readonly Seat[], ledger: NightLedger): void {
 	}
 }
 
+/**
+ * 연인 한쪽이 오늘 밤에 죽으면 다른 쪽도 오늘 밤에 뒤따른다.
+ *
+ * 밤의 **공격**으로 죽는 연인은 여기 오지 않는다. 그쪽은 짝이 대신 죽는
+ * 희생이고, 판정은 resolveNightCasualties가 치료·방탄 바로 뒤에서 한다.
+ * 여기 남는 것은 몸받이가 성립하지 않는 죽음뿐이다 — 자폭에 휘말렸거나
+ * 자경단원의 자책으로 죽은 연인.
+ *
+ * 그래서 희생으로 살아남은 좌석(SPARED)은 건너뛴다. 대신 죽은 짝이 killed에
+ * 들어간 것을 보고 이 연쇄가 돌면, 방금 목숨을 건진 사람이 그 죽음 때문에
+ * 다시 죽어 희생이 없던 일이 된다. "대신 죽는다"는 대신 죽은 쪽에서 멈춘다.
+ *
+ * 고정점까지 도는 이유는 자폭이다 — 테러리스트가 연인 한 명을 안고 터지면
+ * 그 짝이 죽고, 그 짝이 또 다른 쌍의 한쪽일 수도 있다(모드가 늘면). 한 바퀴는
+ * 반드시 killed를 하나 이상 늘리므로 좌석 수를 넘겨 돌 수 없다.
+ *
+ * 낮의 처형으로 죽는 연인은 여기 오지 않는다. 그쪽은 kill()이 잇는다 —
+ * 밤의 연쇄는 아침 방송에 실릴 결말 목록을 만들어야 해서 파이프라인의 일이고,
+ * 낮의 연쇄는 만들 목록이 없어 처형 처리 안에서 끝난다.
+ */
 function chainLovers(seats: readonly Seat[], ledger: NightLedger): void {
 	let spread = true;
 	while (spread) {
@@ -816,6 +829,7 @@ function chainLovers(seats: readonly Seat[], ledger: NightLedger): void {
 			if (ledger.killed.indexOf(seat.index) < 0) continue;
 			const partner = seatByIndex(seats, seat.loverIndex);
 			if (!partner) continue;
+			if (hasOutcome(ledger, partner, NightOutcome.SPARED)) continue;
 			if (addChainDeath(ledger, partner, NightOutcome.HEARTBREAK)) spread = true;
 		}
 	}
@@ -832,6 +846,8 @@ function chainLovers(seats: readonly Seat[], ledger: NightLedger): void {
  * 승리 판정이다 — 시민 하나가 마피아로 넘어가면 양쪽 인원이 동시에 1씩
  * 움직여 마진이 2 바뀐다. 판을 뒤집는 폭이 무작위 사망 순서에 달리게 된다.
  * 연인도 제외한다. 연인은 쌍이 본질이라 혼자 물려받을 수 있는 직업이 아니다.
+ *
+ * 얻는 것이지 베끼는 것이 아니다. 파낸 무덤에는 무능력한 시민만 남는다.
  */
 function digGraves(seats: readonly Seat[], ledger: NightLedger): void {
 	for (const digger of seats) {
@@ -845,21 +861,30 @@ function digGraves(seats: readonly Seat[], ledger: NightLedger): void {
 			if (victim.team === Team.MAFIA) continue;
 			if (victim.role === Role.LOVER || victim.role === Role.GRAVEDIGGER) continue;
 			// 성직자가 되살린 사람의 무덤은 비어 있다
-			if (wasRevived(ledger, victim)) continue;
+			if (hasOutcome(ledger, victim, NightOutcome.REVIVED)) continue;
 			digger.role = victim.role;
+			// 복제가 아니라 이전이다. 무덤 쪽은 무능력한 시민만 남는다.
+			//
+			// 시체의 직업을 그대로 두면 같은 직업이 판에 둘이 된다. 시체라서
+			// 무해해 보이지만 성직자가 그 사람을 되살리는 순간 진짜로 둘이 되고,
+			// 종료 화면의 직업 공개도 "의사가 둘이었다"로 읽힌다.
+			// 파낸 무덤은 마피아 팀도 연인도 아니므로 남는 자리는 언제나 시민이다.
+			victim.role = Role.CITIZEN;
 			digger.usesSpent++;
+			// 문구는 victim.role이 아니라 digger.role을 읽는다. 바로 위에서
+			// 무덤을 비웠으므로 victim.role은 이제 시민이다
 			ledger.reveals.push({
 				seat: digger.index,
-				line: `⛏️ ${index}번 참가자의 무덤에서 ${roleName(victim.role)}의 흔적을 얻었습니다.\n오늘부터 당신은 ${roleName(victim.role)}입니다.`,
+				line: `⛏️ ${index}번 참가자의 무덤에서 ${roleName(digger.role)}의 흔적을 얻었습니다.\n오늘부터 당신은 ${roleName(digger.role)}입니다.`,
 			});
 			break;
 		}
 	}
 }
 
-function wasRevived(ledger: NightLedger, seat: Seat): boolean {
+function hasOutcome(ledger: NightLedger, seat: Seat, outcome: NightOutcome): boolean {
 	for (const casualty of ledger.casualties) {
-		if (casualty.seat === seat && casualty.outcome === NightOutcome.REVIVED) return true;
+		if (casualty.seat === seat && casualty.outcome === outcome) return true;
 	}
 	return false;
 }
