@@ -20,6 +20,7 @@ import { inMafiaChat, NightActionKind, roleDef, roleName } from "../domain/Roles
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { QUICK_NOTE } from "../domain/chat/QuickPhrases.ts";
 import {
+	hasExtraProbe,
 	hasNightTurn,
 	isPeacefulNight,
 	nightActionBlockedReason,
@@ -298,16 +299,37 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (!result) return;
 
 		// 적용은 밤이 끝날 때다. 여기서는 "이 사람이 저 사람을 골랐다"만 남긴다
-		putIntent(room.nightIntents, seat.index, target.index);
-
-		if (result.consumed) {
-			seat.usedSkill = true;
-			// 진행률의 분자는 usedSkill을 센다. 소모되지 않은 지목(쪽지의 첫
-			// 클릭)은 그 숫자를 움직이지 않으므로 방에 알릴 것도 없다
-			broadcastNightProgress(room);
+		//
+		// 접선한 스파이의 둘째 지목만 다른 자리에 적는다. nightIntents는 한
+		// 좌석에 하나만 담는 목록이라, 둘째를 같이 넣으면 조회가 첫 지목만
+		// 답하고 둘째는 조용히 사라진다(NightPipeline.targetOf)
+		if (seat.usedSkill) {
+			if (target.index === intentTarget(room.nightIntents, seat.index)) {
+				label(sender, "이미 이번 밤에 조사한 대상입니다.\n다른 사람을 선택하세요.");
+				return;
+			}
+			seat.extraProbeIndex = target.index;
+		} else {
+			putIntent(room.nightIntents, seat.index, target.index);
+			if (result.consumed) {
+				seat.usedSkill = true;
+				// 진행률의 분자는 usedSkill을 센다. 소모되지 않은 지목(쪽지의 첫
+				// 클릭)은 그 숫자를 움직이지 않으므로 방에 알릴 것도 없다.
+				// 둘째 지목도 마찬가지다 — 저 사람은 이미 분자에 들어가 있다
+				broadcastNightProgress(room);
+			}
 		}
 		label(sender, result.label, result.labelDurationMs);
-		if (result.confirmed) widget.sendMessage({ type: "selectResponse", num: targetIndex });
+		if (result.confirmed) {
+			// again이 참이면 위젯이 격자를 잠그지 않고 한 칸을 더 받는다.
+			// 잠근 뒤에 여는 메시지를 따로 보내지 않는 이유는, 그 사이에 위젯이
+			// 한 번이라도 "끝났다"로 그려지면 스파이 화면이 깜빡이기 때문이다
+			widget.sendMessage({
+				type: "selectResponse",
+				num: targetIndex,
+				again: hasExtraProbe(seat) && seat.extraProbeIndex === 0,
+			});
+		}
 		if (result.needsPhrase) {
 			widget.sendMessage({ type: "phrases", num: targetIndex, options: QUICK_NOTE });
 		}

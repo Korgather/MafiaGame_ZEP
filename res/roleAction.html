@@ -196,6 +196,8 @@ let myNum = 0;
 
 let picked = null;
 
+let picks = [];
+
 let canPick = false;
 
 let noSelf = false;
@@ -244,6 +246,7 @@ Parent.on({
  init(data) {
   myNum = Number(data.myNum) || 0;
   picked = null;
+  picks = [];
   noSelf = !!data.noSelf;
   targetsDead = !!data.targetsDead;
   const role = qs("#myrole");
@@ -277,16 +280,18 @@ Parent.on({
  },
  selectResponse(data) {
   picked = Number(data.num);
-  canPick = false;
+  if (picks.indexOf(picked) < 0) picks.push(picked);
+  const again = data.again === true;
+  canPick = again;
   for (const el of qsa(".tile")) {
-   const isPick = Number(el.dataset.num) === picked;
+   const isPick = picks.indexOf(Number(el.dataset.num)) >= 0;
    el.classList.toggle("picked", isPick);
-   if (!isPick) el.disabled = true;
+   el.disabled = isPick || !again;
   }
-  qs("#grid").classList.add("locked");
+  qs("#grid").classList.toggle("locked", !again);
   qs("#choices").classList.add("hidden");
   qs("#grid").classList.remove("hidden");
-  qs("#note").textContent = `✔ ${picked}번을 지목했습니다.`;
+  qs("#note").textContent = again ? `✔ ${picked}번을 지목했습니다. 한 명을 더 조사할 수 있습니다.` : `✔ ${picks.join("번, ")}번을 지목했습니다.`;
  }
 });
 </script>

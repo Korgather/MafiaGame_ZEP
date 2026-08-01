@@ -320,6 +320,18 @@ export interface RoleDef {
 	 */
 	readonly needsContact?: boolean;
 	/**
+	 * 접선한 뒤 조사를 **판에 한 번** 더 쓸 수 있는가 (스파이).
+	 *
+	 * needsContact와 짝이지만 다른 축이다. 저쪽은 "접선 전에 무엇을 못 하는가",
+	 * 이쪽은 "접선 뒤에 무엇이 늘어나는가"를 정한다. 짐승인간도 접선하지만
+	 * 늘어나는 것은 없다.
+	 *
+	 * 밤마다가 아니라 판에 한 번인 이유는 마진이다. 접선한 스파이는 이미
+	 * 마피아 팀이라 밤마다 둘씩 정확한 직업을 읽으면 경찰과 의사가 이틀이면
+	 * 정리된다 — 한 번짜리 정보 하나가 합류의 보상으로 충분하다.
+	 */
+	readonly extraProbeAfterContact?: boolean;
+	/**
 	 * 마피아의 밤 공격에 죽지 않는가 (짐승인간).
 	 *
 	 * 같은 편을 잘못 때리는 사고를 막는 규칙이라 방어(의사)와는 별개 축이다.
@@ -396,7 +408,8 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "스파이",
 		team: Team.CITIZEN,
 		glyph: "🕵️",
-		ability: "둘째 밤부터, 밤마다 한 명의 정확한 직업을 알아냅니다.",
+		ability:
+			"둘째 밤부터, 밤마다 한 명의 정확한 직업을 알아냅니다. 마피아에 합류한 뒤 딱 한 번, 같은 밤에 한 명을 더 조사할 수 있습니다.",
 		// 예전 문구는 "당신은 시민 팀입니다. 얻은 정보를 시민에게 흘리세요"였다.
 		// 규칙과 정반대였다 — 합류하면 team이 MAFIA로 바뀌므로, 시키는 대로
 		// 시민을 도와 시민이 이기면 스파이 본인은 패배로 기록된다.
@@ -417,6 +430,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		needsPriorDay: true,
 		isMafiaSupport: true,
 		needsContact: true,
+		extraProbeAfterContact: true,
 	},
 	SHAMAN: {
 		displayName: "영매",

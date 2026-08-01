@@ -25,10 +25,20 @@ import { describe, it } from "node:test";
 import { GamePhase, Judgement, Role, Team } from "../src/types/Game.types.ts";
 import type { Room, Seat } from "../src/types/Game.types.ts";
 import { POLITICIAN_VOTE_WEIGHT } from "../src/constants/GameConfig.ts";
-import { ROLE_DEFS, countsForMafiaWin, effectiveRole, inMafiaChat } from "../src/domain/Roles.ts";
+import {
+	ROLE_DEFS,
+	countsForMafiaWin,
+	effectiveRole,
+	inMafiaChat,
+	roleName,
+} from "../src/domain/Roles.ts";
 import { putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
 import type { NightSettlement } from "../src/domain/NightPipeline.ts";
-import { NightOutcome } from "../src/domain/NightResolution.ts";
+import {
+	NightOutcome,
+	hasExtraProbe,
+	nightActionBlockedReason,
+} from "../src/domain/NightResolution.ts";
 import { VoteOutcome, tallyVotes } from "../src/domain/Vote.ts";
 import { countAlive, evaluateWinner } from "../src/domain/WinCondition.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
@@ -460,6 +470,105 @@ describe("클래식 상호작용 · 접선과 위임", () => {
 		spy.contacted = true;
 		assert.equal(inMafiaChat(spy), true);
 		assert.equal(countsForMafiaWin(spy), true);
+	});
+
+	it("11-2. 접선한 스파이는 판에 한 번 더 조사한다", () => {
+		const seats = [
+			seat(1, Role.SPY),
+			seat(2, Role.MAFIA),
+			seat(3, Role.POLICE),
+			seat(4, Role.CITIZEN),
+		];
+		const spy = seats[0];
+		assert.equal(hasExtraProbe(spy), false, "접선 전에 추가 첩보가 열렸습니다");
+
+		// 첫 밤. 마피아를 찾아 합류하지만 이 밤은 조사 하나로 끝난다 —
+		// contacted를 세우는 곳이 밤 끝의 정산이라 클릭 시점에는 아직 거짓이다.
+		// 우연이 아니라 필요한 순서다. 접선한 그 밤에 격자가 다시 열리면
+		// "또 누를 수 있음" 자체가 마피아를 찾았다는 답이 되어, 아침까지
+		// 감춰 둔 결과를 클릭 즉시 알려준다
+		const first = night(seats, [[1, 2]]);
+		assert.equal(revealsFor(first, 1).length, 1);
+		assert.equal(spy.contacted, true);
+		assert.deepEqual(first.defected, [1]);
+		assert.equal(hasExtraProbe(spy), true, "접선한 뒤에도 추가 첩보가 없습니다");
+
+		// 둘째 밤. 대상을 하나 고른 뒤에도 격자가 한 번 더 열린다
+		nextNight(seats);
+		spy.usedSkill = true;
+		assert.equal(nightActionBlockedReason(spy, 2), null, "둘째 지목이 막혔습니다");
+		spy.extraProbeIndex = 2;
+		assert.equal(
+			nightActionBlockedReason(spy, 2),
+			"이미 대상을 선택했습니다.",
+			"셋째 지목까지 열렸습니다"
+		);
+
+		const second = night(seats, [[1, 3]]);
+		const lines = revealsFor(second, 1);
+		assert.equal(lines.length, 2, "추가 첩보가 돌지 않았습니다");
+		assert.ok(lines[0].indexOf(roleName(Role.POLICE)) >= 0);
+		assert.ok(lines[1].indexOf(roleName(Role.MAFIA)) >= 0);
+		// 이미 합류한 스파이가 마피아를 또 만난 것이다. 합류 문구가 한 번 더
+		// 나가거나 defected에 두 번 실리면, 자기 편인 사람을 보고 "합류했습니다"가
+		// 뜨고 아침의 배신 통지가 중복된다
+		assert.deepEqual(second.defected, []);
+		assert.equal(lines[1].indexOf("합류했습니다"), -1);
+		assert.equal(spy.extraProbeSpent, true);
+		assert.equal(hasExtraProbe(spy), false, "판에 한 번뿐이어야 합니다");
+
+		// 셋째 밤. 다 쓴 뒤에는 좌석에 값이 남아 있어도 돌지 않는다 —
+		// 위젯이 거절당한 지목을 다시 보내는 길이 있기 때문이다
+		nextNight(seats);
+		spy.usedSkill = true;
+		assert.equal(
+			nightActionBlockedReason(spy, 3),
+			"이미 대상을 선택했습니다.",
+			"다 쓴 추가 첩보가 다시 열렸습니다"
+		);
+		spy.extraProbeIndex = 4;
+		const third = night(seats, [[1, 3]]);
+		assert.equal(revealsFor(third, 1).length, 1, "다 쓴 추가 첩보가 또 돌았습니다");
+	});
+
+	it("11-3. 추가 첩보도 군인에게 튕기고, 막힌 밤에는 돌지 않는다", () => {
+		const seats = [
+			seat(1, Role.SPY, { team: Team.MAFIA, contacted: true }),
+			seat(2, Role.MAFIA),
+			seat(3, Role.SOLDIER),
+			seat(4, Role.CITIZEN),
+		];
+		const spy = seats[0];
+		assert.equal(hasExtraProbe(spy), true);
+
+		// 둘째 조사가 별도 경로로 새 줄을 적었다면 군인의 반탐이 이 길만
+		// 비껴가고, 그때 스파이는 추가 첩보로 군인의 정체를 그냥 읽는다
+		spy.extraProbeIndex = 3;
+		const bounced = night(seats, [[1, 4]]);
+		const lines = revealsFor(bounced, 1);
+		assert.equal(lines.length, 2);
+		assert.ok(lines[0].indexOf(roleName(Role.CITIZEN)) >= 0);
+		assert.ok(lines[1].indexOf("튕겨났습니다") >= 0);
+		assert.equal(lines[1].indexOf(roleName(Role.SOLDIER)), -1, "군인의 직업이 샜습니다");
+		assert.ok(revealsFor(bounced, 3)[0].indexOf("캐내려 했습니다") >= 0);
+		// 튕겨도 쓴 것으로 친다. 실패가 공짜면 캐내기가 군인 탐지기가 된다
+		assert.equal(spy.extraProbeSpent, true);
+
+		// 대조군. 막힌 밤에는 첫 지목도 둘째도 돌지 않는다
+		const blocked = [
+			seat(1, Role.SPY, { team: Team.MAFIA, contacted: true, blocked: true }),
+			seat(2, Role.MAFIA),
+			seat(3, Role.SOLDIER),
+			seat(4, Role.CITIZEN),
+		];
+		blocked[0].extraProbeIndex = 3;
+		const nothing = night(blocked, [[1, 4]]);
+		// 방해받았다는 안내 한 줄만 온다. 조사 결과는 첫째도 둘째도 없다
+		const stopped = revealsFor(nothing, 1);
+		assert.equal(stopped.length, 1, "막혔는데 조사가 돌았습니다");
+		assert.ok(stopped[0].indexOf("방해") >= 0);
+		assert.deepEqual(revealsFor(nothing, 3), [], "막힌 밤에 군인이 캐냄을 알아챘습니다");
+		assert.equal(blocked[0].extraProbeSpent, false, "막힌 밤에 추가 첩보가 닳았습니다");
 	});
 
 	it("12. 영매가 성불시킨 혼령은 성직자도 되살리지 못한다", () => {

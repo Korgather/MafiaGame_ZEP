@@ -16,7 +16,7 @@ import { Judgement, Role, Team } from "../../src/types/Game.types.ts";
 import { buildRoleDeck } from "../../src/domain/RoleAssignment.ts";
 import { roleDef, inMafiaChat, startsContacted, NightActionKind } from "../../src/domain/Roles.ts";
 import { resolveNightIntents } from "../../src/domain/NightPipeline.ts";
-import { isPeacefulNight, NightOutcome } from "../../src/domain/NightResolution.ts";
+import { hasExtraProbe, isPeacefulNight, NightOutcome } from "../../src/domain/NightResolution.ts";
 import { evaluateWinner } from "../../src/domain/WinCondition.ts";
 import { tallyVotes, VoteOutcome } from "../../src/domain/Vote.ts";
 
@@ -57,6 +57,10 @@ function makeSeat(index, role) {
 		contacted: startsContacted(role),
 		seduced: false, intimidated: false, exorcised: false,
 		loverIndex: 0, borrowedRole: null, markIndex: 0,
+		// 빠뜨리면 undefined가 넘어가는데 hasExtraProbe의 !undefined가 참이라
+		// 자격 검사를 통과하고, 그 뒤 seatByIndex(undefined)가 못 찾아 조용히
+		// 끝난다. 아무 오류 없이 스파이의 추가 첩보만 사라지는 판이 된다
+		extraProbeIndex: 0, extraProbeSpent: false,
 	};
 }
 
@@ -90,6 +94,9 @@ function resetRound(seats) {
 	for (const s of seats) {
 		s.healed = false; s.blocked = false; s.attackedBy = []; s.scooped = false;
 		s.usedSkill = false; s.noteText = ""; s.voteCount = 0; s.votedFor = 0;
+		// 찍어 둔 둘째 대상은 하룻밤짜리다. 실제로 썼는지(extraProbeSpent)는
+		// 판 전체의 값이라 여기서 건드리지 않는다 - entities/Room.resetRound와 같다
+		s.extraProbeIndex = 0;
 		// 유혹·협박은 다음 낮까지 살아 있다가 그 다음 밤 시작에 풀린다.
 		// 밤이 시작될 때 지우는 이 자리가 곧 "그 다음 밤"이다
 		s.seduced = false; s.intimidated = false;
@@ -244,6 +251,22 @@ export function playGame(rules, playerCount, seed, model, opts) {
 				target = unknown.length > 0 ? pick(unknown, rng) : pick(others, rng);
 			}
 			if (target) intents.push({ actor: s.index, target: target.index });
+		}
+
+		// 접선한 스파이가 판에 한 번 더 조사한다. 지목 목록이 아니라 좌석에
+		// 적는다 - 그 목록은 "한 좌석의 지목은 하나"에 기대고 있어서, 둘째를
+		// 같이 넣으면 조회가 첫 지목만 답한다(NightPipeline.targetOf).
+		//
+		// 이 능력은 아래 승률을 움직이지 않는다. 마피아 AI가 직업 정보를
+		// 공격 대상 선택에 쓰지 않기 때문이다 - 위 mafiaTarget은 model B의
+		// policeOuted 말고는 무작위다. 그런데도 돌리는 이유는, 규칙이 실제
+		// 판 위에서 도는지를 수천 판이 확인해 주기 때문이다. 스파이의 값어치가
+		// 이 표에 잡히지 않는다는 사실 자체는 보고서에 적어 둔다
+		for (const s of A) {
+			if (!hasExtraProbe(s) || s.blocked) continue;
+			const first = intents.find(it => it.actor === s.index);
+			const rest = A.filter(o => o.index !== s.index && (!first || o.index !== first.target));
+			if (rest.length > 0) s.extraProbeIndex = pick(rest, rng).index;
 		}
 
 		const peaceful = isPeacefulNight(turnCount + 1, playerCount, rules.firstNightPeacefulUpTo);

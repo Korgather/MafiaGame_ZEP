@@ -116,6 +116,9 @@
 		<script>
 			let myNum = 0;
 			let picked = null;
+			// 이번 밤에 확정된 지목 전부. 접선한 스파이만 둘이 되고 나머지는 하나다.
+			// 하나짜리 변수로는 둘째 지목이 첫째의 표시를 지우고 앉는다
+			let picks = [];
 			let canPick = false;
 			// 내 칸을 잠그는가. 건달처럼 자기 지목이 확정된 헛턴인 직업만 참이다
 			let noSelf = false;
@@ -177,6 +180,7 @@
 				init(data) {
 					myNum = Number(data.myNum) || 0;
 					picked = null;
+					picks = [];
 					// 격자를 그리기 전에 정해야 한다. tile()이 이 두 값을 읽는다
 					noSelf = !!data.noSelf;
 					targetsDead = !!data.targetsDead;
@@ -237,22 +241,34 @@
 
 				// 서버가 지목을 받아들였을 때만 표시가 바뀐다. 기존에는 누른 즉시
 				// 빨간 테두리를 그려서, 서버가 거절해도 화면은 선택된 것처럼 보였다
+				//
+				// again이 참이면 한 칸을 더 받는다(접선한 스파이의 추가 첩보).
+				// 자격을 위젯이 스스로 따지지 않는 이유는, 그러려면 접선 여부를
+				// 위젯에 내려보내야 하고 그 값 하나가 곧 "내가 만난 사람이
+				// 마피아였다"는 답이기 때문이다. 판단은 서버가 하고 위젯은 결과만
+				// 받는다
 				selectResponse(data) {
 					picked = Number(data.num);
-					canPick = false;
+					if (picks.indexOf(picked) < 0) picks.push(picked);
+					const again = data.again === true;
+					canPick = again;
 					for (const el of qsa(".tile")) {
-						const isPick = Number(el.dataset.num) === picked;
+						const isPick = picks.indexOf(Number(el.dataset.num)) >= 0;
 						el.classList.toggle("picked", isPick);
-						if (!isPick) el.disabled = true;
+						// 이미 고른 사람은 다시 눌러도 서버가 거절한다. 열어 두면
+						// 같은 칸을 두 번 눌러 능력을 버리는 길이 생긴다
+						el.disabled = isPick || !again;
 					}
 					// 격자 전체를 물린다. 비활성 타일만으로는 "내 차례가 끝났다"가
 					// 아니라 "왜 안 눌리지"로 읽힌다
-					qs("#grid").classList.add("locked");
+					qs("#grid").classList.toggle("locked", !again);
 					// 문구를 고르고 온 경우다. 목록을 치우고 격자를 되돌려 놓아야
 					// 누구를 골랐는지가 화면에 남는다
 					qs("#choices").classList.add("hidden");
 					qs("#grid").classList.remove("hidden");
-					qs("#note").textContent = `✔ ${picked}번을 지목했습니다.`;
+					qs("#note").textContent = again
+						? `✔ ${picked}번을 지목했습니다. 한 명을 더 조사할 수 있습니다.`
+						: `✔ ${picks.join("번, ")}번을 지목했습니다.`;
 				},
 			});
 		</script>

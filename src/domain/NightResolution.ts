@@ -74,8 +74,33 @@ export function nightActionBlockedReason(
 ): string | null {
 	const reason = noTurnReason(seat, turnCount, deadCount);
 	if (reason) return reason;
-	if (seat.usedSkill) return "이미 대상을 선택했습니다.";
+	if (seat.usedSkill) {
+		// 접선한 스파이는 한 명을 더 고를 수 있다. usedSkill을 내리는 대신
+		// 여기서 지나가게 하는 이유는 진행률이다 — 저 값이 곧 "이 사람은
+		// 끝났다"라, 내리면 밤 진행률이 뒤로 돌아간다
+		if (hasExtraProbe(seat) && seat.extraProbeIndex === 0) return null;
+		return "이미 대상을 선택했습니다.";
+	}
 	return null;
+}
+
+/**
+ * 이 좌석이 이번 판에 추가 첩보를 아직 들고 있는가.
+ *
+ * "지금 한 명을 더 고를 수 있는가"와는 다르다 — 그쪽에는 이번 밤에 이미
+ * 골랐는지(extraProbeIndex === 0)가 더 붙는다. 그 조건까지 여기 넣으면
+ * 밤 끝에 실제로 조사를 돌리는 쪽이 자기가 찍어 둔 값 때문에 거짓을 받는다.
+ *
+ * **접선한 밤 당일에는 켜지지 않는다.** contacted를 세우는 곳이 밤 끝의
+ * 정산(NightPipeline)이라 클릭 시점에는 아직 거짓이기 때문이다. 우연이 아니라
+ * 필요한 순서다 — 그 밤에 곧바로 격자가 다시 열리면 "또 누를 수 있음" 자체가
+ * 마피아를 찾아냈다는 신호가 되어, 아침까지 감춰 둔 답을 클릭 즉시 알려준다.
+ * 아래 recordNightIntent의 INSPECT 주석과 같은 이유다.
+ */
+export function hasExtraProbe(seat: Seat): boolean {
+	if (effectiveDef(seat).extraProbeAfterContact !== true) return false;
+	if (!seat.contacted) return false;
+	return !seat.extraProbeSpent;
 }
 
 /**

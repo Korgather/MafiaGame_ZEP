@@ -30,7 +30,7 @@ import {
 	roleName,
 } from "./Roles.ts";
 import type { NightCasualty } from "./NightResolution.ts";
-import { NightOutcome, resolveNightCasualties } from "./NightResolution.ts";
+import { hasExtraProbe, NightOutcome, resolveNightCasualties } from "./NightResolution.ts";
 
 /** 누가 누구를 지목했는가. 좌석 index 두 개 */
 export interface NightIntent {
@@ -458,11 +458,14 @@ function apply(
 
 		case NightActionKind.INSPECT_ROLE:
 			ledger.inspected.push(target.index);
-			// 조건이 둘 곱해진 것이다. 넘어가는 직업인가(def)와, 찾아낸 사람이
-			// 마피아 채팅에 있는가(target). 뒤쪽이 "마피아 직업인가"가 아닌 이유는
-			// 대화 상대가 없는 짐승인간을 찾아낸 것으로 채팅이 열릴 수는
-			// 없기 때문이다. 앞쪽이 없으면 직업을 읽는 능력이 곧 배신이 된다.
-			if (def.defectsToMafia && inMafiaChat(target)) {
+			// 조건이 셋 곱해진 것이다. 넘어가는 직업인가(def), 아직 안 넘어갔는가
+			// (actor), 찾아낸 사람이 마피아 채팅에 있는가(target). 셋째가
+			// "마피아 직업인가"가 아닌 이유는 대화 상대가 없는 짐승인간을 찾아낸
+			// 것으로 채팅이 열릴 수는 없기 때문이다. 첫째가 없으면 직업을 읽는
+			// 능력이 곧 배신이 된다. 둘째가 없으면 이미 합류한 스파이가 추가
+			// 첩보로 마피아를 또 만났을 때 합류 문구가 한 번 더 뜨고 defected에도
+			// 두 번 실린다 — 이미 자기 편인 사람을 보고 "합류했습니다"가 나간다
+			if (def.defectsToMafia && !actor.contacted && inMafiaChat(target)) {
 				actor.team = Team.MAFIA;
 				// 스파이의 접선 방법이 곧 이 조사다. team만 바꾸고 여기를 빠뜨리면
 				// countsForMafiaWin이 계속 거짓이라, 합류한 스파이가 승리 판정에서
@@ -650,6 +653,38 @@ function apply(
 }
 
 /**
+ * 접선한 스파이의 추가 첩보. 판에 한 번뿐이다.
+ *
+ * 지목 루프가 아니라 여기서 도는 이유는 intents가 "한 좌석의 지목은 하나"에
+ * 기대고 있기 때문이다(targetOf). 둘째 지목을 그 목록에 담으면 조회가 조용히
+ * 첫 지목만 답하고 둘째는 사라진다. 그래서 둘째만 좌석에 따로 적어 두고
+ * 이 함수가 읽는다.
+ *
+ * apply를 그대로 다시 부른다. 조사 한 줄을 여기서 새로 적으면 군인의 반탐이
+ * 이 경로만 비껴가고, 그때 스파이는 추가 첩보로 군인의 정체를 그냥 읽는다.
+ */
+function probeAgain(
+	seats: readonly Seat[],
+	wasAlive: readonly number[],
+	ledger: NightLedger,
+	ctx: NightContext
+): void {
+	for (const seat of seats) {
+		if (seat.extraProbeIndex === 0) continue;
+		if (wasAlive.indexOf(seat.index) < 0) continue;
+		// 막힌 사람은 이 밤에 아무것도 하지 않는다. 첫 지목과 같은 규칙이다
+		if (seat.blocked) continue;
+		// 위젯이 거절당한 지목을 다시 보냈거나, 자격이 그사이 사라진 경우
+		if (!hasExtraProbe(seat)) continue;
+		const target = seatByIndex(seats, seat.extraProbeIndex);
+		if (!target) continue;
+		// 군인에게 튕겨도 쓴 것으로 친다. 기본 첩보와 같은 규칙이고,
+		// 실패가 공짜면 캐내기가 군인 탐지기가 된다
+		if (apply(seat, target, ledger, ctx)) seat.extraProbeSpent = true;
+	}
+}
+
+/**
  * 밤에 쌓인 지목을 정해진 순서로 적용한다.
  *
  * skipAttacks는 첫 밤 무사다. ATTACK step의 적용과 DEATH step 양쪽을
@@ -750,6 +785,11 @@ export function resolveNightIntents(
 			// 한 장을 날린다. "막히면 안 닳는다"도 여기서 나온다
 			if (apply(seat, target, ledger, ctx)) seat.usesSpent++;
 		}
+
+		// 스파이의 둘째 조사. 첫 조사가 전부 끝난 뒤에 돈다 — 순서를 뒤집으면
+		// 어제 접선한 스파이가 오늘 또 마피아를 만났을 때 합류 처리가 먼저
+		// 돌아, 위 !actor.contacted 검사가 자기가 방금 세운 값에 걸린다
+		if (step === NightStep.INSPECT) probeAgain(seats, wasAlive, ledger, ctx);
 
 		// 지목이 없어 위 루프에 걸리지 않는 능력들. step의 지목이 모두 적용된
 		// 뒤에 돈다 — 성직자가 되살린 사람을 도굴꾼이 파내면 안 되고,

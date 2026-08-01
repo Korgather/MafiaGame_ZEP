@@ -86,6 +86,8 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		loverIndex: 0,
 		borrowedRole: null,
 		markIndex: 0,
+		extraProbeIndex: 0,
+		extraProbeSpent: false,
 		usedSkill: false,
 		usesSpent: 0,
 		noteText: "",
@@ -130,6 +132,10 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	// 폭탄은 한 판을 넘기지 않는다. 밤마다 지우지 않는 값이라(다음 낮의 처형
 	// 까지 살아야 한다) 판이 바뀌는 이 자리에서 반드시 지워야 한다
 	seat.markIndex = 0;
+	// 추가 첩보도 같다. 판에 한 번뿐이라 밤 리셋이 손대지 않으므로 여기서
+	// 되돌리지 않으면 지난 판에 쓴 스파이가 이번 판에 못 쓴다
+	seat.extraProbeIndex = 0;
+	seat.extraProbeSpent = false;
 	// loverIndex는 여기서 건드리지 않는다. 짝은 좌석 하나로 정할 수 없어
 	// 배정이 끝난 뒤 두 좌석을 함께 보는 쪽(GameFlow)이 서로를 적는다.
 	// 이 함수가 0으로 밀면 그 쌍이 배정 순서에 따라 반쪽만 남는다
@@ -301,7 +307,8 @@ export function withdrawKicks(room: Room, voterId: string): void {
 /**
  * 밤/투표 한 턴이 시작될 때 초기화되는 값 (기존 tagReset).
  *
- * armored(군인의 방탄)와 usesSpent(횟수 제한 능력의 소모)는 **일부러 남긴다.**
+ * armored(군인의 방탄)·usesSpent(횟수 제한 능력의 소모)·extraProbeSpent(스파이의
+ * 추가 첩보)는 **일부러 남긴다.**
  * 게임당 정해진 자원이라 밤이 바뀔 때마다 되돌아오면 능력이 무제한이 된다.
  * 소모는 각각 resolveNightCasualties와 NightPipeline에서만 일어나고,
  * 되돌리는 곳은 assignRole(게임 시작) 하나뿐이다.
@@ -319,6 +326,10 @@ export function resetRound(room: Room): void {
 	room.nightReveals = [];
 	for (const seat of room.seats) {
 		seat.usedSkill = false;
+		// 찍어 둔 둘째 대상은 하룻밤짜리다. 남기면 다음 밤에 아무도 안 눌러도
+		// 지난밤의 그 사람이 다시 조사된다. 실제로 썼는지(extraProbeSpent)는
+		// 판 전체의 값이라 여기서 건드리지 않는다 — 되돌리면 밤마다 쓸 수 있게 된다
+		seat.extraProbeIndex = 0;
 		// 지난밤에 고른 문구가 남으면 대상만 새로 찍어도 옛 문구가 다시 날아간다.
 		// 밤이 끝날 때가 아니라 시작할 때 지우는 것이라(beginNight → resetRound,
 		// 정산은 resolveNight) 배달 전에 지워질 일은 없다

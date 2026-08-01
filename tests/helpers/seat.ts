@@ -36,6 +36,8 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		loverIndex: 0,
 		borrowedRole: null,
 		markIndex: 0,
+		extraProbeIndex: 0,
+		extraProbeSpent: false,
 		usedSkill: false,
 		usesSpent: 0,
 		noteText: "",
