@@ -622,16 +622,16 @@ describe("탭과 미확인 표시", () => {
 		joinRoom(a, 1);
 		joinRoom(b, 1);
 
-		// 둘 다 전체 탭을 보고 있다. 방 탭의 말은 안 읽음으로 쌓인다.
-		// (입장 알림도 방 탭의 줄이라 이미 몇 개 쌓여 있다 — 증가분을 본다)
-		assert.equal(activeChannel(a), ChatChannel.GLOBAL);
-		const before = unreadOf(a, ChatChannel.ROOM);
-		chat(b, "안녕하세요", ChatChannel.ROOM);
-		assert.equal(unreadOf(a, ChatChannel.ROOM), before + 1);
-
-		switchChannel(a, ChatChannel.ROOM);
-		assert.equal(unreadOf(a, ChatChannel.ROOM), 0);
+		// 방에 들어가면 둘 다 방 탭을 본다. 이제 로비 광장의 말이 안 읽음으로
+		// 쌓인다 (증가분을 보는 이유는 방금 전 대화가 이미 있을 수 있어서다)
 		assert.equal(activeChannel(a), ChatChannel.ROOM);
+		const before = unreadOf(a, ChatChannel.GLOBAL);
+		chat(b, "안녕하세요", ChatChannel.GLOBAL);
+		assert.equal(unreadOf(a, ChatChannel.GLOBAL), before + 1);
+
+		switchChannel(a, ChatChannel.GLOBAL);
+		assert.equal(unreadOf(a, ChatChannel.GLOBAL), 0);
+		assert.equal(activeChannel(a), ChatChannel.GLOBAL);
 	});
 
 	it("보고 있는 탭에 온 줄은 곧바로 읽은 것이 된다", () => {
@@ -668,6 +668,37 @@ describe("탭과 미확인 표시", () => {
 		assert.equal(citizenTabs.indexOf(ChatChannel.GHOST), -1, "산 사람에게 유령 탭이 보입니다");
 
 		assert.ok(chatChannels(mafia).some(tab => tab.id === ChatChannel.MAFIA && tab.write));
+	});
+
+	/*
+	 * 대기실에서는 전체와 방이 함께 열려 있다. preferredChannel의 규칙은
+	 * "지금 탭에 쓸 수 있으면 그대로 둔다"라서, 쓸 수 있는 탭이 둘인 이 상태를
+	 * 스스로 정리하지 못한다 — 로비 광장을 보다가 방에 들어온 사람은 방 탭이
+	 * 새로 생긴 것조차 모른 채 전체 탭에 남는다.
+	 */
+	it("방에 들어가면 방 탭으로 옮겨 준다", () => {
+		const player = connect("입장");
+		assert.equal(activeChannel(player), ChatChannel.GLOBAL);
+
+		joinRoom(player, 1);
+
+		assert.equal(activeChannel(player), ChatChannel.ROOM);
+	});
+
+	/*
+	 * 개인 안내는 지금 보고 있는 탭으로 간다(ChatService의 personalTarget).
+	 * 그래서 탭을 옮기는 일이 안내보다 늦으면 방의 규칙 설명이 로비 광장에
+	 * 떨어지고, 정작 방에서는 그것을 다시 찾을 수 없다.
+	 */
+	it("방 규칙 안내가 방 탭에 온다", () => {
+		const player = connect("입장");
+		joinRoom(player, 1);
+
+		const summary = room(1).ruleSet.summary;
+		const inRoom = chatLines(player, ChatChannel.ROOM).filter(line => line.text.indexOf(summary) >= 0);
+		const inGlobal = chatLines(player, ChatChannel.GLOBAL).filter(line => line.text.indexOf(summary) >= 0);
+		assert.equal(inRoom.length, 1);
+		assert.equal(inGlobal.length, 0, "방 규칙 안내가 로비 광장에 떨어졌습니다");
 	});
 });
 

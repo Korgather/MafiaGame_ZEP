@@ -84,7 +84,13 @@ export function showGuide(player: ScriptPlayer): void {
 	});
 }
 
-/** 직업 14종 도감. 스스로 닫히지 않는다 — 읽는 속도는 사람마다 다르다 */
+/**
+ * 직업 도감. 방이 어느 직업을 쓰는지와 무관하게 ROLE_DEFS 전체를 보여준다.
+ * 스스로 닫히지 않는다 — 읽는 속도는 사람마다 다르다.
+ *
+ * 장수를 여기에 적지 않는다. 직업이 늘 때마다 여러 곳의 숫자를 함께 고쳐야
+ * 하는데 실제로 그러지 못했다 — 이 줄과 /도감의 안내가 오랫동안 "14종"이었다.
+ */
 export function showBook(player: ScriptPlayer): void {
 	show(player, {
 		type: "init",

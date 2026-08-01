@@ -22,6 +22,7 @@ import { GamePhase, Team } from "../types/Game.types.ts";
 import { ACTION_RATE, KICK, MAX_SPECTATORS } from "../constants/GameConfig.ts";
 import { Sound } from "../constants/Assets.ts";
 import { isValidRoomNum } from "../constants/RoomLayout.ts";
+import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { spend } from "../domain/RateLimit.ts";
 import {
 	aliveSeats,
@@ -234,6 +235,13 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 	room.seats.push(createSeat(player.id, name, rankOf(player)));
 	playSoundTo(player, Sound.JOIN);
 
+	// 방에 들어온 사람이 볼 곳은 방 탭이다. 옮겨 주지 않으면 로비 광장을
+	// 보다가 들어온 사람은 전체 탭에 그대로 남는다 — 대기실에서는 전체와 방이
+	// 함께 열려 있어서 refresh의 preferredChannel이 아무것도 옮기지 않는다.
+	// 아래 두 줄보다 앞이어야 한다: 방 알림은 방 탭에 쌓이고, 규칙 안내는
+	// "지금 보고 있는 탭"으로 가므로(ChatService의 personalTarget) 순서를
+	// 뒤집으면 방 이야기가 전체 탭에 떨어진다.
+	Chat.focusChannel(player, ChatChannel.ROOM);
 	// 방 탭이 생겼다는 것을 먼저 알린 뒤 입장 알림을 흘린다.
 	// 순서를 뒤집으면 본인만 자기 입장 알림을 못 본다 — 알림이 도착하는
 	// 시점에 아직 방 탭이 없기 때문이다.

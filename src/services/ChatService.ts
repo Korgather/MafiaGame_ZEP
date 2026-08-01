@@ -385,6 +385,29 @@ function isFirstOpen(seen: { [channel: string]: number }): boolean {
 }
 
 /**
+ * 이 사람이 보는 탭을 지정한 채널로 옮긴다.
+ *
+ * preferredChannel(openFor·refresh가 쓰는 것)은 "지금 탭에 쓸 수 있으면 그대로
+ * 둔다"가 규칙이라, 쓸 수 있는 탭이 둘 이상인 동안에는 아무것도 옮기지 않는다.
+ * 대기실이 정확히 그 상태다 — 전체와 방이 함께 열려 있어서, 로비 광장을 보다가
+ * 방에 들어온 사람은 방 탭이 새로 생긴 것조차 모른 채 전체 탭에 남는다.
+ *
+ * 그래서 "무엇을 보여줄지"는 상황을 아는 쪽(방에 들여보내는 코드)이 정하고,
+ * 이 함수는 그것을 옮기기만 한다. preferredChannel에 "방을 더 좋아하라"를
+ * 심지 않는 이유는 그 함수가 권한만 아는 순수 함수이고, 방금 무슨 일이
+ * 일어났는지는 모르기 때문이다.
+ *
+ * 읽을 수 없는 채널로는 옮기지 않는다. 옮기면 화면이 빈 로그가 되고,
+ * 뒤이어 부르는 refresh가 어차피 다른 탭으로 되돌린다.
+ *
+ * 창이 아직 없어도 tag는 고쳐 둔다 — 나중에 openFor가 그 값에서 출발한다.
+ */
+export function focusChannel(player: ScriptPlayer, channel: ChatChannel): void {
+	if (!accessOf(contextOf(player.id), channel).read) return;
+	tagOf(player).chatChannel = channel;
+}
+
+/**
  * 단계가 바뀌거나 누가 죽었을 때 탭 목록을 다시 보낸다.
  *
  * 창을 다시 열지 않는 이유는 입력 중이던 글자와 스크롤 위치가 날아가기

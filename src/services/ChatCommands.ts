@@ -76,7 +76,7 @@ const COMMANDS: { [name: string]: ChatCommand } = {
 	"/도감": {
 		admin: false,
 		args: "",
-		help: "직업 14종의 설명을 봅니다",
+		help: "모든 직업의 설명을 봅니다",
 		run: (voice, player) => showBook(player),
 	},
 	"/귓속말": {
