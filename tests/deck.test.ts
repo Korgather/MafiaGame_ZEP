@@ -157,6 +157,26 @@ describe("덱 구성", () => {
 			}
 		}
 	});
+
+	it("클래식 모드 설명이 실제 직업 수를 말한다", () => {
+		/*
+		 * 모드 설명은 방 선택 화면에 그대로 나가는 문장이다. 그 안의 숫자는
+		 * 코드가 읽지 않으므로 풀이 바뀌어도 조용히 남는다 — 실제로 이 줄은
+		 * 한동안 "스물하나"였고, 그것은 클래식 풀이 아니라 프로젝트 전체
+		 * 직업 수였다. 사람이 세지 않아도 되도록 여기서 센다.
+		 */
+		const deck = CLASSIC_RULES.deck;
+		const pool = ([] as Role[]).concat(
+			deck.leadPool, deck.mafiaPool, deck.citizenRequired, deck.citizenPool
+		);
+		// 평시민은 어느 풀에도 없다. 자리가 남으면 채우는 기본값이라 풀 밖에 산다
+		assert.equal(pool.indexOf(Role.CITIZEN), -1, "평시민이 풀 안에 들어왔습니다");
+		assert.equal(pool.length + 1, 18, "클래식 직업 풀의 크기가 바뀌었습니다");
+		assert.ok(
+			CLASSIC_RULES.summary.indexOf("열여덟") >= 0,
+			`풀은 ${pool.length + 1}종인데 설명이 "${CLASSIC_RULES.summary}"입니다`
+		);
+	});
 });
 
 describe("마피아 리드 선정", () => {

@@ -634,6 +634,39 @@ describe("밤 단계", () => {
 		assert.equal(scooped.alive, true, "첫 밤은 무사인데 누군가 죽었습니다");
 	});
 
+	it("취재 대상이 그 밤에 죽어도 특종은 나간다", () => {
+		// 규칙서 12절 5번의 절반이다. 나머지 절반("취재한 밤의 바로 다음
+		// 아침에 공개")은 바로 위 테스트가 지킨다.
+		//
+		// 죽은 사람을 빼는 편이 직관적으로 보이지만 그 반대다 — 그 밤에 죽었다면
+		// 특종은 직업 하나를 알려주는 데서 끝나지 않고 "마피아가 누구를 노렸는가"
+		// 까지 함께 밝힌다. 시민 편에게 이 판에서 가장 값진 한 줄이라 버리지 않는다.
+		//
+		// 7인인 이유는 클래식의 firstNightPeacefulUpTo가 6이기 때문이다.
+		// 6인 이하로 잡으면 첫 밤에 아무도 죽지 않아 이 테스트가 무의미해진다.
+		startGame(7, 1, [
+			Role.REPORTER, Role.MAFIA, Role.DOCTOR, Role.POLICE,
+			Role.CITIZEN, Role.CITIZEN, Role.CITIZEN,
+		]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const reporter = seatsWithRole(target, Role.REPORTER)[0];
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+
+		// 기자와 마피아가 같은 사람을 고른다
+		send(playerOf(reporter), { type: "select", num: victim.index });
+		send(playerOf(mafia), { type: "select", num: victim.index });
+		finishPhase(target); // NIGHT → 정산 → DAY
+
+		assert.equal(victim.alive, false, "마피아가 고른 사람이 살아남았습니다");
+		const scoop = target.nightReport.find(line => line.indexOf("특종") >= 0);
+		assert.ok(scoop, `죽은 대상의 특종이 사라졌습니다: ${target.nightReport.join(" / ")}`);
+		assert.ok(scoop.indexOf(`${victim.index}번 참가자`) >= 0);
+		assert.ok(scoop.indexOf("시민") >= 0, `직업이 빠졌습니다: ${scoop}`);
+	});
+
 	it("밤이 아닌 때 온 지목은 무시한다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
@@ -859,8 +892,8 @@ describe("투표", () => {
  */
 describe("스킵 · 재판 · 시간 조절", () => {
 	/** 첫 밤을 아무 일 없이 넘기고 투표까지 진행한다 */
-	function reachVote(): ReturnType<typeof room> {
-		const target = room(1);
+	function reachVote(roomNum = 1): ReturnType<typeof room> {
+		const target = room(roomNum);
 		finishPhase(target); // ROLE_REVEAL → NIGHT
 		finishPhase(target); // NIGHT → DAY
 		finishPhase(target); // DAY → VOTE
@@ -939,11 +972,12 @@ describe("스킵 · 재판 · 시간 조절", () => {
 	 * 예전 규칙은 `찬성 * 2 > 분모`, 즉 "안 누른 사람은 전부 반대"였다.
 	 * 5초 안에 버튼을 못 찾은 사람과 화면을 안 보고 있는 사람이 전부
 	 * 반대편에 서는 셈이라 인원이 늘수록 처형이 구조적으로 불가능해졌다.
-	 * 지금은 기권이 어느 쪽도 아니고, 찬성이 반대를 넘어야 처형된다.
+	 * 지금은 기권이 어느 쪽도 아니고, 동수를 어느 쪽으로 보낼지는 모드가
+	 * 정한다 — 클래식은 처형(`execute`), 나머지는 무산(`spare`)이다.
 	 *
-	 * 셋을 나눠 둔 이유는 증상이 제각각이어서다. 기권 규칙이 무너지면
-	 * 처형이 안 되고, 동수 규칙이 무너지면 처형이 너무 쉬워지고, 협박이
-	 * 무너지면 건달의 능력이 통째로 사라진다.
+	 * 넷을 나눠 둔 이유는 증상이 제각각이어서다. 기권 규칙이 무너지면
+	 * 처형이 안 되고, 동수 규칙이 무너지면 두 모드 중 하나가 조용히 다른
+	 * 모드의 규칙으로 돌아가고, 협박이 무너지면 건달의 능력이 통째로 사라진다.
 	 */
 	function standNominee(target: ReturnType<typeof room>, voters: readonly Seat[], nominee: Seat): void {
 		for (const seat of voters) vote(playerOf(seat), nominee.index);
@@ -968,39 +1002,82 @@ describe("스킵 · 재판 · 시간 조절", () => {
 		assert.equal(nominee.alive, false, "찬성 1 대 반대 0인데 살아남았습니다");
 	});
 
-	it("찬성과 반대가 같으면 살린다", () => {
+	// 클래식은 동수를 처형으로 보낸다. 원작의 규칙이고, 찬반이 5초짜리
+	// 단계라 인원이 늘수록 못 누른 사람이 늘어 동수가 흔해지기 때문이다 —
+	// 그 흔한 동수를 전부 살리면 12인 판에서 처형이 거의 나지 않는다
+	it("클래식은 찬성과 반대가 같으면 처형한다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
+		assert.equal(target.ruleSet.judgementTie, "execute", "1번 방이 클래식이 아닙니다");
 		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
 		const others = target.seats.filter(seat => seat.index !== nominee.index);
 
 		standNominee(target, others, nominee);
 		judge(playerOf(others[0]), Judgement.AGREE);
 		judge(playerOf(others[1]), Judgement.OPPOSE);
-		// others[2]는 기권. 처형은 되돌릴 수 없으니 갈린 표는 값이 싼 쪽으로 간다
+		// others[2]는 기권. 기권은 어느 쪽도 아니므로 1 대 1이다
+
+		finishPhase(target);
+		assert.equal(nominee.alive, false, "1 대 1인데 살아남았습니다");
+	});
+
+	// 표준전은 반대쪽이다. 같은 코드가 두 규칙을 다 태우는지 보려면
+	// 두 모드를 나란히 두는 수밖에 없다
+	it("표준전은 찬성과 반대가 같으면 살린다", () => {
+		startPlainGame(MIN_PLAYERS, 5);
+		const target = reachVote(5);
+		assert.equal(target.ruleSet.judgementTie, "spare", "5번 방이 표준전이 아닙니다");
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+		const others = target.seats.filter(seat => seat.index !== nominee.index);
+
+		standNominee(target, others, nominee);
+		judge(playerOf(others[0]), Judgement.AGREE);
+		judge(playerOf(others[1]), Judgement.OPPOSE);
 
 		finishPhase(target);
 		assert.equal(nominee.alive, true, "1 대 1인데 처형됐습니다");
 	});
 
-	it("협박당한 사람은 누르지 못하고 그 몫은 반대로 센다", () => {
+	// 아무도 누르지 않은 낮은 어느 모드에서도 처형하지 않는다. 클래식의
+	// 동수 규칙을 그대로 두면 0 대 0이 통과해 "무관심이 곧 처형"이 된다
+	it("전원이 기권하면 클래식에서도 처형되지 않는다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
 		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
 		const others = target.seats.filter(seat => seat.index !== nominee.index);
-		const gagged = others[0];
+
+		standNominee(target, others, nominee);
+		// 아무도 O/X를 누르지 않는다
+
+		finishPhase(target);
+		assert.equal(nominee.alive, true, "아무도 안 눌렀는데 처형됐습니다");
+		assert.ok(
+			chatSaw(playerOf(others[0]), "아무도 찬반을 내지 않아"),
+			"살아남은 이유가 표가 모자란 것으로 안내됐습니다"
+		);
+	});
+
+	it("협박당한 사람은 누르지 못하고 그 몫은 반대로 센다", () => {
+		// 협박 하나가 결과를 뒤집는 자리를 만들려면 반대가 찬성을 넘어야
+		// 한다(클래식은 동수도 처형이다). 협박 둘과 찬성 하나가 필요해서
+		// 최소 인원으로는 자리가 모자란다
+		startPlainGame(6);
+		const target = reachVote();
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+		const others = target.seats.filter(seat => seat.index !== nominee.index);
 		// 건달이 지난밤 협박한 상태. 낮이 시작될 때 켜져 있고 다음 밤에 풀린다
-		gagged.intimidated = true;
+		others[0].intimidated = true;
+		others[1].intimidated = true;
 
-		// 협박당한 사람은 지목도 못 한다(Voting.canVote). 나머지 둘로 세운다
-		standNominee(target, others.slice(1), nominee);
+		// 협박당한 사람은 지목도 못 한다(Voting.canVote). 나머지 셋으로 세운다
+		standNominee(target, others.slice(2), nominee);
 
-		judge(playerOf(gagged), Judgement.AGREE);
-		assert.equal(gagged.judgement, Judgement.NONE, "협박당했는데 찬성이 접수됐습니다");
+		judge(playerOf(others[0]), Judgement.AGREE);
+		assert.equal(others[0].judgement, Judgement.NONE, "협박당했는데 찬성이 접수됐습니다");
 
-		judge(playerOf(others[1]), Judgement.AGREE);
-		// others[2]는 기권. 찬성 1, 협박 1(반대로 센다), 기권 1 → 1 대 1
-
+		judge(playerOf(others[2]), Judgement.AGREE);
+		// others[3]·others[4]는 기권. 찬성 1, 협박 2(반대로 센다) → 1 대 2.
+		// 협박이 기권으로 흘러가면 1 대 0이 되어 처형된다
 		finishPhase(target);
 		assert.equal(nominee.alive, true, "협박당한 사람의 몫이 반대로 세어지지 않았습니다");
 	});

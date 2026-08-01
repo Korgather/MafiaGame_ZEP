@@ -121,7 +121,7 @@ export type Team = (typeof Team)[keyof typeof Team];
  * "취소했다" 양쪽을 뜻하게 되고, 둘 다 true인 상태를 타입이 막지 못한다.
  */
 export const Judgement = {
-	/** 아직 안 눌렀다. 기권이며 집계에서는 반대로 센다 */
+	/** 아직 안 눌렀다. 기권이며 찬성에도 반대에도 세어지지 않는다(Trial.tallyJudgement) */
 	NONE: "NONE",
 	/** 찬성(O) — 처형 */
 	AGREE: "AGREE",

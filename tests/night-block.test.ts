@@ -171,7 +171,10 @@ describe("차단 — 막힌 능력은 일어나지 않는다", () => {
  * night-pipeline.test.ts의 TRACE_BY_KIND와 같은 수법이고, 저쪽이 막히지 않은
  * 면을, 이쪽이 막힌 면을 맡는다.
  */
-const BLOCKED_BY_KIND: Record<NightActionKind, { actor: Role; actorSetup?: Partial<Seat> }> = {
+const BLOCKED_BY_KIND: Record<
+	NightActionKind,
+	{ actor: Role; actorSetup?: Partial<Seat>; targetSetup?: Partial<Seat> }
+> = {
 	HEAL: { actor: Role.DOCTOR },
 	ATTACK: { actor: Role.MAFIA },
 	SCOOP: { actor: Role.REPORTER },
@@ -187,7 +190,9 @@ const BLOCKED_BY_KIND: Record<NightActionKind, { actor: Role; actorSetup?: Parti
 	MARK: { actor: Role.TERRORIST },
 	STALK: { actor: Role.BEAST },
 	SEANCE: { actor: Role.SHAMAN },
-	REVIVE: { actor: Role.PRIEST },
+	// 성직자는 무덤만 연다(targetsDead). 산 사람을 주면 되살릴 것이 없어
+	// 능력이 아예 발동하지 않고, 그러면 대조군이 벙어리가 된다
+	REVIVE: { actor: Role.PRIEST, targetSetup: { alive: false } },
 	// 유혹만 예외다. 같은 step 안에는 순서가 없어서 막힌 마담의 유혹도 성립한다
 	SEDUCE: { actor: Role.MADAM },
 };
@@ -202,11 +207,11 @@ describe("차단 — 목록의 완전성", () => {
 			// 대조군을 먼저 돌린다. 막지 않으면 한 장이 닳는다는 것을 같은
 			// 자리에서 보이지 않으면, 애초에 발동하지 않는 설정이 조용히
 			// 통과해 그 행이 아무것도 지키지 못한다
-			const free = [seat(1, Role.MADAM), seat(2, row.actor, row.actorSetup), seat(3, Role.CITIZEN)];
+			const free = [seat(1, Role.MADAM), seat(2, row.actor, row.actorSetup), seat(3, Role.CITIZEN, row.targetSetup)];
 			night(free, [[2, 3]]);
 			assert.equal(free[1].usesSpent, 1, `${kind} — 막지 않았는데도 닳지 않는다`);
 
-			const seats = [seat(1, Role.MADAM), seat(2, row.actor, row.actorSetup), seat(3, Role.CITIZEN)];
+			const seats = [seat(1, Role.MADAM), seat(2, row.actor, row.actorSetup), seat(3, Role.CITIZEN, row.targetSetup)];
 			night(seats, [[1, 2], [2, 3]]);
 			assert.equal(seats[1].blocked, true, kind);
 			// 흔적이 남는 자리는 능력마다 다르지만(healed·attackedBy·reveals)

@@ -506,3 +506,84 @@ describe("밤 파이프라인 — 조사 결과", () => {
 		assert.deepEqual(result.defected, []);
 	});
 });
+
+describe("밤 파이프라인 — 군인의 반탐", () => {
+	/** 그 좌석이 이 밤에 받은 알림. 없으면 null */
+	function lineFor(result: NightSettlement, index: number): string | null {
+		const found = result.reveals.find(r => r.seat === index);
+		return found === undefined ? null : found.line;
+	}
+
+	it("스파이의 첩보는 군인에게 튕기고 조사자를 알려준다", () => {
+		const seats = [seat(1, Role.SPY), seat(2, Role.SOLDIER)];
+		const result = night(seats, [[1, 2]]);
+
+		const toSoldier = lineFor(result, 2);
+		assert.ok(toSoldier, "군인이 아무 통보도 받지 못했습니다");
+		assert.match(toSoldier, /1번 참가자/, `조사자가 빠졌습니다: ${toSoldier}`);
+
+		// 시전자에게도 결과를 준다. 아무 말도 없으면 지목이 씹힌 것과
+		// 구분되지 않아 다음 밤에 같은 사람을 또 고른다
+		const toSpy = lineFor(result, 1);
+		assert.ok(toSpy, "스파이가 실패를 통보받지 못했습니다");
+		// 조사가 성립하지 않았다. 직업 이름이 새면 튕겨 낸 의미가 없다
+		assert.doesNotMatch(toSpy, /군인/, `튕겼는데 직업이 새어 나갔습니다: ${toSpy}`);
+	});
+
+	it("도둑의 도벽도 군인에게 튕기고 아무것도 남기지 않는다", () => {
+		const seats = [seat(1, Role.THIEF), seat(2, Role.SOLDIER)];
+		const result = night(seats, [[1, 2]]);
+
+		// borrowedRole이 남으면 튕겨 놓고도 다음 밤에 군인의 능력을 쓴다
+		assert.equal(seats[0].borrowedRole, null, "튕겼는데 능력을 훔쳐 갔습니다");
+		assert.ok(lineFor(result, 2), "군인이 도벽 시도를 통보받지 못했습니다");
+		assert.ok(lineFor(result, 1), "도둑이 실패를 통보받지 못했습니다");
+	});
+
+	it("시민 편 조사는 군인을 그냥 통과한다", () => {
+		// 판정을 시전자의 팀이 아니라 능력 종류로 하는 이유가 여기 있다.
+		// 팀으로 물으면 접선 전 스파이(시민 팀)가 통과하고, 반대로 아무
+		// 조사나 막으면 경찰이 군인을 만날 때마다 밤 하나를 잃는다
+		const seats = [seat(1, Role.POLICE), seat(2, Role.SOLDIER)];
+		const result = night(seats, [[1, 2]]);
+		// 통보가 한 줄뿐이다 — 군인은 아무것도 눈치채지 못한다
+		assert.equal(result.reveals.length, 1);
+		assert.equal(result.reveals[0].seat, 1);
+		assert.match(result.reveals[0].line, /마피아가 아닙니다/);
+	});
+
+	it("군인의 능력을 훔친 도둑은 조사를 튕기지 못한다", () => {
+		// 튕김은 그날 밤 손에 든 능력이 아니라 직업 자체의 성질이다.
+		// 대상 판정에 effectiveDef를 쓰면 이 판이 뒤집힌다
+		const seats = [seat(1, Role.SPY), seat(2, Role.THIEF, { borrowedRole: Role.SOLDIER })];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(result.reveals.length, 1);
+		assert.match(result.reveals[0].line, /도둑/);
+	});
+
+	it("스파이의 능력을 훔친 도둑은 군인에게 튕긴다", () => {
+		// 위 테스트의 짝이다. 시전자 쪽은 반대로 effectiveDef로 읽는다 —
+		// 남의 첩보를 빌려 온 도둑도 캐내는 것은 마찬가지다
+		const seats = [seat(1, Role.THIEF, { borrowedRole: Role.SPY }), seat(2, Role.SOLDIER)];
+		const result = night(seats, [[1, 2]]);
+		assert.ok(lineFor(result, 2), "빌려 온 첩보가 그냥 통과했습니다");
+		const toThief = lineFor(result, 1);
+		assert.ok(toThief);
+		assert.doesNotMatch(toThief, /군인/, `튕겼는데 직업이 새어 나갔습니다: ${toThief}`);
+	});
+
+	it("조사를 튕겨도 방탄은 닳지 않는다", () => {
+		// 같은 직업의 능력이지만 자원이 다르다. 한 플래그로 묶으면 마피아가
+		// 도둑 하나로 군인의 갑옷을 공짜로 벗기고 그 밤에 죽인다
+		const seats = [seat(1, Role.SPY), seat(2, Role.SOLDIER), seat(3, Role.MAFIA)];
+		assert.equal(seats[1].armored, true, "군인이 방탄 없이 시작했습니다");
+
+		night(seats, [[1, 2]]);
+		assert.equal(seats[1].armored, true, "조사 한 번에 갑옷이 벗겨졌습니다");
+
+		// 다음 밤의 공격을 그대로 버틴다
+		const second = night(seats, [[3, 2]]);
+		assert.deepEqual(outcomes(second), [[2, NightOutcome.SHIELDED]]);
+		assert.equal(seats[1].armored, false, "이번에는 닳아야 합니다");
+	});
+});

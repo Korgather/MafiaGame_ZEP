@@ -51,7 +51,7 @@ export function beginJudgement(room: Room): void {
 	room.tickTockPlayed = true;
 
 	playSound(room, Sound.VOTE);
-	Chat.say(room, `🗳️ ${nomineeLabel(room)}를 처형할지 정하세요. 찬성이 반대보다 많아야 처형됩니다.`);
+	Chat.say(room, `🗳️ ${nomineeLabel(room)}를 처형할지 정하세요. ${tieClause(room)} 처형됩니다.`);
 
 	forEachPlayer(room, (player, seat) => openJudgementView(room, player, seat));
 }
@@ -172,21 +172,26 @@ export function broadcastJudgeProgress(room: Room): void {
 }
 
 /**
- * 찬반투표 결과. 찬성이 반대보다 많아야 처형된다.
+ * 찬반투표 결과. 동수를 어느 쪽으로 보낼지는 모드가 정한다.
  *
  * 예전에는 `agree * 2 > voters`, 즉 "안 누른 사람은 전부 반대"였다. 5초
  * 안에 버튼을 못 찾은 사람과 화면을 보고 있지 않은 사람이 전부 반대편에
  * 서는 셈이라, 인원이 늘수록 처형이 구조적으로 불가능해졌다.
  *
- * 지금은 기권이 어느 쪽도 아니다. 같은 코드베이스가 이미 tallyVotes에서
- * "처형은 되돌릴 수 없고 스킵은 밤 한 번을 내주는 것뿐이라, 표가 갈렸을 때
- * 값이 싼 쪽을 고른다"고 정해 두었다. 찬반도 같은 저울을 쓴다 — 3:3이면
- * 살린다. `agree > oppose`는 둘 다 0일 때(아무도 안 누른 낮) 자동으로
- * 거짓이라 별도의 방어가 필요 없다.
+ * 지금은 기권이 어느 쪽도 아니고, 남은 질문 하나("3:3이면?")를 룰셋의
+ * judgementTie가 답한다. 클래식은 원작을 따라 `execute`(같으면 죽인다),
+ * 나머지 모드는 `spare`(넘어야 죽인다)다. 이 값을 룰셋에 둔 이유는
+ * 인원과 시간이 모드마다 다르기 때문이다 — RuleSet.JudgementTie 참고.
+ *
+ * **전원이 기권한 낮은 어느 모드에서도 처형하지 않는다.** `execute`에서
+ * 0 = 0을 그냥 통과시키면 아무도 버튼을 누르지 않은 판이 곧 처형이 되어,
+ * "동수는 처형"이라는 규칙이 "무관심은 처형"으로 변한다. 동수 규칙은 표를
+ * 던진 사람들 사이의 저울이지 빈 저울을 기울이는 장치가 아니다.
  *
  * **협박당한 사람은 반대로 센다.** 좌석 문서가 정한 규칙이고, 건달의 협박이
  * "한 표를 지운다"가 아니라 "한 표를 뺏어 반대편에 놓는다"여야 능력에 값이
  * 생긴다. 눌러 보지도 못한 사람이라 canJudge가 아니라 여기서 갈린다.
+ * 협박은 실제로 놓인 표이므로 위의 "빈 저울" 예외에도 걸리지 않는다.
  *
  * 접속이 끊긴 사람은 기권으로 흘러간다. 예전에는 분모에 남아 반대로 세어졌고
  * 주석도 그렇게 적혀 있었지만, 기권을 중립으로 옮긴 이상 따로 다룰 이유가
@@ -195,7 +200,12 @@ export function broadcastJudgeProgress(room: Room): void {
  * 정치인의 2표 가중치는 여기에 적용하지 않는다. 지목에서 두 표를 쓰는 것과
  * 처형 면역이 이미 정치인의 몫이고, 찬반까지 두 표면 혼자 판을 뒤집는다.
  */
-function judgementPassed(room: Room): boolean {
+interface JudgementTally {
+	readonly agree: number;
+	readonly oppose: number;
+}
+
+function tallyJudgement(room: Room): JudgementTally {
 	let agree = 0;
 	let oppose = 0;
 	for (const seat of room.seats) {
@@ -207,7 +217,29 @@ function judgementPassed(room: Room): boolean {
 		if (seat.judgement === Judgement.AGREE) agree++;
 		else if (seat.judgement === Judgement.OPPOSE) oppose++;
 	}
-	return agree > oppose;
+	return { agree, oppose };
+}
+
+function judgementPassed(room: Room, tally: JudgementTally): boolean {
+	if (tally.agree === 0 && tally.oppose === 0) return false;
+	if (room.ruleSet.judgementTie === "execute") return tally.agree >= tally.oppose;
+	return tally.agree > tally.oppose;
+}
+
+/** 찬반 규칙을 한 줄로. 시작 안내가 읽는다 */
+function tieClause(room: Room): string {
+	return room.ruleSet.judgementTie === "execute" ? "찬성이 반대 이상이어야" : "찬성이 반대보다 많아야";
+}
+
+/**
+ * 살아남은 이유. 아무도 누르지 않은 낮과 표가 모자란 낮을 구분한다.
+ *
+ * 두 경우를 한 문장으로 묶으면 클래식에서 거짓말이 된다 — 전원 기권은
+ * 0 대 0이라 "찬성이 반대에 미치지 못한" 판이 아닌데도 살아남기 때문이다.
+ */
+function sparedReason(room: Room, tally: JudgementTally): string {
+	if (tally.agree === 0 && tally.oppose === 0) return "아무도 찬반을 내지 않아";
+	return room.ruleSet.judgementTie === "execute" ? "찬성이 반대에 미치지 못해" : "찬성이 반대를 넘지 못해";
 }
 
 /**
@@ -219,12 +251,20 @@ function judgementPassed(room: Room): boolean {
  */
 export function resolveJudgement(room: Room): boolean {
 	const nominee = seatAt(room, room.nominee);
-	room.nominee = 0;
-	if (!nominee) return false;
+	if (!nominee) {
+		room.nominee = 0;
+		return false;
+	}
 
-	if (!judgementPassed(room)) {
+	// 집계가 room.nominee를 지우는 것보다 먼저다. canJudge가 그 값으로 단상에
+	// 오른 본인을 분모에서 빼는데, 먼저 지우면 본인이 분모로 돌아온다 —
+	// 협박당한 채 단상에 오른 사람이 자기 처형에 반대 한 표를 얻는 꼴이다
+	const tally = tallyJudgement(room);
+	room.nominee = 0;
+
+	if (!judgementPassed(room, tally)) {
 		room.rejected.push(nominee.index);
-		room.voteRecord.message = `🕊️ 찬성이 반대를 넘지 못해 ${participantLabel(nominee)}는 살아남았습니다.`;
+		room.voteRecord.message = `🕊️ ${sparedReason(room, tally)} ${participantLabel(nominee)}는 살아남았습니다.`;
 		Chat.announce(room, room.voteRecord.message);
 		return false;
 	}

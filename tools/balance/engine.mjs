@@ -198,6 +198,12 @@ export function playGame(rules, playerCount, seed, model, opts) {
 			} else if (def.nightAction === NightActionKind.SEDUCE) {
 				if (model === "B" && knownMafiaAlive.length > 0) target = knownMafiaAlive[0];
 				else target = pick(others, rng);
+			} else if (def.targetsDead) {
+				// 무덤을 고르는 직업(성직자·영매)에게는 사망자만 보인다. 산 사람을
+				// 주면 능력이 발동조차 하지 않아, 그 직업이 없는 판으로 승률을
+				// 재는 셈이 된다 — 성직자가 통째로 빠지면 시민이 실제보다 불리하게 나온다
+				const graves = seats.filter(o => !o.alive);
+				target = graves.length > 0 ? pick(graves, rng) : null;
 			} else {
 				const unknown = others.filter(o => known[o.index] === undefined);
 				target = unknown.length > 0 ? pick(unknown, rng) : pick(others, rng);
@@ -301,7 +307,11 @@ export function playGame(rules, playerCount, seed, model, opts) {
 					else agree = sure || rng() < confirmVote;
 					if (agree) yes++; else no++;
 				}
-				confirmed = yes > no;
+				// 동수의 처분은 모드의 값이다(RuleSet.judgementTie). 클래식은
+				// 찬성이 반대와 같아도 처형하고, 나머지 모드는 살린다.
+				// 여기에 부등호를 하나 옮겨 적으면 측정 도구가 게임과 다른
+				// 규칙으로 승률을 재게 되고, 그 숫자는 틀린 줄도 모른 채 쓰인다
+				confirmed = rules.judgementTie === "execute" ? yes >= no : yes > no;
 			}
 			if (!confirmed) { rejected.push(res.target.index); continue; }
 

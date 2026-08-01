@@ -202,6 +202,13 @@ export function participantLabel(seat: Pick<Seat, "index">): string {
  * 죽은 사람도 포함한다. 목록에서 사라지면 남은 사람들의 자리가 매 라운드
  * 밀려서, 어제 3번을 눌렀던 자리에 오늘은 다른 사람이 앉는다. 자리를
  * 고정하고 죽은 칸을 비활성으로 남기는 편이 오조작이 적다.
+ *
+ * **득표수는 여기서 나가지 않는다.** 예전에는 `votes: seat.voteCount`가 붙어
+ * 있었는데, 투표 화면(Voting.openVoteView)이 이 목록을 그대로 보내므로 투표
+ * 도중에 화면을 새로 여는 사람 — 재접속자와 관전 입장자 — 만 현재 득표를
+ * 실시간으로 보게 됐다. 나머지는 "몇 명이 냈는가"만 받는데(voteProgress)
+ * 한 경로만 판을 다 보여주면 그 경로가 곧 이득이 된다. 개표 화면의 숫자는
+ * 집계 당시의 기록(Voting.resultSeats)에서 따로 붙는다.
  */
 export function seatViews(room: Room, allyTeam?: Team): SeatView[] {
 	return room.seats
@@ -212,7 +219,6 @@ export function seatViews(room: Room, allyTeam?: Team): SeatView[] {
 			name: participantLabel(seat),
 			alive: seat.alive,
 			ally: allyTeam !== undefined && seat.alive && seat.team === allyTeam,
-			votes: seat.voteCount,
 		}));
 }
 

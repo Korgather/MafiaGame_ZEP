@@ -177,6 +177,21 @@ export interface DeckSpec {
 /** 낮에 자유롭게 말할 수 있는가, 준비된 문구만 쓸 수 있는가 */
 export type ChatMode = "free" | "phrasesOnly";
 
+/**
+ * 찬반이 같은 수일 때 단상에 오른 사람은 어떻게 되는가.
+ *
+ * 이 한 부호가 "판을 뒤집는 쪽"과 "그대로 두는 쪽" 중 어느 쪽이 기본값인지를
+ * 정한다. `spare`는 찬성이 반대를 **넘어야** 죽인다 — 되돌릴 수 없는 쪽에
+ * 더 무거운 짐을 지운다. `execute`는 같은 수여도 죽인다 — 원작 클래식의
+ * 규칙이고, 시민 쪽이 한 표 모자라 마피아를 놓치는 판을 줄인다.
+ *
+ * 모드마다 다른 이유는 인원과 시간이 다르기 때문이다. 찬반은 5초짜리
+ * 단계라 인원이 늘수록 못 누른 사람이 늘고, 그 사람들이 전부 기권으로
+ * 빠지면 동수가 흔해진다. 클래식은 그 흔한 동수를 처형 쪽으로 보내고,
+ * 정원이 작거나 시간이 더 짧은 모드는 반대쪽으로 보낸다.
+ */
+export type JudgementTie = "execute" | "spare";
+
 export interface RuleSet {
 	/** 코드가 분기하거나 집계에 쓰는 식별자 */
 	readonly id: string;
@@ -191,6 +206,8 @@ export interface RuleSet {
 	readonly minPlayers: number;
 	readonly maxPlayers: number;
 	readonly chatMode: ChatMode;
+	/** 찬반 동수에서 처형하는가 살리는가 */
+	readonly judgementTie: JudgementTie;
 }
 
 /**
@@ -346,6 +363,7 @@ export const STANDARD_RULES: RuleSet = {
 	minPlayers: 4,
 	maxPlayers: 12,
 	chatMode: "free",
+	judgementTie: "spare",
 };
 
 /**
@@ -387,6 +405,9 @@ export const BLITZ_RULES: RuleSet = {
 	minPlayers: 4,
 	maxPlayers: 8,
 	chatMode: "free",
+	// 찬반이 4초다. 못 누른 사람이 동수를 만드는 판이 흔한데 그 판마다
+	// 처형까지 나가면 3분 단판이 지목 한 번으로 끝난다
+	judgementTie: "spare",
 };
 
 /**
@@ -413,6 +434,8 @@ export const SILENCE_RULES: RuleSet = {
 	minPlayers: 8,
 	maxPlayers: 12,
 	chatMode: "phrasesOnly",
+	// 표준전에서 갈라져 나온 모드다. 표준전과 다르게 둘 이유가 없다
+	judgementTie: "spare",
 };
 
 /**
@@ -504,7 +527,10 @@ const CLASSIC_ROSTER: readonly RosterEntry[] = [
 export const CLASSIC_RULES: RuleSet = {
 	id: "classic",
 	displayName: "클래식",
-	summary: "기본 모드. 4~12명, 직업 스물하나",
+	// 열여덟은 아래 풀을 실제로 센 값이다(리드1 + 보조4 + 필수2 + 특수10 + 평시민1).
+	// 프로젝트 전체 직업은 스물하나이고, 나머지 셋(자경단원·사기꾼·점쟁이)은
+	// 원작 클래식에 없어 이 모드에 들어오지 않는다
+	summary: "기본 모드. 4~12명, 직업 열여덟",
 	timing: STANDARD_RULES.timing,
 	deck: {
 		// roster가 있으므로 배정은 이 값을 읽지 않는다. 표의 mafia + support를
@@ -543,6 +569,10 @@ export const CLASSIC_RULES: RuleSet = {
 	minPlayers: 4,
 	maxPlayers: 12,
 	chatMode: "free",
+	// 원작 클래식의 규칙이다. 표준전과 갈리는 유일한 지점이라 여기 남긴다 —
+	// 찬반은 5초짜리 단계고 인원이 늘수록 못 누른 사람이 늘어 동수가 흔한데,
+	// 그 동수를 전부 살리는 쪽으로 보내면 12인 판에서 처형이 거의 나지 않는다
+	judgementTie: "execute",
 };
 
 /**

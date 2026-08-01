@@ -233,6 +233,18 @@ export interface RoleDef {
 	/** 첫 공격을 한 번 버티는가 (군인) */
 	readonly survivesFirstAttack?: boolean;
 	/**
+	 * 마피아 팀의 캐내는 능력을 튕겨내고 그 사실을 본인에게 알리는가 (군인).
+	 *
+	 * 방탄(survivesFirstAttack)과 같은 직업의 능력이지만 자원이 다르다 —
+	 * 방탄은 한 번 쓰면 사라지는 데 반해 이쪽은 소모되지 않는다. 두 축을
+	 * 한 플래그로 묶으면 조사를 한 번 튕긴 군인이 공격에 그냥 죽는다.
+	 *
+	 * "캐내는 능력"의 판정은 능력 종류로 한다(INSPECT_ROLE·STEAL). 시전자의
+	 * 팀으로 물으면 스파이가 접선 전에는 시민 팀이라 그냥 통과한다 — 그런데
+	 * 접선 전 첩보야말로 이 능력이 막아야 할 바로 그것이다.
+	 */
+	readonly deflectsMafiaProbe?: boolean;
+	/**
 	 * 낮을 한 번은 보내야 쓸 수 있는가 (자경단원·스파이)
 	 *
 	 * 첫 밤에는 아무도 아무것도 모른다. 그 상태로 쓰는 능력은 추리가 아니라
@@ -375,6 +387,10 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightPrompt: "조사하고 싶은 대상을 선택하세요.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
+		// 자기 조사는 언제나 "비마피아"라 정보가 0인데 그 밤 하나를 통째로
+		// 버린다. 잃는 것이 없으므로 칸을 잠근다. 의사가 자기 치료를 허용하는
+		// 것과 정반대인 이유가 여기다 — 그쪽은 자기를 고르는 것이 한 수다
+		noSelfTarget: true,
 	},
 	SPY: {
 		displayName: "스파이",
@@ -462,7 +478,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "군인",
 		team: Team.CITIZEN,
 		glyph: "🪖",
-		ability: "밤에 받는 첫 공격을 한 번 버팁니다.",
+		ability: "밤에 받는 첫 공격을 한 번 버팁니다. 마피아 팀이 캐내려 하면 튕겨내고 누구였는지 알아냅니다.",
 		tip: "한 번은 버팁니다. 살아남았다면 그날 밤 누군가 당신을 노렸다는 뜻입니다.",
 		nightAction: null,
 		nightStep: NightStep.AFTER,
@@ -473,6 +489,7 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
 		survivesFirstAttack: true,
+		deflectsMafiaProbe: true,
 	},
 	THUG: {
 		displayName: "건달",
@@ -750,15 +767,17 @@ export function roleName(role: Role): string {
  *
  * 기존에는 `seat.team === Team.MAFIA` 한 줄이 곧 "마피아 채팅 참가자"였다.
  * 진영과 채팅이 같은 집합이던 시절에는 맞았지만 짐승인간은 마피아 팀이면서
- * 대화는 못 하고(혼자 무는 직업이다), 스파이는 합류 전까지 시민 팀이면서
- * 채팅창을 갖고 있다.
+ * 대화는 못 하고(혼자 무는 직업이다), 스파이는 직업 정의에 마피아 채팅창을
+ * 달고 있으면서 합류 전까지는 시민 팀이다.
  * 두 개념이 갈라진 이상 판정을 한 곳에 못 박지 않으면 중계·인원수·스파이 합류가
  * 서로 다른 답을 내놓게 된다.
  *
- * 클래식에서 셋째 경우가 붙었다 — 접선한 짐승인간. 직업 정의의 nightChat은
- * 여전히 null이다(접선 전에는 아무 창도 없어야 한다). 그래서 판정이 정의만
- * 보면 짐승인간은 영원히 혼자이고, 좌석만 보면 접선 전부터 밀담이 열린다.
- * 둘을 함께 읽는 자리가 여기 하나뿐이라 여기서 묻는다.
+ * 세 줄이 각각 다른 새는 구멍을 막는다.
+ * 첫 줄(팀)이 없으면 스파이가 접선 전부터 밀담을 읽는다 — 조사할 이유가
+ * 사라져 직업 하나가 통째로 무의미해진다. 둘째 줄(정의)이 없으면 합류한
+ * 스파이가 팀만 바뀐 채 말을 못 한다. 셋째 줄(접선)이 없으면 짐승인간이
+ * 영원히 혼자다 — 정의의 nightChat은 접선 후에도 null로 남기 때문이다.
+ * 세 줄을 함께 읽는 자리가 여기 하나뿐이라 여기서 묻는다.
  */
 export function inMafiaChat(seat: { role: Role; team: Team; contacted?: boolean }): boolean {
 	if (seat.team !== Team.MAFIA) return false;

@@ -541,13 +541,20 @@ export function startPlainGame(playerCount: number, roomNum = 1): FakePlayer[] {
  *
  * 검증하려는 직업은 테스트가 직접 앉힌다. ROLE_REVEAL 단계에서만
  * 의미가 있다(밤·투표 화면은 그 뒤에 열리므로 바뀐 직업을 본다).
+ *
+ * roles[k]는 **k+1번 좌석**이 받는다. room.seats의 배열 순서가 아니다 —
+ * 그 순서는 참가 처리 순서라 좌석 번호와 어긋날 수 있고, 실제로 어긋났다.
+ * 배열 순서로 앉히면 "1번 좌석이 마피아"라고 적은 테스트가 판마다 다른
+ * 좌석을 검사하게 되고, 우연히 맞는 판에서는 통과해버려 그 사실이
+ * 드러나지도 않는다.
  */
 export function castRoles(target: Room, roles: readonly Role[]): void {
 	if (roles.length > target.seats.length) {
 		throw new Error(`좌석이 ${target.seats.length}개인데 직업을 ${roles.length}개 주었습니다.`);
 	}
+	const byIndex = target.seats.slice().sort((a, b) => a.index - b.index);
 	for (let i = 0; i < roles.length; i++) {
-		assignRole(target.seats[i], target.seats[i].index, roles[i]);
+		assignRole(byIndex[i], byIndex[i].index, roles[i]);
 	}
 }
 

@@ -342,6 +342,39 @@ function notifyBlocked(
 }
 
 /**
+ * 마피아 팀이 남에게서 무언가를 캐내는 능력인가. 군인이 튕겨내는 대상이다.
+ *
+ * 진영이 아니라 능력 종류로 묻는다. 스파이는 접선 전까지 시민 팀이라
+ * `actor.team`으로 물으면 그냥 통과하는데, 접선 전 첩보야말로 군인이
+ * 막아야 할 바로 그것이다.
+ *
+ * 표로 두어 능력 종류를 늘리면 여기서 컴파일이 멈추게 한다. 함수 안에
+ * `kind === A || kind === B`로 적으면 새 캐내기 능력만 군인을 조용히
+ * 지나가고, 그 구멍은 화면에 아무 흔적도 남기지 않아 발견되지 않는다.
+ *
+ * 시민 편의 조사(경찰·점쟁이·사립탐정·영매)는 false다. 군인은 같은 편이
+ * 자신을 확인하는 것까지 막을 이유가 없고, 막으면 시민 편 정보직이 군인을
+ * 만날 때마다 밤 하나를 잃는다.
+ */
+const MAFIA_PROBE: Record<NightActionKind, boolean> = {
+	HEAL: false,
+	ATTACK: false,
+	INSPECT_TEAM: false,
+	INSPECT_ROLE: true,
+	SCOOP: false,
+	INSPECT_ABILITY: false,
+	NOTE: false,
+	SEDUCE: false,
+	INTIMIDATE: false,
+	STEAL: true,
+	TRACK: false,
+	MARK: false,
+	STALK: false,
+	SEANCE: false,
+	REVIVE: false,
+};
+
+/**
  * 이 능력이 대상에 남기는 흔적. 정산이 나중에 읽는다.
  *
  * 돌려주는 값은 "능력을 실제로 썼는가"다. 사용 횟수를 이 값으로 센다 —
@@ -372,6 +405,33 @@ function apply(
 	// 그래도 타입에는 null이 남아 있으니, 걷어내야 아래 switch가 "종류 전부를
 	// 덮는가"라는 질문이 된다. default가 있던 유일한 이유가 이 null이었다.
 	if (kind === null) return false;
+
+	// 군인은 캐내는 능력을 튕겨내고 누가 왔는지 알아낸다. 두 능력(첩보·도벽)의
+	// 공통 규칙이라 switch 가지 안에 나눠 적지 않는다 — 나눠 적으면 한쪽만
+	// 고쳐진 채로 오래 간다.
+	//
+	// 대상 쪽은 roleDef로 읽는다. effectiveDef(target)로 읽으면 군인의 능력을
+	// 훔친 도둑까지 조사에 면역이 되고, 반대로 남의 능력을 든 군인은 뚫린다.
+	// 튕겨내는 것은 그날 밤 쓰는 능력이 아니라 직업 자체의 성질이다.
+	//
+	// 방탄(armored)은 건드리지 않는다. 같은 직업의 능력이지만 자원이 다르다 —
+	// 조사를 튕긴 밤에 방탄까지 닳으면 그날 밤 마피아가 도둑 하나로 군인의
+	// 갑옷을 공짜로 벗기는 길이 열린다.
+	if (MAFIA_PROBE[kind] && roleDef(target.role).deflectsMafiaProbe === true) {
+		ledger.reveals.push({
+			seat: target.index,
+			line: `🪖 ${actor.index}번 참가자가 당신을 캐내려 했습니다.\n튕겨냈습니다.`,
+		});
+		ledger.reveals.push({
+			seat: actor.index,
+			line: `🪖 ${target.index}번 참가자에게 튕겨났습니다.\n아무것도 알아내지 못했습니다.`,
+		});
+		// 조사가 성립하지 않았으므로 ledger.inspected에는 넣지 않는다.
+		// 반면 true를 돌려주는 것은 맞다 — 그 밤의 능력은 이미 썼다. false로
+		// 하면 도둑이 군인을 공짜로 찾아내는 탐지기가 되고, 1회성 능력이라면
+		// 튕길 때마다 무한히 재시도할 수 있다
+		return true;
+	}
 
 	switch (kind) {
 		case NightActionKind.HEAL:
@@ -407,8 +467,11 @@ function apply(
 				// 스파이의 접선 방법이 곧 이 조사다. team만 바꾸고 여기를 빠뜨리면
 				// countsForMafiaWin이 계속 거짓이라, 합류한 스파이가 승리 판정에서
 				// 영원히 시민 쪽 무게로 남는다 — 배신하고도 상대 편을 돕는 셈이다.
-				// 밀담이 이미 열려 있어(inMafiaChat은 nightChat만 보고 통과시킨다)
-				// 화면상으로는 아무 이상이 없기 때문에 눈에 띄지 않는다
+				// 이 줄을 빠뜨려도 밀담은 열린다. inMafiaChat은 팀부터 보고
+				// 그 다음 nightChat을 보는데, 스파이는 정의에 밀담을 달고
+				// 있으므로 바로 윗줄이 팀을 바꾼 것만으로 둘째 줄에서 통과한다.
+				// contacted는 셋째 줄(짐승인간)에서만 쓰인다. 그래서 화면상으로는
+				// 아무 이상이 없고, 판이 끝나는 순간의 승리 판정에서만 어긋난다
 				actor.contacted = true;
 				ledger.defected.push(actor.index);
 				// 정확한 직업을 적는다. 위장은 팀 조사에만 통해야 하고, 직업을
@@ -552,6 +615,19 @@ function apply(
 			return true;
 
 		case NightActionKind.REVIVE:
+			// 살아 있는 사람은 되살릴 것이 없다. 성직자는 targetsDead라 화면에
+			// 무덤만 뜨지만, 도메인이 그것을 믿으면 안 된다 — 지목한 뒤에
+			// 늦게 도착한 메시지나 재접속으로 산 사람이 실려 올 수 있고,
+			// 그때 REVIVED 기록이 붙으면 도굴꾼의 wasRevived가 오염되고
+			// 판에 한 번뿐인 능력이 아무 일도 없이 사라진다.
+			// 그 밤에 죽은 사람은 허용한다 — REVIVE 단계가 DEATH 뒤에 서는
+			// 이유가 그것이고, seat.alive는 밤이 끝나야 내려간다
+			if (target.alive && ledger.killed.indexOf(target.index) < 0) return false;
+			// 이미 누가 되살렸다면 내 차례는 남는다. 성직자가 둘인 판은
+			// 드물지만 있다 — 도둑이 능력을 훔치거나 도굴꾼이 성직자를
+			// 파내면 그 밤에 둘이 같은 무덤을 열 수 있고, 그대로 두면
+			// 한 사람이 두 번 되살아난 것으로 기록된다
+			if (wasRevived(ledger, target)) return false;
 			// 성불한 혼령은 돌아오지 않는다. false를 돌려주어 횟수를 아낀다 —
 			// 성직자의 능력은 판에 한 번뿐이고, 헛짚었다고 잃으면 영매가
 			// 시민 편의 성직자를 실수로 봉인하는 사고가 판을 끝낸다
