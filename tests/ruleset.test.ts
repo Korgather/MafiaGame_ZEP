@@ -10,7 +10,13 @@ import { describe, it } from "node:test";
 
 import { GamePhase, Role } from "../src/types/Game.types.ts";
 import {
+	ALL_RULE_SETS,
 	BLITZ_RULES,
+	CLASSIC_RULES,
+	defaultRuleSet,
+	resolveRuleSet,
+	ruleSetById,
+	RuleSetId,
 	rulesForRoom,
 	SILENCE_RULES,
 	STANDARD_RULES,
@@ -142,11 +148,134 @@ describe("침묵전", () => {
 describe("방 배정", () => {
 	it("배정표대로 나뉜다", () => {
 		const expected = [
-			"standard", "standard", "standard", "standard", "standard",
+			"classic", "classic", "classic", "classic", "standard",
 			"blitz", "blitz", "silence",
 		];
 		for (let num = 1; num <= ROOM_COUNT; num++) {
 			assert.equal(rulesForRoom(num).id, expected[num - 1], `${num}번 방`);
+		}
+	});
+
+	it("방 절반이 기본 모드다", () => {
+		// 방 번호가 이 프로젝트의 모드 선택 화면이다. 기본 모드를 바꾼다는 것은
+		// "아무 방이나 들어갔을 때 무엇이 나오는가"를 바꾸는 것이므로, 배정표에
+		// 기본 모드가 다수여야 그 말이 사실이 된다
+		let defaults = 0;
+		for (let num = 1; num <= ROOM_COUNT; num++) {
+			if (rulesForRoom(num).id === defaultRuleSet().id) defaults++;
+		}
+		assert.ok(defaults * 2 >= ROOM_COUNT, `기본 모드 방 ${defaults}개 / 전체 ${ROOM_COUNT}개`);
+	});
+
+	it("배정표 밖의 번호도 기본 모드로 간다", () => {
+		// createRoom은 1~ROOM_COUNT로만 부르지만, 이 함수는 그것을 모른다.
+		// 범위 밖에 답이 없으면 undefined가 room.ruleSet에 들어가 그 방의
+		// 모든 타이머와 배정이 한꺼번에 죽는다
+		for (const num of [-1, 0, ROOM_COUNT + 1, 999]) {
+			assert.equal(rulesForRoom(num).id, defaultRuleSet().id, `${num}번 방`);
+		}
+	});
+});
+
+describe("모드 결정", () => {
+	it("기본 모드는 클래식이다", () => {
+		assert.equal(defaultRuleSet().id, RuleSetId.CLASSIC);
+		assert.equal(defaultRuleSet(), CLASSIC_RULES);
+	});
+
+	it("id 상수와 리터럴의 id가 같다", () => {
+		// 상수를 두는 목적이 오타 방지인데 상수 자체가 리터럴과 어긋나면
+		// ruleSetById가 영원히 null을 돌려주고 전부 기본 모드로 흘러간다
+		assert.equal(CLASSIC_RULES.id, RuleSetId.CLASSIC);
+		assert.equal(STANDARD_RULES.id, RuleSetId.STANDARD);
+		assert.equal(BLITZ_RULES.id, RuleSetId.BLITZ);
+		assert.equal(SILENCE_RULES.id, RuleSetId.SILENCE);
+	});
+
+	it("모든 모드가 목록에 있고 id가 겹치지 않는다", () => {
+		const ids = ALL_RULE_SETS.map(rules => rules.id);
+		assert.deepEqual(ids, ["classic", "standard", "blitz", "silence"]);
+		for (const id of ids) {
+			assert.equal(ids.filter(other => other === id).length, 1, `${id} 중복`);
+		}
+	});
+
+	it("id로 찾으면 그 모드가 나온다", () => {
+		for (const rules of ALL_RULE_SETS) {
+			assert.equal(ruleSetById(rules.id), rules, rules.id);
+		}
+		assert.equal(ruleSetById("clasic"), null);
+		assert.equal(ruleSetById(""), null);
+	});
+
+	it("유효한 지정은 기본 모드가 덮지 않는다", () => {
+		for (const rules of ALL_RULE_SETS) {
+			assert.equal(resolveRuleSet(rules.id), rules, rules.id);
+		}
+	});
+
+	it("지정이 없거나 모르는 값이면 기본 모드로 간다", () => {
+		assert.equal(resolveRuleSet(null), CLASSIC_RULES);
+		assert.equal(resolveRuleSet(undefined), CLASSIC_RULES);
+		assert.equal(resolveRuleSet(""), CLASSIC_RULES);
+		assert.equal(resolveRuleSet("clasic"), CLASSIC_RULES);
+		assert.equal(resolveRuleSet("랭크전"), CLASSIC_RULES);
+	});
+});
+
+describe("클래식", () => {
+	it("4~12인, 자유 채팅", () => {
+		assert.equal(CLASSIC_RULES.minPlayers, 4);
+		assert.equal(CLASSIC_RULES.maxPlayers, 12);
+		assert.equal(CLASSIC_RULES.chatMode, "free");
+		assert.equal(CLASSIC_RULES.displayName, "클래식");
+	});
+
+	it("시간표는 표준전과 같은 값을 참조한다", () => {
+		// 같은 숫자를 두 번 적으면 한쪽만 고쳐지는 날이 온다
+		assert.equal(CLASSIC_RULES.timing, STANDARD_RULES.timing);
+	});
+
+	it("첫 밤 무사는 6인까지다", () => {
+		// 원작 클래식은 첫 밤에도 죽는다. 4~6인만 예외로 둔다
+		assert.equal(CLASSIC_RULES.firstNightPeacefulUpTo, 6);
+	});
+
+	it("자경단원·점쟁이·사기꾼은 풀에 없다", () => {
+		const deck = CLASSIC_RULES.deck;
+		const pools = deck.leadPool
+			.concat(deck.mafiaPool)
+			.concat(deck.citizenRequired)
+			.concat(deck.citizenPool);
+		for (const role of [Role.VIGILANTE, Role.SEER, Role.CON_ARTIST]) {
+			assert.ok(pools.indexOf(role) < 0, `${role}이 클래식 풀에 있다`);
+		}
+	});
+
+	it("클래식 풀은 요청받은 열여덟 직업을 전부 담는다", () => {
+		const deck = CLASSIC_RULES.deck;
+		// 마피아 진영 다섯
+		assert.deepEqual(deck.leadPool, [Role.MAFIA]);
+		assert.deepEqual(deck.mafiaPool, [Role.SPY, Role.BEAST, Role.MADAM, Role.THIEF]);
+		// 시민 진영 중요 둘
+		assert.deepEqual(deck.citizenRequired, [Role.POLICE, Role.DOCTOR]);
+		// 시민 진영 특수 열. 평시민은 풀이 아니라 남는 자리로 들어간다
+		assert.deepEqual(deck.citizenPool, [
+			Role.SOLDIER, Role.POLITICIAN, Role.SHAMAN, Role.LOVER,
+			Role.THUG, Role.REPORTER, Role.DETECTIVE, Role.GRAVEDIGGER,
+			Role.TERRORIST, Role.PRIEST,
+		]);
+	});
+
+	it("연인만 짝 직업이다", () => {
+		assert.deepEqual(CLASSIC_RULES.deck.pairedRoles, [Role.LOVER]);
+	});
+
+	it("표를 쓰는 모드는 클래식뿐이다", () => {
+		// 다른 모드에 표가 생기면 그 모드의 mafiaTeamSize가 조용히 안 읽히게 된다
+		for (const rules of ALL_RULE_SETS) {
+			const hasRoster = rules.deck.roster !== null;
+			assert.equal(hasRoster, rules.id === RuleSetId.CLASSIC, rules.id);
 		}
 	});
 });

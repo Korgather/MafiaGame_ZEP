@@ -60,6 +60,32 @@ function makeSeat(index, role) {
 	};
 }
 
+/**
+ * GameFlow.pairLovers와 같은 일. 좌석 하나만 보는 makeSeat이 못 하는 몫이다.
+ *
+ * 짝을 안 맺으면 loverIndex가 0인 채로 남아 연인이 아무 일도 하지 않는다 —
+ * 동반 사망이 없으니 측정된 승률이 실제보다 시민 쪽으로 기운다. 클래식은
+ * 연인을 반드시 둘씩 뽑으므로 홀수 가지는 여기서 돌지 않지만, 표를 쓰지
+ * 않는 모드에서도 이 함수를 지나므로 그쪽 규칙(GameFlow)과 같게 적는다.
+ */
+function pairLovers(seats) {
+	const lovers = seats.filter(s => s.role === Role.LOVER);
+	let i = 0;
+	while (i + 1 < lovers.length) {
+		lovers[i].loverIndex = lovers[i + 1].index;
+		lovers[i + 1].loverIndex = lovers[i].index;
+		i += 2;
+	}
+	if (i < lovers.length) {
+		const odd = lovers[i];
+		const def = roleDef(Role.CITIZEN);
+		odd.role = Role.CITIZEN;
+		odd.team = def.team;
+		odd.contacted = startsContacted(Role.CITIZEN);
+		odd.armored = def.survivesFirstAttack === true;
+	}
+}
+
 function resetRound(seats) {
 	for (const s of seats) {
 		s.healed = false; s.blocked = false; s.attackedBy = []; s.scooped = false;
@@ -121,6 +147,7 @@ export function playGame(rules, playerCount, seed, model, opts) {
 	const rng = mulberry32(seed);
 	const deck = buildRoleDeck(rules.deck, playerCount, rng);
 	const seats = deck.map((r, i) => makeSeat(i + 1, r));
+	pairLovers(seats);
 	const alive = () => seats.filter(s => s.alive);
 	const byIdx = i => seats.find(s => s.index === i);
 

@@ -12,7 +12,8 @@ import { buildRoleDeck, mafiaCount } from "../src/domain/RoleAssignment.ts";
 import { isPeacefulNight } from "../src/domain/NightResolution.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { NightActionKind, ROLE_DEFS } from "../src/domain/Roles.ts";
-import { BLITZ_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
+import { BLITZ_RULES, CLASSIC_RULES, STANDARD_RULES } from "../src/domain/RuleSet.ts";
+import type { RosterEntry } from "../src/domain/RuleSet.ts";
 import {
 	CITIZENS_PER_NIGHT_KILL,
 	MAX_PLAYERS,
@@ -1006,5 +1007,317 @@ describe("첫 밤 무사", () => {
 	it("둘째 밤부터는 인원과 무관하게 죽는다", () => {
 		assert.equal(isPeacefulNight(2, MIN_PLAYERS, PEACEFUL_UP_TO), false);
 		assert.equal(isPeacefulNight(3, PEACEFUL_UP_TO, PEACEFUL_UP_TO), false);
+	});
+});
+
+/**
+ * 클래식 구성표.
+ *
+ * 표를 두기로 한 이유가 "인원별 구성을 코드를 실행하지 않고 읽는 것"이므로,
+ * 표가 스스로 모순되지 않는지는 값만 보고 확인할 수 있어야 한다. 앞의 네
+ * 테스트가 그 몫이고, 나머지는 표대로 덱이 나오는지를 실제로 뽑아서 본다.
+ */
+describe("클래식 구성표", () => {
+	const SPEC = CLASSIC_RULES.deck;
+	// roster는 표를 쓰지 않는 모드에서 null이다. 클래식에서 null이면 아래
+	// "표가 정원까지 빠짐없이 채워져 있다"가 먼저 걸린다
+	const TABLE: readonly RosterEntry[] = SPEC.roster === null ? [] : SPEC.roster;
+
+	/** 표가 그 인원에 준 자리 수 합계 */
+	function slotsOf(entry: RosterEntry): number {
+		return (
+			entry.mafia + entry.support +
+			(entry.police ? 1 : 0) + (entry.doctor ? 1 : 0) +
+			entry.special + entry.citizen
+		);
+	}
+
+	it("표가 정원까지 빠짐없이 채워져 있다", () => {
+		assert.notEqual(SPEC.roster, null);
+		// 인원을 그대로 첨자로 쓴다. 0인 줄부터 정원 줄까지 다 있어야
+		// rosterAt이 자를 일이 없다
+		assert.equal(TABLE.length, MAX_PLAYERS + 1);
+	});
+
+	it("여섯 칸의 합이 그 인원과 같다", () => {
+		for (const count of EVERY_COUNT) {
+			assert.equal(slotsOf(TABLE[count]), count, count + "인 구성표 합계");
+		}
+	});
+
+	it("요청으로 고정된 두 줄이 그대로다", () => {
+		// 8인 = 마피아2·보조1·경찰1·의사1·특수3
+		assert.deepEqual(TABLE[8], {
+			mafia: 2, support: 1, police: true, doctor: true, special: 3, citizen: 0,
+		});
+		// 12인 = 마피아3·보조1·경찰1·의사1·특수5·시민1
+		assert.deepEqual(TABLE[12], {
+			mafia: 3, support: 1, police: true, doctor: true, special: 5, citizen: 1,
+		});
+	});
+
+	it("mafiaTeamSize가 표의 마피아 진영 합과 어긋나지 않는다", () => {
+		// 표가 있는 모드에서 mafiaTeamSize는 읽히지 않는다. 그래도 값이 남아
+		// 있는 이상 거짓말은 하지 않아야 한다 — 표를 고치고 이쪽을 안 고치면
+		// 다음 사람이 인원표를 보고 틀린 답을 얻는다
+		for (let count = 0; count <= MAX_PLAYERS; count++) {
+			const entry = TABLE[count];
+			assert.equal(
+				mafiaCount(SPEC, count), entry.mafia + entry.support, count + "인"
+			);
+		}
+	});
+
+	it("경찰과 의사는 어느 인원에서도 빠지지 않는다", () => {
+		for (const count of EVERY_COUNT) {
+			assert.equal(TABLE[count].police, true, count + "인 경찰");
+			assert.equal(TABLE[count].doctor, true, count + "인 의사");
+		}
+	});
+
+	it("마피아 진영은 인원의 5분의 1에서 8분의 3 사이다", () => {
+		// 하한은 5인의 1명(20%), 상한은 8인의 3명(37.5%)이다. 두 끝 모두
+		// 요청으로 고정된 줄이거나 그 줄에서 한 칸 내려온 줄이라, 이 띠를
+		// 벗어나는 새 줄은 표를 고칠 때 눈에 띄어야 한다
+		for (const count of EVERY_COUNT) {
+			const entry = TABLE[count];
+			const side = entry.mafia + entry.support;
+			assert.ok(side * 5 >= count, count + "인: 마피아 진영이 5분의 1 미만");
+			assert.ok(side * 8 <= count * 3, count + "인: 마피아 진영이 너무 많다");
+		}
+	});
+
+	it("복수로 들어가는 자리는 마피아뿐이다", () => {
+		// 요구는 "마피아만 복수"다. mafia 칸은 Role.MAFIA로 고정이라 몇 장을
+		// 넣어도 같은 직업이지만, 보조에 두 자리를 주면 mafiaPool에서 서로
+		// 다른 두 직업이 나온다 — 그건 표가 아니라 뽑기가 정하는 판이 된다.
+		// 마피아가 없는 판은 아예 성립하지 않으므로 하한도 함께 본다
+		for (const count of EVERY_COUNT) {
+			assert.ok(TABLE[count].mafia >= 1, count + "인: 마피아가 없다");
+			assert.ok(
+				TABLE[count].support <= 1,
+				count + "인: 보조 " + TABLE[count].support + "자리"
+			);
+		}
+	});
+});
+
+describe("클래식 배정", () => {
+	const SPEC = CLASSIC_RULES.deck;
+	// roster는 표를 쓰지 않는 모드에서 null이다. 클래식에서 null이면 아래
+	// "표가 정원까지 빠짐없이 채워져 있다"가 먼저 걸린다
+	const TABLE: readonly RosterEntry[] = SPEC.roster === null ? [] : SPEC.roster;
+	const SEEDS = [1, 7, 42, 1234, 98765, 424242];
+
+	/**
+	 * 덱에서 마피아 진영 자리 수를 센다.
+	 *
+	 * team으로 세지 않는다 — 스파이는 team이 시민이면서 마피아 자리에서 나온다.
+	 * "직업"과 "팀 소속"은 다른 개념이고, 배정이 지키는 것은 자리 쪽이다.
+	 */
+	function mafiaSide(deck: readonly Role[]): number {
+		return deck.filter(
+			role => role === Role.MAFIA || SPEC.mafiaPool.indexOf(role) >= 0
+		).length;
+	}
+
+	function specialSide(deck: readonly Role[]): number {
+		return deck.filter(role => SPEC.citizenPool.indexOf(role) >= 0).length;
+	}
+
+	function countOf(deck: readonly Role[], role: Role): number {
+		return deck.filter(candidate => candidate === role).length;
+	}
+
+	it("덱 길이가 언제나 참가 인원과 같다", () => {
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				assert.equal(
+					buildRoleDeck(SPEC, count, rngFrom(seed)).length, count,
+					count + "인 시드 " + seed
+				);
+			}
+		}
+	});
+
+	it("마피아 진영 자리 수가 표와 정확히 같다", () => {
+		for (const count of EVERY_COUNT) {
+			const entry = TABLE[count];
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				assert.equal(
+					mafiaSide(deck), entry.mafia + entry.support,
+					count + "인 시드 " + seed
+				);
+			}
+		}
+	});
+
+	it("죽이는 마피아 수가 표와 정확히 같다", () => {
+		// 보조가 마피아로 메워져도 이 수는 늘어난다. 그런 판이 생기면 밤
+		// 사망자 수가 표보다 많아지므로 자리 수 합계만으로는 안 잡힌다
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				assert.equal(
+					countOf(deck, Role.MAFIA), TABLE[count].mafia,
+					count + "인 시드 " + seed
+				);
+			}
+		}
+	});
+
+	it("경찰과 의사가 정확히 하나씩 들어간다", () => {
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				assert.equal(countOf(deck, Role.POLICE), 1, count + "인 시드 " + seed + " 경찰");
+				assert.equal(countOf(deck, Role.DOCTOR), 1, count + "인 시드 " + seed + " 의사");
+			}
+		}
+	});
+
+	it("시민 특수 자리 수가 표와 같다", () => {
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				assert.equal(
+					specialSide(deck), TABLE[count].special, count + "인 시드 " + seed
+				);
+			}
+		}
+	});
+
+	it("밤에 따로 죽이는 직업은 예산 안에서만 나온다", () => {
+		// 밀담은 몇 명이 앉든 상의해서 한 명만 친다. 밀담 밖에서 죽이는
+		// 직업이 하나 늘 때마다 시체가 한 구 늘고, 그것을 감당할 수 있는지는
+		// 시민 자리 수가 정한다 — 비율 경로가 쓰는 것과 같은 잣대다.
+		//
+		// 표가 자리를 나눠 적는다고 이 계산이 면제되지 않는다. 표는 "보조
+		// 한 자리"라고만 적지 그 자리에 앉은 것이 짐승인간인지 마담인지
+		// 모르고, 밤 사망자 수를 가르는 것은 그 차이다
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				const solo = deck.filter(role => {
+					const def = ROLE_DEFS[role];
+					if (def.nightAction === NightActionKind.STALK) return true;
+					return (
+						def.nightAction === NightActionKind.ATTACK &&
+						def.nightChat !== ChatChannel.MAFIA
+					);
+				}).length;
+				const citizens = count - mafiaSide(deck);
+				const budget = Math.max(1, Math.floor(citizens / CITIZENS_PER_NIGHT_KILL));
+				assert.ok(
+					1 + solo <= budget,
+					count + "인 시드 " + seed + ": 단독 " + solo + "명, 예산 " + budget
+				);
+			}
+		}
+	});
+
+	it("연인은 없거나 정확히 둘이다", () => {
+		// 반쪽 연인은 조용하다 — 채널도 안 열리고 동반 사망도 안 한다.
+		// 덱에서 막지 못하면 GameFlow의 pairLovers가 시민으로 되돌린다
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const lovers = countOf(buildRoleDeck(SPEC, count, rngFrom(seed)), Role.LOVER);
+				assert.ok(
+					lovers === 0 || lovers === 2,
+					count + "인 시드 " + seed + ": 연인 " + lovers + "명"
+				);
+			}
+		}
+	});
+
+	it("특수 자리가 하나뿐인 인원에는 연인이 들어가지 않는다", () => {
+		// 자리를 둘 먹는데 한 칸만 남았으면 뽑지 않고 다음 후보로 넘어간다.
+		// 여기서 멈추면 남은 칸이 평민으로 흘러가 특수 자리 수가 어긋난다
+		for (const count of EVERY_COUNT) {
+			if (TABLE[count].special !== 1) continue;
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				assert.equal(countOf(deck, Role.LOVER), 0, count + "인 시드 " + seed);
+				assert.equal(specialSide(deck), 1, count + "인 시드 " + seed + " 특수 자리");
+			}
+		}
+	});
+
+	it("클래식 밖의 직업은 어느 시드에서도 나오지 않는다", () => {
+		// 자경단원·점쟁이·사기꾼은 원작 클래식에 없다. 풀에서 뺐다고 끝이
+		// 아니라, 메움패가 도는 경로로도 들어오지 않아야 한다
+		const banned = [Role.VIGILANTE, Role.SEER, Role.CON_ARTIST];
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				for (const role of banned) {
+					assert.equal(countOf(deck, role), 0, count + "인 시드 " + seed + ": " + role);
+				}
+			}
+		}
+	});
+
+	it("직업은 마피아와 연인을 빼면 판에 하나씩만 나온다", () => {
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				for (const role of deck) {
+					if (role === Role.MAFIA || role === Role.CITIZEN || role === Role.LOVER) continue;
+					assert.equal(
+						countOf(deck, role), 1, count + "인 시드 " + seed + ": " + role + " 중복"
+					);
+				}
+			}
+		}
+	});
+
+	it("도굴꾼과 성직자는 같은 판에 들어가지 않는다", () => {
+		// 둘 다 죽은 사람을 되살린다. 함께 있으면 밤마다 누군가 돌아와 판이 안 끝난다
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				const both = countOf(deck, Role.GRAVEDIGGER) > 0 && countOf(deck, Role.PRIEST) > 0;
+				assert.equal(both, false, count + "인 시드 " + seed);
+			}
+		}
+	});
+
+	it("인원 하한을 넘지 못한 직업은 나오지 않는다", () => {
+		for (const count of EVERY_COUNT) {
+			for (const seed of SEEDS) {
+				const deck = buildRoleDeck(SPEC, count, rngFrom(seed));
+				for (const role of deck) {
+					const floor = SPEC.minPlayers[role];
+					if (floor === undefined) continue;
+					assert.ok(
+						count >= floor,
+						count + "인 시드 " + seed + ": " + role + "(하한 " + floor + ")"
+					);
+				}
+			}
+		}
+	});
+
+	it("같은 시드는 같은 덱을 준다", () => {
+		for (const count of EVERY_COUNT) {
+			assert.deepEqual(
+				buildRoleDeck(SPEC, count, rngFrom(20260801)),
+				buildRoleDeck(SPEC, count, rngFrom(20260801)),
+				count + "인"
+			);
+		}
+	});
+
+	it("시드가 다르면 구성이 갈린다", () => {
+		// 표가 자리 수를 못 박아도 그 자리를 누가 채우는지는 매 판 달라야 한다.
+		// 갈리지 않으면 표를 도입하면서 판의 다양성을 잃은 것이다
+		const seen: string[] = [];
+		for (let seed = 1; seed <= 40; seed++) {
+			const deck = buildRoleDeck(SPEC, 8, rngFrom(seed)).slice().sort();
+			const key = deck.join(",");
+			if (seen.indexOf(key) < 0) seen.push(key);
+		}
+		assert.ok(seen.length >= 5, "8인 40시드에서 구성이 " + seen.length + "가지뿐");
 	});
 });

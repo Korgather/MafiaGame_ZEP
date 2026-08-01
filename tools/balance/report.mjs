@@ -12,7 +12,7 @@
  * n은 인원당 반복 횟수(기본 4000). 결과 해석은 docs/design/balance-review.md.
  */
 import { Role, Team } from "../../src/types/Game.types.ts";
-import { STANDARD_RULES, BLITZ_RULES, SILENCE_RULES } from "../../src/domain/RuleSet.ts";
+import { CLASSIC_RULES, STANDARD_RULES, BLITZ_RULES, SILENCE_RULES } from "../../src/domain/RuleSet.ts";
 import { roleDef, ROLE_DEFS } from "../../src/domain/Roles.ts";
 import { ChatChannel } from "../../src/domain/chat/ChatChannel.ts";
 import { playGame, deckFor, seedOf } from "./engine.mjs";
@@ -49,6 +49,7 @@ function rows(sets, lo, hi, model, pad) {
 /* ---------- win: 네 모델을 나란히 ---------- */
 function win() {
 	for (const [label, rules, lo, hi] of [
+		["클래식", CLASSIC_RULES, 4, 12],
 		["표준전", STANDARD_RULES, 4, 12],
 		["속도전", BLITZ_RULES, 4, 8],
 		["침묵전", SILENCE_RULES, 8, 12],

@@ -18,7 +18,7 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
-import { GamePhase } from "../types/Game.types.ts";
+import { GamePhase, Role } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
 import { newSeed, seededRng } from "../domain/Rng.ts";
@@ -321,6 +321,31 @@ function newGameId(room: Room): string {
 }
 
 /**
+ * 연인 좌석끼리 서로를 적는다. 배정 직후에 한 번만 돈다.
+ *
+ * assignRole은 좌석 하나만 보므로 이 일을 할 수 없다(Room.ts의 주석). 두
+ * 좌석을 함께 보는 자리가 여기다.
+ *
+ * 덱은 연인을 반드시 짝수로 준다 — RuleSet의 pairedRoles가 그 직업에 자리를
+ * 둘씩 주고, 남은 자리가 하나뿐이면 아예 뽑지 않는다. 그런데도 홀수를 다루는
+ * 이유는 짝 없는 연인이 조용하기 때문이다: 연인 채널이 열리지 않고(loverIndex가
+ * 0이라 ChatService가 끈다), 죽어도 아무도 따라 죽지 않는다(Death.ts가 0에서
+ * 돌아선다). 화면에는 「연인」이라고 적힌 채 아무 일도 일어나지 않아서, 그 판을
+ * 한 사람은 능력 없는 시민으로 보내고 아무도 그것을 모른다. 차라리 시민으로
+ * 되돌려 이름과 실제를 맞춘다.
+ */
+function pairLovers(room: Room): void {
+	const lovers = room.seats.filter(seat => seat.role === Role.LOVER);
+	let i = 0;
+	while (i + 1 < lovers.length) {
+		lovers[i].loverIndex = lovers[i + 1].index;
+		lovers[i + 1].loverIndex = lovers[i].index;
+		i += 2;
+	}
+	if (i < lovers.length) assignRole(lovers[i], lovers[i].index, Role.CITIZEN);
+}
+
+/**
  * 게임 시작: 자리와 직업을 정하고 직업 카드를 띄운다.
  *
  * 기존 STATE_READY는 이 일을 하면서 room.players 배열 자체를 섞었다.
@@ -352,6 +377,7 @@ function beginGame(room: Room): void {
 	for (let i = 0; i < room.seats.length; i++) {
 		assignRole(room.seats[i], i + 1, deck[i]);
 	}
+	pairLovers(room);
 
 	// 컷을 먼저 건다. playCut이 phaseTimer를 컷 길이만큼 늘리므로, 아래에서
 	// 카드에 실어 보내는 남은 시간이 늘어난 값이어야 서버와 화면이 같은 시계를 본다.

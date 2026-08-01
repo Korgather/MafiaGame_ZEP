@@ -14,7 +14,7 @@ import {
 } from "../constants/GameConfig.ts";
 import { ChatChannel } from "./chat/ChatChannel.ts";
 import { NightActionKind, roleDef } from "./Roles.ts";
-import type { DeckSpec } from "./RuleSet.ts";
+import type { DeckSpec, RosterEntry } from "./RuleSet.ts";
 
 /** Fisher-Yates. rng를 주입할 수 있어 테스트에서 결정적으로 돌릴 수 있다 */
 export function shuffle<T>(array: T[], rng: () => number = Math.random): T[] {
@@ -165,6 +165,131 @@ function mafiaFiller(spec: DeckSpec, playerCount: number, taken: readonly Role[]
 }
 
 /**
+ * 표에서 그 인원의 줄을 읽는다.
+ *
+ * 정원 밖은 마지막 칸으로 자른다 — mafiaCount와 같은 판단이고, 같은 이유다.
+ * 음수는 첫 칸으로 보낸다. 둘 다 실제 판에서는 닿지 않지만, 표를 벗어난
+ * 인원에 답이 없으면 undefined가 아래 여섯 칸 읽기로 그대로 흘러간다.
+ */
+function rosterAt(table: readonly RosterEntry[], playerCount: number): RosterEntry {
+	const last = table.length - 1;
+	const clamped = playerCount > last ? last : playerCount;
+	return table[clamped < 0 ? 0 : clamped];
+}
+
+/**
+ * 자리 수를 지키면서 뽑는다. 짝 직업(spec.pairedRoles)은 자리를 둘 먹는다.
+ *
+ * drawExclusive와 갈리는 지점은 하나다: 여기는 "몇 개를 뽑는가"가 아니라
+ * "자리 몇 칸을 채우는가"를 센다. 연인처럼 반드시 둘이어야 하는 직업이
+ * 있으면 그 둘은 개수 하나가 아니라 칸 둘이기 때문이다.
+ *
+ * 남은 칸이 하나뿐인데 짝 직업이 뽑히면 그 직업을 버리고 다음 후보로 간다.
+ * 거기서 멈추면 남은 한 칸이 평민으로 흘러가 표의 특수 자리 수가 어긋난다.
+ */
+function drawPaired(
+	pool: readonly Role[],
+	slots: number,
+	groups: readonly (readonly Role[])[],
+	paired: readonly Role[],
+	rng: () => number
+): Role[] {
+	if (slots <= 0) return [];
+	let remaining = shuffle(pool.slice(), rng);
+	const picked: Role[] = [];
+	while (picked.length < slots && remaining.length > 0) {
+		const role = remaining[0];
+		const cost = paired.indexOf(role) >= 0 ? 2 : 1;
+		if (picked.length + cost > slots) {
+			remaining = remaining.slice(1);
+			continue;
+		}
+		for (let i = 0; i < cost; i++) picked.push(role);
+		remaining = withoutRivals(remaining.slice(1), picked, groups);
+	}
+	return picked;
+}
+
+/**
+ * 인원별 구성표로 덱을 만든다.
+ *
+ * 자리 수는 표가 정하고, 그 자리를 누가 채우는지는 비율 경로와 똑같은 풀과
+ * 필터(인원 하한·배타)가 정한다. 그래서 클래식에 직업을 하나 더할 때
+ * 손댈 곳은 CLASSIC_RULES의 풀 배열 한 줄이지 이 함수가 아니다.
+ *
+ * 표를 어기는 방향은 한쪽뿐이다 — 마피아 진영 자리는 뽑기가 모자라면 마피아로
+ * 메워 반드시 채우고, 시민 특수 자리는 모자라면 평민이 받는다. 마피아가 한
+ * 명 적은 판은 승패 계산이 통째로 달라지지만, 능력자가 한 명 적고 평민이 한
+ * 명 많은 판은 여전히 성립하는 판이기 때문이다.
+ */
+function buildRosterDeck(
+	spec: DeckSpec,
+	table: readonly RosterEntry[],
+	playerCount: number,
+	rng: () => number
+): Role[] {
+	const entry = rosterAt(table, playerCount);
+	const roles: Role[] = [];
+	for (let i = 0; i < entry.mafia; i++) roles.push(Role.MAFIA);
+
+	/*
+	 * 보조는 mafiaPool에서. 리드 선정은 여기서 돌지 않는다 — 표가 이미
+	 * "죽이는 자리 몇, 보조 몇"을 나눠 적었으므로 누구를 리드로 세울지
+	 * 고를 일이 없다.
+	 *
+	 * 밤 사망자 예산은 돈다. 표가 나눠 적은 것은 자리이지 시체가 아니다 —
+	 * 밀담은 몇 명이 앉든 상의해서 한 명만 치고, 보조 자리에 밀담 밖에서
+	 * 죽이는 직업이 앉으면 그때 시체가 한 구 더 생긴다. 그 하나를 시민
+	 * 진영이 감당할 수 있는지는 표가 아니라 시민 자리 수가 정하므로,
+	 * 비율 경로와 같은 잣대를 그대로 쓴다.
+	 *
+	 * 예산이 하나뿐인 인원에서는 따로 죽이지 않는 직업 중에서만 뽑는다.
+	 * 리드가 마피아로 고정된 덕분에 비율 경로의 리드 검사에 해당하는 가지는
+	 * 필요 없다 — 밀담이 예산 하나를 쓰는 것이 언제나 참이다.
+	 */
+	const teamSize = entry.mafia + entry.support;
+	const budget = nightKillBudget(playerCount - teamSize);
+	const supportCandidates = budget > 1
+		? spec.mafiaPool
+		: spec.mafiaPool.filter(role => !killsIndependently(role));
+	const supportPool = withoutRivals(
+		allowedAt(supportCandidates, playerCount, spec.minPlayers),
+		roles,
+		spec.exclusiveGroups
+	);
+	for (const role of drawExclusive(supportPool, entry.support, spec.exclusiveGroups, rng)) {
+		roles.push(role);
+	}
+	if (roles.length < teamSize) {
+		const filler = mafiaFiller(spec, playerCount, roles);
+		while (roles.length < teamSize) roles.push(filler);
+	}
+
+	// 경찰·의사는 배타를 보지 않는다. citizenRequired가 그러는 것과 같은 이유로,
+	// 표가 "넣는다"고 적었으면 넣는다
+	if (entry.police) roles.push(Role.POLICE);
+	if (entry.doctor) roles.push(Role.DOCTOR);
+
+	const citizenPool = withoutRivals(
+		allowedAt(spec.citizenPool, playerCount, spec.minPlayers),
+		roles,
+		spec.exclusiveGroups
+	);
+	const specials = drawPaired(
+		citizenPool, entry.special, spec.exclusiveGroups, spec.pairedRoles, rng
+	);
+	for (const role of specials) roles.push(role);
+
+	while (roles.length < playerCount) roles.push(Role.CITIZEN);
+	// 표가 인원보다 많은 자리를 적은 경우(0~3인 칸을 읽었을 때)를 자른다.
+	// 넘치는 덱은 assignRole이 도는 좌석 수보다 길어 뒤쪽이 조용히 버려진다
+	const sized = roles.length > playerCount
+		? roles.slice(0, playerCount > 0 ? playerCount : 0)
+		: roles;
+	return shuffle(sized, rng);
+}
+
+/**
  * 인원수에 맞는 직업 목록을 섞어서 돌려준다.
  *
  * 기존에는 8칸짜리 고정 배열(ROLE_DECK)의 앞에서부터 잘라 쓰고 넘치면 시민을
@@ -174,14 +299,23 @@ function mafiaFiller(spec: DeckSpec, playerCount: number, taken: readonly Role[]
  *
  * 그래서 "반드시 있어야 하는 직업 + 매 판 뽑는 풀"로 나눴다. 직업을 하나 더
  * 추가할 때 이 파일에서 할 일은 풀 배열에 한 줄 넣는 것뿐이다.
- * (인원수별 구성표를 두는 길도 있었지만, 그쪽은 직업 하나를 추가할 때마다
- *  4~8명 다섯 줄을 전부 손봐야 해서 확장성에서 진다)
+ *
+ * 인원수별 구성표를 두는 길도 있었고, 그쪽은 직업 하나를 추가할 때마다 인원
+ * 줄을 전부 손봐야 해서 확장성에서 진다고 적어 두었었다. 클래식이 그 표를
+ * 요구하면서 판단을 모드별로 갈랐다 — 표는 자리 수만 적고 그 자리를 누가
+ * 채우는지는 여전히 풀이 정하므로, 직업 추가는 표가 있는 모드에서도 풀
+ * 배열 한 줄이다. 표가 사는 것은 "9인 판에 특수가 몇이야"에 코드를 실행하지
+ * 않고 답하는 능력이고, 그 대가로 인원마다 자리 수를 손으로 정해야 한다.
+ * spec.roster가 그 갈림길이다(있으면 표, 없으면 아래 비율·예산).
  */
 export function buildRoleDeck(
 	spec: DeckSpec,
 	playerCount: number,
 	rng: () => number = Math.random
 ): Role[] {
+	// 표가 있으면 표가 이긴다. 아래의 mafiaTeamSize와 비율 계산은 읽히지 않는다
+	if (spec.roster !== null) return buildRosterDeck(spec, spec.roster, playerCount, rng);
+
 	const teamSize = mafiaCount(spec, playerCount);
 	const citizenSlots = playerCount - teamSize;
 	const budget = nightKillBudget(citizenSlots);

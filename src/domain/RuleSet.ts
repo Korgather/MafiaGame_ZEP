@@ -13,6 +13,7 @@
  * 인원별 값은 배열로 적는다 — 표는 눈으로 읽힌다.
  */
 import { Role } from "../types/Game.types.ts";
+import { ROOM_COUNT } from "../constants/GameConfig.ts";
 
 export interface Timing {
 	/** 전원 준비 완료 후 게임 시작까지(초) */
@@ -69,6 +70,32 @@ export interface Timing {
 	readonly TICK_TOCK_AT: number;
 }
 
+/**
+ * 인원 하나에 대한 직업 구성표 한 줄.
+ *
+ * DeckSpec의 비율·예산 규칙은 "직업 하나를 추가해도 표를 안 고쳐도 된다"는
+ * 확장성을 산다. 대신 어느 인원에서 무엇이 몇 개 나오는지는 돌려 봐야 안다.
+ * 클래식은 반대쪽을 산다 — 인원마다 무엇이 몇 개인지 눈으로 읽히고, 대신
+ * 직업 하나를 더할 때 풀만 늘리면 되도록 자리 수와 후보를 분리했다.
+ * (자리 수는 여기, 그 자리를 누가 채우는지는 DeckSpec의 풀이 정한다)
+ *
+ * 여섯 값의 합이 그 인원과 정확히 같아야 한다 — tests/deck.test.ts가 강제한다.
+ */
+export interface RosterEntry {
+	/** Role.MAFIA 고정. 밤마다 사람을 죽이는 자리 */
+	readonly mafia: number;
+	/** 마피아 진영 보조. mafiaPool에서 뽑는다(스파이·짐승인간·마담·도둑) */
+	readonly support: number;
+	/** 경찰 한 자리를 넣는가 */
+	readonly police: boolean;
+	/** 의사 한 자리를 넣는가 */
+	readonly doctor: boolean;
+	/** 시민 진영 특수. citizenPool에서 뽑는다 */
+	readonly special: number;
+	/** 아무 능력 없는 시민(Role.CITIZEN) */
+	readonly citizen: number;
+}
+
 export interface DeckSpec {
 	/**
 	 * 참가 인원별 마피아 진영 인원. index가 곧 참가 인원이다.
@@ -122,6 +149,29 @@ export interface DeckSpec {
 	 * "적히지 않은 직업"을 코드가 다룰 수 있다.
 	 */
 	readonly minPlayers: Partial<Record<Role, number>>;
+	/**
+	 * 인원별 명시 구성표. index가 곧 참가 인원이다.
+	 *
+	 * null이면 위의 비율·예산 규칙(mafiaTeamSize + 시민 특수 비율)으로 뽑는다.
+	 * 값이 있으면 그쪽이 이기고 mafiaTeamSize는 읽히지 않는다 — 같은 사실을
+	 * 두 곳에 적지 않으려고 표가 있는 모드는 mafiaTeamSize를 표에서 베껴 온
+	 * 값으로 채우고, tests/deck.test.ts가 두 표현이 어긋나면 걸리게 해 둔다.
+	 *
+	 * 인원수 조건문을 코드에 흩는 대신 표 하나로 모은 이유가 이것이다.
+	 * "9인 판에 특수가 몇이야"를 코드를 읽어서 답하지 않고 줄 하나를 본다.
+	 */
+	readonly roster: readonly RosterEntry[] | null;
+	/**
+	 * 반드시 짝수로 들어가는 직업.
+	 *
+	 * 연인은 서로를 아는 두 사람이라 한 명만 뽑히면 직업 자체가 성립하지
+	 * 않는다. 여기 적힌 직업은 자리를 둘 먹으므로, 남은 자리가 하나뿐인
+	 * 순간에는 뽑히지 않고 다음 후보로 넘어간다.
+	 *
+	 * roster 경로에서만 쓴다. 비율 경로(buildRoleDeck)는 자리 수가 뽑기
+	 * 도중에 정해져서 "둘을 넣을 자리가 있는가"를 물을 지점이 없다.
+	 */
+	readonly pairedRoles: readonly Role[];
 }
 
 /** 낮에 자유롭게 말할 수 있는가, 준비된 문구만 쓸 수 있는가 */
@@ -288,6 +338,9 @@ export const STANDARD_RULES: RuleSet = {
 		//   미만 덱에 나오지 않는다」가, 위쪽은 「건달은 8인 이상에서 실제로
 		//   나온다」가 잡는다
 		minPlayers: { BEAST: 6, CON_ARTIST: 7, SHAMAN: 8, REPORTER: 11, SEER: 6, THUG: 8 },
+		// 표준전은 비율·예산으로 뽑는다. 표를 쓰는 모드는 클래식 하나다
+		roster: null,
+		pairedRoles: [],
 	},
 	firstNightPeacefulUpTo: 8,
 	minPlayers: 4,
@@ -327,6 +380,8 @@ export const BLITZ_RULES: RuleSet = {
 		citizenPool: [Role.SOLDIER],
 		exclusiveGroups: [],
 		minPlayers: {},
+		roster: null,
+		pairedRoles: [],
 	},
 	firstNightPeacefulUpTo: 8,
 	minPlayers: 4,
@@ -361,15 +416,211 @@ export const SILENCE_RULES: RuleSet = {
 };
 
 /**
+ * 클래식 인원별 구성표. index가 곧 참가 인원이다.
+ *
+ * 두 줄은 요청으로 못 박혔다 — 8인은 마피아2·보조1·경찰1·의사1·특수3,
+ * 12인은 마피아3·보조1·경찰1·의사1·특수5·시민1. 나머지 아홉 줄은 원작에서
+ * 확인하지 못했으므로 **현재 프로젝트에 맞춘 밸런스**이며, 아래 세 규칙으로
+ * 그 두 줄 사이를 채웠다.
+ *
+ *   1. 경찰과 의사는 어느 인원에서도 빠지지 않는다. 둘이 없으면 시민에게
+ *      확정 정보가 하나도 없어 토론이 지목 순서 싸움이 된다.
+ *   2. 마피아 진영(mafia + support)은 전체의 1/5~3/8 사이. 두 끝은 고정된
+ *      줄이 정한 것이다 — 아래로는 5인의 1명(20%), 위로는 8인의 3명(37.5%).
+ *      mafia 칸이 몇이든 밀담은 상의해서 하룻밤에 하나만 치므로, 이 비율이
+ *      정하는 것은 밤 사망자 수가 아니라 "낮에 몇 명을 찾아내야 하는가"다.
+ *   3. 보조는 6인부터 넣는다. 5인 이하에서 마피아 진영이 둘이 되면 첫 투표
+ *      한 번을 틀리는 순간 인원이 같아진다.
+ *
+ * 각 줄은 tools/balance/report.mjs의 시뮬레이터로 후보를 나란히 돌려 골랐다.
+ * 아래 주석의 백분율은 전부 "조사공유" 모델(시민이 경찰·영매 결과를 낮에
+ * 공유하고 그대로 믿는 판)의 시민 승률이고, 고정된 두 줄이 각각 35%·43%다.
+ *
+ * 0~3번 칸은 게임이 성립하지 않는 인원이라 읽힐 일이 없지만, 만에 하나
+ * 읽혔을 때 마피아 0명 판이 되지 않도록 4인 구성을 반복해 둔다
+ * (mafiaTeamSize 주석과 같은 이유다).
+ */
+const CLASSIC_ROSTER: readonly RosterEntry[] = [
+	// 0~3인: 성립하지 않는 인원. 4인 줄을 반복해 빈칸을 남기지 않는다
+	{ mafia: 1, support: 0, police: true, doctor: true, special: 1, citizen: 0 },
+	{ mafia: 1, support: 0, police: true, doctor: true, special: 1, citizen: 0 },
+	{ mafia: 1, support: 0, police: true, doctor: true, special: 1, citizen: 0 },
+	{ mafia: 1, support: 0, police: true, doctor: true, special: 1, citizen: 0 },
+	// 4인: 마피아1 시민3(77%). 아무 능력 없는 시민을 두지 않는다 — 넷뿐인
+	//      판에서 할 일 없는 자리가 생기면 그 사람의 판이 통째로 비어 버린다.
+	//      진영을 둘로 늘리는 선택지는 없다. 넷 중 둘이 마피아면 첫 밤에 끝난다
+	{ mafia: 1, support: 0, police: true, doctor: true, special: 1, citizen: 0 },
+	// 5인: 특수를 늘리는 대신 평시민을 넣는다(87%). 능력자만 있는 판은 경찰
+	//      조사가 매번 무언가에 걸려서 "아무것도 아닌 사람"이라는 판단이
+	//      사라진다. 특수를 둘로 늘린 88%와 차이가 없어 판단 쪽을 골랐다
+	{ mafia: 1, support: 0, police: true, doctor: true, special: 1, citizen: 1 },
+	// 6인: 보조가 처음 등장한다(44%). 여기서부터 마피아 진영에 대화 상대가
+	//      생긴다. 진영을 하나로 두면 84%까지 올라 시민이 거의 진다고 보기
+	//      어려워진다 — 4·5인의 높은 승률은 그 인원에서 달리 둘 수가 없어서지
+	//      의도한 값이 아니므로, 둘 수 있게 되는 6인부터 띠 안으로 들어온다
+	{ mafia: 1, support: 1, police: true, doctor: true, special: 1, citizen: 1 },
+	// 7인: 둘째 마피아를 넣으면서 보조를 뺀다(53%). 후보 중 가장 낮아
+	//      8인(35%)으로 가는 계단이 제일 완만하다. 마피아 칸을 하나로 되돌린
+	//      구성은 57%로, 여기서 진영 구성을 되돌리면 8인에서 낙차가 커진다
+	{ mafia: 2, support: 0, police: true, doctor: true, special: 2, citizen: 1 },
+	// 8인: 요청으로 고정된 구성(35%)
+	{ mafia: 2, support: 1, police: true, doctor: true, special: 3, citizen: 0 },
+	// 9인: 8인에 평시민 하나를 더한 모양(42%). 그 자리를 특수로 채우면 46%로
+	//      올라가지만, 인원이 늘 때마다 능력자만 늘면 평시민이 사라진다
+	{ mafia: 2, support: 1, police: true, doctor: true, special: 3, citizen: 1 },
+	// 10인: 진영을 그대로 두고 특수만 하나 늘린다(54%). 여기서 진영을 넷으로
+	//       올리면 29%로 떨어져 8인보다 시민이 불리해진다
+	{ mafia: 2, support: 1, police: true, doctor: true, special: 4, citizen: 1 },
+	// 11인: 넷째 마피아 자리(39%). 평시민을 특수로 바꿔 진영이 넷으로 늘어난
+	//       몫을 정보로 갚는다 — 평시민을 남기면 34%로 표 전체 최저가 된다.
+	//       진영을 셋으로 유지하는 구성은 57%로 12인(43%)보다 높아진다
+	{ mafia: 3, support: 1, police: true, doctor: true, special: 5, citizen: 0 },
+	// 12인: 요청으로 고정된 구성(43%)
+	{ mafia: 3, support: 1, police: true, doctor: true, special: 5, citizen: 1 },
+];
+
+/**
+ * 클래식. 기본 모드다.
+ *
+ * 마피아42의 「클래식」을 이 프로젝트의 규칙으로 옮긴 것이다. 원작에서
+ * 가져오지 않은 것을 먼저 적는다 — 추리덱·카드스킬·듀얼스킬·장착특성을
+ * 쓰지 않고, 교주 모드와 랭크·무효경기도 없다. 남은 것은 직업의 기본 능력
+ * 하나씩이고, 그것만으로 판이 돌아가는지를 보는 모드다.
+ *
+ * 표준전과 갈리는 지점은 셋이다.
+ *   - 배정이 표(roster)로 정해진다. 어느 인원에서 무엇이 몇 개인지 눈으로 읽힌다
+ *   - 마피아 진영 보조가 넷이다(스파이·짐승인간·마담·도둑). 표준전의
+ *     사기꾼은 클래식 풀에 없다 — 원작 클래식에 없는 직업이다
+ *   - 시민 특수가 열이다. 자경단원과 점쟁이는 같은 이유로 빠졌다
+ *
+ * 첫 밤 무사 문턱이 표준전(8)보다 낮은 6인 이유: 원작 클래식은 첫 밤에도
+ * 사람이 죽는다. 그 규칙을 그대로 받되 4~6인만 예외로 둔다. 그 인원에서
+ * 첫 밤 사망은 정보가 아니라 손실이고(죽은 사람은 한 마디도 못 했다),
+ * 7인이면 죽어도 토론할 사람이 여섯 남는다.
+ *
+ * 시간표는 표준전과 같은 값을 참조한다. 두 모드 모두 마피아42의 시간표를
+ * 쓰기로 한 이상 같은 숫자를 두 번 적으면 한쪽만 고쳐지는 날이 온다.
+ */
+export const CLASSIC_RULES: RuleSet = {
+	id: "classic",
+	displayName: "클래식",
+	summary: "기본 모드. 4~12명, 직업 스물하나",
+	timing: STANDARD_RULES.timing,
+	deck: {
+		// roster가 있으므로 배정은 이 값을 읽지 않는다. 표의 mafia + support를
+		// 그대로 베낀 값이고, 어긋나면 tests/deck.test.ts가 걸어 준다
+		mafiaTeamSize: [1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 4, 4],
+		// 죽이는 자리는 언제나 마피아다. 짐승인간은 접선 전까지 아무도 못 물어서
+		// 리드로 세우면 첫 밤이 통째로 비는 판이 생긴다 — 보조 자리에만 둔다
+		leadPool: [Role.MAFIA],
+		mafiaPool: [Role.SPY, Role.BEAST, Role.MADAM, Role.THIEF],
+		citizenRequired: [Role.POLICE, Role.DOCTOR],
+		citizenPool: [
+			Role.SOLDIER, Role.POLITICIAN, Role.SHAMAN, Role.LOVER,
+			Role.THUG, Role.REPORTER, Role.DETECTIVE, Role.GRAVEDIGGER,
+			Role.TERRORIST, Role.PRIEST,
+		],
+		// 도굴꾼과 성직자는 둘 다 죽은 사람을 되살린다. 한 판에 같이 들어가면
+		// 밤마다 누군가 돌아와 판이 끝나지 않는다
+		exclusiveGroups: [[Role.GRAVEDIGGER, Role.PRIEST]],
+		minPlayers: {
+			// 접선해야 일을 시작하는 둘. 6인 판에서는 접선할 상대를 찾기 전에
+			// 판이 끝나서, 마피아 진영의 한 자리가 통째로 놀게 된다
+			SPY: 7, BEAST: 7,
+			// 죽은 사람이 있어야 성립하는 직업들
+			SHAMAN: 8, GRAVEDIGGER: 8, PRIEST: 8,
+			// 자리를 둘 먹는다. 특수가 하나뿐인 인원에서는 들어갈 곳이 없다
+			LOVER: 6,
+			// 남의 낮 한 번을 통째로 지우는 능력이라 소인원에서 너무 무겁다
+			THUG: 8,
+			// 판이 길어야 쓸 자리가 나오는 일회성 능력
+			REPORTER: 9, TERRORIST: 7,
+		},
+		roster: CLASSIC_ROSTER,
+		pairedRoles: [Role.LOVER],
+	},
+	firstNightPeacefulUpTo: 6,
+	minPlayers: 4,
+	maxPlayers: 12,
+	chatMode: "free",
+};
+
+/**
+ * 코드가 모드를 가리킬 때 쓰는 이름.
+ *
+ * 문자열 리터럴을 그대로 쓰면 "clasic" 한 글자가 조용히 기본 모드
+ * fallback으로 흘러가고, 그 판은 아무 오류 없이 다른 규칙으로 돌아간다.
+ */
+export const RuleSetId = {
+	CLASSIC: "classic",
+	STANDARD: "standard",
+	BLITZ: "blitz",
+	SILENCE: "silence",
+} as const;
+export type RuleSetId = (typeof RuleSetId)[keyof typeof RuleSetId];
+
+/**
+ * 존재하는 모드 전부. id로 찾을 때와 목록을 보여 줄 때 모두 이 배열을 읽는다.
+ *
+ * 모드를 추가하면 여기에 넣어야 ruleSetById가 찾는다. 넣지 않으면 그 모드는
+ * 방 배정표로만 닿을 수 있고, id로 지정한 요청은 조용히 기본 모드가 된다.
+ */
+export const ALL_RULE_SETS: readonly RuleSet[] = [
+	CLASSIC_RULES, STANDARD_RULES, BLITZ_RULES, SILENCE_RULES,
+];
+
+/**
+ * 모드를 지정하지 않았을 때 무엇으로 하는가 — 이 프로젝트에서 그 답은
+ * 여기 한 곳에만 있다.
+ *
+ * 상수를 직접 참조하지 않고 함수를 두는 이유: 기본 모드를 바꾸는 일은
+ * 한 줄이어야 한다. 호출부마다 CLASSIC_RULES를 적어 두면 그중 하나를
+ * 빠뜨리는 날, 그 경로만 옛 기본값으로 남는다.
+ */
+export function defaultRuleSet(): RuleSet {
+	return CLASSIC_RULES;
+}
+
+/** id로 모드를 찾는다. 없는 id면 null — 무엇으로 대체할지는 부르는 쪽이 정한다 */
+export function ruleSetById(id: string): RuleSet | null {
+	for (const rules of ALL_RULE_SETS) {
+		if (rules.id === id) return rules;
+	}
+	return null;
+}
+
+/**
+ * 바깥에서 온 모드 지정을 규칙으로 바꾼다.
+ *
+ * 유효한 id면 그 모드를 쓴다 — 사용자가 고른 모드를 기본값으로 덮지 않는다.
+ * 비어 있거나 모르는 id면 기본 모드로 간다.
+ */
+export function resolveRuleSet(id: string | null | undefined): RuleSet {
+	if (typeof id !== "string" || id === "") return defaultRuleSet();
+	const found = ruleSetById(id);
+	return found !== null ? found : defaultRuleSet();
+}
+
+/**
  * 방 번호로 모드를 고른다. createRoom에서 한 번 부르고, 게임 중 바뀌지 않는다.
  *
- * 되돌리기는 이 함수 한 줄이다. 모드 하나가 문제면 그 방을 STANDARD_RULES로
+ * 방 번호가 곧 모드 선택 화면이다 — 다른 모드를 하고 싶은 사람은 그 번호의
+ * 방으로 들어간다. 그래서 기본 모드를 클래식으로 바꾸면서도 표준전 방을
+ * 남겼다. "모드를 지정하지 않으면 클래식, 지정하면 그것"을 이 프로젝트의
+ * 입력 수단(방 번호)으로 옮기면 이 배정표가 된다.
+ *
+ * 되돌리기는 이 함수 한 줄이다. 모드 하나가 문제면 그 방을 defaultRuleSet()으로
  * 되돌리고 리터럴은 남겨 둔다.
  */
 export function rulesForRoom(num: number): RuleSet {
+	// 범위 밖은 배정표를 읽지 않는다. 아래 `num >= 6` 같은 열린 조건은 999번
+	// 방까지 속도전으로 만든다 — 없는 방에 붙는 모드는 기본 모드여야 한다
+	if (num < 1 || num > ROOM_COUNT) return defaultRuleSet();
 	if (num === 8) return SILENCE_RULES;
 	if (num >= 6) return BLITZ_RULES;
-	return STANDARD_RULES;
+	if (num === 5) return STANDARD_RULES;
+	// 1~4번 방은 기본 모드
+	return defaultRuleSet();
 }
 
 // 모드별 집계 제외 플래그(ranked 같은 것)는 넣지 않았다. 시즌 1의 세 모드는
