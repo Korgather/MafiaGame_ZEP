@@ -9,6 +9,7 @@
 import { strict as assert } from "node:assert";
 import { beforeEach, describe, it } from "node:test";
 import { GamePhase, Judgement, Role, Team } from "../src/types/Game.types.ts";
+import type { Seat } from "../src/types/Game.types.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { QUICK_NOTE } from "../src/domain/chat/QuickPhrases.ts";
 import { MapTrigger, WidgetFile } from "../src/constants/Assets.ts";
@@ -923,13 +924,85 @@ describe("스킵 · 재판 · 시간 조절", () => {
 
 		passTrial(target, Judgement.OPPOSE);
 
-		assert.equal(nominee.alive, true, "반대가 과반인데 처형됐습니다");
+		assert.equal(nominee.alive, true, "반대가 찬성보다 많은데 처형됐습니다");
 		assert.deepEqual(target.rejected, [nominee.index], "부결 명단에 남지 않았습니다");
 		assert.equal(target.phase, GamePhase.DAY, "부결됐는데 낮으로 돌아가지 않았습니다");
 		assert.ok(
 			chatSaw(playerOf(target.seats[0]), "처형이 무산되어"),
 			"부결 사실이 채팅에 남지 않았습니다"
 		);
+	});
+
+	/**
+	 * 찬반 세 가지를 한 자리에서 못 박는다.
+	 *
+	 * 예전 규칙은 `찬성 * 2 > 분모`, 즉 "안 누른 사람은 전부 반대"였다.
+	 * 5초 안에 버튼을 못 찾은 사람과 화면을 안 보고 있는 사람이 전부
+	 * 반대편에 서는 셈이라 인원이 늘수록 처형이 구조적으로 불가능해졌다.
+	 * 지금은 기권이 어느 쪽도 아니고, 찬성이 반대를 넘어야 처형된다.
+	 *
+	 * 셋을 나눠 둔 이유는 증상이 제각각이어서다. 기권 규칙이 무너지면
+	 * 처형이 안 되고, 동수 규칙이 무너지면 처형이 너무 쉬워지고, 협박이
+	 * 무너지면 건달의 능력이 통째로 사라진다.
+	 */
+	function standNominee(target: ReturnType<typeof room>, voters: readonly Seat[], nominee: Seat): void {
+		for (const seat of voters) vote(playerOf(seat), nominee.index);
+		finishPhase(target); // VOTE → VOTE_RESULT
+		assert.equal(target.nominee, nominee.index, "단상에 세우지 못했습니다");
+		finishPhase(target); // VOTE_RESULT → DEFENSE
+		finishPhase(target); // DEFENSE → JUDGEMENT
+		assert.equal(target.phase, GamePhase.JUDGEMENT, "찬반투표에 도착하지 못했습니다");
+	}
+
+	it("아무도 안 누른 표는 어느 쪽도 아니다 — 찬성 하나면 처형된다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+		const others = target.seats.filter(seat => seat.index !== nominee.index);
+
+		standNominee(target, others, nominee);
+		// 한 명만 누른다. 옛 규칙이면 1 * 2 > 3이 거짓이라 살아남았다
+		judge(playerOf(others[0]), Judgement.AGREE);
+
+		finishPhase(target); // JUDGEMENT → 결론
+		assert.equal(nominee.alive, false, "찬성 1 대 반대 0인데 살아남았습니다");
+	});
+
+	it("찬성과 반대가 같으면 살린다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+		const others = target.seats.filter(seat => seat.index !== nominee.index);
+
+		standNominee(target, others, nominee);
+		judge(playerOf(others[0]), Judgement.AGREE);
+		judge(playerOf(others[1]), Judgement.OPPOSE);
+		// others[2]는 기권. 처형은 되돌릴 수 없으니 갈린 표는 값이 싼 쪽으로 간다
+
+		finishPhase(target);
+		assert.equal(nominee.alive, true, "1 대 1인데 처형됐습니다");
+	});
+
+	it("협박당한 사람은 누르지 못하고 그 몫은 반대로 센다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = reachVote();
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+		const others = target.seats.filter(seat => seat.index !== nominee.index);
+		const gagged = others[0];
+		// 건달이 지난밤 협박한 상태. 낮이 시작될 때 켜져 있고 다음 밤에 풀린다
+		gagged.intimidated = true;
+
+		// 협박당한 사람은 지목도 못 한다(Voting.canVote). 나머지 둘로 세운다
+		standNominee(target, others.slice(1), nominee);
+
+		judge(playerOf(gagged), Judgement.AGREE);
+		assert.equal(gagged.judgement, Judgement.NONE, "협박당했는데 찬성이 접수됐습니다");
+
+		judge(playerOf(others[1]), Judgement.AGREE);
+		// others[2]는 기권. 찬성 1, 협박 1(반대로 센다), 기권 1 → 1 대 1
+
+		finishPhase(target);
+		assert.equal(nominee.alive, true, "협박당한 사람의 몫이 반대로 세어지지 않았습니다");
 	});
 
 	/**

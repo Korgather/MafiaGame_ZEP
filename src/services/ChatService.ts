@@ -108,6 +108,9 @@ function contextOf(playerId: string): ChatContext {
 		// 단상은 한 번에 한 자리다. 아무도 안 올랐으면 nominee가 0이라
 		// 어느 좌석과도 같지 않다(좌석 번호는 1부터다)
 		nominee: room.nominee === seat.index,
+		// 대기실에서는 이 값이 언제나 false다(resetRoom이 좌석을 새로 만든다).
+		// alive처럼 room.started로 감쌀 필요가 없는 이유다
+		seduced: seat.seduced,
 		mafiaChat: inMafiaChat(seat),
 		// 짝은 좌석 하나로 정할 수 없어 GameFlow가 배정 뒤에 적는다.
 		// 0은 "짝 없음"이다 — 좌석 번호가 1부터라 어느 좌석과도 겹치지 않는다
@@ -136,6 +139,8 @@ function spectatorContext(playerId: string): ChatContext {
 		spectating: true,
 		// 판 안에 좌석이 없으니 단상에도 오를 수 없다
 		nominee: false,
+		// 마담은 좌석을 지목한다. 판 밖의 사람은 지목 대상이 아니다
+		seduced: false,
 		mafiaChat: false,
 		loverChat: false,
 		ghostChat: false,

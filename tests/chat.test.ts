@@ -69,6 +69,7 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
 		alive: true,
 		spectating: false,
 		nominee: false,
+		seduced: false,
 		mafiaChat: false,
 		loverChat: false,
 		ghostChat: false,
@@ -169,6 +170,23 @@ describe("채널 권한 표", () => {
 		const dead = ctx({ alive: false });
 		assert.deepEqual(rw(accessOf(dead, ChatChannel.ROOM)), { read: true, write: false });
 		assert.deepEqual(rw(accessOf(dead, ChatChannel.GHOST)), { read: true, write: true });
+	});
+
+	it("유혹당한 사람은 낮 토론을 보되 한마디도 못 한다", () => {
+		const seduced = ctx({ seduced: true });
+		assert.deepEqual(rw(accessOf(seduced, ChatChannel.ROOM)), { read: true, write: false });
+		// 이유를 말해 주지 않으면 입력창이 먹통인 것과 구분되지 않는다
+		assert.notEqual(accessOf(seduced, ChatChannel.ROOM).note, "");
+	});
+
+	it("유혹당한 사람은 단상에 올라도 반론하지 못한다", () => {
+		// 마담의 능력이 값을 갖는 자리다. 여기서 뚫리면 하필 가장 말이
+		// 무거운 자리에서만 유혹이 무력해진다.
+		const onTrial = ctx({ seduced: true, phase: GamePhase.DEFENSE, nominee: true });
+		assert.equal(accessOf(onTrial, ChatChannel.ROOM).write, false);
+		// 유혹이 없으면 같은 자리에서 말할 수 있어야 한다 — 위 결과가
+		// DEFENSE 규칙이 아니라 유혹 때문임을 못 박는다
+		assert.equal(accessOf(ctx({ phase: GamePhase.DEFENSE, nominee: true }), ChatChannel.ROOM).write, true);
 	});
 
 	it("영매는 밤에만 유령의 말을 듣는다", () => {

@@ -354,8 +354,11 @@ function afterWorstFirstNight(deck: Role[]): Seat[] {
 		// 첫 밤에 못 쓰는 능력은 첫 밤 균형을 건드릴 수 없다
 		if (def.needsPriorDay) continue;
 		if (def.nightAction === NightActionKind.INSPECT_ROLE) {
-			// 조사한 사람이 하필 마피아였던 경우. 진영이 통째로 옮겨간다
+			// 조사한 사람이 하필 마피아였던 경우. 진영이 통째로 옮겨간다.
+			// contacted까지 켜야 실제 합류와 같아진다 — 빼면 승리 판정이
+			// 이 좌석을 시민 무게로 세어 그물이 조용히 헐거워진다
 			actor.team = Team.MAFIA;
+			actor.contacted = true;
 		} else if (def.nightAction === NightActionKind.ATTACK) {
 			if (def.nightChat === ChatChannel.MAFIA) mafiaChatKill = 1;
 			// 자책이 있는 직업이 시민을 쏘면 시전자까지 둘이 사라진다
@@ -391,9 +394,45 @@ describe("WinCondition", () => {
 	});
 
 	it("마피아에 합류한 스파이는 마피아 진영으로 센다", () => {
-		const spy = seat(3, Role.SPY, { team: Team.MAFIA });
+		// 합류는 team과 contacted 둘 다 움직인다(NightPipeline의 INSPECT_ROLE).
+		// contacted 없이 team만 바꾸면 아래 "접선 전" 케이스와 구분되지 않는다
+		const spy = seat(3, Role.SPY, { team: Team.MAFIA, contacted: true });
 		const seats = [seat(1, Role.MAFIA), seat(2, Role.CITIZEN), spy];
 		assert.equal(evaluateWinner(seats), Team.MAFIA);
+	});
+
+	it("접선하지 못한 스파이는 아직 시민 쪽 무게로 센다", () => {
+		// 같은 좌석 구성인데 접선만 없다. 여기서 마피아 승이 나오면 스파이는
+		// 아무것도 하지 않고 자기 팀을 이기게 해 주는 직업이 된다
+		const spy = seat(3, Role.SPY);
+		assert.equal(spy.contacted, false, "스파이는 접선 전으로 시작해야 한다");
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.CITIZEN), spy];
+		assert.equal(evaluateWinner(seats), null);
+	});
+
+	it("접선하지 못한 짐승인간이 살아 있으면 시민 승리가 아니다", () => {
+		// 마피아 본진은 전멸했지만 매 밤 혼자 무는 사람이 남았다. 무게로만
+		// 판정하면(짐승인간은 접선 전이라 시민 쪽 무게다) 이 자리에서 시민
+		// 승리가 선언되고, 살아 있는 살인자가 판과 함께 사라진다
+		const beast = seat(3, Role.BEAST);
+		assert.equal(beast.contacted, false, "짐승인간은 접선 전으로 시작해야 한다");
+		const seats = [seat(1, Role.MAFIA, { alive: false }), seat(2, Role.CITIZEN), beast];
+		assert.equal(evaluateWinner(seats), null);
+	});
+
+	it("접선하지 못한 스파이만 남은 방도 끝난다", () => {
+		// 시민 머릿수가 0인데 무게로는 스파이가 시민 쪽에 서 있다. 우세
+		// 판정만으로는 영원히 끝나지 않는 방이라 머릿수 판정이 따로 있다
+		const spy = seat(2, Role.SPY, { team: Team.MAFIA });
+		const seats = [seat(1, Role.CITIZEN, { alive: false }), spy];
+		assert.equal(evaluateWinner(seats), Team.MAFIA);
+	});
+
+	it("건달이 살아 있는 동안에는 마피아가 우세에 닿지 못한다", () => {
+		// 건달의 승리 가중치 3이 값을 갖는 자리다. 머릿수로는 1 대 1이라
+		// 마피아 승이지만, 무게로는 1 대 3이라 아직 판이 남아 있다
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.THUG)];
+		assert.equal(evaluateWinner(seats), null);
 	});
 });
 

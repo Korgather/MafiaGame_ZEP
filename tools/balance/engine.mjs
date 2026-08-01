@@ -12,9 +12,9 @@
  * .mjs이고 tools/ 아래인 이유: tsconfig가 tools를 제외하고 lint도 src·tests만
  * 본다. 시뮬레이터는 제품 코드가 아니라 측정 도구라 그 검사망 밖에 둔다.
  */
-import { Role, Team } from "../../src/types/Game.types.ts";
+import { Judgement, Role, Team } from "../../src/types/Game.types.ts";
 import { buildRoleDeck } from "../../src/domain/RoleAssignment.ts";
-import { roleDef, inMafiaChat, NightActionKind } from "../../src/domain/Roles.ts";
+import { roleDef, inMafiaChat, startsContacted, NightActionKind } from "../../src/domain/Roles.ts";
 import { resolveNightIntents } from "../../src/domain/NightPipeline.ts";
 import { isPeacefulNight, NightOutcome } from "../../src/domain/NightResolution.ts";
 import { evaluateWinner } from "../../src/domain/WinCondition.ts";
@@ -35,15 +35,28 @@ export const seedOf = (p, s) => s * 7919 + p * 104729 + 1;
 
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
-/* Seat의 밤·투표 로직이 읽는 필드만 채운다. ZEP 쪽 필드는 이 엔진이 건드리지 않는다 */
+/*
+ * Seat의 밤·투표 로직이 읽는 필드만 채운다. ZEP 쪽 필드는 이 엔진이 건드리지 않는다.
+ *
+ * 여기 빠진 필드는 타입 검사에 걸리지 않는다 — tools/는 tsconfig 밖이다.
+ * 그래서 새 필드가 Seat에 생기면 이 함수는 조용히 undefined를 넘기고,
+ * 그 undefined를 읽는 규칙(예: countsForMafiaWin의 contacted)이 판정을
+ * 통째로 뒤집는다. Seat에 필드를 더할 때 이 함수를 같이 본다.
+ */
 function makeSeat(index, role) {
 	const def = roleDef(role);
 	return {
 		playerId: "p" + index, index, name: "P" + index, rank: "",
 		role, team: def.team, alive: true, ready: true,
-		votedFor: 0, voteCount: 0, healed: false, attackedBy: [],
+		votedFor: 0, voteCount: 0, judgement: Judgement.NONE, timeVoteSpent: false,
+		healed: false, attackedBy: [],
 		armored: def.survivesFirstAttack === true, blocked: false, scooped: false,
 		usedSkill: false, usesSpent: 0, noteText: "", kickedBy: [], connected: true,
+		// 접선이 필요 없는 직업은 처음부터 참이다. 거짓으로 두면 마피아 본진이
+		// 승리 판정에서 무게 0이 되어 모든 판이 시민 승리로 끝난다
+		contacted: startsContacted(role),
+		seduced: false, intimidated: false, exorcised: false,
+		loverIndex: 0, borrowedRole: null, markIndex: 0,
 	};
 }
 
@@ -51,6 +64,10 @@ function resetRound(seats) {
 	for (const s of seats) {
 		s.healed = false; s.blocked = false; s.attackedBy = []; s.scooped = false;
 		s.usedSkill = false; s.noteText = ""; s.voteCount = 0; s.votedFor = 0;
+		// 유혹·협박은 다음 낮까지 살아 있다가 그 다음 밤 시작에 풀린다.
+		// 밤이 시작될 때 지우는 이 자리가 곧 "그 다음 밤"이다
+		s.seduced = false; s.intimidated = false;
+		s.judgement = Judgement.NONE; s.timeVoteSpent = false;
 	}
 }
 
@@ -203,8 +220,10 @@ export function playGame(rules, playerCount, seed, model, opts) {
 		const rejected = [];
 		for (let attempt = 0; attempt <= confirmRetries; attempt++) {
 			for (const s of seats) { s.votedFor = 0; s.voteCount = 0; }
-			const voters = alive();
-			const pool0 = voters.filter(s => rejected.indexOf(s.index) < 0);
+			// 협박당한 사람은 표를 내지 못한다(Voting.canVote). 후보(pool0)에서는
+			// 빼지 않는다 — 협박은 표를 뺏는 능력이지 지목을 막는 능력이 아니다
+			const voters = alive().filter(s => !s.intimidated);
+			const pool0 = alive().filter(s => rejected.indexOf(s.index) < 0);
 			const cNonChat = pool0.filter(s => !inMafiaChat(s));
 			const mafiaVote = cNonChat.length > 0 ? pick(cNonChat, rng) : null;
 
@@ -246,6 +265,9 @@ export function playGame(rules, playerCount, seed, model, opts) {
 				let yes = 0, no = 0;
 				for (const v of alive()) {
 					if (v.index === res.target.index) continue;
+					// 협박당한 사람은 누르지 못하고, 던지지 못한 찬반은 반대로 센다
+					// (Trial.judgementPassed). 지목 투표와 달리 분모에는 남는다
+					if (v.intimidated) { no++; continue; }
 					let agree;
 					if (inMafiaChat(v)) agree = !shield;
 					else if (model === "A") agree = rng() < 0.5;

@@ -421,8 +421,12 @@ export function judge(player: FakePlayer, pick: Judgement): void {
  *
  * pick이 AGREE면 만장일치 찬성이라 반드시 처형되고, OPPOSE면 부결되어
  * 낮으로 돌아가거나(재지목 가능) 밤으로 넘어간다. 접속이 끊긴 사람은
- * 누를 수 없지만 과반의 분모에는 남는다(Trial.judgementPassed) — 그래서
- * 이 헬퍼로 처형을 만들려면 전원이 접속해 있어야 한다.
+ * 누를 수 없지만 기권으로 흘러가 어느 쪽에도 세어지지 않으므로
+ * (Trial.judgementPassed) 한 명이라도 눌렀다면 결과는 그 사람들끼리 갈린다.
+ *
+ * 협박당한 좌석에도 judge를 보낸다. 서버가 거절하는 것이 정상이고, 그
+ * 거절까지가 이 헬퍼로 만들려는 상황의 일부다 — 협박은 여기서 걸러내면
+ * 안 되고 판정(반대로 센다)이 받아야 한다.
  */
 export function passTrial(target: Room, pick: Judgement = Judgement.AGREE): void {
 	assert.equal(target.phase, GamePhase.VOTE, "투표 단계에서 불러야 합니다");

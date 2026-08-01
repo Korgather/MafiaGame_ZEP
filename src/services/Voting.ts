@@ -121,6 +121,19 @@ export function resumeDay(room: Room): void {
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 }
 
+/**
+ * 낮 화면 위쪽에 뜨는 한 줄.
+ *
+ * 협박당한 사람에게 이유를 말해 주는 자리다. 말하지 않으면 그는 투표 칸을
+ * 눌러도 아무 일이 없는 화면을 보게 되고, 그것은 규칙이 아니라 고장으로
+ * 읽힌다. 누가 협박했는지는 말하지 않는다 — 알면 낮에 건달을 지목한다.
+ */
+function dayNote(seat: Seat): string {
+	if (!seat.alive) return "당신은 죽었습니다. 관전 중입니다.";
+	if (seat.intimidated) return "협박당해 오늘은 투표할 수 없습니다.";
+	return "투표 전까지 이야기를 나누세요.";
+}
+
 /** 한 사람의 아침 화면 */
 export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	const widget = openPhase(player, room, {
@@ -131,7 +144,7 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		aliveCount: aliveSeats(room).length,
 		timer: room.phaseTimer,
 		...identityOf(seat),
-		note: seat.alive ? "투표 전까지 이야기를 나누세요." : "당신은 죽었습니다. 관전 중입니다.",
+		note: dayNote(seat),
 		// 밤사이 무슨 일이 있었는지는 채팅이 아니라 화면에 남는다
 		deaths: room.nightReport,
 		spectating: false,
@@ -249,21 +262,28 @@ export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void
 		picked: seat.votedFor,
 		rejected: room.rejected,
 	});
-	if (canVote(seat)) bindVoteWidget(widget);
+	// 무는 조건이 canVote가 아니라 seat.alive다. 협박당한 사람에게도 핸들러를
+	// 달아 두어야 칸을 눌렀을 때 "왜 안 되는지"가 돌아온다. 실제 거절은
+	// 핸들러 안에서 canVote가 한다
+	if (seat.alive) bindVoteWidget(widget);
 	sendVoteProgress(room, player);
 }
 
 /**
  * 이 좌석이 이번 투표에 참여할 수 있는가.
  *
- * 지금은 생사 하나뿐이지만 판정이 세 곳(핸들러를 무는가 / 표를 받는가 /
- * 진행률의 분모에 드는가)에서 필요하고, 셋이 어긋나면 증상이 제각각이다 —
- * 핸들러만 빠뜨리면 위젯을 조작해 표를 넣을 수 있고, 분모만 빠뜨리면
- * 진행률이 영원히 100%에 닿지 않아 아무도 투표를 끝내지 못한 것처럼 보인다.
- * 조건이 하나여도 이름을 남겨 두는 이유다.
+ * 판정이 두 곳(표를 받는가 / 진행률의 분모에 드는가)에서 필요하고, 둘이
+ * 어긋나면 증상이 제각각이다 — 표 쪽만 빠뜨리면 위젯을 조작해 표를 넣을 수
+ * 있고, 분모만 빠뜨리면 진행률이 영원히 100%에 닿지 않아 아무도 투표를
+ * 끝내지 못한 것처럼 보인다.
+ *
+ * 협박당한 사람이 여기서 빠지는 것은 찬반(Trial.canJudge)과 다른 판단이다.
+ * 찬반은 "던지지 못한 표를 반대로 센다"라 그를 분모에 남겨야 하지만, 지목은
+ * 던지지 않은 표에 기본값이 없다. 여기서 빼지 않으면 그의 칸이 끝까지 비어
+ * 진행률이 100%에 닿지 못한다.
  */
 function canVote(seat: Seat): boolean {
-	return seat.alive;
+	return seat.alive && !seat.intimidated;
 }
 
 /**
@@ -311,7 +331,7 @@ function bindVoteWidget(widget: ScriptWidget): void {
 
 		if (room.phase !== GamePhase.VOTE) return;
 		if (!canVote(voter)) {
-			label(sender, "투표 권한이 없습니다.");
+			label(sender, voter.intimidated ? "협박당해 오늘은 투표할 수 없습니다." : "투표 권한이 없습니다.");
 			return;
 		}
 

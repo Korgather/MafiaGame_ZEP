@@ -56,6 +56,14 @@ export interface ChatContext {
 	 * 방 상태를 알아야 한다 — 지금은 "나는 어떤 사람인가"만 받는다.
 	 */
 	readonly nominee: boolean;
+	/**
+	 * 마담에게 유혹당했는가. 이번 낮에는 방 채팅으로 한마디도 못 한다.
+	 *
+	 * 좌석의 blocked(밤 능력 차단)와 다른 값이다. 능력을 막는 것과 입을
+	 * 막는 것은 다른 일이고, 무엇보다 수명이 다르다 — blocked는 밤 정산이
+	 * 끝나면 지워지지만 이 값은 다음 낮을 지나 그 다음 밤 시작에 풀린다.
+	 */
+	readonly seduced: boolean;
 	/** 마피아 밀담 참가자인가 (마피아 본인 + 합류한 스파이) */
 	readonly mafiaChat: boolean;
 	/**
@@ -142,6 +150,7 @@ export const LOOSE_CONTEXT: ChatContext = {
 	alive: true,
 	spectating: false,
 	nominee: false,
+	seduced: false,
 	mafiaChat: false,
 	loverChat: false,
 	ghostChat: false,
@@ -195,6 +204,22 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		// 밤에 전원이 자유롭게 말할 수 있으면 마피아가 밤에 무엇을 하든
 		// 의미가 없어진다 — 밤이 정보 비대칭을 만드는 유일한 시간이다.
 		if (ctx.phase === GamePhase.NIGHT) return locked("밤에는 방 채팅이 잠깁니다");
+		/*
+		 * 마담의 유혹. 이 낮 동안 방 채팅으로 한마디도 못 한다.
+		 *
+		 * 방 채널만 막으면 된다. 마피아 밀담과 연인 대화는 밤에만 열리는데
+		 * 유혹은 밤 정산 뒤에 걸려 다음 밤 시작에 풀리므로, 두 채널이 열려
+		 * 있는 시간과 이 상태가 살아 있는 시간이 겹치지 않는다. 유령 채널은
+		 * 죽은 사람의 자리라 유혹이 닿기 전에 이미 다른 규칙이 정한다.
+		 *
+		 * 아래 DEFENSE 분기보다 위에 둔다. 유혹당한 사람이 단상에 오르면
+		 * 최후의 반론조차 못 한다 — 그것이 이 능력의 값이다. 순서를 뒤집으면
+		 * 단상에 오른 사람만 유혹을 뚫고 말하게 되는데, 하필 가장 말이 무거운
+		 * 자리에서 능력이 무력해진다.
+		 *
+		 * 읽기는 남긴다(locked). 말을 막는 능력이지 눈을 가리는 능력이 아니다.
+		 */
+		if (ctx.seduced) return locked("마담에게 유혹당해 오늘은 말할 수 없습니다");
 		/*
 		 * 최후의 반론. 단상에 오른 사람 말고는 아무도 말하지 않는다.
 		 *

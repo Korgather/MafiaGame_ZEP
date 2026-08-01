@@ -51,7 +51,7 @@ export function beginJudgement(room: Room): void {
 	room.tickTockPlayed = true;
 
 	playSound(room, Sound.VOTE);
-	Chat.say(room, `🗳️ ${nomineeLabel(room)}를 처형할지 정하세요. 찬성이 과반이어야 처형됩니다.`);
+	Chat.say(room, `🗳️ ${nomineeLabel(room)}를 처형할지 정하세요. 찬성이 반대보다 많아야 처형됩니다.`);
 
 	forEachPlayer(room, (player, seat) => openJudgementView(room, player, seat));
 }
@@ -63,13 +63,32 @@ function nomineeLabel(room: Room): string {
 }
 
 /**
- * 이 좌석이 O/X를 누를 수 있는가.
+ * 이 좌석이 찬반의 **분모에 드는가**.
  *
  * 단상에 오른 본인은 빠진다. 자기 처형에 반대를 던지는 것은 무의미하고
  * (반대는 어차피 기본값이다) 분모에만 들어가 규칙을 한 표 유리하게 만든다.
+ *
+ * 협박당한 사람은 여기 남는다 — 그의 몫은 사라지는 것이 아니라 반대로
+ * 세어지기 때문이다(judgementPassed). 버튼을 누를 수 있느냐는 다른 질문이고
+ * 그쪽은 canPressJudge가 답한다.
  */
 function canJudge(room: Room, seat: Seat): boolean {
 	return seat.alive && seat.index !== room.nominee;
+}
+
+/**
+ * 이 좌석이 O/X 버튼을 누를 수 있는가.
+ *
+ * canJudge와 나눠 둔 이유는 협박이다. 협박당한 사람을 canJudge에서 빼면
+ * 그가 판정의 분모에서도 사라져 건달의 협박이 "한 표를 지운다"가 되는데,
+ * 클래식 규칙은 "던지지 못한 찬반은 반대로 센다"이다. 반대로 canJudge
+ * 하나로 버튼까지 열어 두면 협박이 아무것도 막지 못한다.
+ *
+ * 진행률(judgeProgress)의 분모도 이쪽을 쓴다. 누를 수 없는 사람을 분모에
+ * 남기면 그 화면은 영원히 100%에 닿지 못한다.
+ */
+function canPressJudge(room: Room, seat: Seat): boolean {
+	return canJudge(room, seat) && !seat.intimidated;
 }
 
 /** 한 사람의 반론/찬반 화면. 두 단계가 같은 위젯을 쓴다 */
@@ -82,11 +101,11 @@ export function openJudgementView(room: Room, player: ScriptPlayer, seat: Seat):
 		nomineeName: nomineeLabel(room),
 		timer: room.phaseTimer,
 		picked: seat.judgement,
-		canJudge: judging && canJudge(room, seat),
+		canJudge: judging && canPressJudge(room, seat),
 	});
 	// 반론 단계에서도 물어 둔다. 찬반으로 넘어갈 때 위젯을 다시 열기 때문에
 	// 사실상 두 번 무는 셈이지만, 물지 않고 열면 그 화면은 영영 먹통이다
-	if (canJudge(room, seat)) bindJudgementWidget(widget);
+	if (canPressJudge(room, seat)) bindJudgementWidget(widget);
 	sendJudgeProgress(room, player);
 }
 
@@ -104,7 +123,7 @@ function bindJudgementWidget(widget: ScriptWidget): void {
 
 		// 반론 단계에서는 아직 못 누른다. 위젯이 버튼을 잠그지만 방어는 여기다
 		if (room.phase !== GamePhase.JUDGEMENT) return;
-		if (!canJudge(room, voter)) return;
+		if (!canPressJudge(room, voter)) return;
 
 		const pick = field(data, "pick");
 		if (pick === Judgement.AGREE) {
@@ -114,7 +133,7 @@ function bindJudgementWidget(widget: ScriptWidget): void {
 			voter.judgement = Judgement.OPPOSE;
 			label(sender, "반대했습니다.");
 		} else {
-			// 같은 버튼을 다시 눌러 취소한 경우. 기권은 반대로 센다
+			// 같은 버튼을 다시 눌러 취소한 경우. 기권은 어느 쪽으로도 세지 않는다
 			voter.judgement = Judgement.NONE;
 			label(sender, "선택을 취소했습니다.");
 		}
@@ -135,7 +154,7 @@ function judgeProgress(room: Room): { type: "judge-progress"; voted: number; vot
 	for (const seat of room.seats) {
 		// 접속이 끊긴 좌석은 분모에서 뺀다 — Voting.voteProgress와 같은 이유다.
 		// 통과 판정(judgementPassed)의 분모와 다른 것은 의도적이다
-		if (!canJudge(room, seat) || !seat.connected) continue;
+		if (!canPressJudge(room, seat) || !seat.connected) continue;
 		voters++;
 		if (seat.judgement !== Judgement.NONE) voted++;
 	}
@@ -153,27 +172,42 @@ export function broadcastJudgeProgress(room: Room): void {
 }
 
 /**
- * 찬반투표 결과.
+ * 찬반투표 결과. 찬성이 반대보다 많아야 처형된다.
  *
- * 규칙 그대로 "생존자 과반수가 찬성(O)"이다. 분모는 단상에 오른 본인을 뺀
- * 생존자다(canJudge). 접속이 끊긴 사람은 **분모에 남긴다** — 진행률 표시와
- * 다른 판단이다. 끊긴 사람을 빼면 남은 두세 명의 찬성만으로 처형이 통과해
- * "과반"이 실제 인원과 무관해진다.
+ * 예전에는 `agree * 2 > voters`, 즉 "안 누른 사람은 전부 반대"였다. 5초
+ * 안에 버튼을 못 찾은 사람과 화면을 보고 있지 않은 사람이 전부 반대편에
+ * 서는 셈이라, 인원이 늘수록 처형이 구조적으로 불가능해졌다.
  *
- * 기권은 반대로 센다. 확신이 없으면 사람이 죽지 않는 쪽으로 기운다.
+ * 지금은 기권이 어느 쪽도 아니다. 같은 코드베이스가 이미 tallyVotes에서
+ * "처형은 되돌릴 수 없고 스킵은 밤 한 번을 내주는 것뿐이라, 표가 갈렸을 때
+ * 값이 싼 쪽을 고른다"고 정해 두었다. 찬반도 같은 저울을 쓴다 — 3:3이면
+ * 살린다. `agree > oppose`는 둘 다 0일 때(아무도 안 누른 낮) 자동으로
+ * 거짓이라 별도의 방어가 필요 없다.
+ *
+ * **협박당한 사람은 반대로 센다.** 좌석 문서가 정한 규칙이고, 건달의 협박이
+ * "한 표를 지운다"가 아니라 "한 표를 뺏어 반대편에 놓는다"여야 능력에 값이
+ * 생긴다. 눌러 보지도 못한 사람이라 canJudge가 아니라 여기서 갈린다.
+ *
+ * 접속이 끊긴 사람은 기권으로 흘러간다. 예전에는 분모에 남아 반대로 세어졌고
+ * 주석도 그렇게 적혀 있었지만, 기권을 중립으로 옮긴 이상 따로 다룰 이유가
+ * 없다 — 끊긴 사람에게 찬성과 반대 중 하나를 대신 골라 줄 근거가 없다.
  *
  * 정치인의 2표 가중치는 여기에 적용하지 않는다. 지목에서 두 표를 쓰는 것과
  * 처형 면역이 이미 정치인의 몫이고, 찬반까지 두 표면 혼자 판을 뒤집는다.
  */
 function judgementPassed(room: Room): boolean {
-	let voters = 0;
 	let agree = 0;
+	let oppose = 0;
 	for (const seat of room.seats) {
 		if (!canJudge(room, seat)) continue;
-		voters++;
+		if (seat.intimidated) {
+			oppose++;
+			continue;
+		}
 		if (seat.judgement === Judgement.AGREE) agree++;
+		else if (seat.judgement === Judgement.OPPOSE) oppose++;
 	}
-	return agree * 2 > voters;
+	return agree > oppose;
 }
 
 /**
@@ -190,7 +224,7 @@ export function resolveJudgement(room: Room): boolean {
 
 	if (!judgementPassed(room)) {
 		room.rejected.push(nominee.index);
-		room.voteRecord.message = `🕊️ 찬성이 과반에 못 미쳐 ${participantLabel(nominee)}는 살아남았습니다.`;
+		room.voteRecord.message = `🕊️ 찬성이 반대를 넘지 못해 ${participantLabel(nominee)}는 살아남았습니다.`;
 		Chat.announce(room, room.voteRecord.message);
 		return false;
 	}

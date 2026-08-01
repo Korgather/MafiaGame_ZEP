@@ -404,6 +404,12 @@ function apply(
 			// 없기 때문이다. 앞쪽이 없으면 직업을 읽는 능력이 곧 배신이 된다.
 			if (def.defectsToMafia && inMafiaChat(target)) {
 				actor.team = Team.MAFIA;
+				// 스파이의 접선 방법이 곧 이 조사다. team만 바꾸고 여기를 빠뜨리면
+				// countsForMafiaWin이 계속 거짓이라, 합류한 스파이가 승리 판정에서
+				// 영원히 시민 쪽 무게로 남는다 — 배신하고도 상대 편을 돕는 셈이다.
+				// 밀담이 이미 열려 있어(inMafiaChat은 nightChat만 보고 통과시킨다)
+				// 화면상으로는 아무 이상이 없기 때문에 눈에 띄지 않는다
+				actor.contacted = true;
 				ledger.defected.push(actor.index);
 				// 정확한 직업을 적는다. 위장은 팀 조사에만 통해야 하고, 직업을
 				// 읽는 능력까지 속이면 스파이가 사기꾼을 만났을 때 아무 일도
