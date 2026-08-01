@@ -141,16 +141,15 @@ const TRACE_BY_KIND: Record<
 			assert.deepEqual(settlement.reveals.map(r => r.seat), [1]);
 		},
 	},
-	// 자폭은 attackedBy를 거치지 않는 유일한 사망 경로다. 대상에 공격
-	// 흔적이 남으면 의사가 막을 수 있게 되어 확정 사망이 아니게 된다
+	// 지목한 밤에는 아무도 죽지 않는다. 폭탄은 테러리스트가 죽을 때 터진다 —
+	// 여기서 결말이 나오면 매 밤 스스로 죽는 직업이 된다.
+	// 대상에 흔적도 남지 않는다. 남으면 "누가 나를 안고 죽으려 한다"가 샌다
 	MARK: {
 		actor: Role.TERRORIST,
-		check: (target, settlement) => {
+		check: (target, settlement, actor) => {
 			noTrace(target);
-			assert.deepEqual(settlement.casualties.map(c => [c.seat.index, c.outcome]), [
-				[1, NightOutcome.EXPLODED],
-				[2, NightOutcome.BOMBED],
-			]);
+			assert.deepEqual(settlement.casualties, []);
+			assert.equal(actor.markIndex, target.index);
 		},
 	},
 	// 접선 전 짐승인간은 물지 못한다. 마피아가 같은 사람을 노리지 않은

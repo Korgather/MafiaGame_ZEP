@@ -8,7 +8,7 @@
  * sendMessage를 호출했다.
  */
 import type { ScriptPlayer, ScriptWidget, WidgetAlign } from "zep-script";
-import type { CutTone, Seat, Team } from "../types/Game.types.ts";
+import type { CutTone, Room, Seat, Team } from "../types/Game.types.ts";
 import type {
 	CardView,
 	ChatChannelView,
@@ -159,6 +159,7 @@ function open(
  */
 function openMain(
 	player: ScriptPlayer,
+	room: Room | null,
 	fileName: string,
 	align: WidgetAlign,
 	size: WidgetBox,
@@ -171,8 +172,28 @@ function openMain(
 	// 나중에 채팅을 펼칠 때 이 위젯의 상자를 다시 계산해야 한다.
 	// 위젯 핸들에는 자기가 어떤 크기로 열렸는지가 남지 않아 여기 적어둔다.
 	tag.mainBox = { align, size };
+	// 어느 판·어느 단계의 화면인지도 같이 적는다. 여는 곳이 하나뿐이라
+	// 새 화면을 붙이는 사람이 도장을 기억할 필요가 없다 — mainBox와 같은 이유다
+	tag.mainStamp = room ? { gameId: room.gameId, phaseId: room.phaseId } : null;
 	tag.widget = widget;
 	return widget;
+}
+
+/**
+ * 지난 판이나 지난 단계의 화면에서 온 메시지인가.
+ *
+ * room.phase 검사가 이미 있는데도 필요한 이유는 같은 이름의 단계가 한 판에
+ * 여러 번 오기 때문이다. 1차 투표 화면에서 늦게 도착한 표는 2차 투표에서도
+ * phase === VOTE를 통과한다. phaseId는 되감기지 않으므로 그 표를 버릴 수 있다.
+ *
+ * 도장이 없으면 통과시킨다. 대기실 위젯과 채팅처럼 판에 매이지 않은 화면이
+ * 그렇고, 그쪽은 원래 단계 검사만으로 충분했다. 없는 것을 막는 쪽으로
+ * 판정하면 도장을 빠뜨린 경로 하나가 그 화면의 입력을 통째로 죽인다.
+ */
+export function isStaleEvent(room: Room, player: ScriptPlayer): boolean {
+	const stamp = tagOf(player).mainStamp;
+	if (!stamp) return false;
+	return stamp.gameId !== room.gameId || stamp.phaseId !== room.phaseId;
 }
 
 /**
@@ -364,6 +385,14 @@ export interface NightActionPayload extends Identity {
 	seats: SeatView[];
 	/** 내 칸을 잠글 것인가 (RoleDef.noSelfTarget) */
 	noSelf: boolean;
+	/**
+	 * 고를 수 있는 칸이 산 사람인가 죽은 사람인가 (RoleDef.targetsDead).
+	 *
+	 * 영매와 성직자는 무덤을 고른다. 이 값이 없으면 위젯이 alive만 보고
+	 * 격자 전체를 잠가서, 능력은 있는데 누를 칸이 하나도 없는 화면이 된다.
+	 * 두 직업만의 예외를 위젯이 직업 이름으로 알아내지 않게 하려고 서버가 정한다.
+	 */
+	targetsDead: boolean;
 	timer: number;
 	note: string;
 }
@@ -576,7 +605,8 @@ export function updateChat(
  */
 export function openLobby(player: ScriptPlayer): ScriptWidget {
 	// 방 선택 크기로 연다. 방 안이었다면 곧바로 오는 pushLobby가 늘려준다
-	return openMain(player, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY_ROOMS, {
+	// 대기실은 판에 매이지 않는다 — 도장 없이 열어 예전처럼 단계 검사에만 맡긴다
+	return openMain(player, null, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY_ROOMS, {
 		type: "setID",
 		id: player.id,
 	});
@@ -618,32 +648,65 @@ export function pushLobby(
 	});
 }
 
-/** 밤/아침 진행 화면 */
-export function openPhase(player: ScriptPlayer, payload: PhasePayload): ScriptWidget {
-	return openMain(player, WidgetFile.PHASE, topAlign(player), WidgetSize.PHASE, payload);
+/**
+ * 밤/아침 진행 화면.
+ *
+ * 단계 화면 다섯은 전부 room을 받는다. 인자가 하나 늘어난 이유는 도장이다 —
+ * 여는 시점의 판·단계를 화면에 새겨 두어야 늦게 도착한 클릭을 가려낼 수 있고,
+ * 그 값을 아는 것은 호출부가 아니라 방이다.
+ */
+export function openPhase(player: ScriptPlayer, room: Room, payload: PhasePayload): ScriptWidget {
+	return openMain(player, room, WidgetFile.PHASE, topAlign(player), WidgetSize.PHASE, payload);
 }
 
 /** 투표 화면. 개표도 같은 파일이라 payload 타입만 다르다 */
 export function openVote(
 	player: ScriptPlayer,
+	room: Room,
 	payload: VotePayload | VoteResultPayload
 ): ScriptWidget {
-	return openMain(player, WidgetFile.VOTE, topAlign(player), WidgetSize.VOTE, payload);
+	return openMain(player, room, WidgetFile.VOTE, topAlign(player), WidgetSize.VOTE, payload);
 }
 
 /** 최후의 반론과 찬반투표. 두 단계가 한 파일을 쓴다 */
-export function openJudgement(player: ScriptPlayer, payload: JudgementPayload): ScriptWidget {
-	return openMain(player, WidgetFile.JUDGEMENT, topAlign(player), WidgetSize.JUDGEMENT, payload);
+export function openJudgement(
+	player: ScriptPlayer,
+	room: Room,
+	payload: JudgementPayload
+): ScriptWidget {
+	return openMain(
+		player,
+		room,
+		WidgetFile.JUDGEMENT,
+		topAlign(player),
+		WidgetSize.JUDGEMENT,
+		payload
+	);
 }
 
 /** 종료 화면 */
-export function openGameOver(player: ScriptPlayer, payload: GameOverPayload): ScriptWidget {
-	return openMain(player, WidgetFile.GAME_OVER, topAlign(player), WidgetSize.GAME_OVER, payload);
+export function openGameOver(
+	player: ScriptPlayer,
+	room: Room,
+	payload: GameOverPayload
+): ScriptWidget {
+	return openMain(
+		player,
+		room,
+		WidgetFile.GAME_OVER,
+		topAlign(player),
+		WidgetSize.GAME_OVER,
+		payload
+	);
 }
 
 /** 밤 능력 위젯. 조작 대상이 많아 모바일에서도 상단 중앙 고정 */
-export function openRoleAction(player: ScriptPlayer, payload: NightActionPayload): ScriptWidget {
-	return openMain(player, WidgetFile.ROLE_ACTION, "top", WidgetSize.ROLE_ACTION, payload);
+export function openRoleAction(
+	player: ScriptPlayer,
+	room: Room,
+	payload: NightActionPayload
+): ScriptWidget {
+	return openMain(player, room, WidgetFile.ROLE_ACTION, "top", WidgetSize.ROLE_ACTION, payload);
 }
 
 /**

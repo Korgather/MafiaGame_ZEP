@@ -499,11 +499,13 @@ function apply(
 		}
 
 		case NightActionKind.MARK:
-			// CHAIN(55)은 DEATH(50) 뒤다. 자폭은 공격이 아니라 확정된 죽음이라
-			// 의사도 방탄도 막지 못한다 — attackedBy를 거치지 않는 유일한 사망
-			// 경로이고, 그래서 여기서 직접 결말을 쌓는다
-			addChainDeath(ledger, actor, NightOutcome.EXPLODED);
-			addChainDeath(ledger, target, NightOutcome.BOMBED);
+			// 여기서는 아무도 죽지 않는다. 폭탄은 지목한 밤이 아니라 테러리스트가
+			// **죽는 순간** 터진다 — 지목한 자리에서 터뜨리면 테러리스트가 매 밤
+			// 스스로 죽는 직업이 되고, 원작의 "안고 죽는다"가 "먼저 죽는다"가 된다.
+			//
+			// 좌석에 적는 이유는 수명이다. 밤 지목(nightIntents)은 다음 밤이
+			// 시작될 때 지워지지만 폭탄은 그 사이의 낮 처형까지 살아 있어야 한다
+			actor.markIndex = target.index;
 			return true;
 
 		case NightActionKind.STALK:
@@ -666,7 +668,12 @@ export function resolveNightIntents(
 		// 지목이 없어 위 루프에 걸리지 않는 능력들. step의 지목이 모두 적용된
 		// 뒤에 돈다 — 성직자가 되살린 사람을 도굴꾼이 파내면 안 되고,
 		// 자폭으로 죽은 사람의 연인도 뒤따라야 한다
-		if (step === NightStep.CHAIN) chainLovers(seats, ledger);
+		if (step === NightStep.CHAIN) {
+			// 순서가 중요하다. 폭탄이 먼저 터져야 그 폭발에 휘말린 사람의 연인이
+			// 같은 밤에 뒤따른다 — 뒤집으면 연인 연쇄가 폭사자를 못 보고 지나간다
+			detonateBombs(seats, ledger);
+			chainLovers(seats, ledger);
+		}
 		if (step === NightStep.REVIVE) digGraves(seats, ledger);
 	}
 
@@ -693,6 +700,31 @@ export function resolveNightIntents(
  * 밤의 연쇄는 아침 방송에 실릴 결말 목록을 만들어야 해서 파이프라인의 일이고,
  * 낮의 연쇄는 만들 목록이 없어 처형 처리 안에서 끝난다.
  */
+/**
+ * 폭탄을 안고 죽은 사람이 지목해 둔 적을 데려간다.
+ *
+ * 조건이 셋이다. 폭탄을 들고 있고(markIndex), 오늘 밤에 죽었고,
+ * 지목한 상대가 **다른 팀**이어야 한다. 마지막 조건이 이 능력을 시민 편의
+ * 도구로 묶는다 — 팀을 보지 않으면 테러리스트가 밤에 살해당하는 것만으로
+ * 시민 하나가 더 죽어 마피아의 밤이 이중으로 이득이 된다.
+ *
+ * 공격이 아니라 확정된 죽음이다. attackedBy를 거치지 않으므로 의사도
+ * 방탄도 막지 못한다 — 이미 죽은 사람이 데려가는 것이라 막을 주체가 없다.
+ *
+ * 낮의 처형으로 터지는 폭탄은 여기 오지 않는다. 그쪽은 kill()이 잇는다 —
+ * 연인 연쇄와 같은 이유이고, 같은 규칙이 두 층에 나뉘어 있는 이유도 같다.
+ */
+function detonateBombs(seats: readonly Seat[], ledger: NightLedger): void {
+	for (const bomber of seats) {
+		if (bomber.markIndex === 0) continue;
+		if (ledger.killed.indexOf(bomber.index) < 0) continue;
+		const mark = seatByIndex(seats, bomber.markIndex);
+		if (!mark) continue;
+		if (mark.team === bomber.team) continue;
+		addChainDeath(ledger, mark, NightOutcome.BOMBED);
+	}
+}
+
 function chainLovers(seats: readonly Seat[], ledger: NightLedger): void {
 	let spread = true;
 	while (spread) {

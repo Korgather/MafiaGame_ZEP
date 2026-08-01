@@ -24,6 +24,7 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 	const created: PlayerTag = {
 		widget: null,
 		mainBox: null,
+		mainStamp: null,
 		cardWidget: null,
 		cutWidget: null,
 		profileWidget: null,

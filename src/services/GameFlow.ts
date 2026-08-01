@@ -21,6 +21,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
+import { newSeed, seededRng } from "../domain/Rng.ts";
 import { assignRole, enterPhase, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
 import { guard } from "../infrastructure/Fault.ts";
@@ -306,6 +307,20 @@ export function refreshProgress(room: Room): void {
 }
 
 /**
+ * 판마다 하나씩 오르는 일련번호.
+ *
+ * 방 번호와 붙여 gameId를 만든다. 방 번호만으로는 같은 방의 다음 판과
+ * 구별되지 않고, 순번만으로는 다른 방의 판과 구별되지 않는다. 스크립트가
+ * 다시 뜨면 0으로 되돌아가지만 그때는 살아 있는 위젯도 함께 사라진다.
+ */
+let gameSerial = 0;
+
+function newGameId(room: Room): string {
+	gameSerial++;
+	return `${room.num}-${gameSerial}`;
+}
+
+/**
  * 게임 시작: 자리와 직업을 정하고 직업 카드를 띄운다.
  *
  * 기존 STATE_READY는 이 일을 하면서 room.players 배열 자체를 섞었다.
@@ -316,6 +331,10 @@ export function refreshProgress(room: Room): void {
  */
 function beginGame(room: Room): void {
 	room.started = true;
+	// 판을 여는 두 숫자를 먼저 적는다. gameId는 이 뒤로 열리는 모든 위젯에
+	// 도장으로 찍히므로 화면보다 앞서야 하고, seed는 바로 아래 배정이 읽는다
+	room.gameId = newGameId(room);
+	room.seed = newSeed();
 	enterPhase(room, GamePhase.ROLE_REVEAL);
 	room.phaseTimer = room.ruleSet.timing.ROLE_REVEAL;
 	// 직업 확인 5초 동안은 째깍 사운드를 울리지 않는다
@@ -325,8 +344,11 @@ function beginGame(room: Room): void {
 	room.turnCount = 0;
 	room.total = room.seats.length;
 
-	shuffle(room.seats);
-	const deck = buildRoleDeck(room.ruleSet.deck, room.seats.length);
+	// 자리 섞기와 직업 배정이 같은 난수열을 쓴다. 시드 하나에서 나오므로
+	// room.seed만 알면 이 판의 배정 전체를 밖에서 그대로 재현할 수 있다
+	const rng = seededRng(room.seed);
+	shuffle(room.seats, rng);
+	const deck = buildRoleDeck(room.ruleSet.deck, room.seats.length, rng);
 	for (let i = 0; i < room.seats.length; i++) {
 		assignRole(room.seats[i], i + 1, deck[i]);
 	}

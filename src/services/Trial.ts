@@ -20,7 +20,7 @@ import { field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
-import { bindMessage, openJudgement, updateMain } from "./Widgets.ts";
+import { bindMessage, isStaleEvent, openJudgement, updateMain } from "./Widgets.ts";
 
 /**
  * 최후의 반론. 단상에 오른 사람만 말한다.
@@ -75,7 +75,7 @@ function canJudge(room: Room, seat: Seat): boolean {
 /** 한 사람의 반론/찬반 화면. 두 단계가 같은 위젯을 쓴다 */
 export function openJudgementView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	const judging = room.phase === GamePhase.JUDGEMENT;
-	const widget = openJudgement(player, {
+	const widget = openJudgement(player, room, {
 		type: judging ? "judge" : "defense",
 		myNum: seat.index,
 		nominee: room.nominee,
@@ -98,6 +98,9 @@ function bindJudgementWidget(widget: ScriptWidget): void {
 		if (!found) return;
 		const room = found.room;
 		const voter = found.seat;
+		// 지난 판·지난 단계의 화면에서 늦게 도착한 입력은 버린다. 아래 phase
+		// 검사는 같은 이름의 단계가 다시 왔을 때 통과시키므로 이 한 줄이 더 필요하다
+		if (isStaleEvent(room, sender)) return;
 
 		// 반론 단계에서는 아직 못 누른다. 위젯이 버튼을 잠그지만 방어는 여기다
 		if (room.phase !== GamePhase.JUDGEMENT) return;

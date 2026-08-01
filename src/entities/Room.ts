@@ -85,6 +85,7 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		exorcised: false,
 		loverIndex: 0,
 		borrowedRole: null,
+		markIndex: 0,
 		usedSkill: false,
 		usesSpent: 0,
 		noteText: "",
@@ -126,6 +127,9 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.intimidated = false;
 	seat.exorcised = false;
 	seat.borrowedRole = null;
+	// 폭탄은 한 판을 넘기지 않는다. 밤마다 지우지 않는 값이라(다음 낮의 처형
+	// 까지 살아야 한다) 판이 바뀌는 이 자리에서 반드시 지워야 한다
+	seat.markIndex = 0;
 	// loverIndex는 여기서 건드리지 않는다. 짝은 좌석 하나로 정할 수 없어
 	// 배정이 끝난 뒤 두 좌석을 함께 보는 쪽(GameFlow)이 서로를 적는다.
 	// 이 함수가 0으로 밀면 그 쌍이 배정 순서에 따라 반쪽만 남는다
@@ -171,6 +175,17 @@ export function seatAt(room: Room, index: number): Seat | undefined {
 
 export function aliveSeats(room: Room): Seat[] {
 	return room.seats.filter(seat => seat.alive);
+}
+
+/**
+ * 죽은 좌석. 영매·성직자의 대상 목록이자, 그들에게 이번 밤 차례가 도는지의 근거다.
+ *
+ * 좌석이 판 내내 남아 있어서(사망 처리는 alive만 내린다) 이 숫자는
+ * room.total에서 생존자를 빼도 같다. 그래도 직접 세는 이유는 total이
+ * 판 시작 시점의 값이고, 이쪽은 "지금 무덤에 몇 명 있는가"라서다.
+ */
+export function deadSeats(room: Room): Seat[] {
+	return room.seats.filter(seat => !seat.alive);
 }
 
 export function participantLabel(seat: Pick<Seat, "index">): string {

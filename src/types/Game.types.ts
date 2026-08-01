@@ -287,6 +287,14 @@ export interface Seat {
 	 * 사실이 사라지고, 승리 판정과 결과 화면이 훔친 직업으로 그를 센다.
 	 */
 	borrowedRole: Role | null;
+	/**
+	 * 테러리스트가 안고 죽겠다고 지목해 둔 참가 번호. 0이면 없다.
+	 *
+	 * 밤마다 초기화하지 않는다. 폭탄이 터지는 시점은 지목한 밤이 아니라
+	 * **테러리스트가 죽는 순간**이고, 그것은 다음 낮의 처형일 수도 있다.
+	 * 매 밤 지우면 밤에 죽었을 때만 터지는 절반짜리 능력이 된다.
+	 */
+	markIndex: number;
 }
 
 /** 한 번의 개표가 남기는 것 */
@@ -483,6 +491,18 @@ export interface Room {
  * 여기에는 이 접속에서만 의미가 있는 것 — 위젯 핸들과 읽음·차단 기록 — 만 남긴다.
  * 기존에는 21개 필드가 tag.data와 tag에 경계 없이 섞여 있었다.
  */
+/**
+ * "이 화면은 이 판의 이 단계 것이다"를 적어 두는 도장.
+ *
+ * 판이 바뀌면 gameId가 달라지고, 단계가 바뀌면 phaseId가 오른다. 둘을 함께
+ * 보는 이유는 어느 한쪽만으로는 새지 않기 때문이다 — 재경기는 phaseId가
+ * 되감기고, 한 판 안에서는 gameId가 그대로다.
+ */
+export interface PhaseStamp {
+	gameId: string;
+	phaseId: number;
+}
+
 export interface PlayerTag {
 	/** 대기실/단계별 메인 위젯 */
 	widget: ScriptWidget | null;
@@ -493,6 +513,20 @@ export interface PlayerTag {
 	 * 상자를 다시 계산해야 한다(Widgets.squeezeMain). 그 재료를 여기 둔다.
 	 */
 	mainBox: { align: WidgetAlign; size: { width: number; height: number; mobile?: number } } | null;
+	/**
+	 * 메인 위젯이 어느 판·어느 단계의 화면으로 열렸는가.
+	 *
+	 * 늦게 도착한 클릭을 버리는 근거다. 위젯은 클라이언트에서 돌고 메시지는
+	 * 비동기라, 단계가 바뀐 뒤에 지난 화면의 버튼이 서버에 닿을 수 있다.
+	 * room.phase만 보는 검사로는 같은 이름의 단계가 여러 번 오는 것을
+	 * (밤·재투표) 구분하지 못한다.
+	 *
+	 * 위젯이 아니라 좌석 주인의 tag에 적는 이유는 위젯 핸들에 아무것도
+	 * 붙일 수 없어서다. 값이 null이면 "이 화면은 판정 대상이 아니다"라는
+	 * 뜻이고(대기실·채팅), 그때는 예전처럼 단계 검사에만 맡긴다 —
+	 * 도장을 빠뜨린 경로가 생겨도 조용히 입력이 막히지는 않는다.
+	 */
+	mainStamp: PhaseStamp | null;
 	/**
 	 * 카드 위젯 (직업 공개 · 첫 안내 · 직업 도감이 함께 쓰는 자리).
 	 *

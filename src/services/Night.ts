@@ -29,6 +29,7 @@ import {
 import { intentTarget, putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
 import {
 	aliveSeats,
+	deadSeats,
 	enterPhase,
 	participantLabel,
 	resetRound,
@@ -40,13 +41,14 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { forEachPlayer, label, playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
-import { DeathCause, kill } from "./Death.ts";
+import { DeathCause, kill, revive } from "./Death.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { PhasePayload } from "./Widgets.ts";
 import {
 	bindMessage,
 	closeCard,
 	identityOf,
+	isStaleEvent,
 	openPhase,
 	openRoleAction,
 	updateMain,
@@ -90,7 +92,7 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
  */
 function nightNote(room: Room, seat: Seat): string {
 	if (!seat.alive) return "당신은 죽었습니다. 관전 중입니다.";
-	const blocked = nightActionBlockedReason(seat, room.turnCount);
+	const blocked = nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length);
 	if (blocked) return blocked;
 	return "밤입니다. 대상을 지목하세요.";
 }
@@ -137,7 +139,7 @@ export function beginNight(room: Room): void {
 export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	if (!seat.alive) {
 		// 죽은 사람은 통합 채팅의 유령 채널로 대화한다. 밤 화면만 열어준다
-		openPhase(player, nightPhaseView(room, seat));
+		openPhase(player, room, nightPhaseView(room, seat));
 		return;
 	}
 
@@ -149,9 +151,9 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	Chat.tell(player, nightNotice(room, seat));
 
 	// 지목할 것이 남아 있지 않은 이유는 여러 가지고(능력이 없다, 다 썼다,
-	// 첫 밤이다, 이미 골랐다) 전부 한 함수가 안다. 이걸 보지 않으면
-	// 자경단원이 매일 밤 눌러도 아무 일 없는 격자를 받는다.
-	const canAct = nightActionBlockedReason(seat, room.turnCount) === null;
+	// 첫 밤이다, 이미 골랐다, 무덤이 비었다) 전부 한 함수가 안다. 이걸 보지
+	// 않으면 자경단원이 매일 밤 눌러도 아무 일 없는 격자를 받는다.
+	const canAct = nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length) === null;
 
 	// 지목할 것이 없으면 밤 안내 화면만 본다.
 	//
@@ -160,13 +162,13 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	// 얹혀 있었기 때문이다. 채팅이 자기 위젯으로 나가면서 남은 질문은
 	// "지목할 것이 있는가" 하나뿐이 됐다.
 	if (!canAct) {
-		openPhase(player, nightPhaseView(room, seat));
+		openPhase(player, room, nightPhaseView(room, seat));
 		return;
 	}
 
 	if (def.nightPrompt) label(player, def.nightPrompt, NIGHT_PROMPT_MS);
 
-	const widget = openRoleAction(player, {
+	const widget = openRoleAction(player, room, {
 		type: "init",
 		myNum: seat.index,
 		...identityOf(seat),
@@ -174,6 +176,7 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		seats: seatViews(room, inMafiaChat(seat) ? seat.team : undefined),
 		// 선택 필드를 그대로 넘기면 undefined가 ZEP까지 간다
 		noSelf: def.noSelfTarget === true,
+		targetsDead: def.targetsDead === true,
 		timer: room.phaseTimer,
 		note: def.nightNotice,
 	});
@@ -193,11 +196,14 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 function nightProgress(room: Room): { type: "progress"; acted: number; total: number } {
 	let acted = 0;
 	let total = 0;
+	const dead = deadSeats(room).length;
 	for (const seat of room.seats) {
 		// 접속이 끊긴 사람은 분모에서 뺀다. 남겨 두면 절대 안 차는 막대가 되고,
 		// 그러면 "다 끝났다"를 알리려던 것이 "누군가 뭉개고 있다"로 읽힌다
 		if (!seat.alive || !seat.connected) continue;
-		if (!hasNightTurn(seat, room.turnCount)) continue;
+		// 무덤이 비어 있으면 영매·성직자도 여기서 빠진다. 격자를 못 받은 사람이
+		// 분모에 남으면 막대가 영영 안 차고, 그 자체가 "이 방에 영매가 있다"다
+		if (!hasNightTurn(seat, room.turnCount, dead)) continue;
 		// 쪽지는 보내도 되고 안 보내도 되는 능력이다. 분모에 넣으면 막대가
 		// 끝까지 안 차고, 그러면 아무 일 없는 밤이 "누가 뭉개고 있다"로 읽힌다
 		if (roleDef(seat.role).nightAction === NightActionKind.NOTE) continue;
@@ -260,6 +266,9 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (!found) return;
 		const room = found.room;
 		const seat = found.seat;
+		// 지난 판·지난 단계의 화면에서 늦게 도착한 입력은 버린다. 아래 phase
+		// 검사는 같은 이름의 단계가 다시 왔을 때 통과시키므로 이 한 줄이 더 필요하다
+		if (isStaleEvent(room, sender)) return;
 		if (room.phase !== GamePhase.NIGHT || !seat.alive) return;
 
 		if (kind === "phrase") {
@@ -270,7 +279,7 @@ function bindNightWidget(widget: ScriptWidget): void {
 		// 위젯을 잠그는 판정과 같은 함수다. 조작된 select가 와도 서버가
 		// 같은 근거로 거절하므로, 화면에서 격자가 사라진 상태와 서버가
 		// 허용하는 상태가 갈라질 수 없다.
-		const blocked = nightActionBlockedReason(seat, room.turnCount);
+		const blocked = nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length);
 		if (blocked) {
 			label(sender, blocked);
 			return;
@@ -279,7 +288,11 @@ function bindNightWidget(widget: ScriptWidget): void {
 		const targetIndex = asInt(field(data, "num"));
 		if (targetIndex === null) return;
 		const target = seatAt(room, targetIndex);
-		if (!target || !target.alive) return;
+		// 산 사람인지 죽은 사람인지는 여기서 묻지 않는다. 영매와 성직자는
+		// 무덤을 고르는 직업이고, 그 판정은 능력마다 다르다(RoleDef.targetsDead).
+		// 여기서 alive를 요구하면 두 직업의 지목이 도메인에 닿기도 전에 사라진다 —
+		// recordNightIntent가 이미 능력에 맞는 대상인지 보고 null로 거절한다
+		if (!target) return;
 
 		const result = recordNightIntent(seat, target);
 		if (!result) return;
@@ -349,18 +362,22 @@ function chooseNotePhrase(
 }
 
 /**
- * 스파이가 마피아를 찾아내 합류했을 때.
+ * 마피아를 찾아낸 사람이 채팅에 합류했을 때.
  *
  * 전에는 팀원 각각에게 개인 안내를 보내고 스파이 위젯에는 chatEnable을
  * 따로 쏘았다 — 같은 사실을 두 경로로 알리는 구조라 한쪽만 고치기 쉬웠다.
  * 지금은 마피아 채널에 한 줄 남기고 본인의 탭 목록만 새로 고친다.
  * 채널에 쓴 한 줄은 기록에도 남아서 나중에 합류한 사람도 볼 수 있다.
+ *
+ * 문구가 "스파이"로 고정이었던 것은 접선하는 직업이 하나였을 때의 잔재다.
+ * 지금은 스파이와 짐승인간 둘 다 이 길로 들어오므로 직업 이름을 읽는다 —
+ * 여기 들어온 시점에 이미 같은 팀이라 감출 것이 없다.
  */
-function announceSpyJoin(room: Room, player: ScriptPlayer): void {
+function announceContact(room: Room, seat: Seat, player: ScriptPlayer): void {
 	Chat.channelSay(
 		room,
 		ChatChannel.MAFIA,
-		`🕵️ ${player.name}(스파이)님이 마피아 채팅에 합류했습니다.`
+		`🕵️ ${participantLabel(seat)}(${roleName(seat.role)})님이 마피아 채팅에 합류했습니다.`
 	);
 	Chat.refresh(player);
 }
@@ -406,25 +423,48 @@ export function resolveNight(room: Room): void {
 				break;
 			case NightOutcome.BACKFIRED:
 				// 자책의 이유는 방에 알리지 않는다 — 알리면 자경단원의 정체가
-				// 시체와 함께 공개된다. 본인에게만 왜 죽었는지 말해준다.
-				kill(room, casualty.seat, DeathCause.NIGHT_KILL);
+				// 시체와 함께 공개된다. 사인은 따로 있지만 announce가 평범한
+				// 제거와 같은 문구를 내보내고, 본인에게만 왜 죽었는지 말해준다.
+				kill(room, casualty.seat, DeathCause.BACKFIRE);
 				tellSeat(casualty.seat, "🔫 당신이 쏜 사람은 같은 편이었습니다. 책임을 지고 스스로 목숨을 끊었습니다.");
 				break;
 			case NightOutcome.KILLED:
 				kill(room, casualty.seat, DeathCause.NIGHT_KILL);
 				break;
+			case NightOutcome.BOMBED:
+				// 폭탄의 주인은 여기 없다. 그 사람은 이미 KILLED로 이 목록에
+				// 들어와 있고(폭탄은 죽는 순간 터진다), 결말을 하나 더 붙이면
+				// 같은 좌석이 두 번 죽은 기록이 된다
+				kill(room, casualty.seat, DeathCause.SUICIDE_BOMB);
+				break;
+			case NightOutcome.HEARTBREAK:
+				kill(room, casualty.seat, DeathCause.SACRIFICE);
+				break;
+			case NightOutcome.REVIVED:
+				// 유일하게 죽이지 않는 결말이다. 사망 목록에 실려 오는 이유는
+				// 파이프라인이 "이 밤에 좌석에 일어난 일"을 한 줄기로 내보내기
+				// 때문이고, 그 편이 순서(9단계 소생이 7단계 연쇄 뒤)를 지킨다
+				revive(room, casualty.seat);
+				break;
+			default: {
+				// 결말이 늘면 여기서 컴파일이 멈춘다. switch가 조용히 무시하면
+				// 그 결말은 "아무 일도 일어나지 않는 밤"이 되고, 테스트는 도메인
+				// 층에서만 초록이라 서비스가 빠뜨린 것을 아무도 못 본다
+				const unhandled: never = casualty.outcome;
+				return unhandled;
+			}
 		}
 	}
 
 	publishScoops(room);
 
-	// 스파이의 합류는 채널 안내와 탭 목록 갱신이 필요해서 reveals와 따로 간다.
+	// 접선은 채널 안내와 탭 목록 갱신이 필요해서 reveals와 따로 간다.
 	// 채널에 남긴 한 줄은 기록에도 남아 나중에 합류한 사람도 볼 수 있다
 	for (const index of settlement.defected) {
 		const joined = seatAt(room, index);
 		if (!joined) continue;
 		const player = ScriptApp.getPlayerByID(joined.playerId);
-		if (player) announceSpyJoin(room, player);
+		if (player) announceContact(room, joined, player);
 	}
 }
 

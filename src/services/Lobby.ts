@@ -307,7 +307,7 @@ function spectate(player: ScriptPlayer, room: Room): void {
  * 진행 화면 하나를 띄워두고 내용만 다시 그린다(refreshSpectators).
  */
 function openSpectateView(room: Room, player: ScriptPlayer): void {
-	bindMessage(openPhase(player, spectateView(room)), "spectate", (sender, data) => {
+	bindMessage(openPhase(player, room, spectateView(room)), "spectate", (sender, data) => {
 		if (messageType(data) !== "spectate-quit") return;
 		// 이 버튼 한 번이 접속자 전원에게 방 목록을 다시 보낸다.
 		// 대기실 위젯의 다섯 갈래와 같은 이유로 같은 관문을 지난다.

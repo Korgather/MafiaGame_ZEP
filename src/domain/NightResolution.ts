@@ -329,9 +329,13 @@ export const NightOutcome = {
 	SHIELDED: "SHIELDED",
 	/** 자경단원이 같은 편을 쏴 자신도 죽었다 */
 	BACKFIRED: "BACKFIRED",
-	/** 테러리스트가 스스로 터졌다 */
-	EXPLODED: "EXPLODED",
-	/** 자폭에 휘말렸다 */
+	/**
+	 * 폭탄을 안고 죽은 사람에게 지목당해 함께 끌려갔다.
+	 *
+	 * 터뜨린 본인의 결말은 여기 없다. 폭탄은 죽는 순간 터지므로 그 사람은
+	 * 이미 다른 이유로(KILLED·처형) 죽어 있고, 결말을 하나 더 붙이면
+	 * 같은 좌석이 두 번 죽은 것으로 기록된다.
+	 */
 	BOMBED: "BOMBED",
 	/** 연인이 죽어 뒤따랐다 */
 	HEARTBREAK: "HEARTBREAK",

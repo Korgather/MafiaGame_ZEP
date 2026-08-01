@@ -24,7 +24,14 @@ import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { beginDayStage } from "./Stage.ts";
-import { bindMessage, identityOf, openPhase, openVote, updateMain } from "./Widgets.ts";
+import {
+	bindMessage,
+	identityOf,
+	isStaleEvent,
+	openPhase,
+	openVote,
+	updateMain,
+} from "./Widgets.ts";
 
 /**
  * 한 낮에 지목 투표를 몇 번까지 돌리는가. 2 = 첫 투표 + 재지목 한 번.
@@ -116,7 +123,7 @@ export function resumeDay(room: Room): void {
 
 /** 한 사람의 아침 화면 */
 export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	const widget = openPhase(player, {
+	const widget = openPhase(player, room, {
 		type: "init",
 		phase: "day",
 		turn: room.turnCount,
@@ -148,6 +155,9 @@ function bindTimeWidget(widget: ScriptWidget): void {
 		if (!found) return;
 		const room = found.room;
 		const seat = found.seat;
+		// 지난 판·지난 단계의 화면에서 늦게 도착한 입력은 버린다. 아래 phase
+		// 검사는 같은 이름의 단계가 다시 왔을 때 통과시키므로 이 한 줄이 더 필요하다
+		if (isStaleEvent(room, sender)) return;
 
 		if (room.phase !== GamePhase.DAY) return;
 		if (!seat.alive) return;
@@ -231,7 +241,7 @@ function isRejected(room: Room, num: number): boolean {
  * 재접속으로 새 위젯을 열 때 다시 물어야 표가 서버에 도달한다.
  */
 export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	const widget = openVote(player, {
+	const widget = openVote(player, room, {
 		type: "init",
 		myNum: seat.index,
 		seats: seatViews(room),
@@ -295,6 +305,9 @@ function bindVoteWidget(widget: ScriptWidget): void {
 		if (!found) return;
 		const room = found.room;
 		const voter = found.seat;
+		// 지난 판·지난 단계의 화면에서 늦게 도착한 입력은 버린다. 아래 phase
+		// 검사는 같은 이름의 단계가 다시 왔을 때 통과시키므로 이 한 줄이 더 필요하다
+		if (isStaleEvent(room, sender)) return;
 
 		if (room.phase !== GamePhase.VOTE) return;
 		if (!canVote(voter)) {
@@ -442,7 +455,7 @@ function resultSeats(room: Room): SeatView[] {
 
 /** 한 사람의 투표 결과 화면 */
 export function openVoteResultView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	openVote(player, {
+	openVote(player, room, {
 		type: "result",
 		myNum: seat.index,
 		seats: resultSeats(room),

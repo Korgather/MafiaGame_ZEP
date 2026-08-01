@@ -116,7 +116,7 @@ export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void 
 
 	// winner는 GAME_OVER에 들어간 순간 정해진다. 도중 재접속 경로도 여기를 지난다.
 	const winner = room.winner === null ? Team.CITIZEN : room.winner;
-	openGameOver(player, {
+	openGameOver(player, room, {
 		type: "init",
 		winner,
 		team: seat.team,
