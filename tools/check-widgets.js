@@ -130,6 +130,19 @@ function element(node, doc) {
 	}
 	const classes = new Set((attrs.class || "").split(/\s+/).filter(Boolean));
 
+	/*
+	 * 고친 클래스를 class 속성에 되돌려 쓴다.
+	 *
+	 * 이것이 없으면 classList로 붙이고 뗀 클래스가 선택자에 잡히지 않는다
+	 * (matches는 node.attrs.class를 읽는다). 위젯이 무엇을 감추고 무엇을
+	 * 드러내는지가 전부 이 방식이라 — hidden 토글 하나가 화면의 절반을
+	 * 결정하는 자리가 여럿이다 — 동기화하지 않으면 "감췄어야 하는데 안 감춤"
+	 * 이라는 부류의 버그를 이 검사기가 통째로 못 본다.
+	 */
+	function sync() {
+		attrs.class = Array.from(classes).join(" ");
+	}
+
 	const el = {
 		tagName: node.tag.toUpperCase(),
 		dataset,
@@ -140,17 +153,29 @@ function element(node, doc) {
 		scrollTop: 0,
 		scrollHeight: 0,
 		clientHeight: 0,
+		/*
+		 * 가로쪽도 0이다. 탭 줄이 잘렸는지 재는 계산(chat.html의 syncFade)이
+		 * 이 셋을 함께 빼는데, 없는 값으로 두면 NaN이 나와 비교가 늘 false가
+		 * 된다 — 답은 같지만 그것은 "재보니 안 잘렸다"가 아니라 "재지 못했다"다.
+		 * 레이아웃이 없는 검사기에서는 잘린 것이 없는 쪽이 참이다.
+		 */
+		scrollLeft: 0,
+		scrollWidth: 0,
+		clientWidth: 0,
 		classList: {
 			add(...names) {
 				for (const name of names) classes.add(name);
+				sync();
 			},
 			remove(...names) {
 				for (const name of names) classes.delete(name);
+				sync();
 			},
 			toggle(name, force) {
 				const on = force === undefined ? !classes.has(name) : !!force;
 				if (on) classes.add(name);
 				else classes.delete(name);
+				sync();
 				return on;
 			},
 			contains(name) {
@@ -224,6 +249,13 @@ function element(node, doc) {
 		focus() {},
 		blur() {},
 		setSelectionRange() {},
+		/*
+		 * 레이아웃이 없으므로 스크롤은 아무 일도 하지 않는다. 그래도 두는
+		 * 이유는 없으면 TypeError가 되어, 스크롤을 부르는 위젯의 그리기가
+		 * 그 줄에서 통째로 멈춘다는 것이다 — 검사기에 없는 함수 하나가
+		 * 아래쪽 화면 전부를 안 그려진 것으로 만든다.
+		 */
+		scrollIntoView() {},
 		// 클릭을 흉내내지는 않으므로 위임 핸들러 안쪽까지는 가지 않는다
 		closest() {
 			return null;
