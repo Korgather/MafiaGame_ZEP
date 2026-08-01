@@ -15,7 +15,7 @@
 import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
-import { Sound } from "../constants/Assets.ts";
+import { Bgm, Sound } from "../constants/Assets.ts";
 import { inMafiaChat, NightActionKind, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { QUICK_NOTE } from "../domain/chat/QuickPhrases.ts";
@@ -43,6 +43,7 @@ import { forEachPlayer, label, playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { DeathCause, kill, revive } from "./Death.ts";
+import * as Screen from "./Screen.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { AllyPick, AllyPickPayload, PhasePayload } from "./Widgets.ts";
 import {
@@ -126,6 +127,10 @@ export function beginNight(room: Room): void {
 	resetRound(room);
 
 	beginNightStage(room);
+	// 밤의 인상은 소리와 배율이 만든다. 조금 당겨진 화면은 옆자리까지만
+	// 보이게 해서 "누가 무엇을 하는지 모른다"를 시야로 만들고, 음악은
+	// 낮과 다른 곡으로 갈아 낀다. 아침에 setScene(DAY)이 그대로 되돌린다
+	Screen.setScene(room, Screen.Zoom.NIGHT, Bgm.NIGHT);
 	playSound(room, Sound.NIGHT);
 	// 밤에는 방 채팅이 잠기지만 읽기는 열려 있다. 이 한 줄이 없으면 채팅
 	// 기록만 봤을 때 아침과 아침 사이가 비어 무슨 일이 있었는지 알 수 없다
@@ -576,7 +581,12 @@ export function deliverNightReveals(room: Room): void {
 		tellSeat(target, reveal.line);
 		if (!reveal.sound) continue;
 		const player = ScriptApp.getPlayerByID(target.playerId);
-		if (player) playSoundTo(player, reveal.sound);
+		if (!player) continue;
+		playSoundTo(player, reveal.sound);
+		// 통보 가운데 이것만 화면이 같이 반응한다. 나머지는 읽으면 되는
+		// 정보지만 "막혔다"는 밤 하나가 통째로 사라졌다는 뜻이라, 아침에
+		// 쏟아지는 안내 더미에서 이 한 줄만은 몸으로 알아채야 한다
+		if (reveal.sound === Sound.BLOCKED) Screen.shakeOne(player, Screen.Tremor.BLOCKED);
 	}
 	room.nightReveals = [];
 }

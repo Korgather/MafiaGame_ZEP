@@ -24,6 +24,7 @@ import { forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { settleMatch } from "./Rewards.ts";
+import * as Screen from "./Screen.ts";
 import { clearSilhouettes } from "./Stage.ts";
 import type { RematchPayload } from "./Widgets.ts";
 import { bindMessage, closeCard, openGameOver, updateMain } from "./Widgets.ts";
@@ -58,6 +59,10 @@ export function finish(room: Room, winner: TeamType): void {
 	//    (연습 판 격리는 docs/superpowers/specs/2026-07-30-season0-1-execution-design.md D8)
 
 	clearSilhouettes(room);
+	// 음악이 끊기고 화면이 물러선다. 판 내내 깔려 있던 곡이 사라지는 것이
+	// 승리 소리보다 먼저 "끝났다"를 알리고, 넓어진 화면은 살아남은 사람과
+	// 쓰러진 사람이 한 화면에 들어오게 한다. 빈 문자열이 곧 "정지"다
+	Screen.setScene(room, Screen.Zoom.FINALE, "");
 	playSound(room, winner === Team.MAFIA ? Sound.MAFIA_WIN : Sound.CITIZEN_WIN);
 	Chat.announce(room, "🔎 전원의 직업", roster(room));
 	// 방 밖에도 한 줄 흘린다. 로비에 선 사람이 어느 방이 곧 비는지 알 수 있는

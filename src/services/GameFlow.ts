@@ -19,7 +19,7 @@
 import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase, Role } from "../types/Game.types.ts";
-import { Sound } from "../constants/Assets.ts";
+import { Bgm, Sound } from "../constants/Assets.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
 import { newSeed, seededRng } from "../domain/Rng.ts";
 import { assignRole, enterPhase, readyCount, resetRoom } from "../entities/Room.ts";
@@ -45,6 +45,7 @@ import {
 } from "./Night.ts";
 import { finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay } from "./Rewards.ts";
+import * as Screen from "./Screen.ts";
 import {
 	clearSilhouettes,
 	resetPlayerAppearance,
@@ -157,6 +158,9 @@ function advanceGame(room: Room, dt: number): void {
 	// 컷은 단계 안에서 산다. 단계 시간을 컷 길이만큼 늘려 두었으므로(playCut)
 	// 같은 dt로 함께 줄이면 컷이 걷히는 시점과 단계가 끝나는 시점이 서로 밀리지 않는다.
 	advanceCut(room, dt);
+	// 클로즈업도 같은 시계를 쓴다. 컷과 달리 단계 시간을 늘리지 않으므로
+	// 단계가 먼저 끝나면 물고 있던 카메라는 다음 단계의 setScene이 걷는다
+	Screen.advanceShot(room, dt);
 
 	if (!room.tickTockPlayed && room.phaseTimer < room.ruleSet.timing.TICK_TOCK_AT) {
 		room.tickTockPlayed = true;
@@ -291,6 +295,11 @@ export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	// 컷은 단계 화면 위에 얹힌다. 맨 뒤인 것이 중요하다 — 위젯은 뜬 순서대로
 	// 쌓이므로(그래서 컷은 zIndex도 함께 싣는다) 단계 화면보다 먼저 열면 가려진다.
 	showCut(room, player);
+	// 배율·카메라·BGM은 단계가 바뀔 때 방 전원에게 한 번 나간다. 그 순간
+	// 접속이 끊겨 있던 사람은 못 받았으므로 여기서 지금 상태를 다시 입힌다.
+	// 이 함수의 호출처가 재접속 하나뿐이라(index.ts) BGM을 다시 트는 것이
+	// 안전하다 — 단계마다 불린다면 곡이 매번 처음으로 돌아갔을 것이다
+	Screen.restoreView(room, player);
 }
 
 /**
@@ -384,6 +393,12 @@ function beginGame(room: Room): void {
 		assignRole(room.seats[i], i + 1, deck[i]);
 	}
 	pairLovers(room);
+
+	// 음악이 여기서 시작한다. 밤 곡을 미리 깔아 두는 이유는 직업 공개 다음이
+	// 곧바로 첫 밤이기 때문이다 — 같은 곡이면 beginNight의 setScene이 곡을
+	// 갈아 끼우지 않아서, 판이 열리고 첫 밤이 될 때까지 음악이 끊기지 않는다.
+	// 배율은 밤보다 살짝 덜 당긴다. 아직 볼 것이 자기 카드뿐이다
+	Screen.setScene(room, Screen.Zoom.REVEAL, Bgm.NIGHT);
 
 	// 컷을 먼저 건다. playCut이 phaseTimer를 컷 길이만큼 늘리므로, 아래에서
 	// 카드에 실어 보내는 남은 시간이 늘어난 값이어야 서버와 화면이 같은 시계를 본다.

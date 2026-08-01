@@ -13,13 +13,14 @@
 import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase, Judgement } from "../types/Game.types.ts";
-import { Sound } from "../constants/Assets.ts";
+import { Bgm, Sound } from "../constants/Assets.ts";
 import { enterPhase, participantLabel, seatAt } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { DeathCause, kill } from "./Death.ts";
+import * as Screen from "./Screen.ts";
 import { bindMessage, identityOf, isStaleEvent, openJudgement, updateMain } from "./Widgets.ts";
 
 /**
@@ -36,6 +37,14 @@ export function beginDefense(room: Room): void {
 	// 지난 판의 O/X가 남으면 아무도 누르지 않아도 결과가 나온다
 	for (const seat of room.seats) seat.judgement = Judgement.NONE;
 
+	// 재판은 이 판에서 유일하게 한 사람만 말하는 시간이다. 음악을 바꾸고
+	// 그 사람에게 카메라를 붙여 "지금 누구를 보는 자리인가"를 화면으로 말한다.
+	// 배율이 아니라 카메라가 주인공을 정하므로, 반론 시간(15초)보다 훨씬
+	// 짧게 잡아 4.5초 뒤에는 방 전체가 다시 보이게 둔다 — 반론을 듣는 동안
+	// 다른 사람 반응도 봐야 추리가 된다
+	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL);
+	Screen.focusSeat(room, room.nominee, Screen.Hold.DEFENSE, Screen.Zoom.SPOT, Screen.Zoom.TRIAL);
+
 	const name = nomineeLabel(room);
 	centerLabel(room, `${name}의 최후의 반론`);
 	Chat.say(room, `🎤 ${name}의 최후의 반론입니다. 다른 사람은 들어 주세요.`);
@@ -50,6 +59,10 @@ export function beginJudgement(room: Room): void {
 	// 5초짜리 단계다. 째깍을 켜면 시작하자마자 울려서 안내가 아니라 소음이 된다
 	room.tickTockPlayed = true;
 
+	// 반론 클로즈업이 아직 안 끝났을 수 있다(시간 단축으로 DEFENSE가 잘리면
+	// 그렇다). setScene이 카메라를 사람에게 돌려놓으므로 찬반은 언제나
+	// 방 전체가 보이는 화면에서 시작한다
+	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL);
 	playSound(room, Sound.VOTE);
 	Chat.say(room, `🗳️ ${nomineeLabel(room)}를 처형할지 정하세요. ${tieClause(room)} 처형됩니다.`);
 
@@ -294,6 +307,10 @@ export function resolveJudgement(room: Room): boolean {
 
 	// 처형 사실은 kill이 직접 알린다 — 마피아 팀이었는지까지 밝히므로
 	room.voteRecord.message = `☠️ ${participantLabel(nominee)}가 처형되었습니다.`;
+	// 처형만은 방 전체가 흔들린다. 카메라를 단상으로 보내지 않는 이유는
+	// 이 직후가 곧바로 밤 컷이기 때문이다 — 컷 위젯이 모바일에서 화면을
+	// 덮으므로 팬은 아무에게도 안 보이고, 짧은 진동만 컷 아래로 전해진다
+	Screen.shake(room, Screen.Tremor.EXECUTION);
 	kill(room, nominee, DeathCause.EXECUTION);
 	return true;
 }

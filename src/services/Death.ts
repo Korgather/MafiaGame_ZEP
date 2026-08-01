@@ -22,6 +22,7 @@ import { sprite } from "../infrastructure/Sprites.ts";
 import { playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { awardExp } from "./Rewards.ts";
+import * as Screen from "./Screen.ts";
 import { applyNameplate, restoreAppearance, seatPlayer } from "./Stage.ts";
 
 /**
@@ -79,7 +80,13 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 		// 밤 사망은 죽은 본인만 듣는다. 방 전체에 내면 곧바로 이어지는 아침
 		// 소리와 겹치고, 한 밤에 둘이 죽으면 같은 소리가 두 번 난다.
 		// 처형이 방의 소리인 것과 반대다 — 그쪽은 개표 화면을 다 같이 보는 중이다.
-		if (cause !== DeathCause.EXECUTION) playSoundTo(player, Sound.DEATH);
+		if (cause !== DeathCause.EXECUTION) {
+			playSoundTo(player, Sound.DEATH);
+			// 소리와 같은 조건, 같은 사람. 아침에 열 줄이 한꺼번에 올라오는데
+			// 그중 하나가 자기 부고다 — 짧은 진동이 그 한 줄을 찾아 준다.
+			// 처형이 빠지는 것도 같은 이유다: 그쪽은 방 전체가 이미 흔들렸다
+			Screen.shakeOne(player, Screen.Tremor.DEATH);
+		}
 
 		// 처형당한 시민 진영에게는 위로 경험치. 전적은 건드리지 않는다.
 		// role !== MAFIA로 판정하면 짐승인간·사기꾼이 처형당할 때마다 위로금을 받는다.
@@ -211,6 +218,9 @@ export function revive(room: Room, seat: Seat): void {
 	// 유령 탭을 닫고 산 사람의 권한으로 돌린다
 	Chat.refresh(player);
 	playSoundTo(player, Sound.HEAL);
+	// 부활은 판에서 가장 드문 일이고, 당한 사람은 유령 화면을 보다가 갑자기
+	// 자리로 끌려온다. 아주 약한 진동 하나가 "지금 화면이 바뀐 게 맞다"를 알린다
+	Screen.shakeOne(player, Screen.Tremor.SAVED);
 }
 
 /**

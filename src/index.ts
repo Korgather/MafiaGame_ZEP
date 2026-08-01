@@ -66,10 +66,10 @@ ScriptApp.onJoinPlayer.Add(player => guard("접속", () => {
 	player.attackParam1 = 2;
 	player.attackParam2 = 3;
 
-	if (player.isMobile) {
-		player.displayRatio = 0.7;
-		ScriptApp.putMobilePunch();
-	}
+	// 배율은 위 resetPlayerAppearance가 넣는다(Screen.baseRatio). 여기서 또
+	// 넣으면 폰의 기본값이 두 곳에 적히고, 한쪽만 고치는 날 밤마다 화면이
+	// 튄다 — 연출이 곱하는 기준이 바로 그 값이기 때문이다
+	if (player.isMobile) ScriptApp.putMobilePunch();
 	player.sendUpdated();
 
 	// 채팅은 로비든 게임 중이든 항상 있다. 아래 두 갈래보다 먼저 여는 이유는

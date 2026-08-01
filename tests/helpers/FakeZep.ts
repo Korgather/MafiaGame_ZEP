@@ -135,6 +135,24 @@ export class FakeWidget {
 	}
 }
 
+/**
+ * setCameraTarget 한 번의 기록.
+ *
+ * 실제 API는 오버로드가 셋이다(타일 좌표 / 오브젝트 키 / 사람). 좌표로 보낸
+ * 호출만 x·y가 채워지고, 사람에게 되돌린 호출은 둘 다 null이다 — 테스트가
+ * 물어보는 것이 "어디를 비췄나"와 "돌아왔나" 두 가지라서 그 둘만 구분한다.
+ */
+export interface CameraShot {
+	readonly tileX: number | null;
+	readonly tileY: number | null;
+}
+
+/** shakeScreen 한 번의 기록 */
+export interface Shake {
+	readonly ms: number;
+	readonly power: number;
+}
+
 /** 가짜 ScriptPlayer. 부작용은 전부 배열에 기록해 테스트가 관찰한다 */
 export class FakePlayer {
 	// ZEP이 주는 필드
@@ -171,6 +189,9 @@ export class FakePlayer {
 	readonly chat: string[] = [];
 	readonly labels: string[] = [];
 	readonly sounds: string[] = [];
+	readonly stoppedSounds: string[] = [];
+	readonly cameraShots: CameraShot[] = [];
+	readonly shakes: Shake[] = [];
 	saveCount = 0;
 	updatedCount = 0;
 
@@ -215,6 +236,29 @@ export class FakePlayer {
 		this.sounds.push(args[0] as string);
 	}
 
+	stopSound(...args: unknown[]): void {
+		checkCall("player.stopSound", args, 1, 1);
+		this.stoppedSounds.push(args[0] as string);
+	}
+
+	/**
+	 * 상한이 4인 이유는 타일 오버로드다(tileX, tileY, time?, easing?).
+	 * 사람이나 오브젝트 키를 주는 오버로드는 셋이라 하한이 1이다.
+	 */
+	setCameraTarget(...args: unknown[]): void {
+		checkCall("player.setCameraTarget", args, 1, 4);
+		if (typeof args[0] === "number") {
+			this.cameraShots.push({ tileX: args[0] as number, tileY: args[1] as number });
+		} else {
+			this.cameraShots.push({ tileX: null, tileY: null });
+		}
+	}
+
+	shakeScreen(...args: unknown[]): void {
+		checkCall("player.shakeScreen", args, 2, 2);
+		this.shakes.push({ ms: args[0] as number, power: args[1] as number });
+	}
+
 	spawnAt(...args: unknown[]): void {
 		checkCall("player.spawnAt", args, 2, 3);
 		this.tileX = args[0] as number;
@@ -244,6 +288,9 @@ export class FakePlayer {
 		this.chat.length = 0;
 		this.labels.length = 0;
 		this.sounds.length = 0;
+		this.stoppedSounds.length = 0;
+		this.cameraShots.length = 0;
+		this.shakes.length = 0;
 	}
 }
 

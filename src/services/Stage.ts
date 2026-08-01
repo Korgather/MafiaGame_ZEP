@@ -23,6 +23,7 @@ import { Tile } from "../constants/Assets.ts";
 import { notifyStaff } from "../infrastructure/Fault.ts";
 import { forEachPlayer } from "./Broadcast.ts";
 import { rankOf } from "./Rewards.ts";
+import * as Screen from "./Screen.ts";
 
 /** 기본 캐릭터 스프라이트로 되돌린다 */
 const DEFAULT_SPRITE = null as unknown as ScriptDynamicResource;
@@ -203,12 +204,22 @@ export function restoreAppearance(room: Room, player: ScriptPlayer, seat: Seat):
 	player.sendUpdated();
 }
 
-/** 게임이 끝나 대기실로 돌아갈 때의 원상복구 */
+/**
+ * 게임이 끝나 대기실로 돌아갈 때의 원상복구.
+ *
+ * 카메라와 음악도 여기서 푼다. 배율은 사람에게 걸려 있고 방에 걸려 있지
+ * 않아서(Screen 참고) 방을 초기화하는 것만으로는 돌아오지 않는다 — 안 풀면
+ * 대기실을 밤의 배율로 걸어 다니고 밤 음악이 계속 흐른다.
+ */
 export function resetPlayerAppearance(player: ScriptPlayer): void {
 	applyNameplate(player, null);
 	player.sprite = DEFAULT_SPRITE;
 	player.attackSprite = DEFAULT_SPRITE;
 	player.moveSpeed = 80;
 	player.hidden = false;
+	// sendUpdated는 이쪽이 먼저 부른다. resetView가 배율을 넣고 다시 한 번
+	// 보내므로 두 번 나가지만, 순서를 바꾸면 이 함수가 고친 값이 한 프레임
+	// 늦게 반영된다
+	Screen.resetView(player);
 	player.sendUpdated();
 }

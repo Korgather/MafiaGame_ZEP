@@ -374,6 +374,28 @@ export interface ActiveCut {
 	timer: number;
 }
 
+/**
+ * 지금 카메라가 붙어 있는 클로즈업.
+ *
+ * 방 하나에 하나뿐인 이유는 ActiveCut과 같다 — 클로즈업은 사건이 일어난
+ * 순간에만 걸리고 다음 사건까지 반드시 끝난다.
+ *
+ * 왜 방이 들고 있는가: 카메라를 남의 자리로 옮기면 **되돌릴 사람이
+ * 필요하다.** 옮긴 곳에서 setTimeout으로 되돌리는 방법이 없다(ZEP 런타임에
+ * 타이머가 없고, 있더라도 그 사이에 방이 끝나면 유령 콜백이 남는다).
+ * 그래서 컷과 같은 방식으로 데이터만 두고 GameFlow의 프레임 루프가 굴린다
+ * (Screen.advanceShot). 클로저를 방에 저장하지 않는 것이 요점이다.
+ */
+export interface ActiveShot {
+	/** 카메라가 보고 있는 타일 */
+	readonly tileX: number;
+	readonly tileY: number;
+	/** 남은 시간(초). 0이 되면 각자 자기 캐릭터로 돌아간다 */
+	timer: number;
+	/** 끝났을 때 되돌릴 배율 배수. 그 단계의 기본 배율이다 */
+	readonly back: number;
+}
+
 /** 게임 방 하나 */
 export interface Room {
 	readonly num: number;
@@ -512,6 +534,28 @@ export interface Room {
 	chatLog: ChatMessage[];
 	/** 지금 도는 중인 전환 컷. 없으면 null */
 	cut: ActiveCut | null;
+	/** 지금 걸려 있는 카메라 클로즈업. 없으면 null */
+	shot: ActiveShot | null;
+	/**
+	 * 지금 깔려 있는 BGM 파일명. 없으면 빈 문자열.
+	 *
+	 * 두 가지 일을 한다. 같은 곡이 이어지는 단계에서 곡을 다시 시작하지
+	 * 않게 하고(낮→투표→개표), 도중에 들어온 사람에게 같은 곡을 틀어준다
+	 * (Screen.restoreView). 소리는 사람마다 나지만 "무엇이 깔려 있는가"는
+	 * 방의 사실이라는 점에서 cut과 같은 성질이다.
+	 */
+	ambience: string;
+	/**
+	 * 지금 방 전체에 걸려 있는 카메라 배율 **배수**(Screen.Zoom의 값 하나).
+	 *
+	 * 절대값이 아니라 배수인 이유는 사람마다 기준이 다르기 때문이다 —
+	 * 모바일은 화면이 좁아 기본이 0.7로 더 멀다(Screen.baseRatio). 절대값을
+	 * 넣으면 폰에서 밤마다 화면이 갑자기 확대된다.
+	 *
+	 * 클로즈업이 걸린 동안에는 클로즈업의 배수가 들어 있고, 끝나면
+	 * ActiveShot.back으로 되돌아간다. 즉 "지금 실제로 보이는 배율"이다.
+	 */
+	zoom: number;
 }
 
 /**

@@ -13,7 +13,7 @@ import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import type { SeatView } from "../types/Widget.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
-import { Sound } from "../constants/Assets.ts";
+import { Bgm, Sound } from "../constants/Assets.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { SKIP_VOTE, tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
@@ -24,6 +24,7 @@ import type { VoteProgressPayload } from "./Widgets.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
+import * as Screen from "./Screen.ts";
 import { beginDayStage } from "./Stage.ts";
 import {
 	bindMessage,
@@ -73,6 +74,9 @@ export function beginDay(room: Room): void {
 	for (const seat of room.seats) seat.timeVoteSpent = false;
 
 	beginDayStage(room);
+	// 밤에서 낮으로. 배율이 기준으로 돌아오고 음악이 바뀌는 이 한 줄이
+	// "밤이 끝났다"를 가장 먼저 알린다 — 아침 컷보다도 빠르다
+	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY);
 	playSound(room, Sound.MORNING);
 
 	// 아침이 왔다는 사실은 방 전체가 같이 겪는 일이다. 전에는 사람 수만큼
@@ -118,6 +122,9 @@ export function resumeDay(room: Room): void {
 	room.phaseTimer = Math.floor(dayDuration(room, aliveSeats(room).length) / 2);
 	room.tickTockPlayed = false;
 
+	// 소리도 컷도 다시 틀지 않지만 장면은 되돌려야 한다. 여기 오기 직전이
+	// 재판이라 화면은 아직 단상을 당겨 비추고 있고 음악도 재판 곡이다
+	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY);
 	Chat.say(room, "🌞 처형이 무산되어 토론을 이어갑니다. 곧 다시 투표합니다.");
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 }
@@ -239,6 +246,9 @@ export function beginVote(room: Room): void {
 		seat.voteCount = 0;
 	}
 
+	// 낮과 같은 곡을 이어 쓰되 화면만 한 뼘 당긴다. 곡이 같으므로
+	// setScene은 다시 시작하지 않는다 — 토론 중이던 음악이 그대로 흐른다
+	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY);
 	playSound(room, Sound.VOTE);
 	centerLabel(room, "투표가 시작되었습니다.");
 	// 중앙 라벨은 몇 초 뒤 사라진다. 늦게 화면을 본 사람과 재접속한 사람에게는
@@ -445,6 +455,14 @@ export function beginVoteResult(room: Room): void {
 	// 화면만 열리고 실제로는 아무 일도 일어나지 않은 낮이라, 거기까지
 	// 울리면 소리가 "개표 화면이 떴다"는 뜻이 되어 사건과 구별되지 않는다
 	if (nominee !== 0) playSound(room, Sound.NOMINATE);
+
+	// 화면은 투표 때 그대로다. 단상에 오른 사람이 있을 때만 그 자리로
+	// 잠깐 카메라를 옮긴다 — 아무도 오르지 않은 개표에서 카메라가 움직이면
+	// 그 자체가 "뭔가 있었다"는 잘못된 신호가 된다
+	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY);
+	if (nominee !== 0) {
+		Screen.focusSeat(room, nominee, Screen.Hold.NOMINEE, Screen.Zoom.SPOT, Screen.Zoom.VOTE);
+	}
 
 	forEachPlayer(room, (player, seat) => openVoteResultView(room, player, seat));
 	Chat.announce(room, room.voteRecord.message);
