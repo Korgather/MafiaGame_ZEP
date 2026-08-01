@@ -86,6 +86,8 @@ body {
 	-webkit-tap-highlight-color: transparent;
 }
 .panel {
+	position: relative;
+	isolation: isolate;
 	display: flex;
 	flex-direction: column;
 	width: 100%;
@@ -97,6 +99,13 @@ body {
 	border-radius: var(--r3);
 	box-shadow: var(--shadow);
 	overflow: hidden;
+	animation: panel-in 240ms var(--ease);
+}
+@keyframes panel-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
 }
 .panel.night {
 	background: linear-gradient(165deg, var(--night-1) 0%, var(--night-2) 100%);
@@ -109,6 +118,54 @@ body {
 .panel.vote {
 	background: linear-gradient(165deg, var(--vote-1) 0%, var(--vote-2) 100%);
 	border-color: #4a3a5a;
+}
+.panel.night::after,
+.panel.day::after,
+.panel.vote::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+}
+.panel.night::after {
+	background: radial-gradient(120% 70% at 50% -10%, rgba(126, 148, 224, 0.16) 0%, transparent 62%);
+	animation: moonlight 9s ease-in-out infinite;
+}
+@keyframes moonlight {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+.panel.day::after {
+	background: linear-gradient(115deg, rgba(255, 196, 106, 0.14) 0%, transparent 45%);
+	animation: daylight 11s ease-in-out infinite;
+}
+@keyframes daylight {
+	0%,
+	100% {
+		opacity: 0.6;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+.panel.vote::after {
+	background: radial-gradient(130% 60% at 50% 108%, rgba(232, 85, 79, 0.18) 0%, transparent 60%);
+	animation: emberglow 6s ease-in-out infinite;
+}
+@keyframes emberglow {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
 }
 .idbar {
 	display: flex;
@@ -212,6 +269,10 @@ body {
 }
 .timeline.urgent i {
 	background: var(--danger);
+}
+.timeline.urgent {
+	background: rgba(232, 85, 79, 0.18);
+	box-shadow: 0 0 8px rgba(232, 85, 79, 0.5);
 }
 .progress {
 	flex: 0 0 auto;
@@ -640,7 +701,6 @@ body {
 	gap: var(--s1);
 	flex: 0 0 auto;
 	min-width: 44px;
-	min-height: 40px;
 	margin: 2px var(--s1) 2px 0;
 	padding: 0 var(--s2);
 	font: inherit;
@@ -968,6 +1028,7 @@ body {
 
 </style>
 		<style>			.cut {
+				position: relative;
 				display: flex;
 				align-items: center;
 				justify-content: center;
@@ -978,6 +1039,7 @@ body {
 				--ink-cut: var(--accent);
 				--cut-1: var(--surface);
 				--cut-2: var(--bg);
+				--vignette: rgba(0, 0, 0, 0.45);
 				background: linear-gradient(160deg, var(--cut-1) 0%, var(--cut-2) 100%);
 				opacity: 0.96;
 			}
@@ -985,23 +1047,55 @@ body {
 				--ink-cut: #9db4ee;
 				--cut-1: var(--night-1);
 				--cut-2: var(--night-2);
+				--vignette: rgba(0, 0, 0, 0.62);
 			}
 			.cut.day {
 				--ink-cut: var(--accent);
 				--cut-1: var(--day-1);
 				--cut-2: var(--day-2);
+				--vignette: rgba(0, 0, 0, 0.28);
 			}
 			.cut.mafia {
 				--ink-cut: var(--mafia-ink);
 				--cut-1: var(--mafia-dim);
 				--cut-2: #180c0c;
+				--vignette: rgba(48, 6, 6, 0.66);
 			}
 			.cut.citizen {
 				--ink-cut: var(--citizen-ink);
 				--cut-1: var(--citizen-dim);
 				--cut-2: #0b1218;
+				--vignette: rgba(4, 14, 26, 0.5);
+			}
+			.cut::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				pointer-events: none;
+				background: radial-gradient(ellipse 78% 62% at 50% 50%, transparent 38%, var(--vignette) 100%);
+			}
+			.cut.mafia::before {
+				content: "";
+				position: absolute;
+				inset: 0;
+				pointer-events: none;
+				background: rgba(232, 85, 79, 0.45);
+				animation: strike 520ms var(--ease) 120ms both;
+			}
+			@keyframes strike {
+				0% {
+					opacity: 0;
+				}
+				18% {
+					opacity: 1;
+				}
+				100% {
+					opacity: 0;
+				}
 			}
 			.band {
+				position: relative;
+				z-index: 1;
 				display: flex;
 				flex-direction: column;
 				align-items: center;
@@ -1016,7 +1110,14 @@ body {
 				color: var(--ink-cut);
 				text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
 				word-break: keep-all;
-				animation: rise 420ms var(--ease) 80ms both;
+				animation: headline 520ms var(--ease) 80ms both;
+			}
+			@keyframes headline {
+				from {
+					opacity: 0;
+					letter-spacing: 0.22em;
+					transform: translateY(6px);
+				}
 			}
 			.lines {
 				display: flex;

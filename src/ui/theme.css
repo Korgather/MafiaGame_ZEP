@@ -20,6 +20,9 @@
  *    타이머를 44px 링에서 숫자+선으로 바꾼 이유는 폭이다 — 위젯이 96% 폭일
  *    때 링은 오른쪽 끝 구석에 박혀 시야 밖이고, 링 안에 들어가는 숫자는
  *    18px이 한계다. 선은 폭이 넓어질수록 같이 길어진다.
+ * 6. .panel이 열릴 때 한 번 떠오르고, 톤(night/day/vote)마다 아주 느린
+ *    빛 한 겹을 얹는다. 색만으로 구분하던 단계가 30초쯤 지나면 눈에
+ *    적응돼 더 이상 "밤"으로 읽히지 않던 것을 메운다.
  */
 
 /* ---------- 토큰 ---------- */
@@ -131,7 +134,14 @@ body {
 }
 
 /* ---------- 판 ---------- */
+/*
+ * position과 isolation은 아래 분위기 레이어(::after)를 위한 것이다.
+ * z-index: -1인 가상 요소는 새 쌓임 맥락 안에서만 "판 배경 위, 내용 아래"에
+ * 머문다 — isolation을 빼면 위젯 바깥 배경 뒤로 내려가 아예 보이지 않는다.
+ */
 .panel {
+	position: relative;
+	isolation: isolate;
 	display: flex;
 	flex-direction: column;
 	width: 100%;
@@ -143,6 +153,24 @@ body {
 	border-radius: var(--r3);
 	box-shadow: var(--shadow);
 	overflow: hidden;
+	animation: panel-in 240ms var(--ease);
+}
+
+/*
+ * 위젯이 열리는 순간.
+ *
+ * ZEP 위젯은 생성되면 아무 전환 없이 그 자리에 박힌다. 밤이 시작될 때마다
+ * 화면이 툭 붙어서, 판이 바뀐 것이 아니라 화면이 한 번 끊긴 것처럼 보였다.
+ * 240ms는 그 끊김만 지우고 기다림은 만들지 않는 길이다.
+ *
+ * 채팅(.chat)은 .panel을 쓰지 않는다. 상시 떠 있는 창이 갱신마다 깜빡이면
+ * 안 되기 때문인데, 그 덕에 여기서 따로 예외를 둘 필요가 없다.
+ */
+@keyframes panel-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
 }
 
 /*
@@ -161,6 +189,79 @@ body {
 .panel.vote {
 	background: linear-gradient(165deg, var(--vote-1) 0%, var(--vote-2) 100%);
 	border-color: #4a3a5a;
+}
+
+/*
+ * 분위기 레이어. 톤 배경 위에 아주 느리게 숨쉬는 빛을 한 겹 얹는다.
+ *
+ * 배경색만으로도 세 단계는 서로 다르지만, 정지한 그림이라 30초쯤 보고 있으면
+ * 눈이 그 색에 적응해서 "지금 밤이다"가 더 이상 읽히지 않는다. 아주 느린
+ * 밝기 변화는 의식적으로 보이지는 않으면서 화면이 살아 있다는 감만 남긴다.
+ *
+ * 주기가 6초 아래로 내려가지 않는 이유는 시선이다. 이 화면에서 사람이
+ * 봐야 하는 것은 지시 줄과 남은 시간이지 배경이 아니다. 빨라지는 순간
+ * 배경이 눈길을 끌기 시작하고, 그러면 연출이 아니라 방해가 된다.
+ *
+ * prefers-reduced-motion은 파일 맨 위에서 이미 처리된다(무한 반복을 1회로
+ * 자르고 길이를 1ms로 줄인다). 0%와 100%를 같은 값으로 둔 것은 그때 남는
+ * 프레임이 시작 상태가 되게 하기 위해서다.
+ */
+.panel.night::after,
+.panel.day::after,
+.panel.vote::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+}
+
+/* 밤: 위에서 내려오는 달빛이 느리게 밝아졌다 잦아든다 */
+.panel.night::after {
+	background: radial-gradient(120% 70% at 50% -10%, rgba(126, 148, 224, 0.16) 0%, transparent 62%);
+	animation: moonlight 9s ease-in-out infinite;
+}
+
+@keyframes moonlight {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* 낮: 왼쪽 위에서 비스듬히 드는 아침 빛 */
+.panel.day::after {
+	background: linear-gradient(115deg, rgba(255, 196, 106, 0.14) 0%, transparent 45%);
+	animation: daylight 11s ease-in-out infinite;
+}
+
+@keyframes daylight {
+	0%,
+	100% {
+		opacity: 0.6;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* 투표: 아래에서 올라오는 붉은 기운. 셋 중 가장 빠르고 가장 뚜렷하다 */
+.panel.vote::after {
+	background: radial-gradient(130% 60% at 50% 108%, rgba(232, 85, 79, 0.18) 0%, transparent 60%);
+	animation: emberglow 6s ease-in-out infinite;
+}
+
+@keyframes emberglow {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
 }
 
 /* ---------- 신분 줄 ---------- */
@@ -319,6 +420,21 @@ body {
 
 .timeline.urgent i {
 	background: var(--danger);
+}
+
+/*
+ * 마지막 10초. 선이 바깥으로 번진다.
+ *
+ * 번짐을 막대(i)에 걸면 .timeline의 overflow: hidden이 그대로 잘라서 아무
+ * 일도 일어나지 않는다. 트랙 쪽에 거는 이유가 그것이다 — 자기 그림자는
+ * 자기 overflow에 잘리지 않는다.
+ *
+ * 트랙 바탕까지 붉게 두는 것은 남은 폭이 0에 가까워졌을 때를 위한 것이다.
+ * 그때는 막대가 사실상 사라져서, 색을 지고 있는 것이 트랙밖에 없다.
+ */
+.timeline.urgent {
+	background: rgba(232, 85, 79, 0.18);
+	box-shadow: 0 0 8px rgba(232, 85, 79, 0.5);
 }
 
 /*
@@ -905,7 +1021,6 @@ body {
 	gap: var(--s1);
 	flex: 0 0 auto;
 	min-width: 44px;
-	min-height: 40px;
 	margin: 2px var(--s1) 2px 0;
 	padding: 0 var(--s2);
 	font: inherit;

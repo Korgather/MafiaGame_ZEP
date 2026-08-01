@@ -86,6 +86,8 @@ body {
 	-webkit-tap-highlight-color: transparent;
 }
 .panel {
+	position: relative;
+	isolation: isolate;
 	display: flex;
 	flex-direction: column;
 	width: 100%;
@@ -97,6 +99,13 @@ body {
 	border-radius: var(--r3);
 	box-shadow: var(--shadow);
 	overflow: hidden;
+	animation: panel-in 240ms var(--ease);
+}
+@keyframes panel-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
 }
 .panel.night {
 	background: linear-gradient(165deg, var(--night-1) 0%, var(--night-2) 100%);
@@ -109,6 +118,54 @@ body {
 .panel.vote {
 	background: linear-gradient(165deg, var(--vote-1) 0%, var(--vote-2) 100%);
 	border-color: #4a3a5a;
+}
+.panel.night::after,
+.panel.day::after,
+.panel.vote::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+}
+.panel.night::after {
+	background: radial-gradient(120% 70% at 50% -10%, rgba(126, 148, 224, 0.16) 0%, transparent 62%);
+	animation: moonlight 9s ease-in-out infinite;
+}
+@keyframes moonlight {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+.panel.day::after {
+	background: linear-gradient(115deg, rgba(255, 196, 106, 0.14) 0%, transparent 45%);
+	animation: daylight 11s ease-in-out infinite;
+}
+@keyframes daylight {
+	0%,
+	100% {
+		opacity: 0.6;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+.panel.vote::after {
+	background: radial-gradient(130% 60% at 50% 108%, rgba(232, 85, 79, 0.18) 0%, transparent 60%);
+	animation: emberglow 6s ease-in-out infinite;
+}
+@keyframes emberglow {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
 }
 .idbar {
 	display: flex;
@@ -212,6 +269,10 @@ body {
 }
 .timeline.urgent i {
 	background: var(--danger);
+}
+.timeline.urgent {
+	background: rgba(232, 85, 79, 0.18);
+	box-shadow: 0 0 8px rgba(232, 85, 79, 0.5);
 }
 .progress {
 	flex: 0 0 auto;
@@ -640,7 +701,6 @@ body {
 	gap: var(--s1);
 	flex: 0 0 auto;
 	min-width: 44px;
-	min-height: 40px;
 	margin: 2px var(--s1) 2px 0;
 	padding: 0 var(--s2);
 	font: inherit;

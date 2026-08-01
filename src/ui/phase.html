@@ -25,6 +25,9 @@
 			 *    그리는 쪽은 shared.js의 startTimer 하나다.
 			 * 4. note가 .lead-sub로 올라갔다. 이 화면에는 진행률 문구가 없어서
 			 *    둘째 줄이 비어 있었고, 아래 한 줄로 두면 무대와 겹쳐 읽혔다.
+			 * 5. 밤사이 사건이 한 줄씩 도착하고, 하늘 글리프가 아주 느리게
+			 *    떠 있다. 판 전체의 분위기 레이어는 theme.css(.panel.night/.day)가
+			 *    맡고, 이 파일은 이 화면에만 있는 두 요소를 움직인다.
 			 *
 			 * 세로 예산: 다섯 층 합이 203px이라 모바일 24%면 충분하다
 			 * (WidgetSize.PHASE.mobile을 28 → 24로 낮추는 요청과 짝이다).
@@ -44,9 +47,51 @@
 				gap: var(--s2);
 			}
 
+			/*
+			 * 하늘. 달이든 해든 아주 느리게 떠 있다.
+			 *
+			 * 2px는 보려고 해야 보이는 폭이고, 그게 이 움직임에 필요한 전부다.
+			 * 이 글리프는 화면에서 유일하게 "지금이 밤인가 낮인가"만 말하는
+			 * 요소라 눈에 걸려야 하지만, 옆의 남은 시간보다 크게 움직이는 순간
+			 * 시선을 잘못된 곳에 붙잡아 둔다.
+			 *
+			 * span이지만 .sky-row가 flex라 블록으로 취급돼 transform이 먹는다.
+			 */
 			.sky {
 				font-size: var(--t-xl);
 				line-height: 1;
+				animation: sky-drift 6s ease-in-out infinite;
+			}
+
+			@keyframes sky-drift {
+				0%,
+				100% {
+					transform: translateY(0);
+				}
+				50% {
+					transform: translateY(-2px);
+				}
+			}
+
+			/*
+			 * 밤사이 사건이 한 줄씩 도착한다. 지연은 아래 init에서 박는다.
+			 *
+			 * 세 명이 죽은 아침에 세 줄이 한꺼번에 나타나면 그것은 목록이지
+			 * 사건이 아니다. 90ms 간격이면 마지막 줄까지 0.2초 안에 끝나서
+			 * 기다림은 생기지 않으면서 "하나, 둘, 셋"으로 읽힌다.
+			 *
+			 * 왼쪽에서 들어오는 이유는 이 상자의 왼쪽 붉은 선이다 — 줄이 그
+			 * 선에서 뻗어 나오는 것처럼 보인다.
+			 */
+			.stack span {
+				animation: deathline 300ms var(--ease) both;
+			}
+
+			@keyframes deathline {
+				from {
+					opacity: 0;
+					transform: translateX(-6px);
+				}
 			}
 
 			.turn {
@@ -312,10 +357,18 @@
 					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다.
 					// 빈 목록이면 상자째 숨긴다 — 왼쪽 붉은 선만 남으면
 					// "무슨 일이 있었는데 글이 안 떴나"로 읽힌다
+					// 지연을 여기서 박는 이유는 줄 수에 상한이 없기 때문이다.
+					// :nth-child로 적으면 열두 명짜리 방에서 뒤쪽 줄이 지연 없이
+					// 한꺼번에 뜬다
 					const deaths = Array.isArray(data.deaths) ? data.deaths : [];
 					qs("#deaths").classList.toggle("hidden", deaths.length === 0);
 					qs("#deaths").innerHTML = html`${deaths.map(
-						line => html`<span class="${line.indexOf("☠") >= 0 ? "" : "good"}">${line}</span>`
+						(line, i) =>
+							html`<span
+								class="${line.indexOf("☠") >= 0 ? "" : "good"}"
+								style="animation-delay:${i * 90}ms"
+								>${line}</span
+							>`
 					)}`;
 
 					paintTimeVote(data.timeVote === true);
