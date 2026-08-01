@@ -1007,13 +1007,13 @@ body {
 			.reveal {
 				display: flex;
 				flex-direction: column;
-				gap: var(--s1);
+				gap: 3px;
 			}
 			.rev {
 				display: flex;
 				align-items: center;
 				gap: var(--s2);
-				padding: 6px var(--s2);
+				padding: 4px var(--s2);
 				font-size: var(--t-sm);
 				background: var(--surface-2);
 				border: 1px solid var(--line);
@@ -1068,6 +1068,10 @@ body {
 			.rev .fate.alive {
 				color: var(--ok);
 			}
+			.body.cut {
+				-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+				mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+			}
 			.waiting {
 				display: flex;
 				align-items: center;
@@ -1100,7 +1104,7 @@ body {
 				<span class="who" id="who">게임 종료</span>
 			</div>
 
-			<div class="body scroll">
+			<div class="body scroll" id="listbox">
 				<div class="reveal" id="reveal"></div>
 			</div>
 
@@ -1279,6 +1283,14 @@ function revealHtml(p, i) {
 				</div>`;
 }
 
+function paintCut() {
+ const box = qs("#listbox");
+ const hidden = box.scrollHeight - box.clientHeight;
+ box.classList.toggle("cut", hidden > 2 && box.scrollTop < hidden - 2);
+}
+
+qs("#listbox").addEventListener("scroll", paintCut);
+
 function paintRematch(state) {
  const data = state || {};
  const count = Number(data.count) || 0;
@@ -1307,6 +1319,7 @@ Parent.on({
   startTimer(qs("#timer"), data.timer);
   const players = Array.isArray(data.players) ? data.players : [];
   qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
+  paintCut();
   paintRematch(data.rematch);
  },
  rematch(data) {

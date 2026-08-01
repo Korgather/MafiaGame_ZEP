@@ -65,18 +65,28 @@
 				letter-spacing: -0.02em;
 			}
 
-			/* 정체 공개 표. 한 줄에 한 명 */
+			/*
+			 * 정체 공개 표. 한 줄에 한 명.
+			 *
+			 * 줄 간격과 위아래 여백이 여기서 특별히 좁은 것은 이 목록이 예산
+			 * 안에 들어오지 않기 때문이다. 46%는 메인 위젯의 천장이고(Assets의
+			 * 세로 예산) 그 안에서 목록에 돌아오는 자리는 212px인데, 12명 판의
+			 * 명단은 399px을 요구한다. 한 줄을 30px에서 26px로 줄이면 여섯 줄
+			 * 대신 일곱 줄이 보인다 — 한 줄을 더 얻는 것이 이 4px의 전부이고,
+			 * 그래서 더 줄이지 않았다. 여기서 더 좁히면 왼쪽 진영 띠들이
+			 * 서로 붙어 한 덩어리로 읽힌다.
+			 */
 			.reveal {
 				display: flex;
 				flex-direction: column;
-				gap: var(--s1);
+				gap: 3px;
 			}
 
 			.rev {
 				display: flex;
 				align-items: center;
 				gap: var(--s2);
-				padding: 6px var(--s2);
+				padding: 4px var(--s2);
 				font-size: var(--t-sm);
 				background: var(--surface-2);
 				border: 1px solid var(--line);
@@ -141,6 +151,26 @@
 			}
 
 			/*
+			 * 잘린 목록.
+			 *
+			 * 12명 판의 명단은 이 화면보다 길고, 그 사실은 화면이 정한 것이
+			 * 아니라 예산이 정한 것이다(46%가 메인 위젯의 천장). 데스크톱은
+			 * 스크롤바가 늘 보이지만 모바일 웹뷰의 스크롤바는 손을 대는 동안만
+			 * 나타나므로, 손을 대기 전에는 아래에 더 있다는 표시가 아무 데도
+			 * 없었다 — 여덟 명이 죽고 살아난 판의 결과가 여섯 줄에서 끝난
+			 * 것처럼 보인다.
+			 *
+			 * 마지막 줄을 흐리게 잘라 "여기서 끝이 아니다"를 말한다. 바닥까지
+			 * 내리면 클래스를 떼므로 다 본 목록의 마지막 줄이 흐려지지 않는다.
+			 * mask를 못 읽는 웹뷰에서는 아무 일도 일어나지 않고 스크롤은 그대로
+			 * 된다 — 이 표시는 없으면 불편한 것이지 없으면 막히는 것이 아니다.
+			 */
+			.body.cut {
+				-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+				mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+			}
+
+			/*
 			 * "한 판 더" 옆의 인원수.
 			 *
 			 * 이 숫자가 그 버튼의 판단 근거다 — 혼자 누르고 빈 방에 남는 것과
@@ -186,7 +216,7 @@
 				<span class="who" id="who">게임 종료</span>
 			</div>
 
-			<div class="body scroll">
+			<div class="body scroll" id="listbox">
 				<div class="reveal" id="reveal"></div>
 			</div>
 
@@ -219,6 +249,24 @@
 					<span class="fate${p.alive ? " alive" : ""}">${p.alive ? "생존" : "사망"}</span>
 				</div>`;
 			}
+
+			/**
+			 * 목록이 아래로 더 남았는가.
+			 *
+			 * 두 조건을 함께 본다 — 내용이 상자보다 긴가(스크롤이 생겼는가),
+			 * 그리고 아직 바닥이 아닌가. 앞의 것만 보면 다 내려본 뒤에도
+			 * 마지막 줄이 흐려져서 글씨가 깨진 것처럼 보인다.
+			 *
+			 * 2px은 소수점 반올림 여유다. 확대/축소가 걸린 화면에서 두 값이
+			 * 1px씩 어긋나 스크롤이 없는 목록에 잘림 표시가 붙는 것을 막는다.
+			 */
+			function paintCut() {
+				const box = qs("#listbox");
+				const hidden = box.scrollHeight - box.clientHeight;
+				box.classList.toggle("cut", hidden > 2 && box.scrollTop < hidden - 2);
+			}
+
+			qs("#listbox").addEventListener("scroll", paintCut);
 
 			/**
 			 * "한 판 더" 현황. init에 실려 오고, 누가 누를 때마다 rematch 조각으로
@@ -266,6 +314,9 @@
 
 					const players = Array.isArray(data.players) ? data.players : [];
 					qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
+					// 목록을 그린 직후에만 잰다. 이 화면에서 상자 높이가 바뀌는
+					// 다른 경로는 없다 — 아래 rematch 조각은 버튼 안의 글자만 바꾼다
+					paintCut();
 
 					paintRematch(data.rematch);
 				},
