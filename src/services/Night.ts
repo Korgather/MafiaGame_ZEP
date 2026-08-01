@@ -27,7 +27,14 @@ import {
 	recordNightIntent,
 } from "../domain/NightResolution.ts";
 import { intentTarget, putIntent, resolveNightIntents } from "../domain/NightPipeline.ts";
-import { aliveSeats, participantLabel, resetRound, seatAt, seatViews } from "../entities/Room.ts";
+import {
+	aliveSeats,
+	enterPhase,
+	participantLabel,
+	resetRound,
+	seatAt,
+	seatViews,
+} from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { forEachPlayer, label, playSound, playSoundTo } from "./Broadcast.ts";
@@ -89,7 +96,7 @@ function nightNote(room: Room, seat: Seat): string {
 }
 
 export function beginNight(room: Room): void {
-	room.phase = GamePhase.NIGHT;
+	enterPhase(room, GamePhase.NIGHT);
 	room.phaseTimer = room.ruleSet.timing.NIGHT;
 	room.tickTockPlayed = false;
 	/*

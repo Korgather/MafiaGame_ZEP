@@ -14,7 +14,7 @@
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { NightActionKind, roleDef } from "./Roles.ts";
+import { effectiveDef, NightActionKind, roleDef } from "./Roles.ts";
 
 /**
  * 밤에 대상을 지목했을 때 시전자에게 돌아가는 것.
@@ -67,8 +67,12 @@ const REVEAL_MS = 6000;
  *
  * turnCount는 지나간 낮의 수다(첫 밤이면 0).
  */
-export function nightActionBlockedReason(seat: Seat, turnCount: number): string | null {
-	const reason = noTurnReason(seat, turnCount);
+export function nightActionBlockedReason(
+	seat: Seat,
+	turnCount: number,
+	deadCount?: number
+): string | null {
+	const reason = noTurnReason(seat, turnCount, deadCount);
 	if (reason) return reason;
 	if (seat.usedSkill) return "이미 대상을 선택했습니다.";
 	return null;
@@ -86,17 +90,41 @@ export function nightActionBlockedReason(seat: Seat, turnCount: number): string 
  * 두 함수가 조건을 복사해 갖지 않게 blocked 쪽이 이쪽을 부른다. 능력에
  * 조건이 하나 늘어도 고칠 곳은 여전히 아래 한 군데다.
  */
-export function hasNightTurn(seat: Seat, turnCount: number): boolean {
-	return noTurnReason(seat, turnCount) === null;
+export function hasNightTurn(seat: Seat, turnCount: number, deadCount?: number): boolean {
+	return noTurnReason(seat, turnCount, deadCount) === null;
 }
 
-/** 구조적으로 이번 밤에 할 일이 없는 이유. 할 일이 있으면 null */
-function noTurnReason(seat: Seat, turnCount: number): string | null {
-	const def = roleDef(seat.role);
+/**
+ * 구조적으로 이번 밤에 할 일이 없는 이유. 할 일이 있으면 null.
+ *
+ * deadCount는 지금까지 죽은 사람 수다. 사망자를 대상으로 하는 직업
+ * (영매·성직자)은 이 값이 0인 밤에 고를 수 있는 칸이 하나도 없다 — 격자를
+ * 열어 두면 빈 화면이 뜨고, 무엇보다 진행률의 분모에 남아 "3명 중 2명"에서
+ * 영영 멈춘다. 선택 인자인 이유는 이 조건을 아는 호출부가 방을 들고 있는
+ * 쪽뿐이기 때문이다. 모르는 호출부(테스트·순수 시뮬레이터)는 예전 그대로 답한다.
+ */
+function noTurnReason(seat: Seat, turnCount: number, deadCount?: number): string | null {
+	// 빌린 능력이 있으면 그쪽이 이번 밤의 능력이다. 원래 직업으로 물으면
+	// 도둑은 훔친 밤에 "이미 다 썼습니다"를 보고 격자를 못 연다
+	const def = effectiveDef(seat);
 	if (def.nightAction === null) return "밤에 쓸 능력이 없는 직업입니다. 아침을 기다리세요.";
+	if (def.targetsDead === true && deadCount !== undefined && deadCount === 0) {
+		return "아직 아무도 죽지 않았습니다. 이번 밤은 지켜보세요.";
+	}
 	// usesSpent만 보면 방금 이번 밤에 쓴 사람도 "차례가 없다"가 되어 분모에서
-	// 빠진다. 이번 밤에 쓴 것은 위 usedSkill이 답할 몫이다
-	if (def.maxUses !== undefined && seat.usesSpent >= def.maxUses && !seat.usedSkill) {
+	// 빠진다. 이번 밤에 쓴 것은 위 usedSkill이 답할 몫이다.
+	//
+	// 빌린 능력은 이 검사를 지나간다. usesSpent는 좌석의 것이지 능력의 것이
+	// 아니어서, 훔치기로 이미 1이 올라간 도둑이 maxUses 1짜리 능력을 빌리면
+	// 그 밤에 곧바로 "다 썼습니다"가 된다 — 훔치는 행위가 훔친 것을 태운다.
+	// 빌린 능력의 잔여 횟수는 원래 주인의 좌석에 남아 있고, 도둑은 그 능력을
+	// 정확히 한 밤만 들고 있으므로 여기서 세지 않아도 한 번을 넘길 수 없다.
+	if (
+		seat.borrowedRole === null &&
+		def.maxUses !== undefined &&
+		seat.usesSpent >= def.maxUses &&
+		!seat.usedSkill
+	) {
 		return "능력을 쓸 수 있는 횟수를 다 썼습니다. 이번 밤은 지켜보세요.";
 	}
 	if (def.firstNightOnly && turnCount > 0) {
@@ -121,12 +149,17 @@ function noTurnReason(seat: Seat, turnCount: number): string | null {
  * 능력이 없는 직업이면 null. 고를 수 없는 대상이어도 null이다.
  */
 export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult | null {
-	const def = roleDef(actor.role);
+	// 빌린 능력이 있으면 그쪽으로 답한다. noTurnReason과 같은 근거를 봐야
+	// 격자는 열렸는데 지목은 거절되는 밤이 생기지 않는다
+	const def = effectiveDef(actor);
 	if (def.nightAction === null) return null;
 	// 위젯이 이미 잠근 칸이지만 여기서도 막는다. 위젯의 잠금은 화면의 일이고,
 	// 지목이 실제로 기록되는 곳은 여기다 — 한쪽만 있으면 위젯을 안 거치는
 	// 경로가 하나 생기는 날 규칙이 사라진다
 	if (def.noSelfTarget === true && actor.index === target.index) return null;
+	// 산 자를 고르는 능력과 죽은 자를 고르는 능력은 격자가 아예 다르다.
+	// 한쪽 격자에서 다른 쪽 대상이 올라오는 경로는 위젯 버그이거나 위조다
+	if (def.targetsDead === true ? target.alive : !target.alive) return null;
 
 	switch (def.nightAction) {
 		case NightActionKind.HEAL:
@@ -149,17 +182,6 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 			if (def.attackSound) attack.roomSound = def.attackSound;
 			return attack;
 		}
-
-		case NightActionKind.BLOCK:
-			// 지목한 순간에는 막았는지 아닌지를 답할 수 없다. 대상이 아직
-			// 아무것도 고르지 않았을 수 있고, 그 밤이 어떻게 정산될지는
-			// 파이프라인이 돌아야 정해진다. 답은 아침에 한 번만 간다 —
-			// NightPipeline의 notifyBlocked다
-			return {
-				consumed: true,
-				confirmed: true,
-				label: `${target.index}번 참가자를 방해하기로 했습니다.`,
-			};
 
 		case NightActionKind.INSPECT_TEAM:
 		case NightActionKind.INSPECT_ROLE:
@@ -205,6 +227,88 @@ export function recordNightIntent(actor: Seat, target: Seat): NightSelectResult 
 				label: `${target.index}번에게 보낼 문구를 고르세요.`,
 				needsPhrase: true,
 			};
+
+		case NightActionKind.SEDUCE:
+			// 능력을 막았는지는 지목 시점에 답할 수 없다. 대상이 아직 아무것도
+			// 고르지 않았을 수 있고, 그 밤이 어떻게 정산될지는 파이프라인이 돌아야
+			// 정해진다 — 그쪽 답은 아침에 한 번만 간다(NightPipeline의 notifyBlocked).
+			// 대신 다음 낮까지 이어지는 침묵은 지금 확정된 사실이라 여기서 알린다.
+			// 아침에 대상이 말을 못 하는 이유를 마담만은 알고 있어야 낮의 판단이 선다
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자를 유혹했습니다.\n내일 낮 동안 그는 말할 수 없습니다.`,
+				labelDurationMs: REVEAL_MS,
+			};
+
+		case NightActionKind.INTIMIDATE:
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자를 협박했습니다.\n내일 낮 그는 투표할 수 없습니다.`,
+				labelDurationMs: REVEAL_MS,
+			};
+
+		case NightActionKind.STEAL:
+			// 훔친 능력은 오늘 밤이 아니라 내일 밤에 쓴다. 오늘 쓸 수 있다고
+			// 착각하면 도둑은 아무것도 못 한 채 두 밤을 버린다
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자의 능력을 훔칩니다.\n내일 밤에 그 능력을 씁니다.`,
+				labelDurationMs: REVEAL_MS,
+			};
+
+		case NightActionKind.TRACK:
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자를 미행합니다.\n그가 누구를 찾아갔는지 내일 아침에 알게 됩니다.`,
+				labelDurationMs: REVEAL_MS,
+				privateSound: Sound.INVESTIGATE,
+			};
+
+		case NightActionKind.MARK:
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자와 함께 죽기로 했습니다.`,
+				labelDurationMs: REVEAL_MS,
+			};
+
+		case NightActionKind.STALK: {
+			// 접선 전과 후의 문구가 다르다. 접선 전에는 지목이 곧 "마피아와 같은
+			// 사람을 골랐는가"를 묻는 시도이고, 접선 뒤에는 그냥 공격이다.
+			// 같은 문구를 쓰면 짐승인간은 자기가 접선했는지를 문구로 알 수 없다
+			const stalk: NightSelectResult = {
+				consumed: true,
+				confirmed: true,
+				label: actor.contacted
+					? `${target.index}번 참가자를 공격 대상으로 정했습니다.`
+					: `${target.index}번 참가자를 노립니다.\n마피아와 같은 대상이면 접선합니다.`,
+				labelDurationMs: REVEAL_MS,
+			};
+			if (actor.contacted && def.attackSound) stalk.roomSound = def.attackSound;
+			return stalk;
+		}
+
+		case NightActionKind.SEANCE:
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자의 혼령을 부릅니다.\n결과는 내일 아침에 알게 됩니다.`,
+				labelDurationMs: REVEAL_MS,
+				privateSound: Sound.INVESTIGATE,
+			};
+
+		case NightActionKind.REVIVE:
+			return {
+				consumed: true,
+				confirmed: true,
+				label: `${target.index}번 참가자를 되살립니다.\n이 판에 한 번뿐입니다.`,
+				labelDurationMs: REVEAL_MS,
+				privateSound: Sound.HEAL,
+			};
 	}
 }
 
@@ -225,6 +329,14 @@ export const NightOutcome = {
 	SHIELDED: "SHIELDED",
 	/** 자경단원이 같은 편을 쏴 자신도 죽었다 */
 	BACKFIRED: "BACKFIRED",
+	/** 테러리스트가 스스로 터졌다 */
+	EXPLODED: "EXPLODED",
+	/** 자폭에 휘말렸다 */
+	BOMBED: "BOMBED",
+	/** 연인이 죽어 뒤따랐다 */
+	HEARTBREAK: "HEARTBREAK",
+	/** 성직자가 되살렸다. 유일하게 죽음이 아닌 결말이다 */
+	REVIVED: "REVIVED",
 } as const;
 export type NightOutcome = (typeof NightOutcome)[keyof typeof NightOutcome];
 
@@ -249,7 +361,12 @@ export function resolveNightCasualties(seats: readonly Seat[]): NightCasualty[] 
 	const killed: Seat[] = [];
 
 	for (const seat of seats) {
-		if (!seat.alive || seat.attackedBy.length === 0) continue;
+		if (!seat.alive) continue;
+		// 면역은 attackedBy를 비우는 대신 걸러서 본다. 비우면 "공격은 받았지만
+		// 죽지 않았다"와 "아무도 안 왔다"가 같은 상태가 되어, 뒤따르는 자책
+		// 판정도 미행 결과도 그 밤에 무슨 일이 있었는지를 되짚을 수 없다
+		const attackers = effectiveAttackers(seats, seat);
+		if (attackers.length === 0) continue;
 		if (seat.healed) {
 			casualties.push({ seat, outcome: NightOutcome.SAVED });
 			continue;
@@ -268,9 +385,8 @@ export function resolveNightCasualties(seats: readonly Seat[]): NightCasualty[] 
 	// 군인이 버텼다면 시민은 멀쩡하므로 책임질 일도 없다.
 	for (const victim of killed) {
 		if (victim.team === Team.MAFIA) continue;
-		for (const shooterIndex of victim.attackedBy) {
-			const shooter = seatByIndex(seats, shooterIndex);
-			if (!shooter || !shooter.alive) continue;
+		for (const shooter of effectiveAttackers(seats, victim)) {
+			if (!shooter.alive) continue;
 			if (!roleDef(shooter.role).backfiresOnAlly) continue;
 			if (shooter.team !== victim.team) continue;
 			if (hasCasualty(casualties, shooter)) continue;
@@ -278,6 +394,27 @@ export function resolveNightCasualties(seats: readonly Seat[]): NightCasualty[] 
 		}
 	}
 	return casualties;
+}
+
+/**
+ * 이 좌석을 실제로 죽일 수 있는 공격자들.
+ *
+ * immuneToMafiaKill은 "마피아 팀의 칼이 안 통한다"는 뜻이고, 그 판정 기준은
+ * 무기가 아니라 **쏜 사람의 진영**이다. 자경단원의 총은 시민의 것이므로 통한다.
+ * 짐승인간이 접선 전에 마피아에게 죽지 않는 것이 이 규칙의 전부이고, 그래서
+ * 정산 시점에 진영을 다시 읽는다 — 도굴꾼처럼 판 도중에 진영이 바뀌는
+ * 직업이 있는 이상, 지목 시점의 진영을 기억해 두면 그 순간 틀린다.
+ */
+function effectiveAttackers(seats: readonly Seat[], target: Seat): Seat[] {
+	const immune = roleDef(target.role).immuneToMafiaKill === true;
+	const attackers: Seat[] = [];
+	for (const index of target.attackedBy) {
+		const shooter = seatByIndex(seats, index);
+		if (!shooter) continue;
+		if (immune && shooter.team === Team.MAFIA) continue;
+		attackers.push(shooter);
+	}
+	return attackers;
 }
 
 function hasCasualty(casualties: readonly NightCasualty[], seat: Seat): boolean {

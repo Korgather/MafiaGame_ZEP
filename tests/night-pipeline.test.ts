@@ -73,11 +73,14 @@ const TRACE_BY_KIND: Record<
 		actor: Role;
 		/** 시전자에게 미리 심어 둘 상태. 없으면 팩토리 기본값 */
 		actorSetup?: Partial<Seat>;
-		check: (target: Seat, settlement: NightSettlement) => void;
+		/** 대상의 직업. 없으면 시민 */
+		targetRole?: Role;
+		/** 대상에게 미리 심어 둘 상태. 영매·성직자처럼 시체를 부르는 능력이 쓴다 */
+		targetSetup?: Partial<Seat>;
+		check: (target: Seat, settlement: NightSettlement, actor: Seat) => void;
 	}
 > = {
 	HEAL: { actor: Role.DOCTOR, check: t => assert.equal(t.healed, true) },
-	BLOCK: { actor: Role.THUG, check: t => assert.equal(t.blocked, true) },
 	ATTACK: { actor: Role.MAFIA, check: t => assert.deepEqual(t.attackedBy, [1]) },
 	SCOOP: { actor: Role.REPORTER, check: t => assert.equal(t.scooped, true) },
 	// 조사의 답은 대상이 아니라 시전자에게 간다(reveals). 대상은 자기가
@@ -101,6 +104,82 @@ const TRACE_BY_KIND: Record<
 				[2],
 				"쪽지가 배달되지 않았다 — 이 행은 아무것도 지키지 못한다"
 			);
+		},
+	},
+	// 유혹은 두 흔적을 남긴다. 하나만 보면 수명이 다른 두 값 중 하나가
+	// 조용히 빠져도 이 행이 통과한다
+	SEDUCE: {
+		actor: Role.MADAM,
+		check: t => {
+			assert.equal(t.blocked, true);
+			assert.equal(t.seduced, true);
+		},
+	},
+	// 협박은 밤을 건드리지 않는다. blocked가 함께 켜지면 낮의 능력이
+	// 밤의 능력까지 빼앗는 셈이라 건달이 마담의 상위 직업이 된다
+	INTIMIDATE: {
+		actor: Role.THUG,
+		check: t => {
+			assert.equal(t.intimidated, true);
+			assert.equal(t.blocked, false);
+		},
+	},
+	// 훔치기가 남기는 곳은 대상이 아니라 시전자다. 대상에 흔적이 남으면
+	// "도둑에게 능력을 빼앗겼다"가 다음 밤에 새어 나간다
+	STEAL: {
+		actor: Role.THIEF,
+		check: (target, _settlement, actor) => {
+			noTrace(target);
+			assert.equal(actor.borrowedRole, Role.CITIZEN);
+		},
+	},
+	// 미행도 조사다. 흔적은 없지만 시전자에게 답이 가야 한다
+	TRACK: {
+		actor: Role.DETECTIVE,
+		check: (target, settlement) => {
+			noTrace(target);
+			assert.deepEqual(settlement.reveals.map(r => r.seat), [1]);
+		},
+	},
+	// 자폭은 attackedBy를 거치지 않는 유일한 사망 경로다. 대상에 공격
+	// 흔적이 남으면 의사가 막을 수 있게 되어 확정 사망이 아니게 된다
+	MARK: {
+		actor: Role.TERRORIST,
+		check: (target, settlement) => {
+			noTrace(target);
+			assert.deepEqual(settlement.casualties.map(c => [c.seat.index, c.outcome]), [
+				[1, NightOutcome.EXPLODED],
+				[2, NightOutcome.BOMBED],
+			]);
+		},
+	},
+	// 접선 전 짐승인간은 물지 못한다. 마피아가 같은 사람을 노리지 않은
+	// 밤이라 헛짚음이 맞다 — 여기서 물면 접선 조건이 없는 것과 같다
+	STALK: {
+		actor: Role.BEAST,
+		check: (target, settlement, actor) => {
+			noTrace(target);
+			assert.equal(actor.contacted, false);
+			assert.deepEqual(settlement.defected, []);
+		},
+	},
+	// 성불은 시체에만 통한다. 산 사람을 대상으로 두면 이 행이 실제 쓰임과
+	// 다른 상황을 지키게 된다
+	SEANCE: {
+		actor: Role.SHAMAN,
+		targetSetup: { alive: false },
+		check: t => assert.equal(t.exorcised, true),
+	},
+	// 소생은 좌석을 직접 되돌리지 않는다. 결말만 쌓고 실제로 살리는 것은
+	// 파이프라인 밖의 서비스다 — 그 경계가 여기서 고정된다
+	REVIVE: {
+		actor: Role.PRIEST,
+		targetSetup: { alive: false },
+		check: (target, settlement) => {
+			assert.equal(target.alive, false);
+			assert.deepEqual(settlement.casualties.map(c => [c.seat.index, c.outcome]), [
+				[2, NightOutcome.REVIVED],
+			]);
 		},
 	},
 };
@@ -226,9 +305,10 @@ describe("밤 파이프라인 — 목록의 완전성", () => {
 			const row = TRACE_BY_KIND[kind];
 			// 표가 실제 직업 정의와 어긋나면 아래 검사는 다른 능력을 보게 된다
 			assert.equal(ROLE_DEFS[row.actor].nightAction, kind);
-			const seats = [seat(1, row.actor, row.actorSetup), seat(2, Role.CITIZEN)];
+			const targetRole = row.targetRole === undefined ? Role.CITIZEN : row.targetRole;
+			const seats = [seat(1, row.actor, row.actorSetup), seat(2, targetRole, row.targetSetup)];
 			const settlement = night(seats, [[1, 2]]);
-			row.check(seats[1], settlement);
+			row.check(seats[1], settlement, seats[0]);
 		}
 	});
 });

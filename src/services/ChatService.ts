@@ -109,6 +109,9 @@ function contextOf(playerId: string): ChatContext {
 		// 어느 좌석과도 같지 않다(좌석 번호는 1부터다)
 		nominee: room.nominee === seat.index,
 		mafiaChat: inMafiaChat(seat),
+		// 짝은 좌석 하나로 정할 수 없어 GameFlow가 배정 뒤에 적는다.
+		// 0은 "짝 없음"이다 — 좌석 번호가 1부터라 어느 좌석과도 겹치지 않는다
+		loverChat: seat.loverIndex !== 0,
 		ghostChat: hearsGhosts(seat),
 		chatMode: room.ruleSet.chatMode,
 	};
@@ -134,6 +137,7 @@ function spectatorContext(playerId: string): ChatContext {
 		// 판 안에 좌석이 없으니 단상에도 오를 수 없다
 		nominee: false,
 		mafiaChat: false,
+		loverChat: false,
 		ghostChat: false,
 		chatMode: watching.room.ruleSet.chatMode,
 	};

@@ -24,6 +24,16 @@ export const ChatChannel = {
 	MAFIA: "MAFIA",
 	/** 사망자(=관전자)와 영매 */
 	GHOST: "GHOST",
+	/**
+	 * 연인 두 사람의 야간 밀담.
+	 *
+	 * 원리상 청중이 좌석 쌍마다 다르다는 점에서 MAFIA와 다르다 — 마피아 채널은
+	 * 방에 하나지만 연인 채널은 쌍에 하나다. 그래도 채널을 쌍마다 만들지는 않는다.
+	 * 클래식은 한 방에 쌍이 정확히 하나라(연인은 반드시 2인 1쌍) 소속 여부가
+	 * 곧 청중이고, ChatPermission은 seat.loverIndex가 0이 아닌지만 본다.
+	 * 쌍이 여럿인 모드가 생기면 이 표가 아니라 그 판정 한 줄이 바뀐다.
+	 */
+	LOVER: "LOVER",
 } as const;
 
 export type ChatChannel = (typeof ChatChannel)[keyof typeof ChatChannel];
@@ -32,7 +42,10 @@ export type ChatChannel = (typeof ChatChannel)[keyof typeof ChatChannel];
  * 직업이 밤에 배정받을 수 있는 비밀 채널.
  * RoleDef.nightChat이 GLOBAL이나 ROOM을 가리키는 일은 없어야 하므로 좁혀둔다.
  */
-export type NightChannel = typeof ChatChannel.MAFIA | typeof ChatChannel.GHOST;
+export type NightChannel =
+	| typeof ChatChannel.MAFIA
+	| typeof ChatChannel.GHOST
+	| typeof ChatChannel.LOVER;
 
 /**
  * ZEP 기본 채팅의 청중.
@@ -136,6 +149,16 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 		speaksInto: null,
 		placeholder: "죽은 사람들에게",
 	},
+	LOVER: {
+		label: "연인",
+		glyph: "💞",
+		// 연인은 서로가 연인이라는 것만 알고 서로의 직업은 모른다. 표시하면
+		// 둘 중 한쪽이 죽는 순간 남은 쪽이 확정 정보를 들고 낮에 나선다.
+		revealsRole: false,
+		// MAFIA와 같은 이유다. 방 안에 연인 아닌 사람들이 앉아 있다.
+		speaksInto: null,
+		placeholder: "연인에게만",
+	},
 };
 
 /**
@@ -147,6 +170,7 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
  */
 export const CHANNEL_ORDER: readonly ChatChannel[] = [
 	ChatChannel.MAFIA,
+	ChatChannel.LOVER,
 	ChatChannel.GHOST,
 	ChatChannel.ROOM,
 	ChatChannel.GLOBAL,

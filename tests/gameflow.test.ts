@@ -1627,13 +1627,14 @@ describe("밤에 알아낸 것의 배달", () => {
 	 * NightPipeline은 reveals 배열을 만들 뿐이고, 그것을 각자에게 실제로 보내는
 	 * deliverNightReveals는 서비스 층에 있다.
 	 */
-	it("건달에게 막힌 밤은 답이 없고, 다음 밤은 멀쩡하다", () => {
-		// 건달의 인원 하한은 8인이라 이 7인 판의 덱에는 들어오지 않는다.
-		// 직업을 직접 앉혀서 본다
+	it("마담에게 막힌 밤은 답이 없고, 다음 밤은 멀쩡하다", () => {
+		// 마담은 클래식 전용이라 표준전 덱에서는 뽑히지 않는다. 직업을 직접
+		// 앉혀서 본다 — 막는 쪽이 건달에서 마담으로 옮겨 간 뒤에도 서비스 층의
+		// 세 가지(자기 칸 잠금·밤마다의 초기화·아침 배달)는 그대로여야 한다
 		startGame(7, 1, [
 			Role.MAFIA,
 			Role.POLICE,
-			Role.THUG,
+			Role.MADAM,
 			Role.CITIZEN,
 			Role.POLITICIAN,
 			Role.SOLDIER,
@@ -1643,19 +1644,19 @@ describe("밤에 알아낸 것의 배달", () => {
 		finishPhase(target); // ROLE_REVEAL → NIGHT
 		passPeacefulFirstNight(target); // 둘째 밤
 
-		const thug = seatsWithRole(target, Role.THUG)[0];
+		const madam = seatsWithRole(target, Role.MADAM)[0];
 		const police = seatsWithRole(target, Role.POLICE)[0];
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const answer = `🔍 ${mafia.index}번 참가자는 마피아입니다!`;
 
 		// 위젯이 내 칸을 잠그려면 이 한 줄이 payload에 실려야 한다. 값이 상수
 		// false가 되어도 게임 규칙은 멀쩡하고 화면만 조용히 열린다
-		const payload = mainWidget(playerOf(thug)).lastOfType("init");
+		const payload = mainWidget(playerOf(madam)).lastOfType("init");
 		assert.ok(payload);
-		assert.equal(payload.noSelf, true, "건달의 지목 화면이 자기 칸을 열어둔 채 열렸습니다");
+		assert.equal(payload.noSelf, true, "마담의 지목 화면이 자기 칸을 열어둔 채 열렸습니다");
 
-		// 둘째 밤: 건달이 경찰을 막는다. 마피아는 지목하지 않아 아무도 죽지 않는다
-		send(playerOf(thug), { type: "select", num: police.index });
+		// 둘째 밤: 마담이 경찰을 유혹한다. 마피아는 지목하지 않아 아무도 죽지 않는다
+		send(playerOf(madam), { type: "select", num: police.index });
 		send(playerOf(police), { type: "select", num: mafia.index });
 		finishPhase(target); // NIGHT → 정산 → DAY
 
@@ -1669,8 +1670,8 @@ describe("밤에 알아낸 것의 배달", () => {
 			"막힌 경찰에게 방해 통보가 오지 않았습니다"
 		);
 		assert.ok(
-			chatSaw(playerOf(thug), `${police.index}번은 어젯밤 능력을 썼고`),
-			"막은 건달에게 통보가 오지 않았습니다"
+			chatSaw(playerOf(madam), `${police.index}번은 어젯밤 능력을 썼고`),
+			"막은 마담에게 통보가 오지 않았습니다"
 		);
 
 		// 셋째 밤으로. 아무도 투표하지 않아 처형도 없다

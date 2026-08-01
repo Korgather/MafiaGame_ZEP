@@ -74,7 +74,13 @@ function nightAction(role) {
  * 코드에서 이미 사라진 문장이 남아 있었다.
  */
 function noTurnNote(role, over) {
-	const seat = Object.assign({ role, alive: true, usedSkill: false, usesSpent: 0 }, over);
+	// borrowedRole은 생략할 수 없다. 안내 문구를 고르는 쪽이 effectiveDef로
+	// "이번 밤에 실제로 들고 있는 능력"을 묻기 때문에, 빠지면 undefined를
+	// 직업 표에 넣고 미리보기 빌드가 그 자리에서 죽는다
+	const seat = Object.assign(
+		{ role, alive: true, usedSkill: false, usesSpent: 0, borrowedRole: null },
+		over
+	);
 	return { role: ROLE_DEFS[role].displayName, team: ROLE_DEFS[role].team, note: nightActionBlockedReason(seat, 0) };
 }
 

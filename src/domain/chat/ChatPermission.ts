@@ -58,6 +58,17 @@ export interface ChatContext {
 	readonly nominee: boolean;
 	/** 마피아 밀담 참가자인가 (마피아 본인 + 합류한 스파이) */
 	readonly mafiaChat: boolean;
+	/**
+	 * 연인 밀담 참가자인가 (짝이 맺어진 좌석).
+	 *
+	 * 짝의 신원이 아니라 소속 여부만 받는다. 청중을 고르는 곳이
+	 * "사람마다 이 채널을 읽을 수 있는가"를 묻는 구조라(ChatService의
+	 * deliverTo) 여기에 짝 번호를 넣어도 쓸 곳이 없다. 클래식은 한 방에
+	 * 연인이 정확히 한 쌍이므로 소속 여부가 곧 청중이다.
+	 * 한 방에 쌍이 둘 이상인 모드가 생기면 그때 이 값이 짝 식별자가 되고,
+	 * deliverTo가 보낸 사람의 짝과 비교해야 한다 — 그 전에는 없는 문제다.
+	 */
+	readonly loverChat: boolean;
 	/** 유령의 목소리를 듣는 직업인가 (영매) */
 	readonly ghostChat: boolean;
 	/** 이 방의 채팅 방식. 침묵전이면 낮에 준비된 문구만 쓸 수 있다 */
@@ -132,6 +143,7 @@ export const LOOSE_CONTEXT: ChatContext = {
 	spectating: false,
 	nominee: false,
 	mafiaChat: false,
+	loverChat: false,
 	ghostChat: false,
 	chatMode: "free",
 };
@@ -149,7 +161,12 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 	 * GLOBAL은 ctx.started가 이미 잠그고(게임 중에는 아무도 못 쓴다),
 	 * ROOM은 아래에서 읽기만 열어준다.
 	 */
-	if (ctx.spectating && (channel === ChatChannel.MAFIA || channel === ChatChannel.GHOST)) {
+	if (
+		ctx.spectating &&
+		(channel === ChatChannel.MAFIA ||
+			channel === ChatChannel.LOVER ||
+			channel === ChatChannel.GHOST)
+	) {
 		return NONE;
 	}
 
@@ -217,6 +234,25 @@ export function accessOf(ctx: ChatContext, channel: ChatChannel): ChannelAccess 
 		if (!ctx.mafiaChat) return NONE;
 		if (!ctx.alive) return locked("죽은 뒤에는 밀담에 낄 수 없습니다");
 		if (ctx.phase !== GamePhase.NIGHT) return locked("마피아 밀담은 밤에만 열립니다");
+		return OPEN;
+	}
+
+	/*
+	 * LOVER — 마피아 밀담과 같은 모양이다. 밤에만, 산 사람만.
+	 *
+	 * 이 분기가 없으면 LOVER가 아래 GHOST 규칙으로 흘러내린다. 그러면 죽은
+	 * 사람 전원이 연인 채널을 쓸 수 있게 되고, CHANNEL_ORDER에서 LOVER가
+	 * GHOST보다 앞이라 죽는 순간 탭이 유령이 아니라 연인으로 옮겨간다.
+	 * 채널을 값으로 만든 대가가 여기 있다 — 표에 한 줄을 더하면 판정에도
+	 * 한 가지가 늘고, 빠뜨리면 새 채널이 조용히 옆 채널의 규칙을 물려받는다.
+	 */
+	if (channel === ChatChannel.LOVER) {
+		if (!ctx.loverChat) return NONE;
+		// 한쪽이 죽으면 그날 밤 다른 쪽도 상심으로 따라 죽는다(NightPipeline의
+		// chainLovers). 그래도 잠금은 남겨 둔다 — 연쇄가 도는 것은 밤의 끝이고,
+		// 그 사이에 죽은 사람이 남은 연인에게 정보를 넘기는 창이 열린다
+		if (!ctx.alive) return locked("죽은 뒤에는 연인과 이야기할 수 없습니다");
+		if (ctx.phase !== GamePhase.NIGHT) return locked("연인의 대화는 밤에만 열립니다");
 		return OPEN;
 	}
 

@@ -15,7 +15,7 @@ import { GamePhase, Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
-import { revealViews } from "../entities/Room.ts";
+import { enterPhase, revealViews } from "../entities/Room.ts";
 import { forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
@@ -35,7 +35,7 @@ export function finishIfDecided(room: Room): boolean {
 }
 
 export function finish(room: Room, winner: TeamType): void {
-	room.phase = GamePhase.GAME_OVER;
+	enterPhase(room, GamePhase.GAME_OVER);
 	room.phaseTimer = room.ruleSet.timing.GAME_OVER;
 	room.tickTockPlayed = true;
 	room.winner = winner;

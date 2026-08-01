@@ -70,6 +70,7 @@ function ctx(over: Partial<ChatContext> = {}): ChatContext {
 		spectating: false,
 		nominee: false,
 		mafiaChat: false,
+		loverChat: false,
 		ghostChat: false,
 		chatMode: "free",
 	};

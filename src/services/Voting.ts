@@ -17,7 +17,7 @@ import { Sound } from "../constants/Assets.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { SKIP_VOTE, tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
-import { aliveSeats, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
+import { aliveSeats, enterPhase, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
@@ -55,7 +55,7 @@ function dayDuration(room: Room, aliveCount: number): number {
 }
 
 export function beginDay(room: Room): void {
-	room.phase = GamePhase.DAY;
+	enterPhase(room, GamePhase.DAY);
 	room.phaseTimer = dayDuration(room, aliveSeats(room).length);
 	room.tickTockPlayed = false;
 
@@ -106,7 +106,7 @@ export function beginDay(room: Room): void {
  * 무대(beginDayStage)도 이미 낮 상태 그대로다.
  */
 export function resumeDay(room: Room): void {
-	room.phase = GamePhase.DAY;
+	enterPhase(room, GamePhase.DAY);
 	room.phaseTimer = Math.floor(dayDuration(room, aliveSeats(room).length) / 2);
 	room.tickTockPlayed = false;
 
@@ -194,7 +194,7 @@ function broadcastDayTimer(room: Room): void {
 }
 
 export function beginVote(room: Room): void {
-	room.phase = GamePhase.VOTE;
+	enterPhase(room, GamePhase.VOTE);
 	room.phaseTimer = room.ruleSet.timing.VOTE;
 	room.tickTockPlayed = false;
 	room.voteRound++;
@@ -375,7 +375,7 @@ export function broadcastVoteProgress(room: Room): void {
  * 말할 기회를 주기 때문에 "표가 몰렸다 = 죽는다"가 성립하지 않는다.
  */
 export function beginVoteResult(room: Room): void {
-	room.phase = GamePhase.VOTE_RESULT;
+	enterPhase(room, GamePhase.VOTE_RESULT);
 	room.phaseTimer = room.ruleSet.timing.VOTE_RESULT;
 	room.tickTockPlayed = true; // 결과 발표 중에는 째깍 사운드를 울리지 않는다
 

@@ -40,7 +40,7 @@ beforeEach(() => resetWorld());
  * 밤 능력이 전부 등장하는 덱. 무작위 덱을 쓰면 점쟁이가 안 뽑힌 판에서
  * 「경찰과 점쟁이가 다르다」가 검사할 대상 없이 통과한다.
  */
-const DECK = [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.SEER, Role.THUG, Role.CITIZEN];
+const DECK = [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.SEER, Role.MADAM, Role.CITIZEN];
 
 function silence(players: readonly FakePlayer[]): void {
 	for (const player of players) player.clearLog();
@@ -115,7 +115,7 @@ describe("효과음 배선", () => {
 	/**
 	 * 차단은 아침에 채팅 한 줄로만 왔다. 토론이 시작되면 밀려 올라가고,
 	 * 놓치면 자기 능력이 대상에 닿았다고 믿은 채 하루를 보낸다.
-	 * 막은 쪽(건달)에게는 붙이지 않는다 — 자기가 무엇을 했는지 이미 안다.
+	 * 막은 쪽(마담)에게는 붙이지 않는다 — 자기가 무엇을 했는지 이미 안다.
 	 */
 	it("차단음은 막힌 사람에게만 난다", () => {
 		const players = startGame(6, 1, DECK);
@@ -123,9 +123,9 @@ describe("효과음 배선", () => {
 		finishPhase(target);
 
 		const police = seatsWithRole(target, Role.POLICE)[0];
-		const thug = playerOf(seatsWithRole(target, Role.THUG)[0]);
+		const madam = playerOf(seatsWithRole(target, Role.MADAM)[0]);
 		send(playerOf(police), { type: "select", num: seatsWithRole(target, Role.CITIZEN)[0].index });
-		send(thug, { type: "select", num: police.index });
+		send(madam, { type: "select", num: police.index });
 		silence(players);
 
 		finishPhase(target); // 정산 → 아침 통보
@@ -154,7 +154,7 @@ describe("효과음 배선", () => {
 		assert.equal(listeners(players, Sound.DEATH), 1);
 		assert.equal(heard(playerOf(victim), Sound.DEATH), true);
 
-		const executed = seatsWithRole(target, Role.THUG)[0];
+		const executed = seatsWithRole(target, Role.MADAM)[0];
 		silence(players);
 		finishPhase(target); // DAY → VOTE
 		for (const player of players) vote(player, executed.index);

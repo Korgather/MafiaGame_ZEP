@@ -16,7 +16,11 @@
 import { Role, Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import type { SpriteKey } from "../constants/Assets.ts";
-import { POLITICIAN_VOTE_WEIGHT } from "../constants/GameConfig.ts";
+import {
+	POLITICIAN_VOTE_WEIGHT,
+	POLITICIAN_WIN_WEIGHT,
+	THUG_WIN_WEIGHT,
+} from "../constants/GameConfig.ts";
 import { ChatChannel } from "./chat/ChatChannel.ts";
 import type { NightChannel } from "./chat/ChatChannel.ts";
 
@@ -39,14 +43,37 @@ export const NightActionKind = {
 	INSPECT_TEAM: "INSPECT_TEAM",
 	/** 스파이: 대상의 정확한 직업 확인. 마피아면 밤 정산에서 마피아로 넘어간다 */
 	INSPECT_ROLE: "INSPECT_ROLE",
-	/** 건달: 대상의 그날 밤 능력을 통째로 막는다 */
-	BLOCK: "BLOCK",
 	/** 기자: 대상의 직업을 다음 아침에 전체 공개한다 */
 	SCOOP: "SCOOP",
 	/** 점쟁이: 대상이 밤에 지목하는 직업인지만 확인 */
 	INSPECT_ABILITY: "INSPECT_ABILITY",
 	/** 시민: 대상에게 정해진 문구 하나를 익명으로 보낸다 */
 	NOTE: "NOTE",
+	/**
+	 * 마담: 대상의 능력을 막고 다음 낮의 발언까지 막는다.
+	 *
+	 * 밤 능력을 막는 유일한 종류다. 예전에는 "그 밤에만 사는 차단"을 뜻하는
+	 * BLOCK이 따로 있었지만, 클래식에서 그 자리를 쓰던 직업(건달)이 낮
+	 * 투표를 막는 쪽(INTIMIDATE)으로 옮겨가면서 아무도 쓰지 않게 되어 지웠다.
+	 * 다시 필요해지면 그때 나눈다 — 나눌 근거는 수명이다. 밤에서 끝나는
+	 * 차단과 다음 낮까지 이어지는 유혹은 "밤이 끝났는데 왜 아직 못 말하는가"를
+	 * 행동 종류만으로 구별할 수 있어야 하기 때문이다.
+	 */
+	SEDUCE: "SEDUCE",
+	/** 건달: 대상의 다음 낮 투표(지목·찬반)를 막는다. 밤 능력은 막지 않는다 */
+	INTIMIDATE: "INTIMIDATE",
+	/** 도둑: 대상의 기본 능력을 훔쳐 다음 밤에 쓴다 */
+	STEAL: "STEAL",
+	/** 사립탐정: 대상이 그 밤에 누구를 지목했는지 확인 */
+	TRACK: "TRACK",
+	/** 테러리스트: 함께 죽을 상대를 지목 */
+	MARK: "MARK",
+	/** 짐승인간: 대상을 노린다. 마피아와 같은 대상이면 접선, 접선 뒤에는 공격 */
+	STALK: "STALK",
+	/** 영매: 사망자의 직업을 확인하고 성불시킨다 */
+	SEANCE: "SEANCE",
+	/** 성직자: 사망자를 되살린다 */
+	REVIVE: "REVIVE",
 } as const;
 export type NightActionKind = (typeof NightActionKind)[keyof typeof NightActionKind];
 
@@ -59,23 +86,36 @@ export type NightActionKind = (typeof NightActionKind)[keyof typeof NightActionK
  * 막을 사람이 늦게 누르면 이미 지나간 능력을 막게 됐다.
  *
  * 숫자 사이를 비워 둔 것은 나중에 끼우기 위해서다. 원문 기획의 SWAP(10)은
- * 대상을 바꿔치기하는 직업 전용이라 아직 넣지 않았다.
+ * 여전히 비어 있다 — 도둑을 넣으면서 후보가 되었지만, 훔치기를 SWAP에 두면
+ * 유혹·차단보다 먼저 돌아 "막혔는데도 훔쳤다"가 된다. 훔치기는 AFTER다.
  *
  * 값이 아니라 순서만 뜻한다. STEP_ORDER(NightPipeline.ts)가 이 순서를
  * 배열로 고정한다 — Jint에서 sort 안정성을 믿지 않기로 했으므로 정렬하지 않는다.
  */
 export const NightStep = {
-	/** 능력 차단 — 건달(S6), 마담(시즌 2) */
+	/** 능력 차단 — 마담 */
 	BLOCK: 20,
 	/** 보호 — 의사 */
 	PROTECT: 30,
 	/** 공격 — 마피아·짐승인간·자경단원 */
 	ATTACK: 40,
+	/**
+	 * 접선 — 짐승인간이 마피아와 같은 대상을 노렸는지 확인한다.
+	 *
+	 * ATTACK 뒤인 이유는 그 시점에야 마피아의 지목이 모두 등록돼 있어서고,
+	 * DEATH 앞인 이유는 접선한 짐승인간이 그 밤의 공격을 아직 등록할 수
+	 * 있어야 해서다. 둘 사이가 아니면 같은 step 안의 좌석 순서에 결과가 걸린다.
+	 */
+	CONTACT: 45,
 	/** 사망 확정 + 자경단원 자책 */
 	DEATH: 50,
-	/** 조사 — 경찰·스파이·점쟁이 */
+	/** 연쇄 — 테러리스트 자폭·연인 동반 사망 */
+	CHAIN: 55,
+	/** 소생 — 성직자. 연쇄까지 끝난 뒤라야 "이 밤의 사망자"가 확정돼 있다 */
+	REVIVE: 58,
+	/** 조사 — 경찰·스파이·점쟁이·영매 */
 	INSPECT: 60,
-	/** 사후 — 기자 특종·시민 쪽지·사기꾼 역알림·건달 차단 통보 */
+	/** 사후 — 기자 특종·시민 쪽지·사기꾼 역알림·건달 협박·도둑 훔치기·탐정 미행 */
 	AFTER: 70,
 } as const;
 export type NightStep = (typeof NightStep)[keyof typeof NightStep];
@@ -209,14 +249,13 @@ export interface RoleDef {
 	 */
 	readonly needsPriorDay?: boolean;
 	/**
-	 * 자기 자신은 대상으로 고를 수 없는가 (건달).
+	 * 자기 자신은 대상으로 고를 수 없는가 (건달·마담·도둑·사립탐정·테러리스트).
 	 *
-	 * 켜는 기준은 "결과가 반드시 없는 지목인가"다. 건달이 자기를 막으면
-	 * 정말로 아무 일도 일어나지 않는다 — BLOCK은 대상의 blocked만 켜는데,
-	 * 파이프라인의 가드는 BLOCK step 자신은 건너뛰므로(NightPipeline.ts)
-	 * 자기 blocked는 자기 능력을 되돌리지 못하고, 그 밤의 다른 무엇도
-	 * blocked를 읽지 않는다. 고를 수는 있지만 아무 일도 없는 칸이 하나
-	 * 생기는 셈이라, 위젯에서 아예 잠근다.
+	 * 켜는 기준은 "자기에게 쓰면 반드시 손해이거나 아무 일도 없는가"다.
+	 * 마담이 자기를 유혹하면 자기 낮 발언만 잃고, 건달이 자기를 협박하면
+	 * 자기 표만 잃는다. 도둑은 자기 능력을 자기에게서 훔쳐 제자리이고,
+	 * 사립탐정은 자기가 누구를 미행했는지를 알게 될 뿐이며, 테러리스트는
+	 * 한 번뿐인 자폭을 혼자 쓴다. 위젯에서 아예 잠근다.
 	 *
 	 * 자경단원에게는 일부러 켜지 않았다. 자기를 쏘는 것은 빈 수가 아니라
 	 * 실제로 죽는 수다("자기 자신을 지목해도 막지 않는다",
@@ -237,6 +276,52 @@ export interface RoleDef {
 	 * 새므로, 소리를 내는 직업을 여기서 고른다. 없으면 조용히 지나간다.
 	 */
 	readonly attackSound?: string;
+	/**
+	 * 승리 판정에서 이 좌석이 몇 명으로 세어지는가. 없으면 1명.
+	 *
+	 * voteWeight와 헷갈리기 쉬우나 완전히 다른 축이다. voteWeight는 낮에
+	 * 던지는 표의 무게고, 이쪽은 "마피아 수 ≥ 시민 수"를 셀 때의 무게다.
+	 * 정치인은 두 값이 우연히 2로 같지만 건달은 표 1장에 승리 가중치 3이다 —
+	 * 한 필드로 합치면 건달이 낮에 세 표를 던지게 된다.
+	 */
+	readonly winWeight?: number;
+	/**
+	 * 마피아팀 보조직업인가 (스파이·짐승인간·마담·도둑).
+	 *
+	 * 마피아 본직과 나누는 축이다. 클래식 구성표가 "마피아 n명 + 보조 1명"으로
+	 * 자리를 세므로 배정이 이 값을 읽고, 밤 공격 예산도 본직 수만 따른다.
+	 * team === MAFIA로는 갈리지 않는다 — 사기꾼도 마피아 팀이지만 보조 자리가
+	 * 아니라 마피아 본직 풀(표준전)에서 나온다.
+	 */
+	readonly isMafiaSupport?: boolean;
+	/**
+	 * 접선해야 마피아로 인정받는가 (스파이·짐승인간).
+	 *
+	 * isMafiaSupport와 겹쳐 보이지만 다른 축이다. 마담과 도둑은 보조이면서도
+	 * 처음부터 마피아와 대화하고 승리 인원에 세지지만, 스파이와 짐승인간은
+	 * 접선 전까지 밀담을 보지 못하고 승리 인원에도 들지 않는다.
+	 * 한 필드로 합치면 마담이 첫 밤에 혼자 앉아 있게 된다.
+	 *
+	 * 접선하는 *방법*은 여기 없다 — 스파이는 조사(defectsToMafia), 짐승인간은
+	 * 같은 대상 지목(STALK)으로, 각자의 능력이 곧 조건이다. 이 플래그는
+	 * "seat.contacted를 false로 시작하는가"만 정한다.
+	 */
+	readonly needsContact?: boolean;
+	/**
+	 * 마피아의 밤 공격에 죽지 않는가 (짐승인간).
+	 *
+	 * 같은 편을 잘못 때리는 사고를 막는 규칙이라 방어(의사)와는 별개 축이다.
+	 * survivesFirstAttack이 "한 번 버틴다"인 것과 달리 이쪽은 영구적이고,
+	 * 자경단원·테러리스트 등 마피아가 아닌 공격에는 걸리지 않는다.
+	 */
+	readonly immuneToMafiaKill?: boolean;
+	/**
+	 * 살아 있는 사람이 아니라 사망자를 지목하는가 (영매·성직자).
+	 *
+	 * 위젯의 대상 목록과 파이프라인의 유효성 검사가 같은 값을 읽어야 한다.
+	 * 한쪽에만 두면 "위젯에는 뜨는데 서버가 거절하는" 칸이 생긴다.
+	 */
+	readonly targetsDead?: boolean;
 }
 
 const NO_CHAT = "🌙 밤에는 채팅을 할 수 없습니다.";
@@ -314,21 +399,27 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// 그 주사위가 맞으면 진영이 옮겨가 마진이 2 줄고(마피아 +1, 시민 -1)
 		// 4~7명 판은 아무도 한 마디 하기 전에 아침에 끝났다.
 		needsPriorDay: true,
+		isMafiaSupport: true,
+		needsContact: true,
 	},
 	SHAMAN: {
 		displayName: "영매",
 		team: Team.CITIZEN,
 		glyph: "🔮",
-		ability: "밤마다 죽은 사람들과 대화합니다.",
+		ability: "밤마다 죽은 사람들과 대화하고, 그중 한 명을 성불시켜 직업을 봅니다.",
 		tip: "죽은 사람은 자기를 죽인 쪽을 압니다. 그 말을 낮에 전하세요.",
-		nightAction: null,
-		nightStep: NightStep.AFTER,
+		// 예전에는 지목이 없었다(대화만). 성불을 붙이면서 지목이 생겼는데,
+		// 대상이 사망자라 살아 있는 사람 격자를 그대로 쓸 수 없다 — targetsDead가
+		// 위젯과 서버 유효성 검사 양쪽에 같은 목록을 쓰게 만든다.
+		nightAction: NightActionKind.SEANCE,
+		nightStep: NightStep.INSPECT,
 		nightChat: ChatChannel.GHOST,
 		nightSprite: null,
 		nightAttackSprite: null,
-		nightPrompt: null,
+		nightPrompt: "성불시킬 혼령을 선택하세요.",
 		nightNotice: "🌙 죽은 혼령들과 대화할 수 있습니다.",
 		immuneToVote: false,
+		targetsDead: true,
 	},
 	POLITICIAN: {
 		displayName: "정치인",
@@ -345,6 +436,9 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		nightNotice: NO_CHAT,
 		immuneToVote: true,
 		voteWeight: POLITICIAN_VOTE_WEIGHT,
+		// 표의 무게와 값이 같지만 뜻이 다른 축이다 — 마피아가 이기려면
+		// 정치인 한 명을 두 명으로 세고 넘어서야 한다. winWeight 선언 참고.
+		winWeight: POLITICIAN_WIN_WEIGHT,
 	},
 	VIGILANTE: {
 		displayName: "자경단원",
@@ -384,22 +478,29 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "건달",
 		team: Team.CITIZEN,
 		glyph: "🥊",
-		ability: "밤마다 한 명의 밤 능력을 막고, 막을 것이 있었는지 알게 됩니다.",
-		tip: "확정 시민을 막으면 헛턴입니다. 밤에 움직일 것 같은 사람을 고르세요.",
-		nightAction: NightActionKind.BLOCK,
-		nightStep: NightStep.BLOCK,
+		ability: "밤마다 한 명을 협박해 다음 낮의 투표를 막습니다. 마피아 세 명 몫으로 세어집니다.",
+		// 예전에는 밤 능력을 막는 직업이었다. 클래식의
+		// 건달은 낮을 막는다 — 협박당한 사람은 지목도 찬반도 하지 못하고,
+		// 찬반에서는 미응답이 반대표로 세어진다. 밤을 막는 자리는 마담이 잇는다.
+		tip: "당신이 살아 있는 한 마피아는 좀처럼 이기지 못합니다. 대신 표적이 됩니다.",
+		nightAction: NightActionKind.INTIMIDATE,
+		// AFTER인 것이 핵심이다. 협박의 효과는 다음 낮에 나타나므로 밤의
+		// 어떤 판정도 이 값을 읽지 않는다. 반대로 협박당한 건달 자신은
+		// 파이프라인의 blocked 가드에 걸려 그 밤의 협박을 못 한다.
+		nightStep: NightStep.AFTER,
 		nightChat: null,
-		// 밤에 바뀌는 모습이 없다. 차단은 그 밤의 방에 아무 흔적도 남기지 않는
+		// 밤에 바뀌는 모습이 없다. 협박은 그 밤의 방에 아무 흔적도 남기지 않는
 		// 능력이라, 스프라이트가 바뀌면 그 자체가 "건달이 여기 있다"가 된다.
-		// 대상은 다음 아침에 "누군가 방해했다"까지만 듣는다 — 그때는 이미 밤이
-		// 끝나서 누가 어디에 서 있었는지를 되짚을 수 없다
 		nightSprite: null,
 		nightAttackSprite: null,
-		nightPrompt: "방해할 대상을 선택하세요.",
+		nightPrompt: "협박할 대상을 선택하세요.",
 		nightNotice: NO_CHAT,
 		immuneToVote: false,
-		// 자기를 막는 것은 확정된 헛턴이다 — 이유는 noSelfTarget 선언에 적었다
+		// 자기를 협박하면 자기 표만 잃는다 — 이유는 noSelfTarget 선언에 적었다
 		noSelfTarget: true,
+		// 표는 한 장인데 승리 판정에서는 세 명이다. voteWeight와 나눠 둔 이유가
+		// 이 어긋남이다 — 한 필드로 합치면 건달이 낮에 세 표를 던진다.
+		winWeight: THUG_WIN_WEIGHT,
 	},
 	REPORTER: {
 		displayName: "기자",
@@ -421,21 +522,30 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "짐승인간",
 		team: Team.MAFIA,
 		glyph: "🐺",
-		ability: "밤마다 한 명을 물어 죽입니다. 경찰 조사에는 시민으로 나옵니다.",
-		// 전에는 "마피아와 같은 사람을 물면 한 명만 죽습니다"였다. 사실이긴 해도
-		// 겹치는 쪽이 손해라 아무도 따를 이유가 없는 조언이었고, 대화 수단도 없어
-		// 겹칠지 말지 고를 수조차 없었다. 실제로 할 수 있는 판단만 적는다.
-		tip: "마피아와 대화할 수 없습니다. 마피아가 노릴 만한 사람은 피해야 시체가 둘 나옵니다.",
-		nightAction: NightActionKind.ATTACK,
-		nightStep: NightStep.ATTACK,
+		ability: "마피아와 같은 사람을 노리면 접선합니다. 접선한 뒤에는 밤마다 한 명을 물어 죽입니다.",
+		// 예전에는 처음부터 혼자 무는 독립 공격자였고, 조언도 "마피아와 겹치지
+		// 말라"였다. 클래식에서는 정확히 반대다 — 겹쳐야 합류한다.
+		tip: "마피아가 노릴 만한 사람을 함께 노리세요. 접선 전에는 아무도 죽이지 못합니다.",
+		nightAction: NightActionKind.STALK,
+		// CONTACT(45)에 서는 이유는 NightStep 선언에 적었다. ATTACK 뒤라
+		// 마피아의 지목이 다 등록돼 있고, DEATH 앞이라 접선한 밤의 공격을
+		// 아직 등록할 수 있다.
+		nightStep: NightStep.CONTACT,
+		// 접선 전에는 null이다. 접선하면 seat.contacted가 켜지고 밤 채팅이
+		// 열린다 — 판단은 좌석 상태를 아는 쪽(Night 서비스)이 한다.
 		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: "claw",
-		nightPrompt: "물어 죽일 대상을 선택하세요.",
+		nightPrompt: "노릴 대상을 선택하세요.",
 		nightNotice: LONE_MAFIA_TEAM,
 		immuneToVote: false,
 		// 경찰에게 잡히지 않는 것이 이 직업의 존재 이유다. appearsAsMafia를 켜면
 		// 마피아가 셋인 판이 되고, 끄면 "찾을 수 없는 살인마"가 된다.
+		isMafiaSupport: true,
+		needsContact: true,
+		// 마피아가 접선 전의 짐승인간을 모르고 때리는 사고를 막는다. 자경단원과
+		// 테러리스트에게는 걸리지 않는다 — 마피아의 공격만 빗나간다.
+		immuneToMafiaKill: true,
 	},
 	CON_ARTIST: {
 		displayName: "사기꾼",
@@ -476,6 +586,135 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		// usedSkill이 두 번째 지목을 막는다
 		firstNightOnly: true,
 	},
+	MADAM: {
+		displayName: "마담",
+		team: Team.MAFIA,
+		glyph: "💋",
+		ability: "밤마다 한 명을 유혹해 그 밤의 능력과 다음 낮의 발언을 막습니다.",
+		tip: "경찰과 의사를 재우는 것이 가장 큽니다. 다음 낮에 조용해진 사람이 곧 정답입니다.",
+		nightAction: NightActionKind.SEDUCE,
+		// 건달이 비운 자리를 그대로 잇는다. 유혹은 그 밤의 다른 모든 능력보다
+		// 먼저 돌아야 "이미 지나간 능력을 막는" 일이 없다.
+		nightStep: NightStep.BLOCK,
+		// 마담은 접선이 필요 없다. 처음부터 마피아와 대화한다
+		nightChat: ChatChannel.MAFIA,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: "유혹할 대상을 선택하세요.",
+		nightNotice: MAFIA_CHAT,
+		immuneToVote: false,
+		isMafiaSupport: true,
+		noSelfTarget: true,
+	},
+	THIEF: {
+		displayName: "도둑",
+		team: Team.MAFIA,
+		glyph: "🧤",
+		ability: "한 밤 동안 한 명의 능력을 훔치고, 다음 밤에 그 능력을 대신 씁니다.",
+		tip: "밤에 움직이지 않는 사람을 훔치면 다음 밤이 통째로 빕니다.",
+		nightAction: NightActionKind.STEAL,
+		// AFTER인 이유는 NightStep 선언에 적었다. SWAP(10)에 두면 유혹·협박보다
+		// 먼저 돌아 "막혔는데도 훔쳤다"가 된다.
+		nightStep: NightStep.AFTER,
+		nightChat: ChatChannel.MAFIA,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: "능력을 훔칠 대상을 선택하세요.",
+		nightNotice: MAFIA_CHAT,
+		immuneToVote: false,
+		isMafiaSupport: true,
+		noSelfTarget: true,
+	},
+	LOVER: {
+		displayName: "연인",
+		team: Team.CITIZEN,
+		glyph: "💞",
+		ability: "연인이 누구인지 서로 압니다. 한쪽이 죽으면 다른 쪽도 따라 죽습니다.",
+		tip: "서로를 확정 시민으로 쓸 수 있습니다. 다만 밝히는 순간 둘이 한 표적이 됩니다.",
+		nightAction: null,
+		// 지목이 없어도 CHAIN에 세운다. 짝의 죽음을 따라가는 것이 이 직업의
+		// 유일한 판정이고, 그 판정이 도는 자리가 CHAIN이다.
+		nightStep: NightStep.CHAIN,
+		nightChat: ChatChannel.LOVER,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: null,
+		nightNotice: "🌙 밤에는 연인과 대화할 수 있습니다.",
+		immuneToVote: false,
+	},
+	DETECTIVE: {
+		displayName: "사립탐정",
+		team: Team.CITIZEN,
+		glyph: "🔦",
+		ability: "밤마다 한 명을 미행해 그 사람이 누구를 지목했는지 봅니다.",
+		tip: "직업은 알 수 없습니다. 하지만 밤마다 누군가를 노리는 사람은 시민이 아닙니다.",
+		nightAction: NightActionKind.TRACK,
+		// 지목을 읽는 능력이므로 그 밤의 지목이 전부 등록된 뒤여야 한다
+		nightStep: NightStep.AFTER,
+		nightChat: null,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: "미행할 대상을 선택하세요.",
+		nightNotice: NO_CHAT,
+		immuneToVote: false,
+		noSelfTarget: true,
+	},
+	GRAVEDIGGER: {
+		displayName: "도굴꾼",
+		team: Team.CITIZEN,
+		glyph: "⛏️",
+		ability: "처음 죽은 시민 편 사망자의 직업을 대신 갖습니다. 판에 한 번뿐입니다.",
+		tip: "마피아 팀과 연인의 무덤은 파지 않습니다. 아무도 죽지 않은 밤에는 그대로 기다립니다. 무엇이 되었는지는 아침에 알려줍니다.",
+		// 지목이 없다. 그 밤의 사망자가 확정되는 순간 자동으로 일어난다 —
+		// 고를 것이 없는 능력에 격자를 띄우면 "고를 수 있다"는 거짓말이 된다.
+		nightAction: null,
+		// CHAIN 뒤라야 그 밤의 사망자가 확정돼 있고, REVIVE 앞이라야 소생으로
+		// 되살아난 사람을 파내지 않는다. 그 사이가 없어 REVIVE에 함께 세우고
+		// 파이프라인이 소생을 먼저 적용한다(NightPipeline.ts).
+		nightStep: NightStep.REVIVE,
+		nightChat: null,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: null,
+		nightNotice: NO_CHAT,
+		immuneToVote: false,
+	},
+	TERRORIST: {
+		displayName: "테러리스트",
+		team: Team.CITIZEN,
+		glyph: "💣",
+		ability: "게임에 딱 한 번, 지목한 사람과 함께 자폭합니다.",
+		tip: "마피아라고 확신할 때만 쓰세요. 시민을 데려가면 두 명이 한꺼번에 줄어듭니다.",
+		nightAction: NightActionKind.MARK,
+		nightStep: NightStep.CHAIN,
+		nightChat: null,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: "함께 죽을 대상을 선택하세요. 이 판에 한 번뿐입니다.",
+		nightNotice: NO_CHAT,
+		immuneToVote: false,
+		maxUses: 1,
+		noSelfTarget: true,
+		// 첫 밤 자폭은 순수한 주사위다. 자경단원·스파이와 같은 이유로 늦춘다
+		needsPriorDay: true,
+	},
+	PRIEST: {
+		displayName: "성직자",
+		team: Team.CITIZEN,
+		glyph: "⛪",
+		ability: "게임에 딱 한 번, 죽은 사람 한 명을 되살립니다.",
+		tip: "되살릴 사람이 시민이어야 이득입니다. 영매가 성불시킨 혼령은 되살릴 수 없습니다.",
+		nightAction: NightActionKind.REVIVE,
+		nightStep: NightStep.REVIVE,
+		nightChat: null,
+		nightSprite: null,
+		nightAttackSprite: null,
+		nightPrompt: "되살릴 대상을 선택하세요. 이 판에 한 번뿐입니다.",
+		nightNotice: NO_CHAT,
+		immuneToVote: false,
+		maxUses: 1,
+		targetsDead: true,
+	},
 	CITIZEN: {
 		displayName: "시민",
 		team: Team.CITIZEN,
@@ -515,9 +754,17 @@ export function roleName(role: Role): string {
  * 채팅창을 갖고 있다.
  * 두 개념이 갈라진 이상 판정을 한 곳에 못 박지 않으면 중계·인원수·스파이 합류가
  * 서로 다른 답을 내놓게 된다.
+ *
+ * 클래식에서 셋째 경우가 붙었다 — 접선한 짐승인간. 직업 정의의 nightChat은
+ * 여전히 null이다(접선 전에는 아무 창도 없어야 한다). 그래서 판정이 정의만
+ * 보면 짐승인간은 영원히 혼자이고, 좌석만 보면 접선 전부터 밀담이 열린다.
+ * 둘을 함께 읽는 자리가 여기 하나뿐이라 여기서 묻는다.
  */
-export function inMafiaChat(seat: { role: Role; team: Team }): boolean {
-	return seat.team === Team.MAFIA && ROLE_DEFS[seat.role].nightChat === ChatChannel.MAFIA;
+export function inMafiaChat(seat: { role: Role; team: Team; contacted?: boolean }): boolean {
+	if (seat.team !== Team.MAFIA) return false;
+	const def = ROLE_DEFS[seat.role];
+	if (def.nightChat === ChatChannel.MAFIA) return true;
+	return def.needsContact === true && seat.contacted === true;
 }
 
 /**
@@ -549,4 +796,63 @@ export function hearsGhosts(seat: { role: Role }): boolean {
 export function hasJobAbility(role: Role): boolean {
 	const kind = ROLE_DEFS[role].nightAction;
 	return kind !== null && kind !== NightActionKind.NOTE;
+}
+
+/**
+ * 이 좌석이 오늘 밤 실제로 쓰는 직업.
+ *
+ * 도둑이 능력을 훔치면 borrowedRole이 채워진다. role 자체를 덮어쓰지 않는
+ * 이유는 그 순간 되돌릴 방법이 사라지기 때문이다 — 훔친 능력은 한 밤만
+ * 쓰고 반납되고, 종료 화면은 도둑을 도둑으로 공개해야 하며, 승패도 원래
+ * 직업으로 갈린다. 훔친 것은 능력이지 정체가 아니다.
+ *
+ * 밤 파이프라인은 좌석의 직업을 이 함수로만 읽는다. 직접 seat.role을 읽는
+ * 자리가 하나라도 남으면 도둑이 그 능력만 못 쓰는 구멍이 된다.
+ */
+export function effectiveRole(seat: { role: Role; borrowedRole: Role | null }): Role {
+	return seat.borrowedRole !== null ? seat.borrowedRole : seat.role;
+}
+
+/** effectiveRole의 정의. 파이프라인이 nightStep·nightAction을 물을 때 쓴다 */
+export function effectiveDef(seat: { role: Role; borrowedRole: Role | null }): RoleDef {
+	return ROLE_DEFS[effectiveRole(seat)];
+}
+
+/**
+ * 승리 판정에서 이 좌석이 몇 명으로 세어지는가.
+ *
+ * 살아 있는지는 묻지 않는다 — 그건 부르는 쪽(WinCondition)이 이미 걸러 둔다.
+ * 여기서 묻는 것은 "이 사람 한 명이 몇 명 몫인가" 하나다.
+ *
+ * borrowedRole을 보지 않는 것이 중요하다. 도둑이 건달의 능력을 훔쳤다고
+ * 마피아 진영의 벽이 3 올라가면, 훔치는 행위 자체가 자기 편을 지는 쪽으로
+ * 민다. 능력은 빌려도 무게는 원래 직업의 것이다.
+ */
+export function winWeightOf(seat: { role: Role }): number {
+	const weight = ROLE_DEFS[seat.role].winWeight;
+	return weight === undefined ? 1 : weight;
+}
+
+/**
+ * 이 좌석이 지금 마피아 진영 인원으로 세어지는가.
+ *
+ * 팀만으로는 답이 나오지 않는다. 스파이와 짐승인간은 처음부터 team이
+ * MAFIA지만 접선 전에는 마피아가 몇 명인지 세는 자리에 끼지 않는다 —
+ * 서로를 모르고, 마피아도 그들을 모르며, 접선하지 못한 채 게임이 끝나면
+ * 아무 일도 하지 않은 것이다. 접선을 team 값으로 표현하려던 시도가 깨진
+ * 지점은 Seat.contacted 선언에 적혀 있다.
+ */
+export function countsForMafiaWin(seat: { role: Role; team: Team; contacted: boolean }): boolean {
+	return seat.team === Team.MAFIA && seat.contacted;
+}
+
+/**
+ * 이 직업이 배정될 때 seat.contacted의 초기값.
+ *
+ * 보조직업이 아닌 좌석에서 언제나 참인 이유는 "접선하지 않았다"가 곧
+ * "아직 마피아로 세지 않는다"이기 때문이다. 시민에게 그 상태를 주면
+ * 시민 진영 인원에서 빠지는 것이 아니라 아무 뜻도 없는 값이 하나 생긴다.
+ */
+export function startsContacted(role: Role): boolean {
+	return ROLE_DEFS[role].needsContact !== true;
 }

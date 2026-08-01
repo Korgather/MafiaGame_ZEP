@@ -174,13 +174,25 @@ describe("점쟁이", () => {
 		assert.match(reveal(night(seats, [[1, 2]]), 2), /조사했습니다/);
 	});
 
-	it("영매·군인·정치인도 '없습니다'다", () => {
-		// 사기꾼과 같은 답을 내는 직업이 넷 더 있는 것이, 이 직업이 확정
-		// 정보가 되지 않게 하는 유일한 장치다
-		for (const role of [Role.SHAMAN, Role.SOLDIER, Role.POLITICIAN]) {
+	it("군인·정치인도 '없습니다'다", () => {
+		// 사기꾼과 같은 답을 내는 직업이 셋 더 있는 것이, 이 직업이 확정
+		// 정보가 되지 않게 하는 유일한 장치다(군인·정치인·시민).
+		//
+		// 영매는 여기 있었다. 클래식에서 밤마다 시체 하나의 직업을 읽는
+		// 능력(SEANCE)이 붙으면서 hasJobAbility가 참이 되어 빠졌다 — 점괘의
+		// '없습니다' 후보가 하나 줄었다는 뜻이라 RuleSet의 SEER 하한에 적힌
+		// 측정치도 그만큼 낡았다
+		for (const role of [Role.SOLDIER, Role.POLITICIAN]) {
 			const seats = [seat(1, Role.SEER), seat(2, role)];
 			assert.match(reveal(night(seats, [[1, 2]]), 1), NONE, role);
 		}
+	});
+
+	it("영매는 '있습니다'다", () => {
+		// 위 목록에서 영매를 뺀 것이 실수가 아니라 규칙 변경임을 못 박는다.
+		// 이 단언이 없으면 SEANCE를 되돌려도 아무 문장도 붉어지지 않는다
+		const seats = [seat(1, Role.SEER), seat(2, Role.SHAMAN)];
+		assert.match(reveal(night(seats, [[1, 2]]), 1), HAS);
 	});
 
 	it("시민의 익명 쪽지는 직업 능력으로 세지 않는다", () => {

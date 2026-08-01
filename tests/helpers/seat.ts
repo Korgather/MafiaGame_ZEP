@@ -6,7 +6,7 @@
  */
 import { Judgement, Role } from "../../src/types/Game.types.ts";
 import type { Seat } from "../../src/types/Game.types.ts";
-import { ROLE_DEFS } from "../../src/domain/Roles.ts";
+import { ROLE_DEFS, startsContacted } from "../../src/domain/Roles.ts";
 
 export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): Seat {
 	return {
@@ -27,6 +27,14 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		armored: ROLE_DEFS[role].survivesFirstAttack === true,
 		blocked: false,
 		scooped: false,
+		// 접선이 필요한 직업만 거짓으로 시작한다. 여기서 전부 참으로 두면
+		// 스파이·짐승인간 테스트가 접선을 거치지 않고도 통과해 버린다
+		contacted: startsContacted(role),
+		seduced: false,
+		intimidated: false,
+		exorcised: false,
+		loverIndex: 0,
+		borrowedRole: null,
 		usedSkill: false,
 		usesSpent: 0,
 		noteText: "",

@@ -14,7 +14,7 @@ import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase, Judgement } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
-import { participantLabel, seatAt } from "../entities/Room.ts";
+import { enterPhase, participantLabel, seatAt } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
@@ -29,7 +29,7 @@ import { bindMessage, openJudgement, updateMain } from "./Widgets.ts";
  * 화면과 안내만 맡는다.
  */
 export function beginDefense(room: Room): void {
-	room.phase = GamePhase.DEFENSE;
+	enterPhase(room, GamePhase.DEFENSE);
 	room.phaseTimer = room.ruleSet.timing.DEFENSE;
 	room.tickTockPlayed = false;
 
@@ -45,7 +45,7 @@ export function beginDefense(room: Room): void {
 
 /** 찬반투표. 처형이 확정되는 유일한 자리 */
 export function beginJudgement(room: Room): void {
-	room.phase = GamePhase.JUDGEMENT;
+	enterPhase(room, GamePhase.JUDGEMENT);
 	room.phaseTimer = room.ruleSet.timing.JUDGEMENT;
 	// 5초짜리 단계다. 째깍을 켜면 시작하자마자 울려서 안내가 아니라 소음이 된다
 	room.tickTockPlayed = true;

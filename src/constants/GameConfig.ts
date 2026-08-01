@@ -104,6 +104,23 @@ export const FAULT_REPORT_RATE = {
 export const POLITICIAN_VOTE_WEIGHT = 2;
 
 /**
+ * 승리 판정에서 정치인 한 명이 몇 명으로 세어지는가.
+ *
+ * POLITICIAN_VOTE_WEIGHT와 값이 같지만 상수를 나눠 둔다. 표의 무게를
+ * 밸런스 때문에 3으로 올리는 날 승리 판정까지 따라 움직이면, 정치인 한 명이
+ * 살아 있다는 이유로 마피아가 이길 수 없는 판이 조용히 생긴다.
+ */
+export const POLITICIAN_WIN_WEIGHT = 2;
+
+/**
+ * 승리 판정에서 건달 한 명이 몇 명으로 세어지는가.
+ *
+ * 표는 한 장이다. 건달이 살아 있는 동안 마피아가 넘어야 할 벽을 세 명만큼
+ * 올리는 것이 이 직업의 전부이고, 그래서 낮에 가장 먼저 지목당한다.
+ */
+export const THUG_WIN_WEIGHT = 3;
+
+/**
  * 밤 사망자 한 명을 감당하려면 시민 진영에 몇 명이 필요한가.
  *
  * 마피아 진영의 "인원"은 덱의 mafiaTeamSize가 관리하지만 "밤에 시체가 몇 구

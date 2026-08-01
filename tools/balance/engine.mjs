@@ -151,7 +151,7 @@ export function playGame(rules, playerCount, seed, model, opts) {
 					const police = A.find(o => o.role === Role.POLICE);
 					target = police || pick(A, rng);
 				} else target = pick(A, rng);
-			} else if (def.nightAction === NightActionKind.BLOCK) {
+			} else if (def.nightAction === NightActionKind.SEDUCE) {
 				if (model === "B" && knownMafiaAlive.length > 0) target = knownMafiaAlive[0];
 				else target = pick(others, rng);
 			} else {

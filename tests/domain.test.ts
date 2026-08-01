@@ -523,9 +523,14 @@ describe("NightResolution", () => {
 		// 새 밤 능력을 더할 때 여기가 먼저 빨개지라고 둔 테스트다
 		const nonConsuming: NightActionKind[] = [];
 		for (const role of Object.keys(ROLE_DEFS) as Role[]) {
-			const kind = ROLE_DEFS[role].nightAction;
+			const def = ROLE_DEFS[role];
+			const kind = def.nightAction;
 			if (kind === null) continue;
-			const result = recordNightIntent(seat(1, role), seat(2, Role.CITIZEN));
+			// 영매·성직자는 시체를 부른다. 산 사람을 주면 recordNightIntent가
+			// 격자 위조로 보고 null을 돌려주므로, 각 능력이 실제로 쓰이는
+			// 대상을 준다 — 그러지 않으면 이 표가 두 직업을 조용히 건너뛴다
+			const target = seat(2, Role.CITIZEN, { alive: def.targetsDead !== true });
+			const result = recordNightIntent(seat(1, role), target);
 			assert.ok(result, `${role}의 지목이 null로 돌아왔습니다`);
 			if (!result.consumed) nonConsuming.push(kind);
 		}
@@ -534,11 +539,15 @@ describe("NightResolution", () => {
 });
 
 describe("NightResolution - 정산", () => {
+	// 공격자 좌석(9번)을 배열에 함께 넣는다. 정산이 공격자를 번호로 되찾아
+	// 진영을 다시 읽기 때문이다(effectiveAttackers) — 좌석이 없으면 그 공격은
+	// 아예 없었던 것이 된다. 짐승인간의 마피아 면역이 그 되찾기에 걸려 있다
 	it("치료받으면 살고 아니면 죽는다", () => {
 		const casualties = resolveNightCasualties([
 			seat(1, Role.CITIZEN, { attackedBy: [9], healed: true }),
 			seat(2, Role.POLICE, { attackedBy: [9] }),
 			seat(3, Role.DOCTOR),
+			seat(9, Role.MAFIA),
 		]);
 		assert.equal(casualties.length, 2);
 		assert.equal(casualties[0].outcome, NightOutcome.SAVED);
@@ -547,22 +556,24 @@ describe("NightResolution - 정산", () => {
 	});
 
 	it("군인은 첫 공격을 버티고 방탄을 잃는다", () => {
+		const killer = seat(9, Role.MAFIA);
 		const soldier = seat(1, Role.SOLDIER, { attackedBy: [9] });
 		assert.equal(soldier.armored, true, "군인은 방탄을 갖고 시작한다");
 
-		const first = resolveNightCasualties([soldier]);
+		const first = resolveNightCasualties([soldier, killer]);
 		assert.equal(first[0].outcome, NightOutcome.SHIELDED);
 		assert.equal(soldier.armored, false, "방탄이 소모되지 않았다");
 
 		// 다음 밤: 같은 좌석이 또 맞으면 이번엔 죽는다
 		soldier.attackedBy = [9];
-		assert.equal(resolveNightCasualties([soldier])[0].outcome, NightOutcome.KILLED);
+		assert.equal(resolveNightCasualties([soldier, killer])[0].outcome, NightOutcome.KILLED);
 	});
 
 	it("치료가 방탄보다 먼저 쓰인다", () => {
 		// 순서가 반대면 의사가 지킨 군인이 방탄을 헛되이 잃는다
+		const killer = seat(9, Role.MAFIA);
 		const soldier = seat(1, Role.SOLDIER, { attackedBy: [9], healed: true });
-		assert.equal(resolveNightCasualties([soldier])[0].outcome, NightOutcome.SAVED);
+		assert.equal(resolveNightCasualties([soldier, killer])[0].outcome, NightOutcome.SAVED);
 		assert.equal(soldier.armored, true, "방탄이 헛되이 소모됐다");
 	});
 

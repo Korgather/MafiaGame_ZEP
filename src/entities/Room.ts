@@ -14,7 +14,7 @@ import type { RevealView, SeatView } from "../types/Widget.types.ts";
 import { GamePhase, Judgement, Role, Team } from "../types/Game.types.ts";
 import { KICK } from "../constants/GameConfig.ts";
 import { roomOrigin } from "../constants/RoomLayout.ts";
-import { roleDef, roleName } from "../domain/Roles.ts";
+import { roleDef, roleName, startsContacted } from "../domain/Roles.ts";
 import { rulesForRoom } from "../domain/RuleSet.ts";
 
 /** 아직 개표가 없었을 때의 값 */
@@ -28,6 +28,12 @@ export function createRoom(num: number): Room {
 		startPoint: roomOrigin(num),
 		ruleSet: rulesForRoom(num),
 		phase: GamePhase.LOBBY,
+		// 대기실에는 판이 없다. 빈 문자열과 0은 "아직 아무 판도 시작되지
+		// 않았다"는 뜻이고, 그래서 이 상태에서 도착하는 게임 이벤트는
+		// gameId 비교 하나로 전부 걸러진다
+		gameId: "",
+		phaseId: 0,
+		seed: 0,
 		started: false,
 		phaseTimer: 0,
 		countdown: 0,
@@ -71,6 +77,14 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		armored: false,
 		blocked: false,
 		scooped: false,
+		// 보조직업이 아닌 좌석에서는 언제나 참이다(Seat 선언 참고). 대기실
+		// 좌석은 아직 직업이 없으므로 참으로 두고, assignRole이 다시 정한다
+		contacted: true,
+		seduced: false,
+		intimidated: false,
+		exorcised: false,
+		loverIndex: 0,
+		borrowedRole: null,
 		usedSkill: false,
 		usesSpent: 0,
 		noteText: "",
@@ -107,6 +121,14 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.attackedBy = [];
 	seat.blocked = false;
 	seat.scooped = false;
+	seat.contacted = startsContacted(role);
+	seat.seduced = false;
+	seat.intimidated = false;
+	seat.exorcised = false;
+	seat.borrowedRole = null;
+	// loverIndex는 여기서 건드리지 않는다. 짝은 좌석 하나로 정할 수 없어
+	// 배정이 끝난 뒤 두 좌석을 함께 보는 쪽(GameFlow)이 서로를 적는다.
+	// 이 함수가 0으로 밀면 그 쌍이 배정 순서에 따라 반쪽만 남는다
 }
 
 /*
@@ -288,12 +310,44 @@ export function resetRound(room: Room): void {
 		// 지우지 않으면 한 번 막힌 사람이 남은 판 내내 막힌 채로 있는다
 		seat.blocked = false;
 		seat.scooped = false;
+		/*
+		 * 유혹과 협박은 blocked보다 정확히 하루 더 산다. 걸린 밤에는
+		 * 능력을(유혹만) 막고, 이어지는 낮에 발언과 투표를 막고, 다음 밤이
+		 * 시작되는 이 자리에서 풀린다.
+		 *
+		 * 그래서 밤 정산이 끝나는 자리에서 지우면 안 된다 — 그러면 낮에
+		 * 아무 일도 일어나지 않아 두 능력이 통째로 사라진다. 이 함수가
+		 * beginNight에서만 불리는 것이 그 수명의 근거다.
+		 */
+		seat.seduced = false;
+		seat.intimidated = false;
 	}
+}
+
+/**
+ * 단계를 바꾼다. 단계 대입은 전부 이 함수를 지난다.
+ *
+ * room.phase = ... 를 직접 쓰면 phaseId를 올리는 것을 잊는다. 실제로 대입은
+ * 열 곳에 흩어져 있었고, 그중 한 곳이라도 순번을 빠뜨리면 그 단계에서만
+ * 지난 화면의 늦은 클릭이 살아 들어온다 — 가장 찾기 어려운 종류의 버그다.
+ *
+ * 되감기지 않는 것이 핵심이다. 같은 단계로 다시 들어가도(재투표 → VOTE)
+ * 순번은 오르므로, 1차 투표 화면에서 늦게 도착한 표가 2차 투표에 섞이지 않는다.
+ */
+export function enterPhase(room: Room, phase: GamePhase): void {
+	room.phase = phase;
+	room.phaseId++;
 }
 
 /** 게임이 끝나고 대기실로 돌아갈 때 (기존 gameReset + startState(INIT)) */
 export function resetRoom(room: Room): void {
 	room.phase = GamePhase.LOBBY;
+	// 판이 끝났으므로 식별자를 비운다. 늦게 도착하는 지난 판의 이벤트는
+	// 전부 gameId 비교에서 걸린다. phaseId는 여기서 0으로 되돌려도 안전하다 —
+	// gameId가 이미 달라서 순번만으로 판을 가릴 일이 없다
+	room.gameId = "";
+	room.phaseId = 0;
+	room.seed = 0;
 	room.started = false;
 	room.phaseTimer = 0;
 	room.countdown = 0;

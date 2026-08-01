@@ -47,6 +47,11 @@ export function mafiaCount(deck: DeckSpec, playerCount: number): number {
  */
 function killsIndependently(role: Role): boolean {
 	const def = roleDef(role);
+	// 짐승인간(STALK)은 접선하면 밀담에 앉지만 표적은 끝까지 혼자 고른다.
+	// 기준이 "밀담에 앉는가"가 아니라 "누구를 죽일지 혼자 정하는가"이므로
+	// 여기 걸린다 — 빠지면 짐승인간이 예산 밖의 공범으로 세어져 한 판에
+	// 둘이 서고, 시체가 매 밤 셋씩 나온다.
+	if (def.nightAction === NightActionKind.STALK) return true;
 	return def.nightAction === NightActionKind.ATTACK && def.nightChat !== ChatChannel.MAFIA;
 }
 

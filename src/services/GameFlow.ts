@@ -21,7 +21,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { buildRoleDeck, shuffle } from "../domain/RoleAssignment.ts";
-import { assignRole, readyCount, resetRoom } from "../entities/Room.ts";
+import { assignRole, enterPhase, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
 import { guard } from "../infrastructure/Fault.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
@@ -316,7 +316,7 @@ export function refreshProgress(room: Room): void {
  */
 function beginGame(room: Room): void {
 	room.started = true;
-	room.phase = GamePhase.ROLE_REVEAL;
+	enterPhase(room, GamePhase.ROLE_REVEAL);
 	room.phaseTimer = room.ruleSet.timing.ROLE_REVEAL;
 	// 직업 확인 5초 동안은 째깍 사운드를 울리지 않는다
 	room.tickTockPlayed = true;

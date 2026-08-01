@@ -19,7 +19,9 @@
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
+import { Role } from "../types/Game.types.ts";
 import {
+	effectiveDef,
 	hasJobAbility,
 	inMafiaChat,
 	NightActionKind,
@@ -81,7 +83,10 @@ const DECLARED_STEP_ORDER = [
 	NightStep.BLOCK,
 	NightStep.PROTECT,
 	NightStep.ATTACK,
+	NightStep.CONTACT,
 	NightStep.DEATH,
+	NightStep.CHAIN,
+	NightStep.REVIVE,
 	NightStep.INSPECT,
 	NightStep.AFTER,
 ] as const;
@@ -189,6 +194,68 @@ interface NightLedger {
 	 * AFTER step의 능력이 "대상이 오늘 죽었는가"를 물을 곳이 여기뿐이다.
 	 */
 	readonly killed: number[];
+	/**
+	 * 이 밤의 결말들. DEATH가 채우고 CHAIN·REVIVE가 덧붙인다.
+	 *
+	 * 지역 변수가 아니라 원장에 있는 이유는 자폭(MARK)과 소생(REVIVE)이
+	 * apply 안에서 결말을 만들기 때문이다. 반환값으로 올려 보내면 능력 하나가
+	 * 결말을 몇 개 만드는지를 apply의 시그니처가 미리 정해야 한다 — 자폭은
+	 * 둘(자신·대상)이고 소생은 하나다.
+	 */
+	readonly casualties: NightCasualty[];
+}
+
+/**
+ * apply가 원장 밖에서 읽어야 하는 것들.
+ *
+ * 원장(쓰는 곳)과 나눠 둔 이유는 방향이다. ledger는 이 밤에 쌓이는 결과이고
+ * ctx는 이 밤의 입력이다. 하나로 합치면 apply가 자기가 쌓은 것을 다시 읽는
+ * 경로가 열리고, 그때부터 능력의 결과가 좌석 순서에 따라 달라진다.
+ */
+interface NightContext {
+	readonly seats: readonly Seat[];
+	readonly intents: readonly NightIntent[];
+}
+
+function seatByIndex(seats: readonly Seat[], index: number): Seat | null {
+	for (const seat of seats) {
+		if (seat.index === index) return seat;
+	}
+	return null;
+}
+
+/**
+ * 이 좌석이 오늘 밤 마피아 밀담의 표적이 되었는가. 짐승인간의 접선 판정이다.
+ *
+ * CONTACT(45)가 ATTACK(40) 뒤에 있으므로 마피아의 지목은 이미 attackedBy에
+ * 들어와 있다. intents가 아니라 attackedBy를 읽는 이유가 그것이다 — 지목을
+ * 읽으면 "마피아의 지목인가"를 여기서 다시 판정해야 하고, 막힌 마피아의
+ * 지목까지 세어 접선이 성립한다.
+ *
+ * inMafiaChat을 함께 보는 이유는 짐승인간 자신을 세지 않기 위해서다. 진영만
+ * 보면 짐승인간 둘이 같은 사람을 노렸을 때 서로 접선한 것이 된다.
+ */
+function targetedByMafiaTeam(seats: readonly Seat[], target: Seat): boolean {
+	for (const index of target.attackedBy) {
+		const shooter = seatByIndex(seats, index);
+		if (!shooter) continue;
+		if (inMafiaChat(shooter)) return true;
+	}
+	return false;
+}
+
+/**
+ * 오늘 밤의 사망자 목록에 한 명을 더한다. 이미 죽는 사람이면 아무 일도 없다.
+ *
+ * 멱등이어야 하는 이유는 연쇄다. 마피아가 죽인 사람을 테러리스트가 다시
+ * 안고 터지면 결말이 둘 쌓이고, 아침 방송이 같은 사람의 죽음을 두 번 알린다.
+ */
+function addChainDeath(ledger: NightLedger, seat: Seat, outcome: NightOutcome): boolean {
+	if (!seat.alive) return false;
+	if (ledger.killed.indexOf(seat.index) >= 0) return false;
+	ledger.casualties.push({ seat, outcome });
+	ledger.killed.push(seat.index);
+	return true;
 }
 
 /**
@@ -291,8 +358,15 @@ function notifyBlocked(
  * 이제 값을 돌려주지만, never 대입은 그대로 둔다 — 반환 타입이 boolean이라
  * "가지가 모자라다"가 "암묵적 undefined"로 조용히 통과할 여지가 있다.
  */
-function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
-	const def = roleDef(actor.role);
+function apply(
+	actor: Seat,
+	target: Seat,
+	ledger: NightLedger,
+	ctx: NightContext
+): boolean {
+	// 훔친 능력을 쓰는 밤에는 도둑이 그 직업이다. roleDef(actor.role)로 읽으면
+	// 도둑은 매 밤 훔치기만 하고 훔친 것을 쓸 길이 없다
+	const def = effectiveDef(actor);
 	const kind = def.nightAction;
 	// 지목할 것이 없는 직업은 애초에 intent를 남기지 못하므로 여기 오지 않는다.
 	// 그래도 타입에는 null이 남아 있으니, 걷어내야 아래 switch가 "종류 전부를
@@ -300,14 +374,6 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 	if (kind === null) return false;
 
 	switch (kind) {
-		case NightActionKind.BLOCK:
-			// 켜 두기만 한다. 실제로 막는 것은 아래 순회의 가드다 —
-			// 이 자리에서 대상의 능력을 되돌리려 하면 "이미 적용된 것을
-			// 어떻게 없던 일로 하는가"를 능력 종류마다 따로 알아야 한다.
-			// step 20이 전부보다 앞이므로 그럴 일이 없다
-			target.blocked = true;
-			ledger.blocks.push({ actor: actor.index, target: target.index });
-			return true;
 		case NightActionKind.HEAL:
 			target.healed = true;
 			return true;
@@ -388,6 +454,108 @@ function apply(actor: Seat, target: Seat, ledger: NightLedger): boolean {
 				line: `✉️ 익명 쪽지: ${actor.noteText}`,
 			});
 			return true;
+
+		case NightActionKind.SEDUCE:
+			// 두 가지를 동시에 건다. blocked는 오늘 밤의 능력을, seduced는 내일
+			// 낮의 발언을 막는다. 하나로 합칠 수 없는 이유는 수명이 다르기
+			// 때문이고(NightActionKind 선언에 기록), 아침에 blocked를 내리는
+			// 코드가 seduced까지 내리면 유혹은 차단과 구별되지 않는다
+			target.blocked = true;
+			target.seduced = true;
+			ledger.blocks.push({ actor: actor.index, target: target.index });
+			return true;
+
+		case NightActionKind.INTIMIDATE:
+			// 밤 능력은 건드리지 않는다. 협박은 낮의 표를 빼앗는 능력이고,
+			// 그래서 tallyVotes와 judgementPassed가 이 값을 읽는다
+			target.intimidated = true;
+			return true;
+
+		case NightActionKind.STEAL:
+			// 오늘 밤에는 아무 일도 일어나지 않는다. borrowedRole은 다음 밤의
+			// effectiveDef가 읽고, 그 밤이 끝나면 파이프라인이 비운다.
+			// 직업 이름을 알려주지 않는 것이 중요하다 — 알려주면 도둑이 조사
+			// 직업이 되고, 훔친 능력을 쓸 이유가 사라진다
+			actor.borrowedRole = target.role;
+			ledger.reveals.push({
+				seat: actor.index,
+				line: `🧤 ${target.index}번 참가자의 능력을 훔쳤습니다.\n내일 밤 그 능력을 쓸 수 있습니다.`,
+			});
+			return true;
+
+		case NightActionKind.TRACK: {
+			// 미행도 조사다. 사기꾼은 미행당한 것도 알아차린다 — 한쪽만
+			// 통보하면 사기꾼의 "조사당했다"가 경찰의 존재를 확정해 준다
+			ledger.inspected.push(target.index);
+			const followed = intentTarget(ctx.intents, target.index);
+			ledger.reveals.push({
+				seat: actor.index,
+				line:
+					followed === 0
+						? `🔦 ${target.index}번 참가자는 어젯밤 아무 데도 가지 않았습니다.`
+						: `🔦 ${target.index}번 참가자는 어젯밤 ${followed}번 참가자를 찾아갔습니다.`,
+			});
+			return true;
+		}
+
+		case NightActionKind.MARK:
+			// CHAIN(55)은 DEATH(50) 뒤다. 자폭은 공격이 아니라 확정된 죽음이라
+			// 의사도 방탄도 막지 못한다 — attackedBy를 거치지 않는 유일한 사망
+			// 경로이고, 그래서 여기서 직접 결말을 쌓는다
+			addChainDeath(ledger, actor, NightOutcome.EXPLODED);
+			addChainDeath(ledger, target, NightOutcome.BOMBED);
+			return true;
+
+		case NightActionKind.STALK:
+			// 접선한 뒤에는 평범한 공격자다. 마피아와 겹칠 필요가 없다
+			if (actor.contacted) {
+				target.attackedBy.push(actor.index);
+				return true;
+			}
+			if (targetedByMafiaTeam(ctx.seats, target)) {
+				actor.contacted = true;
+				// 접선한 밤부터 곧바로 문다. CONTACT(45)가 DEATH(50) 앞인 이유가
+				// 이 한 줄이다 — 뒤에 있으면 접선한 밤은 언제나 허탕이 된다
+				target.attackedBy.push(actor.index);
+				ledger.defected.push(actor.index);
+				ledger.reveals.push({
+					seat: actor.index,
+					line: "🐺 마피아와 접선했습니다.\n이제 밤마다 한 명을 물 수 있습니다.",
+				});
+				return true;
+			}
+			ledger.reveals.push({
+				seat: actor.index,
+				line: `🐺 ${target.index}번 참가자는 마피아의 표적이 아니었습니다.`,
+			});
+			// 접선에 실패해도 쓴 것은 쓴 것이다. 횟수 제한이 없는 능력이라
+			// 세는 값이 달라지지 않지만, 막혔을 때와 헛짚었을 때를
+			// usesSpent로 구별할 수 있어야 회귀 테스트가 둘을 나눠 본다
+			return true;
+
+		case NightActionKind.SEANCE:
+			// 성불은 조사가 아니라 처분이다. inspected에 넣지 않는 이유가 그것이다 —
+			// 사기꾼은 죽은 뒤에 통보를 받을 곳이 없고, 산 사람을 부를 수도 없다
+			target.exorcised = true;
+			ledger.reveals.push({
+				seat: actor.index,
+				line: `🔮 ${target.index}번 참가자의 직업은 ${roleName(target.role)}이었습니다.`,
+			});
+			return true;
+
+		case NightActionKind.REVIVE:
+			// 성불한 혼령은 돌아오지 않는다. false를 돌려주어 횟수를 아낀다 —
+			// 성직자의 능력은 판에 한 번뿐이고, 헛짚었다고 잃으면 영매가
+			// 시민 편의 성직자를 실수로 봉인하는 사고가 판을 끝낸다
+			if (target.exorcised) {
+				ledger.reveals.push({
+					seat: actor.index,
+					line: `⛪ ${target.index}번 참가자의 혼령은 이미 떠났습니다.`,
+				});
+				return false;
+			}
+			ledger.casualties.push({ seat: target, outcome: NightOutcome.REVIVED });
+			return true;
 	}
 
 	// 위 switch가 종류를 전부 덮으면 여기 오는 kind는 never다. 가지를 하나
@@ -409,9 +577,22 @@ export function resolveNightIntents(
 	opts: { readonly skipAttacks: boolean }
 ): NightSettlement {
 	const ledger: NightLedger = {
-		reveals: [], defected: [], inspected: [], killed: [], blocks: [],
+		reveals: [], defected: [], inspected: [], killed: [], blocks: [], casualties: [],
 	};
-	let casualties: NightCasualty[] = [];
+	const ctx: NightContext = { seats, intents };
+
+	/*
+	 * 밤이 시작될 때 이미 빌린 능력을 들고 있던 좌석.
+	 *
+	 * 도둑의 한 바퀴는 두 밤이다 — A밤에 훔치고, B밤에 쓰고, B밤이 끝나면
+	 * 비운다. 비우는 시점을 "밤 끝"으로 잡되 이 스냅숏이 필요한 이유는,
+	 * A밤의 AFTER에서 방금 훔친 것도 같은 밤 끝에 지워지기 때문이다.
+	 * 밤이 시작될 때 이미 있던 것만 지우면 두 밤이 정확히 한 바퀴가 된다.
+	 */
+	const borrowedAtStart: number[] = [];
+	for (const seat of seats) {
+		if (seat.borrowedRole !== null) borrowedAtStart.push(seat.index);
+	}
 
 	/*
 	 * 밤이 시작될 때 살아 있던 좌석 번호.
@@ -440,12 +621,12 @@ export function resolveNightIntents(
 	for (const step of STEP_ORDER) {
 		if (step === NightStep.DEATH) {
 			if (!opts.skipAttacks) {
-				casualties = resolveNightCasualties(seats);
-				// 살아남은 결말(SAVED·SHIELDED)은 여기 들어오지 않는다. 뒤 step이
+				// 살아남은 결말(SAVED·SHIELDED)은 killed에 들어오지 않는다. 뒤 step이
 				// 묻는 것은 "오늘 죽었는가"이지 "오늘 공격받았는가"가 아니다 —
 				// 후자를 답하면 의사가 살린 사람에게 쪽지가 안 가고, 그 사실이
 				// 곧 "저 사람은 어젯밤 공격받았다"를 알려주는 신호가 된다
-				for (const casualty of casualties) {
+				for (const casualty of resolveNightCasualties(seats)) {
+					ledger.casualties.push(casualty);
 					const died =
 						casualty.outcome === NightOutcome.KILLED ||
 						casualty.outcome === NightOutcome.BACKFIRED;
@@ -465,20 +646,106 @@ export function resolveNightIntents(
 
 		for (const seat of seats) {
 			if (wasAlive.indexOf(seat.index) < 0) continue;
-			if (roleDef(seat.role).nightStep !== step) continue;
+			// 훔친 능력은 훔친 직업의 자리에서 돈다. roleDef(seat.role)로 읽으면
+			// 도둑이 훔친 의사 능력이 AFTER(70)에 서고, PROTECT(30)에 서야 할
+			// 치료가 공격보다 뒤로 밀려 아무도 못 살린다
+			if (effectiveDef(seat).nightStep !== step) continue;
 			// 막힌 사람은 이 밤에 아무것도 하지 않는다. targetOf보다 앞에
 			// 두는 것이 중요하다 — 뒤에 두면 apply까지 가지 않더라도
 			// 여기서 걸러진 것과 대상이 없어 걸러진 것이 구분되지 않는다.
 			// BLOCK step 자신은 통과시킨다. 같은 step 안에는 순서가 없으므로
-			// 건달끼리 서로를 막으면 누가 먼저 눌렀는지가 밤을 가른다
+			// 마담 둘이 서로를 유혹하면 누가 먼저 눌렀는지가 밤을 가른다
 			if (step !== NightStep.BLOCK && seat.blocked) continue;
 			const target = targetOf(seats, intents, seat.index);
 			if (!target) continue;
 			// 실제로 적용된 것만 센다. 지목만으로 세면 쪽지를 안 보낸 시민이
 			// 한 장을 날린다. "막히면 안 닳는다"도 여기서 나온다
-			if (apply(seat, target, ledger)) seat.usesSpent++;
+			if (apply(seat, target, ledger, ctx)) seat.usesSpent++;
 		}
+
+		// 지목이 없어 위 루프에 걸리지 않는 능력들. step의 지목이 모두 적용된
+		// 뒤에 돈다 — 성직자가 되살린 사람을 도굴꾼이 파내면 안 되고,
+		// 자폭으로 죽은 사람의 연인도 뒤따라야 한다
+		if (step === NightStep.CHAIN) chainLovers(seats, ledger);
+		if (step === NightStep.REVIVE) digGraves(seats, ledger);
 	}
 
-	return { casualties, reveals: ledger.reveals, defected: ledger.defected };
+	// 빌린 능력의 수명은 딱 한 밤이다. 이 밤에 방금 훔친 것은 남긴다
+	for (const seat of seats) {
+		if (borrowedAtStart.indexOf(seat.index) >= 0) seat.borrowedRole = null;
+	}
+
+	return {
+		casualties: ledger.casualties,
+		reveals: ledger.reveals,
+		defected: ledger.defected,
+	};
+}
+
+/**
+ * 연인은 함께 죽는다. 한쪽이 오늘 밤에 죽으면 다른 쪽도 오늘 밤에 죽는다.
+ *
+ * 고정점까지 도는 이유는 자폭이다 — 테러리스트가 연인 한 명을 안고 터지면
+ * 그 짝이 죽고, 그 짝이 또 다른 쌍의 한쪽일 수도 있다(모드가 늘면). 한 바퀴는
+ * 반드시 killed를 하나 이상 늘리므로 좌석 수를 넘겨 돌 수 없다.
+ *
+ * 낮의 처형으로 죽는 연인은 여기 오지 않는다. 그쪽은 kill()이 잇는다 —
+ * 밤의 연쇄는 아침 방송에 실릴 결말 목록을 만들어야 해서 파이프라인의 일이고,
+ * 낮의 연쇄는 만들 목록이 없어 처형 처리 안에서 끝난다.
+ */
+function chainLovers(seats: readonly Seat[], ledger: NightLedger): void {
+	let spread = true;
+	while (spread) {
+		spread = false;
+		for (const seat of seats) {
+			if (seat.loverIndex === 0) continue;
+			if (ledger.killed.indexOf(seat.index) < 0) continue;
+			const partner = seatByIndex(seats, seat.loverIndex);
+			if (!partner) continue;
+			if (addChainDeath(ledger, partner, NightOutcome.HEARTBREAK)) spread = true;
+		}
+	}
+}
+
+/**
+ * 도굴꾼이 무덤에서 직업을 하나 얻는다. 판에 한 번뿐이다.
+ *
+ * "첫 밤의 사망자"가 아니라 "도굴꾼이 아직 파지 않았을 때 처음 나온 시민 편
+ * 사망자"다. 첫 밤으로 못 박으면 첫 밤이 무사한 판(작은 인원)에서 이 직업이
+ * 통째로 사라지고, 파이프라인이 밤 번호를 알아야 한다.
+ *
+ * 마피아 팀의 직업은 파내지 않는다. 원작과 다른 프로젝트 규칙이고 이유는
+ * 승리 판정이다 — 시민 하나가 마피아로 넘어가면 양쪽 인원이 동시에 1씩
+ * 움직여 마진이 2 바뀐다. 판을 뒤집는 폭이 무작위 사망 순서에 달리게 된다.
+ * 연인도 제외한다. 연인은 쌍이 본질이라 혼자 물려받을 수 있는 직업이 아니다.
+ */
+function digGraves(seats: readonly Seat[], ledger: NightLedger): void {
+	for (const digger of seats) {
+		if (digger.role !== Role.GRAVEDIGGER) continue;
+		if (!digger.alive || digger.blocked) continue;
+		if (digger.usesSpent > 0) continue;
+		if (ledger.killed.indexOf(digger.index) >= 0) continue;
+		for (const index of ledger.killed) {
+			const victim = seatByIndex(seats, index);
+			if (!victim) continue;
+			if (victim.team === Team.MAFIA) continue;
+			if (victim.role === Role.LOVER || victim.role === Role.GRAVEDIGGER) continue;
+			// 성직자가 되살린 사람의 무덤은 비어 있다
+			if (wasRevived(ledger, victim)) continue;
+			digger.role = victim.role;
+			digger.usesSpent++;
+			ledger.reveals.push({
+				seat: digger.index,
+				line: `⛏️ ${index}번 참가자의 무덤에서 ${roleName(victim.role)}의 흔적을 얻었습니다.\n오늘부터 당신은 ${roleName(victim.role)}입니다.`,
+			});
+			break;
+		}
+	}
+}
+
+function wasRevived(ledger: NightLedger, seat: Seat): boolean {
+	for (const casualty of ledger.casualties) {
+		if (casualty.seat === seat && casualty.outcome === NightOutcome.REVIVED) return true;
+	}
+	return false;
 }
