@@ -455,6 +455,37 @@ export function seatSpectators(room: Room, watchers: readonly Seat[]): string[] 
 	return seated;
 }
 
+/**
+ * 판이 끝났을 때 "한 판 더"를 누른 참가자를 같은 방에 다시 앉힌다.
+ * 돌려주는 값은 앉은 사람들의 id.
+ *
+ * 관전자보다 먼저 불린다(returnToLobby). 방금 한 판을 끝낸 사람이 자기 자리를
+ * 관전자에게 뺏기는 것은 순서가 거꾸로다 — 관전자의 우선권은 "기다렸다"에서
+ * 나오고, 그 기다림은 이 사람들이 판을 하고 있었기 때문에 생겼다.
+ *
+ * 좌석을 그대로 재사용하지 않고 createSeat으로 새로 만드는 것이 요점이다.
+ * 지난 판의 Seat에는 role·team·alive·votedFor·usedSkill·contacted가 그대로
+ * 남아 있고, 종료 화면이 그 값을 읽어 정체를 공개한 직후다. 재사용하면
+ * 다음 판의 대기실이 지난 판의 마피아를 들고 시작한다.
+ *
+ * 관전자 쪽(seatSpectators)이 좌석을 그대로 밀어 넣어도 되는 이유는 그 좌석이
+ * 판에 낀 적이 없어 애초에 비어 있기 때문이다.
+ */
+export function seatRematchers(room: Room, seats: readonly Seat[]): string[] {
+	const seated: string[] = [];
+	for (const seat of seats) {
+		if (!seat.rematch) continue;
+		if (room.seats.length >= room.ruleSet.maxPlayers) break;
+		// 종료 화면을 보다가 나간 사람. 눌러 두고 나갔어도 앉히지 않는다
+		const player = ScriptApp.getPlayerByID(seat.playerId);
+		if (!player) continue;
+		// 등급은 다시 계산한다. 방금 정산이 끝났으므로 오른 레벨이 여기 반영된다
+		room.seats.push(createSeat(seat.playerId, seat.name, rankOf(player)));
+		seated.push(seat.playerId);
+	}
+	return seated;
+}
+
 function setReady(player: ScriptPlayer, ready: boolean): void {
 	const found = locate(player.id);
 	if (!found || found.room.started) return;

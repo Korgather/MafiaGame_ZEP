@@ -29,7 +29,13 @@ import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import { showRoleReveal } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
 import { advanceCut, playCut, showCut } from "./Cut.ts";
-import { broadcastRoomCounts, enterLobby, refreshSpectators, seatSpectators } from "./Lobby.ts";
+import {
+	broadcastRoomCounts,
+	enterLobby,
+	refreshSpectators,
+	seatRematchers,
+	seatSpectators,
+} from "./Lobby.ts";
 import {
 	beginNight,
 	broadcastNightProgress,
@@ -424,6 +430,12 @@ export function returnToLobby(room: Room): void {
 	 */
 	const watchers = room.spectators.slice();
 	resetRoom(room);
+	/*
+	 * "한 판 더"를 누른 사람이 먼저 앉고 그 다음이 관전자다. 두 목록의 합이
+	 * 정원을 넘을 수 있으므로(참가 12 + 관전 8) 순서가 곧 우선권이다 —
+	 * 방금 판을 한 사람이 자기 자리에서 밀려나지 않아야 한다.
+	 */
+	const stayed = seatRematchers(room, seats);
 	const promoted = seatSpectators(room, watchers);
 
 	// 관전자도 같은 대접을 받는다. 앉지 못한 사람까지 포함하는 것이 중요한데,
@@ -449,6 +461,14 @@ export function returnToLobby(room: Room): void {
 		enterLobby(player);
 		// 좌석이 사라졌으므로 마피아·유령 탭도 함께 사라진다
 		Chat.refresh(player);
+	}
+
+	// 누른 사람에게도 알린다. 종료 화면이 대기실 화면으로 덮이는 것만 봐서는
+	// 방을 나온 것과 그대로 앉은 것이 구분되지 않는다 — 아래 promoted와 같은
+	// 이유이고, 이쪽은 몇 번 방인지까지 말해야 한다(종료 화면에 방 번호가 없다)
+	for (const playerId of stayed) {
+		const player = ScriptApp.getPlayerByID(playerId);
+		if (player) label(player, `🔁 ${room.num}번 방에 그대로 앉았습니다. 준비를 누르세요.`);
 	}
 
 	// 기다린 사람에게만 결과를 알린다. 좌석 목록이 떴다는 것만으로는

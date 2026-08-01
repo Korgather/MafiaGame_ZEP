@@ -411,6 +411,33 @@ export interface GameOverPayload {
 	players: RevealView[];
 	/** 대기실로 돌아가기까지. 이 화면만 남은 시간이 없으면 갑자기 사라진다 */
 	timer: number;
+	/** 같은 방에서 한 판 더 — 현재 상태 */
+	rematch: RematchPayload;
+}
+
+/**
+ * "같은 방에서 한 판 더"의 현황.
+ *
+ * 판이 끝나면 좌석이 통째로 비워지고 전원이 방 선택 화면으로 돌아간다
+ * (GameFlow.returnToLobby). 방금 여덟 명이 한 판을 끝냈어도 다시 모이려면
+ * 각자 같은 방 번호를 찾아 눌러야 했고, 종료 화면에는 그 방이 몇 번인지도
+ * 적혀 있지 않았다 — 판이 끝나면 사람들이 흩어졌다.
+ *
+ * 몇 명이 기다리는지를 함께 보내는 것이 요점이다. 혼자 누른 뒤 빈 방에
+ * 앉아 있는 것과, 여섯 명이 이미 눌렀다는 것을 알고 누르는 것은 전혀
+ * 다른 결정이다.
+ *
+ * 화면을 다시 열지 않고 이 조각만 보낸다(updateMain). init을 다시 보내면
+ * 정체 목록의 한 줄씩 밝혀지는 연출이 처음부터 다시 돈다.
+ */
+export interface RematchPayload {
+	type: "rematch";
+	/** 누른 사람 수 */
+	count: number;
+	/** 분모 — 아직 접속해 있는 좌석 수 */
+	of: number;
+	/** 받는 사람이 눌렀는가 */
+	mine: boolean;
 }
 
 /**

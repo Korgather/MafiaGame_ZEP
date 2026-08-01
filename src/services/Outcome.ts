@@ -12,16 +12,21 @@
 import type { ScriptPlayer } from "zep-script";
 import type { Room, Seat, Team as TeamType } from "../types/Game.types.ts";
 import { GamePhase, Team } from "../types/Game.types.ts";
+import { ACTION_RATE } from "../constants/GameConfig.ts";
 import { Sound } from "../constants/Assets.ts";
 import type { MessageRow } from "../domain/chat/ChatMessage.ts";
+import { spend } from "../domain/RateLimit.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
-import { enterPhase, revealViews } from "../entities/Room.ts";
+import { enterPhase, findSeat, revealViews } from "../entities/Room.ts";
+import { tagOf } from "../infrastructure/PlayerTag.ts";
+import { messageType } from "../types/Widget.types.ts";
 import { forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { settleMatch } from "./Rewards.ts";
 import { clearSilhouettes } from "./Stage.ts";
-import { closeCard, openGameOver } from "./Widgets.ts";
+import type { RematchPayload } from "./Widgets.ts";
+import { bindMessage, closeCard, openGameOver, updateMain } from "./Widgets.ts";
 
 /**
  * 승패가 갈렸으면 종료 처리를 하고 true를 돌려준다.
@@ -116,14 +121,54 @@ export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void 
 
 	// winner는 GAME_OVER에 들어간 순간 정해진다. 도중 재접속 경로도 여기를 지난다.
 	const winner = room.winner === null ? Team.CITIZEN : room.winner;
-	openGameOver(player, room, {
+	const widget = openGameOver(player, room, {
 		type: "init",
 		winner,
 		team: seat.team,
 		reason: winReason(winner),
 		players: revealViews(room),
 		timer: room.phaseTimer,
+		rematch: rematchView(room, seat),
 	});
+
+	// 받는 것은 "again", 되보내는 것은 "rematch"다. 한 이름을 쓰면 서버가
+	// 방금 뿌린 현황이 위젯을 거쳐 다시 서버로 오는 모양과 구분되지 않는다
+	bindMessage(widget, "rematch", (sender, data) => {
+		if (messageType(data) !== "again") return;
+		// 대기실 위젯의 갈래들과 같은 관문을 지난다. 이 버튼 한 번이
+		// 방 전원에게 메시지를 뿌리므로 연타를 막아야 하는 쪽이다
+		if (!spend(tagOf(sender).actionRate, ACTION_RATE, Time.getUtcTime())) return;
+		wantRematch(room, sender);
+	});
+}
+
+/**
+ * "한 판 더"를 눌렀다. 한 번 누르면 취소하지 않는다.
+ *
+ * 취소를 두지 않는 것은 이 화면이 16초짜리이기 때문이다. 되돌릴 수 있게
+ * 하면 마지막 순간에 숫자가 흔들려서, 그 숫자를 보고 누른 사람이 빈 방에
+ * 남는다. 앉은 뒤에 마음이 바뀌면 대기실에서 방을 나가면 된다.
+ */
+function wantRematch(room: Room, player: ScriptPlayer): void {
+	const seat = findSeat(room, player.id);
+	if (!seat || seat.rematch) return;
+	seat.rematch = true;
+	// 분모와 분자가 함께 움직이므로 전원에게 다시 보낸다. mine이 사람마다
+	// 다른 값이라 방송이 아니라 각자에게 보내는 형태가 된다
+	forEachPlayer(room, (each, eachSeat) => updateMain(each, rematchView(room, eachSeat)));
+}
+
+function rematchView(room: Room, seat: Seat): RematchPayload {
+	let count = 0;
+	let of = 0;
+	for (const candidate of room.seats) {
+		// 끊긴 사람은 분모에서 뺀다. 남겨두면 절대 차지 않는 숫자가 되어
+		// "다 기다리는 중"인지 아닌지를 읽을 수 없다(밤 진행률과 같은 이유)
+		if (!candidate.connected) continue;
+		of++;
+		if (candidate.rematch) count++;
+	}
+	return { type: "rematch", count, of, mine: seat.rematch };
 }
 
 /**

@@ -1068,6 +1068,19 @@ body {
 			.rev .fate.alive {
 				color: var(--ok);
 			}
+			.waiting {
+				display: flex;
+				align-items: center;
+				flex: 0 0 auto;
+				padding: 0 var(--s2);
+				font-size: var(--t-xs);
+				font-weight: 800;
+				font-variant-numeric: tabular-nums;
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+			}
 		</style>
 	</head>
 	<body>
@@ -1089,6 +1102,13 @@ body {
 
 			<div class="body scroll">
 				<div class="reveal" id="reveal"></div>
+			</div>
+
+			<div class="foot">
+				<button type="button" class="btn primary grow" id="again">
+					<span aria-hidden="true">🔁</span><span id="again-text">같은 방에서 한 판 더</span>
+				</button>
+				<span class="waiting" id="waiting" role="status" aria-live="polite"></span>
 			</div>
 		</div>
 
@@ -1259,6 +1279,23 @@ function revealHtml(p, i) {
 				</div>`;
 }
 
+function paintRematch(state) {
+ const data = state || {};
+ const count = Number(data.count) || 0;
+ const of = Number(data.of) || 0;
+ qs("#waiting").textContent = of > 0 ? `${count}/${of}명` : "";
+ const mine = data.mine === true;
+ qs("#again").disabled = mine;
+ qs("#again-text").textContent = mine ? "기다리는 중" : "같은 방에서 한 판 더";
+}
+
+qs("#again").addEventListener("click", () => {
+ qs("#again").disabled = true;
+ Parent.send({
+  type: "again"
+ });
+});
+
 Parent.on({
  init(data) {
   const mafiaWon = data.winner === "mafia";
@@ -1270,6 +1307,10 @@ Parent.on({
   startTimer(qs("#timer"), data.timer);
   const players = Array.isArray(data.players) ? data.players : [];
   qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
+  paintRematch(data.rematch);
+ },
+ rematch(data) {
+  paintRematch(data);
  }
 });
 </script>

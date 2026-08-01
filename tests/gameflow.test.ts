@@ -18,6 +18,7 @@ import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSe
 import { roleBook } from "../src/domain/Guide.ts";
 import { SKIP_VOTE } from "../src/domain/Vote.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
+import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
 	cardWidget,
@@ -1373,6 +1374,127 @@ describe("승패와 대기실 복귀", () => {
 		assert.equal(result.winner, Team.MAFIA);
 		// 왜 끝났는지가 화면에 남는다. 예전에는 그림 한 장뿐이라 이유가 없었다
 		assert.ok((result.reason as string).length > 0, "승리 이유가 비어 있습니다");
+	});
+});
+
+/**
+ * 판이 끝난 뒤 같은 방에서 한 판 더.
+ *
+ * returnToLobby가 좌석을 통째로 비우고 전원을 방 선택 화면으로 되돌린다.
+ * 방금 여덟 명이 한 판을 끝냈어도 다시 모이려면 각자 같은 방 번호를 찾아
+ * 눌러야 했고, 종료 화면에는 그 방이 몇 번인지도 적혀 있지 않았다 —
+ * 판이 끝나면 사람들이 흩어졌다.
+ *
+ * finish를 직접 부른다. 승패가 어떻게 갈렸는지는 이 기능과 무관하고,
+ * 12명 판을 실제로 끝까지 돌리면 밤 열 번을 넘겨야 한다.
+ */
+describe("같은 방에서 한 판 더", () => {
+	it("누른 사람만 같은 방에 그대로 앉는다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finish(target, Team.MAFIA);
+
+		send(players[0], { type: "again" });
+		finishPhase(target); // GAME_OVER → 대기실
+
+		assert.equal(target.phase, GamePhase.LOBBY);
+		assert.ok(findSeatOf(players[0]), "누른 사람이 좌석을 받지 못했습니다");
+		// 나머지는 방을 나간 것과 같다. 누르지 않은 사람을 앉혀 두면 다음 판은
+		// 그 사람이 준비를 누를 때까지 시작되지 않는다
+		assert.equal(target.seats.length, 1);
+		assert.equal(mainWidget(players[0]).fileName, WidgetFile.LOBBY);
+	});
+
+	/*
+	 * 분자와 분모만 보내면 안 된다. 혼자 누른 뒤 빈 방에 남는 것과 여섯 명이
+	 * 이미 눌렀다는 것을 알고 누르는 것은 전혀 다른 결정이고, "그중 하나가
+	 * 나인가"는 사람마다 답이 다르다 — 그래서 방송이 아니라 각자에게 보낸다.
+	 */
+	it("누른 현황이 방 전원의 화면에 실린다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finish(target, Team.MAFIA);
+
+		// 종료 화면이 열리는 순간부터 0/4다. 눌러야 보이는 값이면 첫 사람은
+		// 아무 근거 없이 누르는 셈이 된다
+		assert.deepEqual(mainWidget(players[0]).lastOfType("init")?.rematch, {
+			type: "rematch",
+			count: 0,
+			of: MIN_PLAYERS,
+			mine: false,
+		});
+
+		send(players[0], { type: "again" });
+
+		/*
+		 * 조각으로 보낸다(updateMain). init을 다시 보내면 정체 목록이 한 줄씩
+		 * 밝혀지는 연출이 처음부터 다시 돌아, 누가 누를 때마다 방 전원이
+		 * 결과 발표를 다시 보게 된다.
+		 */
+		assert.deepEqual(mainWidget(players[0]).lastOfType("rematch"), {
+			type: "rematch",
+			count: 1,
+			of: MIN_PLAYERS,
+			mine: true,
+		});
+		assert.deepEqual(mainWidget(players[1]).lastOfType("rematch"), {
+			type: "rematch",
+			count: 1,
+			of: MIN_PLAYERS,
+			mine: false,
+		});
+	});
+
+	/**
+	 * 다시 앉는 좌석은 새 좌석이다.
+	 *
+	 * 지난 판의 Seat에는 role·team·alive가 그대로 남아 있고, 종료 화면이
+	 * 방금 그 값을 읽어 정체를 공개한 직후다 — 즉 값이 살아 있는 것이
+	 * 확인된 상태다. 그대로 밀어 넣으면 다음 판의 대기실이 지난 판의
+	 * 마피아를 들고 시작한다.
+	 */
+	it("다시 앉은 좌석에 지난 판의 정체가 남지 않는다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		const mafia = target.seats.filter(seat => seat.role === Role.MAFIA)[0];
+		const player = playerOf(mafia);
+		finish(target, Team.MAFIA);
+
+		send(player, { type: "again" });
+		finishPhase(target);
+
+		const fresh = findSeatOf(player);
+		assert.ok(fresh, "누른 사람이 좌석을 받지 못했습니다");
+		assert.equal(fresh.role, Role.CITIZEN);
+		assert.equal(fresh.team, Team.CITIZEN);
+		assert.equal(fresh.alive, false);
+		assert.equal(fresh.ready, false);
+		// 다음 판 종료 화면이 이 칸을 다시 읽는다. 참으로 남으면 아무도
+		// 누르지 않았는데 전원이 누른 것으로 세어진다
+		assert.equal(fresh.rematch, false);
+	});
+
+	/*
+	 * 두 목록의 합이 정원을 넘을 수 있다(참가 12 + 관전 8). 관전자의 우선권은
+	 * "기다렸다"에서 나오고, 그 기다림은 이 사람들이 판을 하고 있었기 때문에
+	 * 생긴 것이다 — 방금 판을 한 사람이 자기 자리에서 밀려나면 순서가 거꾸로다.
+	 */
+	it("누른 참가자가 기다린 관전자보다 먼저 앉는다", () => {
+		const players = startPlainGame(STANDARD_RULES.maxPlayers);
+		const target = room(1);
+		const watcher = connect("난입한사람");
+		joinRoom(watcher, 1);
+		assert.equal(target.spectators.length, 1, "난입한 사람이 관전석에 앉지 못했습니다");
+
+		finish(target, Team.MAFIA);
+		for (const player of players) send(player, { type: "again" });
+
+		finishPhase(target);
+
+		assert.equal(target.seats.length, STANDARD_RULES.maxPlayers);
+		assert.equal(findSeatOf(watcher), undefined, "관전자가 참가자의 자리를 차지했습니다");
+		// 앉지 못했어도 화면은 걷어준다. 안 그러면 끝난 판을 계속 보게 된다
+		assert.equal(mainWidget(watcher).fileName, WidgetFile.LOBBY);
 	});
 });
 

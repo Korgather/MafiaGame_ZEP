@@ -18,6 +18,7 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		team: ROLE_DEFS[role].team,
 		alive: true,
 		ready: false,
+		rematch: false,
 		votedFor: 0,
 		voteCount: 0,
 		judgement: Judgement.NONE,

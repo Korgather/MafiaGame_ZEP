@@ -68,6 +68,7 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		team: Team.CITIZEN,
 		alive: false,
 		ready: false,
+		rematch: false,
 		votedFor: 0,
 		voteCount: 0,
 		judgement: Judgement.NONE,

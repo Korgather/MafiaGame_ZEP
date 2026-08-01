@@ -1133,8 +1133,37 @@ const SCENES = [
 				reason: "마피아 수가 시민 수와 같아졌습니다.",
 				timer: 14,
 				players: REVEAL,
+				rematch: { type: "rematch", count: 0, of: 8, mine: false },
 			},
 		],
+		// 아직 아무도 안 눌렀다. 잠긴 버튼이 하나도 없어야 한다
+		expect: { 'button[disabled=""]': 0 },
+	},
+	/*
+	 * 한 판 더를 누른 뒤.
+	 *
+	 * 종료 화면은 16초짜리라 누른 표시가 늦게 오면 눌리지 않은 것으로 읽힌다.
+	 * 서버는 화면을 다시 열지 않고 rematch 조각만 보내므로(정체 목록의 한 줄씩
+	 * 밝혀지는 연출을 재생하지 않기 위해서다) init 없이 갱신되는 길이 실제로
+	 * 걸어지는지를 여기서 지킨다 — 그 길이 끊기면 숫자가 영영 0/8로 남는다.
+	 */
+	{
+		label: "결과 — 한 판 더를 누른 뒤 (조각만 온다)",
+		file: "gameOver.html",
+		size: [340, 460],
+		messages: [
+			{
+				type: "init",
+				winner: "citizen",
+				team: "citizen",
+				reason: "마피아가 모두 사라졌습니다.",
+				timer: 12,
+				players: REVEAL,
+				rematch: { type: "rematch", count: 2, of: 8, mine: false },
+			},
+			{ type: "rematch", count: 3, of: 8, mine: true },
+		],
+		expect: { 'button[disabled=""]': 1 },
 	},
 	/*
 	 * 같은 화면을 기호 없이 본다.
@@ -1144,6 +1173,10 @@ const SCENES = [
 	 * 훑어 읽기를 돕는 것이고, 없어도 읽을 수는 있어야 한다.
 	 *
 	 * 이긴 쪽으로 두었다. 승패 머리말의 다른 갈래도 함께 밟힌다.
+	 *
+	 * rematch도 일부러 뺐다. 서버는 늘 실어 보내지만, 안 온 판에 화면이 던지면
+	 * 정체 공개까지 함께 날아간다 — 그리는 순서상 목록보다 뒤라서 목록은 남고
+	 * 버튼만 빈 채로 멈추는 것이 아니라, 같은 init 안이라 통째로 멈춘다.
 	 */
 	{
 		label: "결과 — 기호 없는 공개 줄 (이긴 쪽)",
