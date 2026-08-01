@@ -286,6 +286,9 @@ export function resolveJudgement(room: Room): boolean {
 		room.rejected.push(nominee.index);
 		room.voteRecord.message = `🕊️ ${sparedReason(room, tally)} ${participantLabel(nominee)}는 살아남았습니다.`;
 		Chat.announce(room, room.voteRecord.message);
+		// 처형은 kill이 EXECUTE를 울리는데 부결에는 짝이 없었다. 소리로만
+		// 판을 따라가는 사람에게는 무음이 곧 "아직 개표 중"이었다
+		playSound(room, Sound.ACQUIT);
 		return false;
 	}
 

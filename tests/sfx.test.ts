@@ -16,7 +16,7 @@
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { Role } from "../src/types/Game.types.ts";
+import { Judgement, Role } from "../src/types/Game.types.ts";
 import { Sound } from "../src/constants/Assets.ts";
 import type { FakePlayer } from "./helpers/Harness.ts";
 import {
@@ -134,6 +134,40 @@ describe("효과음 배선", () => {
 		assert.equal(listeners(players, Sound.BLOCKED), 1);
 	});
 
+	/**
+	 * 개표는 마피아42 규칙에서 처형이 아니라 재판의 시작이다. 판에서 가장
+	 * 무거운 전환인데 신호가 화면과 채팅 한 줄뿐이었고, 그 줄은 토론이
+	 * 시작되면 곧 밀려 올라간다.
+	 *
+	 * 아무도 오르지 않은 개표까지 울리면 소리의 뜻이 "개표 화면이 떴다"로
+	 * 넓어져 사건과 구별되지 않는다. 그래서 같은 판의 두 낮을 나란히 본다.
+	 */
+	it("단상에 오른 낮만 지목음이 난다", () => {
+		const players = startGame(6, 1, DECK);
+		const target = room(1);
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // 첫 밤(무사) → DAY
+		finishPhase(target); // → VOTE
+		silence(players);
+		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않았다)
+
+		assert.equal(target.nominee, 0);
+		assert.equal(listeners(players, Sound.NOMINATE), 0);
+
+		finishPhase(target); // → NIGHT (둘째 밤)
+		finishPhase(target); // 둘째 밤(무사) → DAY
+		finishPhase(target); // → VOTE
+		for (const player of players) vote(player, nominee.index);
+		silence(players);
+		finishPhase(target); // → VOTE_RESULT
+
+		assert.equal(target.nominee, nominee.index);
+		// 개표 화면을 다 같이 본다. 죽은 사람도 화면을 보므로 방의 소리다
+		assert.equal(listeners(players, Sound.NOMINATE), players.length);
+	});
+
 	it("처형은 방 전체가, 밤 사망은 죽은 본인만 듣는다", () => {
 		const players = startGame(6, 1, DECK);
 		const target = room(1);
@@ -163,5 +197,29 @@ describe("효과음 배선", () => {
 		assert.equal(executed.alive, false);
 		// 재판 결과를 다 같이 보는 중이라 방의 소리다. 죽은 사람도 화면을 본다
 		assert.equal(listeners(players, Sound.EXECUTE), players.length);
+	});
+
+	/**
+	 * 부결은 오랫동안 무음이었다. 처형에만 소리가 있으면 소리로 판을 따라가는
+	 * 사람에게 무음이 곧 "아직 개표 중"이 되어, 살아남은 낮과 결과가 나오지
+	 * 않은 낮이 같아진다.
+	 */
+	it("부결에도 소리가 난다 — 처형음의 짝", () => {
+		const players = startGame(6, 1, DECK);
+		const target = room(1);
+		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		passPeacefulFirstNight(target); // → 둘째 밤
+		finishPhase(target); // 둘째 밤(무사) → DAY
+		finishPhase(target); // → VOTE
+		for (const player of players) vote(player, nominee.index);
+		silence(players);
+		passTrial(target, Judgement.OPPOSE); // 개표 → 반론 → 찬반(전원 반대) → 부결
+
+		assert.equal(nominee.alive, true);
+		assert.equal(listeners(players, Sound.ACQUIT), players.length);
+		// 둘은 배타적이다. 함께 나면 소리만으로는 결과를 알 수 없다
+		assert.equal(listeners(players, Sound.EXECUTE), 0);
 	});
 });

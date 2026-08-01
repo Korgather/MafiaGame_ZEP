@@ -430,6 +430,11 @@ export function beginVoteResult(room: Room): void {
 		message: outcomeMessage(result),
 	};
 
+	// 단상에 누군가 오른 낮만 소리를 낸다. 동률·전원 스킵·정치인 면역은
+	// 화면만 열리고 실제로는 아무 일도 일어나지 않은 낮이라, 거기까지
+	// 울리면 소리가 "개표 화면이 떴다"는 뜻이 되어 사건과 구별되지 않는다
+	if (nominee !== 0) playSound(room, Sound.NOMINATE);
+
 	forEachPlayer(room, (player, seat) => openVoteResultView(room, player, seat));
 	Chat.announce(room, room.voteRecord.message);
 }

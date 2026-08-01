@@ -804,6 +804,52 @@ def s_mafia_win():
 	return mix(parts), 0.52, 0.0
 
 
+def s_nominate():
+	"""
+	최다 득표자가 단상에 올랐다 — 재판의 시작. 2.7초.
+
+	처형(s_execute)과 같은 LOUD인데도 헷갈리지 않는 이유는 성격이 반대이기
+	때문이다. 처형은 파열음으로 닫고 이쪽은 종으로 연다. 개표 화면이 열리는
+	순간이라 낮·투표와 같은 phase 전환이고 전원의 주의를 요구하므로 계층도
+	그 자리에 둔다.
+
+	낮은 종 한 번 뒤에 나무 타격 두 번 — 단으로 올라가는 두 걸음이다. 두
+	번째를 더 낮고 세게 두어 무게가 앞으로 쏠린다. 서브가 단에 서는 순간을
+	받치고 현이 풀리지 않은 채 남는다. 아직 아무도 죽지 않았다.
+	"""
+	bell = modal(N["C3"], 2.20, 0.72, "brass", 201, hit=0.22) * 0.86
+	step1 = modal(N["G3"], 0.60, 0.060, "wood", 202, hit=0.58) * 0.62
+	step2 = modal(N["E3"], 0.72, 0.075, "wood", 203, hit=0.62) * 0.78
+	stand = sub(112, 46, 1.00, 0.22) * 0.52
+	tail = modal(N["A2"], 2.40, 1.05, "string", 204, hit=0.0) * 0.34
+	parts = [(bell, 0.0), (step1, 0.30), (step2, 0.52), (stand, 0.52), (tail, 0.30)]
+	parts.append((air(2.9, 205), 0.0))
+	return mix(parts), 0.52, 0.0
+
+
+def s_acquit():
+	"""
+	부결 — 단상에 오른 사람이 살아남았다. 2.2초.
+
+	처형보다 한 계층 낮다. 안심을 크게 울리면 그 자체가 놀람이 되고, 무엇보다
+	판이 끝나지 않았다는 사실을 소리가 말해야 한다. 지금까지 부결은 무음이라
+	"아무 일도 없음"과 "살아남음"이 구별되지 않았다.
+
+	유리 두 음이 완전4도로 올라간다(E4→A4). 그 위에 5도 하나를 얹어 3음을
+	비워 둔다 — 화음이 A에 닿지만 밝은지 어두운지는 정해지지 않는다. 살았다는
+	것 말고는 아직 아무것도 밝혀지지 않은 낮이다. 숨을 내려놓는 공기가 뒤를
+	받고 낮은 현 하나가 유보를 남긴다.
+	"""
+	up1 = modal(N["E4"], 1.30, 0.42, "glass", 211, hit=0.26) * 0.72
+	up2 = modal(N["A4"], 1.60, 0.50, "glass", 212, hit=0.22) * 0.80
+	open5 = modal(N["E5"], 1.40, 0.44, "glass", 213, hit=0.14) * 0.34
+	breath = filt(noise(0.90, 214), 1400, 2, "lp") * decay(0.90, 0.30) * 0.20
+	hold = modal(N["A2"], 2.00, 0.90, "string", 215, hit=0.0) * 0.30
+	parts = [(up1, 0.0), (up2, 0.16), (open5, 0.24), (breath, 0.0), (hold, 0.16)]
+	parts.append((air(2.4, 216), 0.0))
+	return mix(parts), 0.44, 0.0
+
+
 # 파일 이름 / 만드는 함수 / 라우드니스 계층.
 # 이 표가 볼륨 밸런스의 유일한 출처다.
 SPECS = [
@@ -819,7 +865,9 @@ SPECS = [
 	("sfx_inspect.mp3", s_inspect, MID),
 	("sfx_blocked.mp3", s_blocked, MID),
 	("sfx_note.mp3", s_note, MID),
+	("sfx_nominate.mp3", s_nominate, LOUD),
 	("sfx_execute.mp3", s_execute, LOUD),
+	("sfx_acquit.mp3", s_acquit, MID),
 	("sfx_death.mp3", s_death, LOUD),
 	("sfx_citizen_win.mp3", s_citizen_win, LOUD),
 	("sfx_mafia_win.mp3", s_mafia_win, LOUD),
