@@ -200,16 +200,22 @@ let canPick = false;
 
 let noSelf = false;
 
+let targetsDead = false;
+
+function pickable(seat) {
+ return targetsDead ? !seat.alive : seat.alive;
+}
+
 function tile(seat) {
  const mine = seat.num === myNum;
  const caption = mine ? "나" : seat.alive ? seat.name || "" : "사망";
- const classes = "tile" + (mine ? " me" : "") + (seat.alive ? "" : " dead") + (seat.ally ? " ally" : "");
+ const classes = "tile" + (mine ? " me" : "") + (pickable(seat) ? "" : " dead") + (seat.ally ? " ally" : "");
  const badge = seat.ally && !mine ? html`<span class="badge">🔻</span>` : "";
  return html`<button
 					type="button"
 					class="${classes}"
 					data-num="${seat.num}"
-					${flag(!seat.alive || mine && noSelf, "disabled")}
+					${flag(!pickable(seat) || mine && noSelf, "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}"
 				>
 					${badge}<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
@@ -239,6 +245,7 @@ Parent.on({
   myNum = Number(data.myNum) || 0;
   picked = null;
   noSelf = !!data.noSelf;
+  targetsDead = !!data.targetsDead;
   const role = qs("#myrole");
   role.textContent = data.role || "";
   role.classList.add(data.team === "mafia" ? "mafia" : "citizen");

@@ -25,6 +25,7 @@ import { accessOf, LOOSE_CONTEXT } from "../src/domain/chat/ChatPermission.ts";
 import { quickFor } from "../src/domain/chat/QuickPhrases.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { MAX_PLAYERS, ROOM_COUNT } from "../src/constants/GameConfig.ts";
+import { createRoom, resetRoom } from "../src/entities/Room.ts";
 
 describe("표준전", () => {
 	/**
@@ -220,6 +221,44 @@ describe("모드 결정", () => {
 		assert.equal(resolveRuleSet(""), CLASSIC_RULES);
 		assert.equal(resolveRuleSet("clasic"), CLASSIC_RULES);
 		assert.equal(resolveRuleSet("랭크전"), CLASSIC_RULES);
+	});
+
+	it("만들어진 방은 반드시 아는 모드를 하나 갖는다", () => {
+		// 방을 만드는 길은 createRoom 하나뿐이고, 그 길에서 ruleSet이 비는
+		// 가지가 없다는 것이 "모드 없는 방은 없다"의 근거다. 타입은
+		// readonly RuleSet이라 이 사실을 말해 주지 않는다 — 배정표에 번호를
+		// 하나 빠뜨리면 undefined가 그 자리에 조용히 앉는다
+		for (let num = 1; num <= ROOM_COUNT; num++) {
+			const room = createRoom(num);
+			assert.ok(
+				ALL_RULE_SETS.indexOf(room.ruleSet) >= 0,
+				num + "번 방의 모드가 목록에 없다"
+			);
+		}
+	});
+
+	it("배정표 밖의 번호로는 방이 만들어지지 않는다", () => {
+		// rulesForRoom은 범위 밖에서 기본 모드를 주지만, 그보다 앞서
+		// 좌표를 정하는 쪽이 번호를 거부한다. 즉 "모드가 이상한 방"이 아니라
+		// "방이 없다"가 되는데, 잘못된 번호에 대해서는 그편이 맞다 —
+		// 갈 자리가 없는 방을 모드만 붙여 만들어 두면 사람이 허공에 선다
+		for (const num of [-1, 0, ROOM_COUNT + 1, 999]) {
+			assert.throws(() => createRoom(num), /방 번호/, num + "번이 통과했다");
+		}
+		// 그래도 규칙 쪽 그물은 남는다. 이 함수는 공개돼 있어 방을 거치지 않고
+		// 직접 불릴 수 있다
+		assert.equal(rulesForRoom(999), CLASSIC_RULES);
+	});
+
+	it("판이 끝나도 방의 모드는 그대로다", () => {
+		// 방은 메모리에만 있고 판이 끝나면 resetRoom이 비운다. 그 함수가
+		// ruleSet까지 지우면 두 번째 판부터 모드 없는 방이 생긴다 —
+		// 이 프로젝트에서 "저장된 모드가 없는 기존 방"이 실제로 생길 수 있는
+		// 유일한 자리다
+		const room = createRoom(5);
+		assert.equal(room.ruleSet, STANDARD_RULES);
+		resetRoom(room);
+		assert.equal(room.ruleSet, STANDARD_RULES);
 	});
 });
 

@@ -119,12 +119,32 @@
 			let canPick = false;
 			// 내 칸을 잠그는가. 건달처럼 자기 지목이 확정된 헛턴인 직업만 참이다
 			let noSelf = false;
+			// 무덤을 고르는 직업인가 (영매·성직자). 참이면 산 칸과 죽은 칸의
+			// 역할이 통째로 뒤바뀐다
+			let targetsDead = false;
+
+			/**
+			 * 이 화면에서 고를 수 있는 칸인가.
+			 *
+			 * 죽었다는 것과 못 고른다는 것이 늘 같은 말이 아니다 — 무덤을 고르는
+			 * 직업에게는 정확히 반대다. 잠금과 회색 처리가 둘 다 이 함수를 보므로
+			 * "보이기는 고를 수 있게 보이는데 눌리지 않는" 칸이 생기지 않는다
+			 */
+			function pickable(seat) {
+				return targetsDead ? !seat.alive : seat.alive;
+			}
 
 			function tile(seat) {
 				const mine = seat.num === myNum;
 				const caption = mine ? "나" : seat.alive ? seat.name || "" : "사망";
+				// dead 클래스는 여기서 "죽었다"가 아니라 "이 화면에서 못 고른다"는
+				// 뜻으로 쓴다. theme.css가 :disabled와 같은 회색을 주므로 무덤
+				// 화면에서는 산 사람 칸이 그 회색을 받는다
 				const classes =
-					"tile" + (mine ? " me" : "") + (seat.alive ? "" : " dead") + (seat.ally ? " ally" : "");
+					"tile" +
+					(mine ? " me" : "") +
+					(pickable(seat) ? "" : " dead") +
+					(seat.ally ? " ally" : "");
 				// 마피아 팀원은 직업까지 보인다. 배지로 색 외의 표시도 남긴다
 				const badge = seat.ally && !mine ? html`<span class="badge">🔻</span>` : "";
 
@@ -132,7 +152,7 @@
 					type="button"
 					class="${classes}"
 					data-num="${seat.num}"
-					${flag(!seat.alive || (mine && noSelf), "disabled")}
+					${flag(!pickable(seat) || (mine && noSelf), "disabled")}
 					aria-label="${seat.num}번 ${seat.name || ""}"
 				>
 					${badge}<span class="num">${seat.num}</span><span class="cap ellip">${caption}</span>
@@ -157,8 +177,9 @@
 				init(data) {
 					myNum = Number(data.myNum) || 0;
 					picked = null;
-					// 격자를 그리기 전에 정해야 한다. tile()이 이 값을 읽는다
+					// 격자를 그리기 전에 정해야 한다. tile()이 이 두 값을 읽는다
 					noSelf = !!data.noSelf;
+					targetsDead = !!data.targetsDead;
 
 					const role = qs("#myrole");
 					role.textContent = data.role || "";

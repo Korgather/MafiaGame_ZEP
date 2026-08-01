@@ -62,6 +62,11 @@ function nightAction(role) {
 		team: def.team,
 		alive: true,
 		prompt: def.nightPrompt || "",
+		// Night.ts가 실어 보내는 두 값이다. 여기서 빠뜨리면 미리보기의 격자만
+		// 서버와 다른 규칙으로 잠긴다 — 실제로 무덤을 고르는 직업의 화면이
+		// 미리보기에서는 전부 잠긴 채로 그려지고 있었다
+		noSelf: def.noSelfTarget === true,
+		targetsDead: def.targetsDead === true,
 		note: def.nightNotice,
 	};
 }
@@ -365,6 +370,33 @@ const SCENES = [
 				seats: SEATS,
 				timer: 22,
 			},
+		],
+	},
+	{
+		// 산 칸과 죽은 칸의 역할이 뒤집히는 유일한 화면이다. 나머지 장면이
+		// 전부 "죽은 칸은 잠긴다"만 보여주므로 이 한 장면이 없으면 뒤집는
+		// 길이 한 번도 그려지지 않는다
+		label: "밤 지목 — 무덤을 고르는 직업(영매)",
+		file: "roleAction.html",
+		size: [360, 440],
+		messages: [
+			{
+				type: "init",
+				myNum: 1,
+				...nightAction(Role.SHAMAN),
+				// 무덤이 둘이어야 "고를 수 있는 칸이 여럿"인 모양이 나온다.
+				// 공용 SEATS는 죽은 사람이 하나뿐이라 여기서만 따로 만든다
+				seats: [
+					{ num: 1, name: "김철수", alive: true },
+					{ num: 2, name: "이영희", alive: false },
+					{ num: 3, name: "박민수", alive: false },
+					{ num: 4, name: "정수연", alive: true },
+					{ num: 5, name: "최지훈매우긴이름입니다", alive: true },
+					{ num: 6, name: "한가영", alive: false },
+				],
+				timer: 22,
+			},
+			{ type: "progress", acted: 0, total: 3 },
 		],
 	},
 	{
