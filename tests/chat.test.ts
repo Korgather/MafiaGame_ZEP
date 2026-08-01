@@ -31,24 +31,31 @@ import { auditRoomAreas } from "../src/services/Stage.ts";
 import type { FakePlayer } from "./helpers/Harness.ts";
 import {
 	activeChannel,
+	cardShown,
 	chat,
 	chatChannels,
 	chatLines,
+	chatPrefill,
 	chatSaw,
 	clearTile,
+	clickUnit,
 	connect,
 	disconnect,
 	finishPhase,
+	hasCard,
+	hasProfile,
 	joinRoom,
 	paintPrivateArea,
 	passPeacefulFirstNight,
 	playerOf,
+	profileShown,
 	reconnect,
 	resetWorld,
 	room,
 	seatsWithRole,
 	send,
 	sendChat,
+	sendProfile,
 	spokenAloud,
 	standAt,
 	startGame,
@@ -789,6 +796,58 @@ describe("알림과 기록", () => {
 		assert.ok(chatSaw(outside, "마피아 승리"), "방 밖에 결과가 전해지지 않았습니다");
 	});
 
+	/*
+	 * 도움말이 있는지조차 모르는 것이 가장 큰 문제였다. 카드가 이 말을 못 하는
+	 * 이유는 그것이 규칙 설명이라는 데 있다 — 채팅창을 어떻게 쓰는지는 채팅창
+	 * 안에 적혀 있어야 손이 간다.
+	 */
+	it("처음 온 사람에게만 채팅창 쓰는 법을 한 줄 알려준다", () => {
+		const rookie = connect("처음");
+
+		joinRoom(rookie, 1);
+
+		assert.ok(chatSaw(rookie, "? 를 누르면"), "첫 입장 안내가 오지 않았습니다");
+	});
+
+	it("두 번째 방부터는 그 줄이 뜨지 않는다", () => {
+		// needsGuide를 showGuide보다 뒤에서 물으면(showGuide가 guideSeen을
+		// 세운다) 이 줄이 영영 뜨지 않는다. 뒤집힌 순서를 잡는 것은 위 검사고,
+		// 이 검사는 반대쪽 — 매번 뜨는 것 — 을 잡는다.
+		const rookie = connect("처음");
+		joinRoom(rookie, 1);
+		send(rookie, { type: "quit" });
+
+		const before = chatLines(rookie).filter(line => line.text.indexOf("? 를 누르면") >= 0).length;
+		joinRoom(rookie, 2);
+		const after = chatLines(rookie).filter(line => line.text.indexOf("? 를 누르면") >= 0).length;
+
+		assert.equal(before, 1, "첫 입장 안내가 한 번 오지 않았습니다");
+		assert.equal(after, 1, "방을 옮길 때마다 안내가 다시 떴습니다");
+	});
+
+	/*
+	 * 전체 채팅은 흐르는 잡담이라 상한이 곧 "얼마나 거슬러 볼 수 있는가"다.
+	 * 40줄이던 동안에는 창을 열 때 되살리는 양(60줄)보다 상한이 작아서, 조금
+	 * 자리를 비운 사람은 방금 무슨 이야기가 오갔는지 되짚을 수 없었다.
+	 */
+	it("자리를 비웠던 사람이 지난 대화를 넉넉히 되짚는다", () => {
+		const talker = connect("수다쟁이");
+		for (let i = 1; i <= 70; i++) {
+			// 여유분을 넘기면 서버가 줄을 버린다. 한 줄씩 값을 치르고 간다
+			tick(CHAT_RATE.REFILL_MS / 1000);
+			chat(talker, `말${i}`);
+		}
+
+		const later = connect("나중");
+
+		const seen = chatLines(later, ChatChannel.GLOBAL).filter(
+			line => line.kind === MessageKind.USER
+		);
+		// 상한이 40이면 여기서 40줄까지만 살아 있다
+		assert.ok(seen.length > 40, `되살아난 줄이 ${seen.length}줄뿐입니다`);
+		assert.ok(chatSaw(later, "말15"), "50줄 넘게 거슬러 볼 수 없습니다");
+	});
+
 	it("재접속하면 그동안의 기록을 다시 받는다", () => {
 		const players = startPlainGame(MIN_PLAYERS);
 		const target = room(1);
@@ -813,7 +872,48 @@ describe("채팅 명령어", () => {
 
 		chat(citizen, "/도움말");
 
-		assert.ok(chatSaw(citizen, "채팅 명령어"));
+		assert.equal(cardShown(citizen).heading, "채팅 도움말");
+	});
+
+	/*
+	 * 도움말이 채팅 표였을 때의 문제는 그것이 로그의 한 줄이라는 데 있었다.
+	 * 처음 온 사람이 도움말을 부르는 시점은 대기실이 가장 시끄러울 때라,
+	 * 읽는 동안 새 발언이 쌓여 표가 위로 밀려 올라갔다.
+	 */
+	it("도움말은 채팅에 흘러가지 않고 카드로 남는다", () => {
+		const player = connect("손님");
+
+		chat(player, "/도움말");
+
+		assert.ok(hasCard(player), "도움말 카드가 뜨지 않았습니다");
+		// 이 문장이 채팅 줄로도 새고 있으면 카드로 옮긴 뜻이 없다
+		assert.equal(chatSaw(player, "귓속말"), false, "도움말이 채팅 줄로도 흘렀습니다");
+	});
+
+	it("도움말에 명령어와 입력창 조작이 함께 실린다", () => {
+		// 조작 세 가지는 지금까지 어디에도 적혀 있지 않았다 — chat.html의
+		// keydown 하나에만 살아서 우연히 눌러 본 사람만 알았다.
+		const player = connect("손님");
+
+		chat(player, "/도움말");
+
+		const titles = cardShown(player).cards.map(card => card.title);
+		for (const mark of ["/귓속말", "/차단", "/도감", "Tab", "↑ ↓", "Esc"]) {
+			assert.ok(titles.indexOf(mark) >= 0, `도움말에 "${mark}"가 없습니다`);
+		}
+	});
+
+	it("운영자 명령은 도움말에도 실리지 않는다", () => {
+		// 목록을 만드는 곳과 실행을 막는 곳이 다르면 둘은 언젠가 어긋난다.
+		// 어긋나는 방향이 "보이지만 안 됨"이라 문의가 늘어난다.
+		const guest = connect("손님");
+		const admin = connect("운영자", { role: 3000 });
+
+		chat(guest, "/도움말");
+		chat(admin, "/도움말");
+
+		assert.equal(cardShown(guest).cards.map(card => card.title).indexOf("/경험치"), -1);
+		assert.ok(cardShown(admin).cards.map(card => card.title).indexOf("/경험치") >= 0);
 	});
 
 	it("모르는 명령어는 안내를 돌려준다", () => {
@@ -879,13 +979,17 @@ describe("채팅 속도 제한", () => {
 	});
 
 	it("명령어 연타도 같은 여유분을 쓴다", () => {
-		// 관문이 발언에만 있으면 /도움말 연타로 tell이 그대로 쏟아진다.
+		// 관문이 발언에만 있으면 명령어 연타로 tell이 그대로 쏟아진다.
 		// 도배 경로는 발언과 명령 둘이고, 여유분은 둘이 함께 쓰는 하나여야 한다.
+		//
+		// /도움말이 아니라 /차단목록으로 세는 이유는 도움말이 채팅 줄을 남기지
+		// 않기 때문이다(카드로 답한다). 그것으로 세면 줄 수가 늘 그대로라
+		// 제한이 통째로 빠져 있어도 통과하는 검사가 된다.
 		const player = connect("수다쟁이");
 
-		for (let i = 0; i < CHAT_RATE.BURST; i++) chat(player, "/도움말");
+		for (let i = 0; i < CHAT_RATE.BURST; i++) chat(player, "/차단목록");
 		const before = chatLines(player).length;
-		chat(player, "/도움말");
+		chat(player, "/차단목록");
 
 		assert.equal(chatLines(player).length, before);
 	});
@@ -949,6 +1053,143 @@ describe("귓속말", () => {
 		chat(sender, "/귓속말 없는사람 안녕");
 
 		assert.ok(chatSaw(sender, "찾지 못했습니다"));
+	});
+
+	/*
+	 * 긴 닉네임을 한 글자도 틀리지 않게 옮겨 적게 만들 이유가 없다. 특히
+	 * 대기실에는 참가 번호가 없어서(번호는 게임이 시작돼야 붙는다) 이름이
+	 * 사람을 부르는 유일한 방법이다.
+	 */
+	it("앞부분만 적어도 찾아준다", () => {
+		const sender = connect("가");
+		const target = connect("김철수");
+
+		chat(sender, "/귓속말 김철 안녕");
+
+		assert.ok(chatSaw(target, "안녕"));
+	});
+
+	it("정확히 같은 이름이 앞부분 일치를 이긴다", () => {
+		// 두 방식을 한 번에 재면 "김"이라는 사람과 "김철수"가 함께 있을 때,
+		// 정확히 지목당한 "김"이 "모호합니다"에 묻힌다.
+		const sender = connect("가");
+		const shortName = connect("김");
+		const longName = connect("김철수");
+
+		chat(sender, "/귓속말 김 안녕");
+
+		assert.ok(chatSaw(shortName, "안녕"), "정확히 이름을 적었는데 닿지 않았습니다");
+		assert.equal(chatSaw(longName, "안녕"), false, "엉뚱한 사람에게 갔습니다");
+	});
+
+	it("걸리는 사람이 여럿이면 후보를 보여주고 아무에게도 보내지 않는다", () => {
+		// 옛 안내는 "참가 번호로 지목하세요" 한 줄이었는데, 이 판정이 가장 자주
+		// 일어나는 대기실에는 참가 번호가 아직 없다.
+		const sender = connect("가");
+		const first = connect("김철수");
+		const second = connect("김영희");
+
+		chat(sender, "/귓속말 김 안녕");
+
+		assert.ok(chatSaw(sender, "김철수"), "후보 이름을 보여주지 않았습니다");
+		assert.ok(chatSaw(sender, "김영희"));
+		assert.equal(chatSaw(first, "안녕"), false, "모호한데도 한 사람에게 보냈습니다");
+		assert.equal(chatSaw(second, "안녕"), false);
+	});
+
+	it("동명이인일 때는 이름을 더 적으라고 하지 않는다", () => {
+		// 정확히 같은 이름이 여럿이면 이름으로는 영영 가릴 수 없다. 그 사실을
+		// 숨기고 "이름을 더 적으세요"라고 하면 될 리 없는 일을 계속 시킨다.
+		const sender = connect("가");
+		connect("같은이름");
+		connect("같은이름");
+
+		chat(sender, "/귓속말 같은이름 안녕");
+
+		assert.ok(chatSaw(sender, "이름으로는 가릴 수 없습니다"));
+	});
+
+	/*
+	 * ZEP 닉네임에는 띄어쓰기가 들어갈 수 있고, 받은 줄의 답장 버튼(↩)은 상대
+	 * 이름을 통째로 채워 넣는다. 첫 칸에서 자르면 그 이름이 두 낱말일 때
+	 * 아무도 찾지 못한다 — 버튼이 만든 명령이 실패하는 것은 버튼이 없는 것보다
+	 * 나쁘다.
+	 */
+	it("닉네임에 띄어쓰기가 있어도 통째로 알아본다", () => {
+		const sender = connect("가");
+		const target = connect("김 철수");
+
+		chat(sender, "/귓속말 김 철수 안녕");
+
+		assert.ok(chatSaw(target, "안녕"));
+		// 이름을 "김"으로 잘랐다면 "철수 안녕"이 본문이 된다
+		assert.equal(chatSaw(target, "철수 안녕"), false, "이름을 첫 칸에서 잘랐습니다");
+	});
+
+	it("짧은 이름과 긴 이름이 함께 있어도 긴 쪽을 알아본다", () => {
+		// 앞부분 일치만으로 이름을 고르면 "김"과 "김 철수"가 같이 있을 때
+		// "김 철수 안녕"의 이름이 "김"으로 잘려 엉뚱한 사람에게 간다.
+		const sender = connect("가");
+		const shortName = connect("김");
+		const longName = connect("김 철수");
+
+		chat(sender, "/귓속말 김 철수 안녕");
+
+		assert.ok(chatSaw(longName, "안녕"));
+		assert.equal(chatSaw(shortName, "안녕"), false, "짧은 이름 쪽으로 갔습니다");
+	});
+});
+
+describe("프로필에서 귓속말 걸기", () => {
+	it("남을 클릭하면 버튼을 내밀고, 자기 자신에게는 내밀지 않는다", () => {
+		const me = connect("가");
+		const other = connect("나");
+
+		clickUnit(me, other);
+		assert.equal(profileShown(me).canWhisper, true);
+
+		clickUnit(me, me);
+		assert.equal(profileShown(me).canWhisper, false, "자기 자신에게 귓속말 버튼이 떴습니다");
+	});
+
+	/*
+	 * 버튼 하나가 곧 발언이 되면 오조작이 취소할 수 없는 일이 된다. "누구에게"
+	 * 까지만 정해 주고 무슨 말을 할지는 사람이 정한다.
+	 */
+	it("눌러도 보내지 않고 입력창만 채운다", () => {
+		const me = connect("가");
+		const other = connect("나");
+		clickUnit(me, other);
+
+		sendProfile(me, { type: "whisper" });
+
+		assert.equal(chatPrefill(me), "/귓속말 나 ");
+		assert.equal(chatSaw(other, "💌"), false, "누르자마자 귓속말이 나갔습니다");
+	});
+
+	it("누르면 프로필이 닫힌다", () => {
+		// 채울 곳이 채팅 입력창이라 프로필이 덮고 있으면 방금 무슨 일이
+		// 일어났는지 보이지 않는다.
+		const me = connect("가");
+		const other = connect("나");
+		clickUnit(me, other);
+
+		sendProfile(me, { type: "whisper" });
+
+		assert.equal(hasProfile(me), false);
+	});
+
+	it("채운 명령을 그대로 보내면 실제로 닿는다", () => {
+		// 버튼이 만든 문자열이 명령어 문법과 어긋나 있으면 아무도 눈치채지
+		// 못한다 — 채워 주기까지는 늘 성공하기 때문이다.
+		const me = connect("가");
+		const other = connect("나 그리고 긴 이름");
+		clickUnit(me, other);
+		sendProfile(me, { type: "whisper" });
+
+		chat(me, `${chatPrefill(me)}안녕`);
+
+		assert.ok(chatSaw(other, "안녕"));
 	});
 });
 

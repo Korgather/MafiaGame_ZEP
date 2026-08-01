@@ -36,7 +36,13 @@
 
 		<div class="chat hidden" id="full">
 			<div class="chat-head" id="chatHead">
-				<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
+				<!--
+					래퍼가 한 겹 더 있는 이유는 오른쪽 페이드 때문이다. 페이드를
+					스크롤되는 쪽(.chat-tabs)에 얹으면 탭과 함께 밀려가 버린다.
+				-->
+				<div class="chat-tabwrap" id="tabwrap">
+					<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
+				</div>
 				<!--
 				글리프만 있던 자리에 글자를 붙였다. ▾ 하나로는 "접힌다"는 뜻이
 				전해지지 않는다. aria-label은 남긴다 — 낭독기에 ▾가 그대로
@@ -57,6 +63,13 @@
 
 			<div class="chat-entry">
 				<button type="button" class="icon-btn" id="emoji" aria-label="이모지">☺</button>
+				<!--
+					명령어가 있다는 것을 알 길이 없었다. 쓸 수 있는 탭에서는
+					안내 문구가 그 탭의 placeholder로 바뀌어 "(/도움말)"이
+					사라지므로(ChatService의 channelViews), 정작 말을 할 수 있는
+					사람만 명령어의 존재를 모르고 지나간다.
+				-->
+				<button type="button" class="icon-btn strong" id="help" aria-label="도움말">?</button>
 				<!--
 					maxlength는 편의일 뿐 한계가 아니다. 진짜 한계는 서버의
 					MAX_CHAT_LENGTH다 (Widget.types.ts). 두 값은 같아야 한다.
@@ -200,7 +213,30 @@
 							>`
 						: "";
 					const name = line.num > 0 ? line.num + "번 참가자" : line.name;
-					who = html`${chip}<span class="ellip">${name}</span>${when}`;
+					/*
+					 * 받은 귓속말에만 답장 버튼을 붙인다.
+					 *
+					 * 답장할 상대가 분명한 줄이 이것뿐이다 — 공개 발언에 붙이면
+					 * 아무나 붙잡고 밀담을 거는 버튼이 되고, 게임 중에는 애초에
+					 * 귓속말이 막혀 있어 누를 수 없는 버튼만 줄마다 늘어난다.
+					 *
+					 * 끼울 이름은 화면에 보이는 것을 그대로 쓴다. 참가 번호가
+					 * 붙어 있으면 번호가 먼저다 — 닉네임에 공백이 있어도, 같은
+					 * 이름이 둘이어도 번호는 하나뿐이다.
+					 */
+					const token = line.num > 0 ? String(line.num) : line.name;
+					const reply =
+						pm !== "" && line.senderId !== ""
+							? html`<button
+									type="button"
+									class="reply"
+									data-who="${token}"
+									aria-label="${name}에게 답장"
+								>
+									↩
+								</button>`
+							: "";
+					who = html`${chip}<span class="ellip">${name}</span>${when}${reply}`;
 				}
 
 				return html`<div class="msg${mine ? " mine" : ""}${pm}">
@@ -261,8 +297,26 @@
 				</button>`;
 			}
 
+			/*
+			 * 오른쪽에 탭이 더 있는지 재서 페이드를 켠다.
+			 *
+			 * 재는 것 말고 방법이 없다. 탭 수로 짐작하면 글꼴·화면 폭에 따라
+			 * 어긋나고, 페이드를 항상 켜 두면 탭이 둘뿐인 로비에서도 오른쪽
+			 * 끝이 이유 없이 어두워진다. 2는 소수점 반올림 여유다 — 끝까지
+			 * 밀어도 차이가 0이 되지 않는 엔진이 있다.
+			 */
+			function syncFade() {
+				const el = qs("#tabs");
+				qs("#tabwrap").classList.toggle("more", el.scrollWidth - el.scrollLeft - el.clientWidth > 2);
+			}
+
 			function drawTabs() {
 				qs("#tabs").innerHTML = html`${channels.map(tabHtml)}`;
+				syncFade();
+				// 고른 탭이 잘린 자리에 있으면 아무것도 고르지 않은 것처럼 보인다.
+				// 밤에는 탭이 넷까지 늘어나므로 실제로 일어난다
+				const chosen = qs('.tab[aria-selected="true"]', qs("#tabs"));
+				if (chosen) chosen.scrollIntoView({ inline: "nearest", block: "nearest" });
 
 				const view = viewOf(active);
 				/*
@@ -276,6 +330,26 @@
 				 * 곳은 권한 표 하나뿐인데 그것이 서버에 있다.
 				 */
 				qs("#input").placeholder = view ? view.placeholder : "";
+			}
+
+			/**
+			 * 방금 생긴 탭을 잠깐 강조한다. before는 직전의 탭 id 목록이다.
+			 *
+			 * 밤이 되면 🔪가, 방에 들어가면 💬가 조용히 하나 늘어난다. 아무도
+			 * 알려주지 않으면 "밤에는 마피아끼리 말할 수 있다"를 모르고 판이 끝난다.
+			 *
+			 * 서버에 새 탭인지 묻지 않는다 — 직전 목록을 이 문서가 들고 있으니
+			 * 여기서 알 수 있고, 물으면 payload 한 필드와 그것을 채우는 서버 쪽
+			 * 판정이 함께 늘어난다. 이 문서가 스스로 아는 것은 스스로 판정한다.
+			 *
+			 * drawTabs()가 innerHTML을 통째로 새로 만들므로 반드시 그 뒤에 부른다.
+			 */
+			function flashNew(before) {
+				for (const view of channels) {
+					if (before.indexOf(view.id) >= 0) continue;
+					const el = qs('.tab[data-id="' + view.id + '"]', qs("#tabs"));
+					if (el) el.classList.add("fresh");
+				}
 			}
 
 			/**
@@ -325,13 +399,42 @@
 			 */
 			const MINI_LABEL = Parent.canReadKeys ? "채팅 (Enter)" : "채팅";
 
+			/** 접힌 막대에 몇 개까지 나열할지. 그 줄에는 총합 배지가 이미 서 있다 */
+			const MINI_MARKS = 3;
+
 			function drawMini() {
 				let total = 0;
-				for (const view of channels) total += view.unread;
+				let single = "";
+				const marks = [];
+				for (const view of channels) {
+					total += view.unread;
+					if (view.unread <= 0) continue;
+					single = view.glyph;
+					marks.push(view.glyph + badgeText(view.unread));
+				}
 				const active_ = viewOf(active);
 
-				qs("#miniGlyph").textContent = active_ ? active_.glyph : "💬";
-				qs("#miniText").textContent = total > 0 ? "새 메시지" : MINI_LABEL;
+				/*
+				 * 글리프는 "누르면 어디로 가게 되는가"다. 시끄러운 탭이 하나면
+				 * 그쪽을 가리키고, 여럿이면 하나를 고를 수 없으니 채팅 자체를
+				 * 뜻하는 💬로 물러난다. 조용하면 지금 보고 있던 탭이다.
+				 */
+				let glyph = active_ ? active_.glyph : "💬";
+				if (marks.length === 1) glyph = single;
+				else if (marks.length > 1) glyph = "💬";
+
+				/*
+				 * 글자 자리에는 "새 메시지"가 아니라 어느 탭인지를 적는다.
+				 *
+				 * 접혀 있는 동안 밖에서 보이는 것은 이 한 줄뿐이다. 총합만 있으면
+				 * 5가 마피아 밀담인지 로비 잡담인지 알 수 없어서, 펴 보기 전에는
+				 * 열어야 할 이유를 알 수 없다. 셋을 넘기면 ⋯ 로 접는다.
+				 */
+				const listed =
+					marks.length <= MINI_MARKS ? marks.join(" ") : marks.slice(0, MINI_MARKS).join(" ") + " ⋯";
+
+				qs("#miniGlyph").textContent = glyph;
+				qs("#miniText").textContent = total > 0 ? listed : MINI_LABEL;
 				qs("#miniBadge").textContent = badgeText(total);
 				qs("#miniBadge").classList.toggle("hidden", total === 0);
 				qs("#mini").classList.toggle("alert", total > 0);
@@ -424,6 +527,10 @@
 				if (el) selectChannel(el.dataset.id);
 			});
 
+			// 손가락으로 탭 줄을 밀었을 때도 페이드를 다시 판정한다. 끝까지 밀었으면
+			// 잘린 것이 없으므로 그림자가 남아 있어서는 안 된다
+			qs("#tabs").addEventListener("scroll", syncFade);
+
 			// 접기는 더 작은 위젯으로 다시 여는 것이다. 서버가 다시 열어준다.
 			//
 			// #fold가 아니라 머리말 전체에 건다. 채널을 고르는 탭만 빼면 이 줄에서
@@ -448,8 +555,40 @@
 				if (nearBottom(qs("#log"))) jump(false);
 			});
 
+			/*
+			 * 답장(↩). 보내지 않고 입력창을 채우기만 한다.
+			 *
+			 * 곧바로 보내면 무엇을 보낼지 정하기 전에 밀담이 나가고, 답장 전용
+			 * 상태를 따로 들면 "지금 어디에 쓰는 중인가"가 화면 어디에도 없는
+			 * 숨은 상태로 생긴다. 입력창에 명령어가 그대로 보이면 상태가 곧 화면이고,
+			 * 마음이 바뀌면 Escape 한 번으로 지워진다.
+			 *
+			 * 줄 하나가 아니라 로그 전체에 건다 — render()가 innerHTML을 통째로
+			 * 갈아치우므로 줄에 직접 건 리스너는 다음 탭 전환에 사라진다.
+			 */
+			qs("#log").addEventListener("click", event => {
+				const el = event.target.closest(".reply");
+				if (!el) return;
+				qs("#input").value = "/귓속말 " + el.dataset.who + " ";
+				takeFocus(false);
+			});
+
 			qs("#emoji").addEventListener("click", () => {
 				qs("#pad").classList.toggle("hidden");
+			});
+
+			/*
+			 * 도움말. submit()을 지나지 않고 직접 보낸다.
+			 *
+			 * submit()은 보낸 글을 ↑ 기록에 남기는데(remember), 버튼으로 열어 본
+			 * 도움말이 기록에 끼면 방금 친 말을 되짚으려던 사람이 자기가 치지도
+			 * 않은 /도움말을 만난다.
+			 *
+			 * 채널은 지금 탭을 그대로 보낸다. 명령어는 권한 검사보다 먼저
+			 * 처리되므로(ChatService.submit) 밤에 아무 데도 쓸 수 없는 시민도 열린다.
+			 */
+			qs("#help").addEventListener("click", () => {
+				Parent.send({ type: "send", channel: active, text: "/도움말" });
 			});
 
 			qs("#pad").addEventListener("click", event => {
@@ -575,9 +714,23 @@
 					draw();
 					render();
 
+					/*
+					 * 다른 위젯이 채워 달라고 부탁한 글 (프로필 창의 💌).
+					 *
+					 * 접혀 있었다면 서버가 펴면서 이 길로 실어 보낸다 — 펴기는
+					 * 위젯을 다시 여는 것이라 접혀 있던 문서가 남겨 줄 방법이 없다.
+					 */
+					if (data.prefill) qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
+
 					// 게임 화면에서 Enter로 펴고 들어온 경우. 앞 문서가 남긴
 					// 의도를 이어받는 곳은 여기 하나뿐이다
 					if (data.focus) takeFocus(data.focus === "command");
+				},
+
+				/** 이미 펴져 있을 때의 같은 부탁. 문서가 살아 있으니 바로 채운다 */
+				prefill(data) {
+					qs("#input").value = String(data.text || "").slice(0, MAX_TEXT);
+					takeFocus(false);
 				},
 
 				/*
@@ -588,10 +741,15 @@
 				channels(data) {
 					const next = data.active || active;
 					const moved = next !== active;
+					// 무엇이 늘었는지 알 수 있는 마지막 순간이다. 아래에서 덮인다
+					const before = channels.map(view => view.id);
 					channels = data.channels || [];
 					quick = data.quick || [];
 					active = next;
 					draw();
+					// init에서는 부르지 않는다 — 접었다 펴는 것도 새 문서라
+					// 그때마다 모든 탭이 "방금 생긴 탭"이 되어 판마다 깜빡인다
+					flashNew(before);
 					if (moved) render();
 				},
 

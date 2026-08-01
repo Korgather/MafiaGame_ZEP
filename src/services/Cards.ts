@@ -22,6 +22,7 @@ import { GUIDE_CARDS, cardForRole, roleBook } from "../domain/Guide.ts";
 import { playSoundTo } from "./Broadcast.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
+import type { CardView } from "../types/Widget.types.ts";
 import { messageType } from "../types/Widget.types.ts";
 import type { CardPayload } from "./Widgets.ts";
 import { bindMessage, closeCard, openCard } from "./Widgets.ts";
@@ -67,6 +68,8 @@ export function showRoleReveal(player: ScriptPlayer, seat: Seat, timer: number):
 		nav: "none",
 		timer,
 		bookLink: false,
+		// nav=none은 머리말 줄을 아예 숨긴다. 채워도 보이지 않는다
+		heading: "",
 	});
 }
 
@@ -81,6 +84,9 @@ export function showGuide(player: ScriptPlayer): void {
 		nav: "steps",
 		timer: 0,
 		bookLink: true,
+		// nav=steps의 머리말은 "처음이신가요? · 2 / 3"이라 장 번호와 한 몸이다.
+		// 그 조합은 위젯이 만든다
+		heading: "",
 	});
 }
 
@@ -98,6 +104,31 @@ export function showBook(player: ScriptPlayer): void {
 		nav: "grid",
 		timer: 0,
 		bookLink: false,
+		// 도감은 이 위젯이 처음부터 알던 화면이라 머리말과 부제(종수·진영 수)를
+		// 위젯이 들고 있다. ""을 보내 그 기본값을 그대로 쓴다
+		heading: "",
+	});
+}
+
+/**
+ * 도움말. 카드 목록을 인자로 받는다.
+ *
+ * 무엇이 도움말에 실릴지는 이 파일이 모른다 — 명령어 표를 가진 곳
+ * (ChatCommands)이 만들어서 넘긴다. 여기서 COMMANDS를 읽으면 카드 슬롯의
+ * 주인이 명령어 표까지 알아야 하고, "운영자 명령은 감춘다"는 판정이
+ * 이쪽으로 새어 들어온다.
+ *
+ * 도감과 같은 격자를 쓴다. 목록이 제 스크롤을 갖고, 한 줄을 눌러 쓰는 법까지
+ * 볼 수 있는 화면이 이미 있는데 새 위젯을 만들 이유가 없다.
+ */
+export function showHelp(player: ScriptPlayer, cards: CardView[]): void {
+	show(player, {
+		type: "init",
+		cards,
+		nav: "grid",
+		timer: 0,
+		bookLink: false,
+		heading: "채팅 도움말",
 	});
 }
 

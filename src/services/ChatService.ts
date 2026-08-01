@@ -72,8 +72,15 @@ import { bindMessage, openChat, squeezeMain, updateChat } from "./Widgets.ts";
 
 /** 방이 기억하는 줄 수. 한 판이 길어야 밤낮 10턴이라 이 정도면 전부 남는다 */
 const ROOM_LOG_LIMIT = 120;
-/** 월드 전체 채팅이 기억하는 줄 수 */
-const GLOBAL_LOG_LIMIT = 40;
+/**
+ * 월드 전체 채팅이 기억하는 줄 수.
+ *
+ * 방 기록과 달리 이쪽은 흐르는 잡담이라 상한이 곧 "얼마나 거슬러 볼 수
+ * 있는가"다. 40줄은 대기실에 열 명만 있어도 한두 마디씩 하면 다 밀려나서,
+ * 조금 자리를 비운 사람이 방금 무슨 이야기가 오갔는지 되짚을 수 없었다.
+ * 창을 열 때 되살리는 양(HISTORY_LIMIT)보다 넉넉해야 뜻이 있다.
+ */
+const GLOBAL_LOG_LIMIT = 80;
 /** 창을 열 때 되살려 주는 줄 수 */
 const HISTORY_LIMIT = 60;
 
@@ -348,9 +355,10 @@ export function tell(player: ScriptPlayer, text: string, rows?: MessageRow[]): v
  *
  * focus는 창이 뜬 뒤 입력창을 잡을지 정한다. 부르는 쪽이 반드시 적어야 하고
  * 기본값을 두지 않았다 — 포커스를 뺏는 것은 눈에 띄는 동작이라 "그냥 열기"와
- * "눌러서 열기"를 호출부에서 구분해 두는 편이 안전하다.
+ * "눌러서 열기"를 호출부에서 구분해 두는 편이 안전하다. prefill도 같은
+ * 이유로 필수다.
  */
-export function openFor(player: ScriptPlayer, focus: ChatFocus): void {
+export function openFor(player: ScriptPlayer, focus: ChatFocus, prefilled: string): void {
 	const ctx = contextOf(player.id);
 	const tag = tagOf(player);
 	const log = visibleLog(player, ctx);
@@ -373,8 +381,33 @@ export function openFor(player: ScriptPlayer, focus: ChatFocus): void {
 		myId: player.id,
 		lines: log.slice(-HISTORY_LIMIT),
 		focus,
+		prefill: prefilled,
 	});
 	bind(widget);
+}
+
+/**
+ * 다른 창이 부탁한 글을 입력창에 채워 준다. 필요하면 채팅을 펴면서.
+ *
+ * 보내기까지 하지 않는 것이 요점이다. 프로필의 귓속말 버튼도, 받은 줄의 답장
+ * 버튼도 "누구에게"까지만 정해 주고 무슨 말을 할지는 사람이 정한다 — 여기서
+ * 대신 보내면 버튼 하나가 곧 발언이 되어 오조작이 취소할 수 없는 일이 된다.
+ *
+ * 창이 아예 없으면(모바일에서 채팅을 닫아 둔 사람) 조용히 넘어간다. 없는 창을
+ * 이 부탁 때문에 새로 열면, 프로필을 눌렀을 뿐인 사람의 화면이 통째로 바뀐다.
+ */
+export function prefill(player: ScriptPlayer, text: string): void {
+	const tag = tagOf(player);
+	if (!tag.chatWidget) return;
+	if (tag.chatOpen) {
+		updateChat(player, { type: "prefill", text });
+		return;
+	}
+	// 접힌 막대에는 입력창이 없다. 펴는 것은 위젯을 다시 여는 것이라
+	// (WidgetSize.CHAT 주석) 채울 글을 payload에 실어 새 문서에 넘긴다.
+	tag.chatOpen = true;
+	openFor(player, "input", text);
+	squeezeMain(player, true);
 }
 
 function isFirstOpen(seen: { [channel: string]: number }): boolean {
@@ -551,7 +584,10 @@ function toggle(sender: ScriptPlayer, data: unknown): void {
 	// 접기는 CSS가 아니라 더 작은 위젯으로 다시 여는 것이다 (WidgetSize.CHAT 주석 참고).
 	// 그래서 "게임 화면에서 Enter로 폈다"는 사실도 위젯이 혼자 이어갈 수 없다 —
 	// 앞 문서가 알려준 의도를 그대로 새 문서에 넘겨준다.
-	openFor(sender, asFocus(field(data, "focus")));
+	// 채울 글은 없다. 입력 중이던 글자는 문서가 바뀌면서 사라지지만, 그것을
+	// 되살리려면 접기 요청이 글까지 실어 와야 한다 — 접기 버튼 하나에 입력 상태
+	// 보존까지 얹기보다, 접었다 펴는 사람은 다시 치는 편이 낫다
+	openFor(sender, asFocus(field(data, "focus")), "");
 	// 모바일은 세로가 좁아 채팅과 단계 위젯이 제 크기로 함께 뜰 수 없다.
 	// 펼치는 쪽이 아니라 자리를 내주는 쪽을 여기서 줄인다 — 채팅은 늘 제
 	// 크기로 뜨고, 단계 위젯은 다시 열리지 않으므로 누르던 것이 살아 있다.
@@ -610,8 +646,11 @@ function whisperTo(from: ScriptPlayer, to: ScriptPlayer, body: string): void {
  * 그래서 새 조건을 쓰지 않고 전체 채팅의 쓰기 권한을 그대로 묻는다.
  * 둘의 규칙("게임 밖에서만")이 같으므로, 한쪽 규칙이 바뀌면 다른 쪽도
  * 저절로 따라간다 — 조건을 복사했다면 여기가 먼저 어긋났을 자리다.
+ *
+ * 명령어 말고 프로필 창도 이 답을 묻는다(귓속말 버튼을 그릴지). 그래서
+ * 내보내지만, 판정은 여전히 이 한 줄뿐이다 — 묻는 곳이 늘어도 규칙은 늘지 않는다.
  */
-function canWhisper(player: ScriptPlayer): boolean {
+export function canWhisper(player: ScriptPlayer): boolean {
 	return accessOf(contextOf(player.id), ChatChannel.GLOBAL).write;
 }
 

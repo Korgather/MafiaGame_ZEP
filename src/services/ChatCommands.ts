@@ -20,7 +20,8 @@ import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { seatAt } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
-import { showBook } from "./Cards.ts";
+import type { CardView } from "../types/Widget.types.ts";
+import { showBook, showHelp } from "./Cards.ts";
 import { awardExp } from "./Rewards.ts";
 
 /**
@@ -45,6 +46,8 @@ interface ChatCommand {
 	/** 인자 안내. 인자를 받지 않으면 "" */
 	readonly args: string;
 	readonly help: string;
+	/** 도움말 목록에서 이름 앞에 서는 기호. 여덟 줄이 나란히 서면 이름만으로는 훑히지 않는다 */
+	readonly glyph: string;
 	/** rest는 명령 이름 뒤에 남은 문자열. 인자가 없으면 "" */
 	run(voice: ChatVoice, player: ScriptPlayer, rest: string): void;
 }
@@ -65,7 +68,16 @@ const COMMANDS: { [name: string]: ChatCommand } = {
 		admin: false,
 		args: "",
 		help: "쓸 수 있는 명령어를 봅니다",
-		run: (voice, player) => voice.tell(player, "📖 채팅 명령어", helpRows(player)),
+		glyph: "❓",
+		/*
+		 * 채팅 표가 아니라 겹쳐 뜨는 카드로 답한다.
+		 *
+		 * 표로 답했을 때의 문제는 그것이 로그의 한 줄이라는 데 있었다. 처음
+		 * 온 사람이 도움말을 부르는 시점은 대기실이 가장 시끄러울 때라, 읽는
+		 * 동안 새 발언이 쌓여 표가 위로 밀려 올라갔다. 도감과 같은 격자를 쓰면
+		 * 목록이 제 스크롤을 갖고, 한 줄을 눌러 쓰는 법까지 볼 수 있다.
+		 */
+		run: (voice, player) => showHelp(player, helpCards(player)),
 	},
 	/*
 	 * 도감을 채팅으로도 여는 이유는, 게임이 시작되면 대기실 위젯(📖 버튼이
@@ -77,56 +89,117 @@ const COMMANDS: { [name: string]: ChatCommand } = {
 		admin: false,
 		args: "",
 		help: "모든 직업의 설명을 봅니다",
+		glyph: "📖",
 		run: (voice, player) => showBook(player),
 	},
 	"/귓속말": {
 		admin: false,
 		args: "<상대> <할 말>",
 		help: "한 사람에게만 보냅니다 (게임 밖에서만)",
+		glyph: "💌",
 		run: whisper,
 	},
 	"/차단": {
 		admin: false,
 		args: "<상대>",
 		help: "그 사람의 발언을 내 화면에서 가립니다",
+		glyph: "🚫",
 		run: block,
 	},
 	"/차단해제": {
 		admin: false,
 		args: "<상대>",
 		help: "차단을 풉니다",
+		glyph: "🔓",
 		run: unblock,
 	},
 	"/차단목록": {
 		admin: false,
 		args: "",
 		help: "내가 차단한 사람을 봅니다",
+		glyph: "📋",
 		run: blockList,
 	},
 	"/신고": {
 		admin: false,
 		args: "<상대> [사유]",
 		help: "접속한 운영자에게 알립니다",
+		glyph: "🚨",
 		run: report,
 	},
 	"/경험치": {
 		admin: true,
 		args: "",
 		help: "경험치를 지급합니다 (운영자)",
+		glyph: "⭐",
 		run: (voice, player) => awardExp(player, ADMIN_EXP_GRANT),
 	},
 };
 
-/** 명령어 이름과 설명을 두 열로. 이름 길이가 제각각이라 한 줄로 이으면 눈이 못 훑는다 */
-function helpRows(player: ScriptPlayer): MessageRow[] {
-	const rows: MessageRow[] = [];
+/**
+ * 입력창 안에서만 통하는 조작. 도움말 뒤에 함께 붙는다.
+ *
+ * 지금까지 어디에도 적혀 있지 않았다. 셋 다 chat.html의 keydown 하나에만
+ * 살아서, 우연히 눌러 본 사람만 알았다.
+ *
+ * 캔버스에서 통하는 것(Enter로 채팅 펴기, "/"로 명령어 시작)은 일부러 뺐다.
+ * 그쪽은 ZEP이 키를 위젯에 넘겨주는지에 달려 있고(Parent.canReadKeys), 서버는
+ * 그 답을 모른다 — 안 되는 조작을 적어두는 것은 안 적는 것보다 나쁘다.
+ * 여기 셋은 입력창에 커서가 있는 동안의 일이라 언제나 통한다.
+ */
+const KEY_CARDS: CardView[] = [
+	{
+		glyph: "⌨",
+		title: "Tab",
+		team: null,
+		summary: "탭을 차례로 옮깁니다",
+		body: "입력창에서 Tab을 누르면 다음 탭으로 갑니다. Shift+Tab이면 이전 탭입니다.",
+		note: "밤에는 탭이 넷까지 늘어납니다.",
+	},
+	{
+		glyph: "⌨",
+		title: "↑ ↓",
+		team: null,
+		summary: "방금 보낸 말을 다시 꺼냅니다",
+		body: "입력창에서 ↑를 누르면 최근에 보낸 말이 차례로 올라옵니다. ↓로 되돌아옵니다.",
+		note: "오타 하나 때문에 다시 치지 않아도 됩니다.",
+	},
+	{
+		glyph: "⌨",
+		title: "Esc",
+		team: null,
+		summary: "쓰던 글을 지우고, 한 번 더 누르면 나갑니다",
+		body: "쓰던 글이 남아 있으면 먼저 비웁니다. 빈 칸에서 한 번 더 누르면 입력창에서 손을 떼고 이동 키가 다시 캐릭터에게 갑니다.",
+		note: "두 걸음인 이유는 오타를 지우려다 창을 닫지 않게 하려는 것입니다.",
+	},
+];
+
+/**
+ * 도움말 카드 한 벌. 명령어 여덟 줄 뒤에 조작 세 줄.
+ *
+ * 카드를 여기서 만들어 Cards에 넘긴다. 반대로 하면(Cards가 COMMANDS를 읽으면)
+ * 카드 위젯 쪽이 명령어 표를 알아야 하고, 운영자 명령을 감추는 판정까지
+ * 그쪽으로 옮겨간다. 볼 자격을 아는 곳은 명령어 표를 가진 이 파일이다.
+ */
+function helpCards(player: ScriptPlayer): CardView[] {
+	const cards: CardView[] = [];
 	for (const name in COMMANDS) {
 		if (!Object.prototype.hasOwnProperty.call(COMMANDS, name)) continue;
 		const command = COMMANDS[name];
 		if (command.admin && player.role < ADMIN_ROLE_LEVEL) continue;
-		rows.push({ label: `${name}${command.args ? ` ${command.args}` : ""}`, value: command.help });
+		cards.push({
+			glyph: command.glyph,
+			// 목록의 이름 칸은 줄바꿈을 하지 않아서, 인자까지 넣으면 설명 칸을
+			// 밀어낸다. 쓰는 법은 눌러서 들어간 화면(note)이 맡는다
+			title: name,
+			team: null,
+			summary: command.help,
+			body: command.help,
+			note: command.args ? `쓰는 법 · ${name} ${command.args}` : "인자 없이 그냥 칩니다.",
+		});
 	}
-	return rows;
+	for (const card of KEY_CARDS) cards.push(card);
+	return cards;
 }
 
 /**
@@ -178,20 +251,69 @@ function resolveTarget(voice: ChatVoice, sender: ScriptPlayer, token: string): S
 		return bySeat.playerId === sender.id ? refuseSelf(voice, sender) : byId(voice, sender, bySeat);
 	}
 
-	const matches: ScriptPlayer[] = [];
-	for (const player of ScriptApp.players) {
-		if (player.name === token) matches.push(player);
-	}
-	if (matches.length === 0) {
+	// 정확히 같은 이름을 먼저 본다. 두 방식을 한 번에 재면 "김"이라는 사람과
+	// "김철수"가 함께 있을 때, 정확히 지목당한 "김"이 "모호합니다"에 묻힌다
+	const exact = playersNamed(token, true);
+	if (exact.length > 0) return oneOf(voice, sender, token, exact, true);
+
+	const partial = playersNamed(token, false);
+	if (partial.length === 0) {
 		voice.tell(sender, `"${token}"을(를) 찾지 못했습니다.`);
 		return null;
 	}
-	if (matches.length > 1) {
-		voice.tell(sender, `"${token}"이(가) ${matches.length}명입니다. 참가 번호로 지목하세요.`);
-		return null;
+	return oneOf(voice, sender, token, partial, false);
+}
+
+/**
+ * exact=false면 앞부분만 맞아도 센다.
+ *
+ * 긴 닉네임을 한 글자도 틀리지 않게 옮겨 적게 만들 이유가 없다. 특히 대기실에는
+ * 참가 번호가 없어서(seatTarget 주석) 이름이 사람을 부르는 유일한 방법이다.
+ *
+ * startsWith가 아니라 indexOf인 것은 Jint에 그 메서드가 없기 때문이다.
+ */
+function playersNamed(token: string, exact: boolean): ScriptPlayer[] {
+	const found: ScriptPlayer[] = [];
+	for (const player of ScriptApp.players) {
+		if (exact ? player.name === token : player.name.indexOf(token) === 0) found.push(player);
 	}
-	if (matches[0].id === sender.id) return refuseSelf(voice, sender);
-	return matches[0];
+	return found;
+}
+
+/** 목록에 이름을 몇 명까지 늘어놓을지. 넘치면 채팅 한 줄이 화면을 덮는다 */
+const AMBIGUOUS_LIMIT = 5;
+
+/**
+ * 걸린 사람이 하나면 그 사람, 여럿이면 후보를 보여주고 null.
+ *
+ * 기존 안내는 "참가 번호로 지목하세요" 한 줄이었는데, 이 판정이 가장 자주
+ * 일어나는 곳(대기실의 귓속말)에는 참가 번호가 아직 없다 — 번호는 게임이
+ * 시작돼야 붙는다. 그래서 후보를 그대로 보여준다: 이름이 보이면 어느 쪽을
+ * 더 적어야 할지 알 수 있다.
+ */
+function oneOf(
+	voice: ChatVoice,
+	sender: ScriptPlayer,
+	token: string,
+	matches: ScriptPlayer[],
+	exact: boolean
+): ScriptPlayer | null {
+	if (matches.length === 1) {
+		return matches[0].id === sender.id ? refuseSelf(voice, sender) : matches[0];
+	}
+	const names: string[] = [];
+	for (let i = 0; i < matches.length && i < AMBIGUOUS_LIMIT; i++) names.push(matches[i].name);
+	const more = matches.length > AMBIGUOUS_LIMIT ? ` 외 ${matches.length - AMBIGUOUS_LIMIT}명` : "";
+	// 정확히 같은 이름이 여럿이면 이름으로는 영영 가릴 수 없다. 그 사실을
+	// 숨기고 "이름을 더 적으세요"라고 하면 될 리 없는 일을 계속 시키게 된다
+	const advice = exact
+		? "닉네임이 같은 사람이 있어 이름으로는 가릴 수 없습니다. 참가 번호로 지목하세요."
+		: "이름을 더 적거나 참가 번호로 지목하세요.";
+	voice.tell(
+		sender,
+		`"${token}"에 걸리는 사람이 ${matches.length}명입니다: ${names.join(", ")}${more}\n${advice}`
+	);
+	return null;
 }
 
 /** 같은 방의 참가 번호. 번호는 게임이 시작돼야 붙으므로 대기실에서는 늘 null */
@@ -242,19 +364,51 @@ function whisper(voice: ChatVoice, sender: ScriptPlayer, rest: string): void {
 		voice.tell(sender, "게임 중에는 귓속말을 보낼 수 없습니다.");
 		return;
 	}
-	const space = rest.indexOf(" ");
-	if (space < 0) {
+	if (rest.indexOf(" ") < 0) {
 		voice.tell(sender, "/귓속말 <상대> <할 말> 처럼 씁니다.");
 		return;
 	}
-	const target = resolveTarget(voice, sender, rest.slice(0, space));
+	const parts = splitTarget(rest);
+	const target = resolveTarget(voice, sender, parts.token);
 	if (!target) return;
-	const body = rest.slice(space + 1).replace(/^\s+|\s+$/g, "");
-	if (body === "") {
+	if (parts.body === "") {
 		voice.tell(sender, "보낼 말을 적어주세요.");
 		return;
 	}
-	voice.whisper(sender, target, body);
+	voice.whisper(sender, target, parts.body);
+}
+
+/**
+ * "<상대> <할 말>"을 가른다.
+ *
+ * 첫 칸에서 자르는 것으로는 모자란다. ZEP 닉네임에는 띄어쓰기가 들어갈 수 있고,
+ * 받은 귓속말 줄의 답장 버튼(↩)은 상대 이름을 통째로 채워 넣는다 — 그 이름이
+ * 두 낱말이면 첫 칸에서 자른 조각으로는 아무도 찾지 못한다. 버튼이 만든 명령이
+ * 실패하는 것은 버튼이 없는 것보다 나쁘다.
+ *
+ * 접속자 이름 가운데 앞부분이 그대로 들어맞는 것이 있으면 가장 긴 것을 이름으로
+ * 본다. 뒤에 공백이 와야 한다는 조건이 함께 있어야, "김"과 "김철수"가 같이
+ * 있을 때 "김철수 안녕"의 이름을 "김"으로 잘라 엉뚱한 사람에게 "철수 안녕"을
+ * 보내지 않는다.
+ */
+function splitTarget(rest: string): { token: string; body: string } {
+	let name = "";
+	for (const player of ScriptApp.players) {
+		const candidate = player.name;
+		if (candidate.length <= name.length) continue;
+		if (rest.indexOf(candidate) !== 0) continue;
+		if (rest.charAt(candidate.length) !== " ") continue;
+		name = candidate;
+	}
+	// 이름을 못 알아봤으면 옛 규칙(첫 칸)으로 돌아간다. 부르는 쪽이 공백이
+	// 있음을 이미 확인했으므로 여기서 -1이 나오지 않는다
+	const cut = name !== "" ? name.length : rest.indexOf(" ");
+	return {
+		token: rest.slice(0, cut),
+		body: rest
+			.slice(cut + 1)
+			.replace(/^\s+|\s+$/g, ""),
+	};
 }
 
 // ────────────────────────────────────────────────────── 차단

@@ -251,6 +251,23 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 	// 이유는 그 카드가 첫 판인 사람에게만 뜨고(needsGuide) 안내판 트리거에서도
 	// 열려 방이 스코프에 없기 때문이다 — 거기 넣으면 거의 아무도 못 본다
 	Chat.tell(player, `📋 ${room.ruleSet.displayName} — ${room.ruleSet.summary}`);
+	/*
+	 * 처음 온 사람에게만 채팅창 쓰는 법 한 줄.
+	 *
+	 * 여기서 판정하는 이유는 아래 showGuide가 guideSeen을 세우기 때문이다 —
+	 * 순서를 뒤집으면 needsGuide가 늘 false가 되어 이 줄이 영영 뜨지 않는다.
+	 *
+	 * 카드가 이 말을 못 하는 이유는 그것이 규칙 설명이라는 데 있다. 카드를 닫은
+	 * 사람이 다음으로 보는 것은 좌석 목록이고, 그때 채팅창을 어떻게 쓰는지는
+	 * 채팅창 안에 적혀 있어야 손이 간다.
+	 *
+	 * 키보드 조작(Tab · ↑ · Esc)은 여기 적지 않는다. 모바일에는 없는 이야기이고,
+	 * 첫 줄에 담을 만큼 자주 쓰는 것도 아니다 — ? 를 눌러 들어간 목록의 뒤쪽
+	 * 세 장이 그 몫을 한다(ChatCommands의 KEY_CARDS).
+	 */
+	if (needsGuide(player)) {
+		Chat.tell(player, "💡 채팅창 위 탭으로 방·전체를 옮기고, ? 를 누르면 명령어 목록이 나옵니다.");
+	}
 
 	refreshRoom(room);
 	broadcastRoomCounts();

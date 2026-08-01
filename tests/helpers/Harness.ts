@@ -24,8 +24,9 @@ import { allRooms, getRoom, locate } from "../../src/entities/RoomRegistry.ts";
 import type { ChatChannel } from "../../src/domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../../src/domain/chat/ChatMessage.ts";
 import { resetGlobalLog } from "../../src/services/ChatService.ts";
+import type { ProfilePayload } from "../../src/services/Widgets.ts";
 import type { PlayerTag, Room, Seat } from "../../src/types/Game.types.ts";
-import type { ChatChannelView } from "../../src/types/Widget.types.ts";
+import type { CardView, ChatChannelView } from "../../src/types/Widget.types.ts";
 import { GamePhase, Judgement, Role } from "../../src/types/Game.types.ts";
 
 let nextPlayerId = 1;
@@ -323,9 +324,60 @@ export function hasCard(player: FakePlayer): boolean {
 	return !!tagOf(player).cardWidget;
 }
 
+/**
+ * 카드에 실려 온 내용. 마지막 init 하나만 본다.
+ *
+ * 카드 슬롯은 열 때마다 새 위젯이므로 init은 늘 하나지만, 도감으로 건너가는
+ * 길처럼 같은 위젯 참조가 이어지는 경우가 있어 마지막 것을 쓴다.
+ */
+export function cardShown(player: FakePlayer): { heading: string; cards: CardView[] } {
+	const messages = cardWidget(player).messages;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const payload = messages[i] as { type?: string; heading?: string; cards?: CardView[] };
+		if (payload.type === "init") {
+			return { heading: payload.heading || "", cards: payload.cards || [] };
+		}
+	}
+	throw new Error(`${player.name}의 카드가 내용을 받은 적이 없습니다.`);
+}
+
+/** 프로필 창. 없으면 던진다 (hasProfile로 먼저 확인한다) */
+export function profileWidget(player: FakePlayer): FakeWidget {
+	const widget = tagOf(player).profileWidget;
+	if (!widget) throw new Error(`${player.name}에게 열린 프로필이 없습니다.`);
+	return widget as unknown as FakeWidget;
+}
+
 /** 프로필 창이 열려 있는가 */
 export function hasProfile(player: FakePlayer): boolean {
 	return !!tagOf(player).profileWidget;
+}
+
+/** 프로필 창에 실려 온 내용 */
+export function profileShown(player: FakePlayer): ProfilePayload {
+	const messages = profileWidget(player).messages;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const payload = messages[i] as { type?: string };
+		if (payload.type === "init") return payload as ProfilePayload;
+	}
+	throw new Error(`${player.name}의 프로필이 내용을 받은 적이 없습니다.`);
+}
+
+/**
+ * 서버가 마지막으로 입력창에 채워 달라고 한 글. 부탁이 없었으면 "".
+ *
+ * 두 경로를 함께 본다 — 펴져 있는 창에는 prefill 메시지가 가고, 접혀 있던
+ * 창은 다시 열리면서 init에 실려 온다(ChatService.prefill). 한쪽만 보면
+ * 접힌 사람에게서만 조용히 실패하는 검사가 된다.
+ */
+export function chatPrefill(player: FakePlayer): string {
+	const messages = chatWidget(player).messages;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const payload = messages[i] as { type?: string; text?: string; prefill?: string };
+		if (payload.type === "prefill") return payload.text || "";
+		if (payload.type === "init") return payload.prefill || "";
+	}
+	return "";
 }
 
 /** 화면을 덮고 있는 전환 컷 */
@@ -353,6 +405,11 @@ export function sendChat(player: FakePlayer, data: object): void {
 /** 카드 위젯이 서버로 메시지를 보낸다 (닫기·도감으로 가기) */
 export function sendCard(player: FakePlayer, data: object): void {
 	cardWidget(player).emit(player, data);
+}
+
+/** 프로필 위젯이 서버로 메시지를 보낸다 (닫기·귓속말) */
+export function sendProfile(player: FakePlayer, data: object): void {
+	profileWidget(player).emit(player, data);
 }
 
 /** 지금 보고 있는 탭에 한 줄 친다 */

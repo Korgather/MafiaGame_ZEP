@@ -370,6 +370,9 @@ body {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
 }
+.icon-btn.strong {
+	font-weight: 800;
+}
 .grid {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -541,11 +544,30 @@ body {
 	flex: 0 0 auto;
 	border-bottom: 1px solid var(--line);
 }
+.chat-tabwrap {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.chat-tabwrap::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 20px;
+	pointer-events: none;
+	opacity: 0;
+	background: linear-gradient(to right, rgba(28, 22, 20, 0), var(--surface));
+	transition: opacity var(--dur) var(--ease);
+}
+.chat-tabwrap.more::after {
+	opacity: 1;
+}
 .chat-tabs {
 	display: flex;
 	gap: 2px;
-	flex: 1 1 auto;
-	min-width: 0;
+	width: 100%;
 	padding: 2px 2px 0;
 	overflow-x: auto;
 	scrollbar-width: none;
@@ -580,13 +602,26 @@ body {
 	outline-offset: -2px;
 }
 .tab[aria-selected="true"] {
-	color: var(--ink);
-	background: var(--surface-2);
+	color: var(--accent);
+	background: var(--surface-3);
 	border-bottom-color: var(--accent);
 }
 .tab.ro::after {
 	content: "🔒";
 	font-size: 9px;
+}
+.tab.fresh {
+	animation: tabpop 1200ms var(--ease);
+}
+@keyframes tabpop {
+	0%,
+	100% {
+		box-shadow: none;
+	}
+	25%,
+	65% {
+		box-shadow: inset 0 0 0 2px var(--accent);
+	}
 }
 .badge-n {
 	min-width: 15px;
@@ -657,6 +692,26 @@ body {
 .msg .chip {
 	padding: 0 var(--s1);
 	font-size: 9px;
+}
+.msg .reply {
+	flex: 0 0 auto;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 0 var(--s1);
+	font: inherit;
+	font-size: 11px;
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	border-radius: var(--r1);
+	cursor: pointer;
+}
+.msg .reply:hover {
+	color: var(--accent);
+}
+.msg .reply:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -1px;
 }
 .msg .txt {
 	padding: var(--s1) var(--s2);
@@ -1297,6 +1352,8 @@ let listing = false;
 
 let bookLink = false;
 
+let heading = "";
+
 const TEAM_LABEL = {
  mafia: "마피아 팀",
  citizen: "시민 팀"
@@ -1315,8 +1372,8 @@ function paintList() {
  let team = "";
  for (let i = 0; i < cards.length; i++) {
   const card = cards[i];
-  const side = card.team === "mafia" ? "mafia" : "citizen";
-  if (card.team !== team) {
+  const side = card.team ? card.team === "mafia" ? "mafia" : "citizen" : "";
+  if (card.team && card.team !== team) {
    team = card.team;
    out += html`<div class="sect ${side}">
 							${TEAM_LABEL[team] || "그 밖"} ${countTeam(team)}
@@ -1382,8 +1439,8 @@ function paint() {
  flip("#dots", nav === "steps");
  flip("#hd", nav !== "none");
  if (nav === "grid") {
-  qs("#heading").textContent = "직업 도감";
-  qs("#sub").textContent = showList ? `${cards.length}종 · 마피아 ${countTeam("mafia")} / 시민 ${countTeam("citizen")}` : "";
+  qs("#heading").textContent = heading || "직업 도감";
+  qs("#sub").textContent = showList && !heading ? `${cards.length}종 · 마피아 ${countTeam("mafia")} / 시민 ${countTeam("citizen")}` : "";
  } else if (nav === "steps") {
   qs("#heading").textContent = "처음이신가요?";
   qs("#sub").textContent = index + 1 + " / " + cards.length;
@@ -1434,6 +1491,7 @@ Parent.on({
   cards = data.cards || [];
   nav = data.nav || "none";
   bookLink = data.bookLink === true;
+  heading = data.heading ? String(data.heading) : "";
   index = 0;
   listing = nav === "grid";
   if (listing) paintList();

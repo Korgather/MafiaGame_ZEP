@@ -418,6 +418,68 @@ const SCENES = [
 			{ type: "init", cards: GUIDE_CARDS.slice(), nav: "grid", timer: 0, bookLink: false },
 		],
 	},
+	/*
+	 * 채팅 도움말. 목록 화면을 도감이 아닌 것으로 쓰는 첫 자리다.
+	 *
+	 * 그래서 이 장면만 보는 것: 서버가 보낸 머리말(heading)이 "직업 도감"을
+	 * 밀어내는지, 그리고 진영 구분선이 하나도 생기지 않는지. 도감은 진영이
+	 * 늘 있어서 그 길을 밟지 못한다 — 구분선이 새면 명령어 목록 위에
+	 * "시민"이라는 머리말이 붙는다.
+	 *
+	 * 카드 넷만 넣는다. 실제로는 열 장이지만(명령어 일곱 + 키 조작 셋)
+	 * 두 부류의 모양이 완전히 같아서, 늘려도 같은 줄을 여섯 번 더 그리는
+	 * 것에 그친다. 대신 양쪽 극단을 고른다 — 이름이 가장 짧은 것, 설명이
+	 * 가장 긴 것, 그리고 이름이 글자가 아닌 것(↑ ↓).
+	 */
+	{
+		label: "카드 — 채팅 도움말 (도감이 아닌 목록)",
+		file: "card.html",
+		size: [360, 480],
+		messages: [
+			{
+				type: "init",
+				heading: "채팅 도움말",
+				nav: "grid",
+				timer: 0,
+				bookLink: false,
+				cards: [
+					{
+						glyph: "❓",
+						title: "/도움말",
+						team: null,
+						summary: "쓸 수 있는 명령어를 봅니다",
+						body: "쓸 수 있는 명령어를 봅니다",
+						note: "인자 없이 그냥 칩니다.",
+					},
+					{
+						glyph: "💌",
+						title: "/귓속말",
+						team: null,
+						summary: "한 사람에게만 보냅니다 (게임 밖에서만)",
+						body: "한 사람에게만 보냅니다 (게임 밖에서만)",
+						note: "쓰는 법 · /귓속말 <이름> <할 말>",
+					},
+					{
+						glyph: "⌨",
+						title: "Tab",
+						team: null,
+						summary: "탭을 차례로 옮깁니다",
+						body: "입력창에서 Tab을 누르면 다음 탭으로 갑니다. Shift+Tab이면 이전 탭입니다.",
+						note: "밤에는 탭이 넷까지 늘어납니다.",
+					},
+					{
+						glyph: "⌨",
+						title: "↑ ↓",
+						team: null,
+						summary: "방금 보낸 말을 다시 꺼냅니다",
+						body: "입력창에서 ↑를 누르면 최근에 보낸 말이 차례로 올라옵니다. ↓로 되돌아옵니다.",
+						note: "오타 하나 때문에 다시 치지 않아도 됩니다.",
+					},
+				],
+			},
+		],
+		expect: { ".rolerow": 4, ".sect": 0 },
+	},
 	{
 		label: "밤 지목 — 마피아",
 		file: "roleAction.html",
@@ -1490,6 +1552,39 @@ const SCENES = [
 			},
 		],
 		expect: { ".stat": 4 },
+	},
+	/*
+	 * 귓속말 버튼이 드러난 프로필.
+	 *
+	 * 위 셋은 canWhisper를 싣지 않아 버튼이 감춰지는 쪽만 밟는다. 감추는
+	 * 것이 기본값이라 그 셋만으로는 "영영 뜨지 않는 버튼"이 통과한다.
+	 *
+	 * .hidden을 세는 이유: 이 화면에서 감춰져야 하는 것은 아바타 그림
+	 * 하나뿐이다(avatar가 ""이라 글리프로 그린다). 둘이 나오면 귓속말
+	 * 버튼이 함께 숨은 것이고, 그것이 이 장면이 잡으려는 것 전부다.
+	 */
+	{
+		label: "프로필 — 귓속말을 걸 수 있는 사람",
+		file: "profile.html",
+		size: PROFILE_SIZE,
+		messages: [
+			{
+				type: "init",
+				name: "김철수",
+				rank: "Lv.3",
+				avatar: "",
+				where: "대기실",
+				stats: [
+					{ label: "마피아", value: "1승 0패" },
+					{ label: "시민", value: "2승 3패" },
+					{ label: "참가", value: "6판" },
+					{ label: "중도 이탈", value: "0판" },
+				],
+				self: false,
+				canWhisper: true,
+			},
+		],
+		expect: { ".stat": 4, ".hidden": 1 },
 	},
 ];
 

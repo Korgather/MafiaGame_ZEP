@@ -76,7 +76,7 @@ ScriptApp.onJoinPlayer.Add(player => guard("접속", () => {
 	// 재접속 경로에서 showPhaseView가 채팅으로 안내를 보낼 수 있기 때문이다.
 	// 포커스는 건드리지 않는다. 막 들어온 사람은 화면을 보려는 것이지
 	// 글을 쓰려는 것이 아니고, 입력창을 잡으면 이동 키부터 먹지 않는다.
-	Chat.openFor(player, "");
+	Chat.openFor(player, "", "");
 
 	// 게임 도중 끊겼다 돌아온 경우. 기존에는 좌석이 사라져 관전조차 못 했다.
 	const found = locate(player.id);

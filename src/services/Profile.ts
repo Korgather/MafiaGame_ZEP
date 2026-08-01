@@ -16,12 +16,20 @@
  * ("쓰는 곳이 여러 곳, 규칙을 아는 곳은 없음")이 채팅 쪽에 새로 생긴다.
  * 먼저 ChatCommands에서 차단/신고를 함수로 꺼낸 뒤에 버튼을 붙이는 순서가
  * 맞다. 그때 이 파일에서 바뀌는 것은 payload 두 줄과 handleMessage의 case뿐이다.
+ *
+ * 귓속말 버튼은 그 순서를 지켜서 붙였다. 이 파일이 하는 일은 "누구에게"를
+ * 넘기는 것뿐이고, 보낼 수 있는지(Chat.canWhisper)와 입력창을 어떻게 채우는지
+ * (Chat.prefill)는 여전히 채팅 쪽 한 곳이 정한다. 명령어를 문자열로 만들어
+ * 넘기는 것이 조금 우스워 보이지만, 그래야 사람이 직접 /귓속말을 친 것과
+ * 완전히 같은 길을 지난다 — 이름 찾기, 차단 여부, 게임 중 금지가 모두 한 번만
+ * 구현돼 있다.
  */
 import type { ScriptPlayer } from "zep-script";
 import type { ProfileStat } from "../types/Widget.types.ts";
 import { messageType } from "../types/Widget.types.ts";
 import { locate, locateSpectator } from "../entities/RoomRegistry.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
+import * as Chat from "./ChatService.ts";
 import { rankOf } from "./Rewards.ts";
 import type { ProfilePayload } from "./Widgets.ts";
 import { bindMessage, closeProfile, openProfile } from "./Widgets.ts";
@@ -55,12 +63,36 @@ export function showProfile(clicker: ScriptPlayer, target: ScriptPlayer): void {
 		where: whereOf(target),
 		stats: statsOf(target),
 		self: clicker.id === target.id,
+		// 자기 자신에게는 보낼 수 없다(ChatCommands가 거절한다). 눌러 봐야
+		// 거절만 돌아오는 버튼은 그리지 않는다
+		canWhisper: clicker.id !== target.id && Chat.canWhisper(clicker),
 	};
-	bindMessage(openProfile(clicker, payload), "profile", handleMessage);
+	// 대상을 클로저로 넘긴다. payload에 담아 위젯을 거쳐 돌아오게 하면 남의
+	// playerId가 웹뷰를 한 바퀴 도는데, 그럴 이유가 없다 — 창을 연 서버가
+	// 이미 알고 있는 값이다
+	bindMessage(
+		openProfile(clicker, payload),
+		"profile",
+		(player, data) => handleMessage(player, target, data)
+	);
 }
 
-function handleMessage(player: ScriptPlayer, data: unknown): void {
-	if (messageType(data) === "close") closeProfile(player);
+function handleMessage(player: ScriptPlayer, target: ScriptPlayer, data: unknown): void {
+	switch (messageType(data)) {
+		case "close":
+			closeProfile(player);
+			break;
+		case "whisper":
+			/*
+			 * 보내지 않는다. 입력창에 "/귓속말 이름 "까지만 채운다.
+			 *
+			 * 창은 닫는다 — 채울 곳이 채팅 입력창이라 프로필이 덮고 있으면
+			 * 방금 무슨 일이 일어났는지 보이지 않는다.
+			 */
+			closeProfile(player);
+			Chat.prefill(player, `/귓속말 ${target.name} `);
+			break;
+	}
 }
 
 /**

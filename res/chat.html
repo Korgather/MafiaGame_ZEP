@@ -370,6 +370,9 @@ body {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
 }
+.icon-btn.strong {
+	font-weight: 800;
+}
 .grid {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -541,11 +544,30 @@ body {
 	flex: 0 0 auto;
 	border-bottom: 1px solid var(--line);
 }
+.chat-tabwrap {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.chat-tabwrap::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 20px;
+	pointer-events: none;
+	opacity: 0;
+	background: linear-gradient(to right, rgba(28, 22, 20, 0), var(--surface));
+	transition: opacity var(--dur) var(--ease);
+}
+.chat-tabwrap.more::after {
+	opacity: 1;
+}
 .chat-tabs {
 	display: flex;
 	gap: 2px;
-	flex: 1 1 auto;
-	min-width: 0;
+	width: 100%;
 	padding: 2px 2px 0;
 	overflow-x: auto;
 	scrollbar-width: none;
@@ -580,13 +602,26 @@ body {
 	outline-offset: -2px;
 }
 .tab[aria-selected="true"] {
-	color: var(--ink);
-	background: var(--surface-2);
+	color: var(--accent);
+	background: var(--surface-3);
 	border-bottom-color: var(--accent);
 }
 .tab.ro::after {
 	content: "🔒";
 	font-size: 9px;
+}
+.tab.fresh {
+	animation: tabpop 1200ms var(--ease);
+}
+@keyframes tabpop {
+	0%,
+	100% {
+		box-shadow: none;
+	}
+	25%,
+	65% {
+		box-shadow: inset 0 0 0 2px var(--accent);
+	}
 }
 .badge-n {
 	min-width: 15px;
@@ -657,6 +692,26 @@ body {
 .msg .chip {
 	padding: 0 var(--s1);
 	font-size: 9px;
+}
+.msg .reply {
+	flex: 0 0 auto;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 0 var(--s1);
+	font: inherit;
+	font-size: 11px;
+	color: var(--ink-3);
+	background: transparent;
+	border: none;
+	border-radius: var(--r1);
+	cursor: pointer;
+}
+.msg .reply:hover {
+	color: var(--accent);
+}
+.msg .reply:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -1px;
 }
 .msg .txt {
 	padding: var(--s1) var(--s2);
@@ -923,7 +978,10 @@ body {
 
 		<div class="chat hidden" id="full">
 			<div class="chat-head" id="chatHead">
-				<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
+				
+				<div class="chat-tabwrap" id="tabwrap">
+					<div class="chat-tabs" id="tabs" role="tablist" aria-label="채팅 채널"></div>
+				</div>
 				
 			<button type="button" class="chat-fold" id="fold" aria-label="채팅 접기">
 				<span aria-hidden="true">▾</span>접기
@@ -940,6 +998,8 @@ body {
 
 			<div class="chat-entry">
 				<button type="button" class="icon-btn" id="emoji" aria-label="이모지">☺</button>
+				
+				<button type="button" class="icon-btn strong" id="help" aria-label="도움말">?</button>
 				
 				<input
 					type="text"
@@ -1351,7 +1411,16 @@ function bubble(line) {
 								>${line.role}</span
 							>` : "";
   const name = line.num > 0 ? line.num + "번 참가자" : line.name;
-  who = html`${chip}<span class="ellip">${name}</span>${when}`;
+  const token = line.num > 0 ? String(line.num) : line.name;
+  const reply = pm !== "" && line.senderId !== "" ? html`<button
+									type="button"
+									class="reply"
+									data-who="${token}"
+									aria-label="${name}에게 답장"
+								>
+									↩
+								</button>` : "";
+  who = html`${chip}<span class="ellip">${name}</span>${when}${reply}`;
  }
  return html`<div class="msg${mine ? " mine" : ""}${pm}">
 					<div class="who">${who}</div>
@@ -1404,10 +1473,29 @@ function tabHtml(view) {
 				</button>`;
 }
 
+function syncFade() {
+ const el = qs("#tabs");
+ qs("#tabwrap").classList.toggle("more", el.scrollWidth - el.scrollLeft - el.clientWidth > 2);
+}
+
 function drawTabs() {
  qs("#tabs").innerHTML = html`${channels.map(tabHtml)}`;
+ syncFade();
+ const chosen = qs('.tab[aria-selected="true"]', qs("#tabs"));
+ if (chosen) chosen.scrollIntoView({
+  inline: "nearest",
+  block: "nearest"
+ });
  const view = viewOf(active);
  qs("#input").placeholder = view ? view.placeholder : "";
+}
+
+function flashNew(before) {
+ for (const view of channels) {
+  if (before.indexOf(view.id) >= 0) continue;
+  const el = qs('.tab[data-id="' + view.id + '"]', qs("#tabs"));
+  if (el) el.classList.add("fresh");
+ }
 }
 
 function drawBadges() {
@@ -1437,12 +1525,24 @@ function drawQuick() {
 
 const MINI_LABEL = Parent.canReadKeys ? "채팅 (Enter)" : "채팅";
 
+const MINI_MARKS = 3;
+
 function drawMini() {
  let total = 0;
- for (const view of channels) total += view.unread;
+ let single = "";
+ const marks = [];
+ for (const view of channels) {
+  total += view.unread;
+  if (view.unread <= 0) continue;
+  single = view.glyph;
+  marks.push(view.glyph + badgeText(view.unread));
+ }
  const active_ = viewOf(active);
- qs("#miniGlyph").textContent = active_ ? active_.glyph : "💬";
- qs("#miniText").textContent = total > 0 ? "새 메시지" : MINI_LABEL;
+ let glyph = active_ ? active_.glyph : "💬";
+ if (marks.length === 1) glyph = single; else if (marks.length > 1) glyph = "💬";
+ const listed = marks.length <= MINI_MARKS ? marks.join(" ") : marks.slice(0, MINI_MARKS).join(" ") + " ⋯";
+ qs("#miniGlyph").textContent = glyph;
+ qs("#miniText").textContent = total > 0 ? listed : MINI_LABEL;
  qs("#miniBadge").textContent = badgeText(total);
  qs("#miniBadge").classList.toggle("hidden", total === 0);
  qs("#mini").classList.toggle("alert", total > 0);
@@ -1520,6 +1620,8 @@ qs("#tabs").addEventListener("click", event => {
  if (el) selectChannel(el.dataset.id);
 });
 
+qs("#tabs").addEventListener("scroll", syncFade);
+
 qs("#chatHead").addEventListener("click", event => {
  if (event.target.closest(".tab")) return;
  Parent.send({
@@ -1544,8 +1646,23 @@ qs("#log").addEventListener("scroll", () => {
  if (nearBottom(qs("#log"))) jump(false);
 });
 
+qs("#log").addEventListener("click", event => {
+ const el = event.target.closest(".reply");
+ if (!el) return;
+ qs("#input").value = "/귓속말 " + el.dataset.who + " ";
+ takeFocus(false);
+});
+
 qs("#emoji").addEventListener("click", () => {
  qs("#pad").classList.toggle("hidden");
+});
+
+qs("#help").addEventListener("click", () => {
+ Parent.send({
+  type: "send",
+  channel: active,
+  text: "/도움말"
+ });
 });
 
 qs("#pad").addEventListener("click", event => {
@@ -1633,15 +1750,22 @@ Parent.on({
   qs("#mini").classList.toggle("hidden", open);
   draw();
   render();
+  if (data.prefill) qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
   if (data.focus) takeFocus(data.focus === "command");
+ },
+ prefill(data) {
+  qs("#input").value = String(data.text || "").slice(0, MAX_TEXT);
+  takeFocus(false);
  },
  channels(data) {
   const next = data.active || active;
   const moved = next !== active;
+  const before = channels.map(view => view.id);
   channels = data.channels || [];
   quick = data.quick || [];
   active = next;
   draw();
+  flashNew(before);
   if (moved) render();
  },
  say(data) {

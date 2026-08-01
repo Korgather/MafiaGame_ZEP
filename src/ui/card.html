@@ -306,6 +306,8 @@
 			let listing = false;
 			/* 마지막 장에서 도감으로 건너갈 수 있는가 */
 			let bookLink = false;
+			/* 목록 화면의 머리말. ""이면 도감으로 본다 (paint 참고) */
+			let heading = "";
 
 			const TEAM_LABEL = { mafia: "마피아 팀", citizen: "시민 팀" };
 
@@ -328,8 +330,11 @@
 				let team = "";
 				for (let i = 0; i < cards.length; i++) {
 					const card = cards[i];
-					const side = card.team === "mafia" ? "mafia" : "citizen";
-					if (card.team !== team) {
+					// 진영이 없는 묶음(도움말)에서는 색도 구분선도 빼야 한다.
+					// team을 안 보고 갈랐던 옛 코드는 진영 없는 카드 전부를
+					// 시민색으로 칠하고 맨 위에 "그 밖 11" 머리말을 하나 뿌렸다
+					const side = card.team ? (card.team === "mafia" ? "mafia" : "citizen") : "";
+					if (card.team && card.team !== team) {
 						team = card.team;
 						out += html`<div class="sect ${side}">
 							${TEAM_LABEL[team] || "그 밖"} ${countTeam(team)}
@@ -409,12 +414,18 @@
 				flip("#hd", nav !== "none");
 
 				if (nav === "grid") {
-					qs("#heading").textContent = "직업 도감";
+					// 격자는 이제 도감 하나가 아니다(도움말도 같은 모양이다).
+					// 서버가 머리말을 적어 보내면 그것을 쓰고, 비워 보내면
+					// 도감이다 — 도감은 이 위젯이 처음부터 알던 화면이라
+					// 여기가 그 이름의 제자리다
+					qs("#heading").textContent = heading || "직업 도감";
 					// 종수만으로는 "적이 몇인가"에 답하지 못한다. 도감을 여는
-					// 사람이 가장 먼저 세는 것이 그 수다
-					qs("#sub").textContent = showList
-						? `${cards.length}종 · 마피아 ${countTeam("mafia")} / 시민 ${countTeam("citizen")}`
-						: "";
+					// 사람이 가장 먼저 세는 것이 그 수다. 다만 도감에서만 뜻이
+					// 있다 — 명령어 목록에서 "11종 · 마피아 0"은 거짓말이다
+					qs("#sub").textContent =
+						showList && !heading
+							? `${cards.length}종 · 마피아 ${countTeam("mafia")} / 시민 ${countTeam("citizen")}`
+							: "";
 				} else if (nav === "steps") {
 					qs("#heading").textContent = "처음이신가요?";
 					qs("#sub").textContent = index + 1 + " / " + cards.length;
@@ -463,6 +474,8 @@
 					cards = data.cards || [];
 					nav = data.nav || "none";
 					bookLink = data.bookLink === true;
+					// 옛 payload(장면 검사기)에는 이 칸이 없다. 없으면 도감이다
+					heading = data.heading ? String(data.heading) : "";
 					index = 0;
 					listing = nav === "grid";
 

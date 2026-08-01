@@ -407,6 +407,17 @@ export interface CardPayload {
 	timer: number;
 	/** 마지막 장에 "직업 보러 가기"를 붙인다 */
 	bookLink: boolean;
+	/**
+	 * 목록 화면의 머리말. ""이면 위젯이 "직업 도감"으로 둔다.
+	 *
+	 * grid는 이제 도감 하나가 아니다 — 명령어 목록도 같은 모양이다(한 줄에
+	 * 글리프·이름·요약, 눌러서 자세히). 머리말과 부제를 위젯이 정해 두면
+	 * 명령어 목록에 "8종 · 마피아 0 / 시민 0"이라는 거짓말이 붙는다.
+	 *
+	 * none·steps에서는 뜻이 없다. 그 둘은 머리말을 아예 숨기거나(none)
+	 * 위젯이 정한다(steps).
+	 */
+	heading: string;
 }
 
 /**
@@ -484,6 +495,15 @@ export interface ChatPayload {
 	 * 게임을 보고 있는 사람의 포커스를 뜬금없이 가져간다.
 	 */
 	focus: ChatFocus;
+	/**
+	 * 입력창에 미리 채워 둘 글. ""이면 비운다.
+	 *
+	 * focus와 같은 이유로 여기 있다. 프로필 창의 "귓속말" 버튼은 접혀 있던
+	 * 채팅을 펴면서 `/귓속말 이름 `까지 채워야 하는데, 접기/펴기가 위젯
+	 * 재생성이라 새 문서에는 그 부탁을 전할 길이 이 payload뿐이다. 이미
+	 * 펴져 있을 때는 ChatPrefillPayload가 같은 일을 한다.
+	 */
+	prefill: string;
 }
 
 /**
@@ -534,6 +554,17 @@ export interface ProfilePayload {
 	stats: ProfileStat[];
 	/** 자기 자신을 클릭했는가. 머리말이 갈린다 */
 	self: boolean;
+	/**
+	 * 귓속말 버튼을 내밀어도 되는가.
+	 *
+	 * 상대의 playerId는 싣지 않는다. 대상은 서버가 클로저로 들고 있고 위젯은
+	 * "눌렀다"만 알린다 — 위젯에 남의 id를 넘기면 그것으로 무엇을 더 할 수
+	 * 있는지가 위젯 쪽 문제가 된다.
+	 *
+	 * 게임 중에는 false다. 눌러 봐야 "게임 중에는 보낼 수 없습니다"만 나오는
+	 * 버튼을 그려 두는 것은 없는 것보다 나쁘다.
+	 */
+	canWhisper: boolean;
 }
 
 /** 채널 목록·빠른 메시지만 다시 보낸다. 단계가 바뀌거나 죽었을 때 */
@@ -625,10 +656,21 @@ export function closeChat(player: ScriptPlayer): void {
 	}
 }
 
+/**
+ * 입력창을 채워 달라는 부탁. 펴져 있는 채팅창에만 통한다.
+ *
+ * 보낸 글을 서버가 기억하지 않는다 — 사람이 지우거나 고쳐 보내는 것이 정상인
+ * 글이라, 기억해 두면 재접속 때 옛 부탁이 되살아나 남의 이름이 입력창에 남는다.
+ */
+export interface ChatPrefillPayload {
+	type: "prefill";
+	text: string;
+}
+
 /** 이미 열려 있는 채팅창에 메시지를 보낸다. 닫혀 있으면 조용히 넘어간다 */
 export function updateChat(
 	player: ScriptPlayer,
-	payload: ChatChannelsPayload | ChatLinePayload | ChatSayPayload
+	payload: ChatChannelsPayload | ChatLinePayload | ChatSayPayload | ChatPrefillPayload
 ): void {
 	const widget = tagOf(player).chatWidget;
 	if (widget) widget.sendMessage(payload);
