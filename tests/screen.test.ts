@@ -1,5 +1,5 @@
 /*
- * 화면 연출 배선 — 배율·카메라·흔들기·배경음이 언제 누구에게 가는가.
+ * 화면 연출 배선 — 배율·카메라·흔들기·비네팅·배경음이 언제 누구에게 가는가.
  *
  * 효과음(sfx.test.ts)과 같은 종류의 위험이지만 한 가지가 더 나쁘다. 카메라와
  * 배율은 **사람에게 붙는 상태**여서 되돌리는 코드가 빠져도 그 순간에는
@@ -13,10 +13,11 @@
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import type { VeilSpec } from "../src/types/Game.types.ts";
 import { GamePhase, Role } from "../src/types/Game.types.ts";
 import { Bgm } from "../src/constants/Assets.ts";
 import type { TremorSpec } from "../src/services/Screen.ts";
-import { Hold, Tremor, Zoom } from "../src/services/Screen.ts";
+import { Hold, Tremor, Veil, Zoom } from "../src/services/Screen.ts";
 import type { FakePlayer } from "./helpers/Harness.ts";
 import {
 	connect,
@@ -84,6 +85,25 @@ function shaken(players: readonly FakePlayer[], tremor: TremorSpec): number {
 		if (shookAt(player, tremor) > 0) count++;
 	}
 	return count;
+}
+
+/**
+ * 그 어둠이 걸린 횟수.
+ *
+ * 짙기까지 보는 이유는 표에 반지름만 다른 항목이 생길 수 있어서다. 둘을
+ * 함께 보면 어느 항목인지가 한 벌로 정해진다.
+ */
+function veiledAt(player: FakePlayer, veil: VeilSpec): number {
+	let count = 0;
+	for (const record of player.veils) {
+		if (record.radius === veil.radius && record.opacity === veil.opacity) count++;
+	}
+	return count;
+}
+
+/** 지금 이 사람 화면에 마지막으로 걸린 어둠 */
+function lastVeil(player: FakePlayer): { radius: number; startRadius: number; opacity: number } {
+	return player.veils[player.veils.length - 1];
 }
 
 describe("배율", () => {
@@ -274,6 +294,138 @@ describe("흔들기", () => {
 
 		assert.equal(shookAt(playerOf(police), Tremor.BLOCKED), 1);
 		assert.equal(shaken(players, Tremor.BLOCKED), 1);
+	});
+});
+
+describe("비네팅", () => {
+	/**
+	 * 어둠은 배율보다 한 겹 더 위험하다. 배율은 틀려도 화면이 멀거나 가까울
+	 * 뿐이지만 비네팅은 걷는 API가 따로 없어서 — 짙기 0을 다시 걸어주는 것이
+	 * 곧 해제다 — 걷는 호출을 빠뜨리면 낮에도 밤의 어둠이 그대로 남는다.
+	 */
+	it("밤에 내려앉고 아침에 걷힌다", () => {
+		const players = startGame(6, 1, ONE_MAFIA);
+		const target = room(1);
+
+		// 곡과 같은 계산이다. 직업 공개에서 미리 걸어 두면 첫 밤까지 어둠이
+		// 한 번도 끊기지 않는다
+		for (const player of players) assert.equal(veiledAt(player, Veil.NIGHT), 1);
+
+		silence(players);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		for (const player of players) {
+			assert.equal(player.veils.length, 0, "같은 어둠을 다시 걸었습니다");
+		}
+
+		silence(players);
+		finishPhase(target); // → DAY
+		for (const player of players) {
+			assert.equal(veiledAt(player, Veil.NONE), 1);
+			// 출발이 밤의 반지름이어야 어둠이 벌어지며 걷힌다. 0에서 출발하면
+			// 화면이 한 번 완전히 덮였다가 사라진다
+			assert.equal(lastVeil(player).startRadius, Veil.NIGHT.radius);
+		}
+
+		silence(players);
+		finishPhase(target); // → VOTE (낮과 같은 어둠 없음)
+		for (const player of players) {
+			assert.equal(player.veils.length, 0, "투표에서 없는 어둠을 다시 걷었습니다");
+		}
+	});
+
+	/**
+	 * 반지름은 뚫린 원의 크기라 화면 대각선 절반을 넘으면 아무것도 보이지
+	 * 않는다. 폰은 그 절반이 PC의 절반쯤이므로 같은 값을 그대로 쓰면 폰에서만
+	 * 어둠이 사라진다 — 배율과 같은 종류의 실수이고 증상만 반대다.
+	 */
+	it("폰은 반지름을 줄여 같은 세기로 덮는다", () => {
+		const phone = connect("폰", { isMobile: true });
+		const desk = connect("PC");
+		const players = [phone, desk, connect("셋"), connect("넷")];
+		for (const player of players) {
+			joinRoom(player, 1);
+			setReady(player);
+		}
+		const target = room(1);
+
+		silence(players);
+		tick(target.countdown + 0.001); // 대기실 카운트다운 → 게임 시작
+
+		assert.equal(target.started, true);
+		assert.equal(lastVeil(desk).radius, Veil.NIGHT.radius);
+		// 0.65는 Screen.MOBILE_VEIL이다. 배율의 0.7과 같은 이유로 여기 숫자로
+		// 적는다 — 상수를 가져다 쓰면 상수를 바꿔도 테스트가 따라 바뀌어서
+		// "값을 고쳤다"는 사실 자체를 아무도 마주치지 않는다
+		assert.equal(lastVeil(phone).radius, Veil.NIGHT.radius * 0.65);
+	});
+
+	/**
+	 * 처형 한순간만 색이 있다. 이 붉은 기는 스스로 걷히지 않고 다음 장면 전환을
+	 * 기다리는데, 처형 뒤에 오는 것은 밤 아니면 종료뿐이라 그 둘 중 하나가
+	 * 반드시 걷어간다 — 그 두 길이 아닌 경로가 생기면 이 테스트가 먼저 깨진다.
+	 */
+	it("처형 순간만 붉게 덮이고 곧바로 걷힌다", () => {
+		const players = startGame(6, 1, ONE_MAFIA);
+		const target = room(1);
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // 첫 밤(무사) → DAY
+		finishPhase(target); // → VOTE
+		for (const player of players) vote(player, mafia.index);
+		silence(players);
+		passTrial(target); // 개표 → 반론 → 찬반 → 처형
+
+		assert.equal(mafia.alive, false);
+		for (const player of players) {
+			assert.equal(veiledAt(player, Veil.STRIKE), 1);
+			// 여기서는 판이 끝났으므로 종료 장면이 걷어갔다
+			assert.equal(lastVeil(player).opacity, 0);
+		}
+	});
+
+	/**
+	 * 재접속. 곡·배율과 같은 이유로 복원이 필요하지만 여기엔 조건이 하나 더
+	 * 붙는다 — 출발 반지름을 방의 현재 값으로 줘야 한다. 다른 값에서 출발시키면
+	 * 이미 밤인 방에 들어온 사람의 화면에서만 어둠이 뒤늦게 조여든다.
+	 */
+	it("도중에 돌아오면 지금 방의 어둠이 그 자리에 걸린다", () => {
+		const players = startGame(6, 1, ONE_MAFIA);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		const returning = players[players.length - 1];
+		disconnect(returning);
+		returning.clearLog();
+		reconnect(returning);
+
+		const veil = lastVeil(returning);
+		assert.equal(veil.radius, Veil.NIGHT.radius);
+		assert.equal(veil.startRadius, Veil.NIGHT.radius, "돌아온 사람에게만 어둠이 다시 조여듭니다");
+	});
+
+	/**
+	 * 대기실 복귀. 배율·음악과 한 묶음이지만 이것만 증상이 다르다 — 남은 배율은
+	 * 이상하다고 느끼기라도 하는데, 남은 어둠은 그냥 "이 맵은 원래 어둡다"로
+	 * 읽혀서 아무도 신고하지 않는다.
+	 */
+	it("대기실로 돌아가면 어둠이 남지 않는다", () => {
+		const players = startGame(6, 1, ONE_MAFIA);
+		const target = room(1);
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // 첫 밤(무사) → DAY
+		finishPhase(target); // → VOTE
+		for (const player of players) vote(player, mafia.index);
+		passTrial(target); // 개표 → 반론 → 찬반 → 처형 → 종료
+
+		assert.equal(target.phase, GamePhase.GAME_OVER);
+		silence(players);
+		finishPhase(target); // 종료 화면 → 대기실
+
+		assert.equal(target.started, false);
+		for (const player of players) assert.equal(lastVeil(player).opacity, 0);
 	});
 });
 

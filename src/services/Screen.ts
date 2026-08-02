@@ -1,5 +1,5 @@
 /**
- * 화면 연출 — 카메라 배율, 클로즈업, 흔들기, 배경음.
+ * 화면 연출 — 카메라 배율, 클로즈업, 흔들기, 비네팅, 배경음.
  *
  * 왜 한 파일인가
  * --------------
@@ -7,12 +7,12 @@
  * displayRatio를 직접 만지고, 처형하는 코드가 그 옆에서 shakeScreen을 부르고,
  * 승리 화면이 또 어딘가에서 소리를 끄는 식이다. 그렇게 되면 세기와 길이를
  * 조율하려 할 때 값이 여덟 파일에 흩어져 있고, 무엇보다 **되돌리는 코드가
- * 빠진 곳**을 찾을 수 없다. 카메라와 배율은 사람에게 붙는 상태라 한 번
- * 어긋나면 그 사람은 다음 판 내내 남의 자리를 보고 있게 된다.
+ * 빠진 곳**을 찾을 수 없다. 카메라·배율·비네팅은 사람에게 붙는 상태라 한 번
+ * 어긋나면 그 사람은 다음 판 내내 남의 자리를, 혹은 어두운 화면을 본다.
  *
- * 그래서 단계 코드가 부르는 것은 대부분 setScene 한 줄이고, 값은 아래 두 표
- * (Zoom·Tremor)에만 있다. "지속시간과 강도를 자연스럽게 조정"하는 일은 이
- * 파일의 상수만 만지면 끝난다.
+ * 그래서 단계 코드가 부르는 것은 대부분 setScene 한 줄이고, 값은 아래 세 표
+ * (Zoom·Tremor·Veil)에만 있다. "지속시간과 강도를 자연스럽게 조정"하는 일은
+ * 이 파일의 상수만 만지면 끝난다.
  *
  * 왜 leaf인가
  * -----------
@@ -20,18 +20,9 @@
  * 파일을 부른다. 반대 방향 화살표가 하나라도 생기면 순환 import가 되고, 그
  * 순환은 webpack/Jint 초기화 순서에서 undefined로 터진다. 이 파일이 아는 것은
  * Broadcast(전달)와 상수·타입뿐이다.
- *
- * 일부러 쓰지 않은 API: cameraEffect(SPOTLIGHT 비네팅)
- * ----------------------------------------------------
- * 밤에 화면 가장자리를 어둡게 덮는 연출이 이 게임에 잘 맞지만, 파라미터의
- * 단위가 zep-script 타입에도 문서에도 없다 — "값이 클수록 밝은 영역이
- * 커진다"가 전부다. 단위가 픽셀이라면 작은 값 하나가 모든 사람의 화면을
- * 새까맣게 덮고, 그 상태를 이 프로젝트에서 확인할 방법이 없다. 밤마다 전원의
- * 화면이 검게 되는 사고는 되돌릴 기회도 없이 판을 끝낸다. 안전하게 확인할 수
- * 있게 되면 여기에 추가한다.
  */
 import type { ScriptPlayer } from "zep-script";
-import type { Room } from "../types/Game.types.ts";
+import type { Room, VeilSpec } from "../types/Game.types.ts";
 import { BGM_VOLUME } from "../constants/Assets.ts";
 import { seatPosition } from "../constants/RoomLayout.ts";
 import { forEachAudience } from "./Broadcast.ts";
@@ -112,6 +103,94 @@ export const Hold = {
 	DEFENSE: 4.5,
 } as const;
 
+/**
+ * 단계마다 화면 가장자리를 어떻게 덮을 것인가.
+ *
+ * 배율(Zoom)이 "얼마나 가까운가"를 말한다면 이쪽은 "얼마나 보이는가"를
+ * 말한다. 밤에 카메라를 당기는 것만으로는 밤이 되지 않는다 — 30초쯤 지나면
+ * 눈이 배율에 적응해서 그냥 평소 화면으로 읽힌다. 시야가 좁아진 것은
+ * 가장자리가 있어야 보인다.
+ *
+ * ### opacity가 안전장치다
+ *
+ * radius의 단위가 픽셀이라는 것은 스튜디오 입력값(blur: 100)에서 추정한
+ * 것이지 문서로 확인한 사실이 아니다. 추정이 틀리면 값 하나가 전원의 화면을
+ * 덮는데, 그 사고는 판이 끝날 때까지 되돌릴 기회가 없다. 그래서 짙기에
+ * 상한(OPACITY_CAP)을 두었다 — 단위가 무엇이든 이 값 아래에서는 최악의 경우가
+ * "가장자리가 좀 어둡다"이지 "화면이 검다"가 아니다. 이 표의 값을 올릴 때
+ * 상한부터 확인할 것.
+ *
+ * ### 왜 네 개뿐인가
+ *
+ * 단계마다 다른 비네팅을 걸면 그건 연출이 아니라 깜빡임이다. 여기서 가르는
+ * 것은 "가려진 판(밤)"과 "드러난 판(낮)", 그리고 그 사이에 한 사람만 서는
+ * 순간(재판)뿐이다.
+ */
+export const Veil = {
+	/** 없음 — 낮·투표·대기실·종료. opacity가 0이라 반지름은 형식일 뿐이다 */
+	NONE: {
+		radius: 2200,
+		color: 0x000000,
+		blur: 160,
+		opacity: 0,
+		ms: 600,
+		easing: "Sine.easeOut",
+	},
+	/** 밤과 직업 공개 — 푸른 기가 도는 어둠이 천천히 조여든다 */
+	NIGHT: {
+		radius: 760,
+		color: 0x060912,
+		blur: 240,
+		opacity: 0.5,
+		ms: 1600,
+		easing: "Sine.easeInOut",
+	},
+	/** 최후의 반론과 찬반 — 단상 하나에 떨어지는 조명 */
+	TRIAL: {
+		radius: 620,
+		color: 0x120308,
+		blur: 200,
+		opacity: 0.44,
+		ms: 900,
+		easing: "Sine.easeInOut",
+	},
+	/**
+	 * 처형이 집행되는 순간. 유일하게 색이 있고 유일하게 빠르다(0.24초).
+	 *
+	 * 이 상태는 다음 setScene까지 남는다. 그 사이를 밤 컷이 덮고 있어서
+	 * 실제로 붉은 화면을 보는 시간은 컷이 열리기 전 한순간뿐이다 —
+	 * 그래서 짙기가 이 표에서 가장 낮은데도 충분히 읽힌다.
+	 */
+	STRIKE: {
+		radius: 480,
+		color: 0x8c1410,
+		blur: 140,
+		opacity: 0.38,
+		ms: 240,
+		easing: "Quart.easeOut",
+	},
+} as const;
+
+/**
+ * 어떤 비네팅도 이보다 짙을 수 없다. 위 표를 만질 때의 상한이자, radius의
+ * 단위 추정이 틀렸을 때 판을 구하는 값이다(Veil 주석).
+ */
+const OPACITY_CAP = 0.55;
+
+/**
+ * 폰에서 반지름을 줄이는 배수.
+ *
+ * 반지름이 픽셀이면 같은 값이 기기마다 다른 세기가 된다. 데스크톱 뷰포트의
+ * 대각선 절반은 900px 안팎이고 폰은 470px 안팎이라, 데스크톱에 맞춘 760을
+ * 폰에 그대로 주면 원이 화면보다 커서 아무것도 덮이지 않는다. 폰에서만
+ * 밤이 밤처럼 보이지 않는 것은 조용한 종류의 고장이라 아무도 신고하지 않는다.
+ *
+ * 두 대각선의 비가 대략 0.52인데 0.65로 둔 것은 방향 때문이다. 이 값이
+ * 너무 크면 효과가 약해질 뿐이고, 너무 작으면 폰 화면이 필요 이상으로
+ * 어두워진다. 확인할 수 없는 값은 약해지는 쪽으로 틀리게 둔다.
+ */
+const MOBILE_VEIL = 0.65;
+
 /** 카메라가 목표로 이동하는 데 걸리는 시간(초) */
 const PAN = 0.6;
 /** 자기 캐릭터로 돌아오는 시간(초). 갈 때보다 조금 빠르다 */
@@ -158,24 +237,54 @@ function applyAmbience(player: ScriptPlayer, file: string): void {
 }
 
 /**
+ * 비네팅을 from에서 to로 옮긴다.
+ *
+ * 이전 상태를 인자로 받는 이유는 API가 그것을 요구하기 때문이다 —
+ * tweenOption.startRadius가 없으면 새 반지름이 즉시 적용되어, 밤이 시작될 때
+ * 어둠이 조여드는 대신 툭 나타난다. "지금 걸려 있는 값"은 방이 기억한다
+ * (Room.veil).
+ */
+function applyVeil(player: ScriptPlayer, from: VeilSpec, to: VeilSpec): void {
+	const scale = player.isMobile ? MOBILE_VEIL : 1;
+	player.applyVignetteEffect(to.radius * scale, {
+		color: to.color,
+		blur: to.blur,
+		// 표를 고치는 사람이 상한을 잊어도 여기서 막힌다. 상한을 Veil 쪽
+		// 주석으로만 두면 그것은 규칙이 아니라 부탁이다
+		opacity: Math.min(to.opacity, OPACITY_CAP),
+		tweenOption: {
+			startRadius: from.radius * scale,
+			duration: to.ms,
+			easingType: to.easing,
+			repeat: 0,
+		},
+	});
+}
+
+/**
  * 이 방의 "장면"을 바꾼다. 단계를 여는 함수가 한 줄로 부른다.
  *
- * 세 가지를 한꺼번에 한다: 돌던 클로즈업 해제, 방 전체 배율, BGM 교체.
- * 셋을 따로 두지 않은 이유는 셋 다 빠뜨리면 티가 나지 않기 때문이다.
- * 클로즈업만 안 풀면 다음 단계 내내 남의 자리를 보고 있게 되는데, 화면은
- * 정상으로 보이므로 아무도 버그라고 말하지 않는다.
+ * 네 가지를 한꺼번에 한다: 돌던 클로즈업 해제, 방 전체 배율, BGM 교체,
+ * 비네팅 교체. 넷을 따로 두지 않은 이유는 넷 다 빠뜨리면 티가 나지 않기
+ * 때문이다. 클로즈업만 안 풀면 다음 단계 내내 남의 자리를 보고 있게 되는데,
+ * 화면은 정상으로 보이므로 아무도 버그라고 말하지 않는다.
  *
  * bgm이 지금 곡과 같으면 다시 시작하지 않는다. 낮→투표→개표처럼 곡이
  * 이어지는 구간에서 3초마다 곡이 처음으로 돌아가면 그건 음악이 아니라
  * 소음이다. 곡을 단계가 아니라 "장면"(밤·낮·재판) 단위로만 가른 것도 같은
- * 이유이고, 그래서 BGM은 세 개뿐이다.
+ * 이유이고, 그래서 BGM은 세 개뿐이다. 비네팅도 같은 이유로 같은 값이면
+ * 건너뛴다 — 다시 걸면 tween이 처음부터 돌아 이미 자리잡은 어둠이 한 번
+ * 출렁인다.
  */
-export function setScene(room: Room, factor: number, bgm: string): void {
+export function setScene(room: Room, factor: number, bgm: string, veil: VeilSpec): void {
 	const hadShot = room.shot !== null;
 	room.shot = null;
 	const changed = room.ambience !== bgm;
 	room.ambience = bgm;
 	room.zoom = factor;
+	const from = room.veil;
+	const shifted = from !== veil;
+	room.veil = veil;
 	forEachAudience(room, player => {
 		applyRatio(player, factor);
 		// 클로즈업이 걸려 있었을 때만 되돌린다. 아무 데도 안 갔는데 돌아오라고
@@ -183,6 +292,7 @@ export function setScene(room: Room, factor: number, bgm: string): void {
 		// 화면이 흔들리는 것처럼 보인다
 		if (hadShot) player.setCameraTarget(player, RETURN);
 		if (changed) applyAmbience(player, bgm);
+		if (shifted) applyVeil(player, from, veil);
 	});
 }
 
@@ -255,17 +365,43 @@ export function shakeOne(player: ScriptPlayer, tremor: TremorSpec): void {
 }
 
 /**
+ * 비네팅만 바꾼다. 단계가 넘어가지 않는데 화면이 반응해야 하는 순간 —
+ * 지금은 처형 하나뿐이다.
+ *
+ * setScene과 달리 배율·음악·클로즈업을 건드리지 않는다. 처형은 재판 화면
+ * 안에서 일어나는 사건이라 카메라가 그대로 있어야 하고, 음악을 여기서
+ * 끊으면 다음 단계가 곡을 다시 시작하면서 두 번 끊긴다.
+ *
+ * 이 상태를 걷는 것은 다음 setScene이다. 걷는 코드를 여기 둘 수 없는 것은
+ * ZEP 런타임에 타이머가 없어서인데(focusSeat의 hold와 같은 사정), 처형
+ * 직후에는 반드시 밤이나 종료가 이어지므로 프레임 루프까지 동원할 이유는
+ * 없다. 그 둘이 아닌 경로가 생기면 여기에 걷는 자리를 만들어야 한다.
+ */
+export function flash(room: Room, veil: VeilSpec): void {
+	const from = room.veil;
+	room.veil = veil;
+	forEachAudience(room, player => {
+		applyVeil(player, from, veil);
+	});
+}
+
+/**
  * 도중에 들어온 사람에게 지금 방의 화면을 맞춰준다. 재접속 복구 경로.
  *
- * 배율과 BGM은 사람에게 붙는 상태라 새 접속에는 아무것도 걸려 있지 않다.
- * 그래서 재접속한 사람만 밤에 낮 배율로, 음악 없이 앉아 있게 된다 —
- * 화면이 깨진 것은 아니라서 본인도 무엇이 다른지 말하기 어렵다.
+ * 배율·BGM·비네팅은 사람에게 붙는 상태라 새 접속에는 아무것도 걸려 있지
+ * 않다. 그래서 재접속한 사람만 밤에 낮 배율로, 음악 없이, 밝은 화면으로
+ * 앉아 있게 된다 — 화면이 깨진 것은 아니라서 본인도 무엇이 다른지 말하기
+ * 어렵다.
  */
 export function restoreView(room: Room, player: ScriptPlayer): void {
 	applyRatio(player, room.zoom);
 	const shot = room.shot;
 	if (shot) player.setCameraTarget(shot.tileX, shot.tileY, PAN);
 	applyAmbience(player, room.ambience);
+	// from과 to가 같다. 이 사람에게는 옮겨올 이전 상태가 없으므로 지금 방의
+	// 어둠을 그대로 입혀야 한다 — 다른 값에서 출발시키면 이미 밤인 방에
+	// 들어온 사람의 화면에서만 어둠이 뒤늦게 조여든다
+	applyVeil(player, room.veil, room.veil);
 }
 
 /**
@@ -280,5 +416,9 @@ export function resetView(player: ScriptPlayer): void {
 	player.displayRatio = baseRatio(player);
 	player.setCameraTarget(player, RETURN);
 	player.stopSound(BGM_KEY);
+	// NONE은 짙기가 0이라 tween이 무엇이든 그 자리에서 사라진다. 이 함수가
+	// 불리는 곳(대기실 복귀·스크립트 종료)에서는 그게 맞다 — 판을 떠나는
+	// 사람의 화면에서 어둠이 1.6초에 걸쳐 걷히는 것을 볼 사람은 없다
+	applyVeil(player, Veil.NONE, Veil.NONE);
 	player.sendUpdated();
 }

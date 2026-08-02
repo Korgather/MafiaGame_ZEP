@@ -16,6 +16,11 @@ import { KICK } from "../constants/GameConfig.ts";
 import { roomOrigin } from "../constants/RoomLayout.ts";
 import { roleDef, roleName, startsContacted } from "../domain/Roles.ts";
 import { rulesForRoom } from "../domain/RuleSet.ts";
+// 이 파일이 services를 부르는 유일한 자리다. 순환이 되지 않는 것은 Screen이
+// leaf이기 때문이다 — 그쪽은 타입·상수와 Broadcast만 알고 entities를 모른다.
+// 표 전체가 아니라 이름 하나만 가져오는 것도 그 경계를 눈에 보이게 두려는
+// 것이다(다른 파일들의 `import * as Screen`과 다른 이유).
+import { Veil } from "../services/Screen.ts";
 
 /** 아직 개표가 없었을 때의 값 */
 function emptyVoteRecord(): VoteRecord {
@@ -59,6 +64,7 @@ export function createRoom(num: number): Room {
 		// 1은 "각자의 기본 배율 그대로"다(Screen.Zoom.LOBBY). 대기실에서
 		// 카메라를 건드리지 않는다는 뜻이라 0이 아니라 1이 초기값이다
 		zoom: 1,
+		veil: Veil.NONE,
 	};
 	return room;
 }
@@ -422,4 +428,5 @@ export function resetRoom(room: Room): void {
 	room.shot = null;
 	room.ambience = "";
 	room.zoom = 1;
+	room.veil = Veil.NONE;
 }

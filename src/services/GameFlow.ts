@@ -398,7 +398,7 @@ function beginGame(room: Room): void {
 	// 곧바로 첫 밤이기 때문이다 — 같은 곡이면 beginNight의 setScene이 곡을
 	// 갈아 끼우지 않아서, 판이 열리고 첫 밤이 될 때까지 음악이 끊기지 않는다.
 	// 배율은 밤보다 살짝 덜 당긴다. 아직 볼 것이 자기 카드뿐이다
-	Screen.setScene(room, Screen.Zoom.REVEAL, Bgm.NIGHT);
+	Screen.setScene(room, Screen.Zoom.REVEAL, Bgm.NIGHT, Screen.Veil.NIGHT);
 
 	// 컷을 먼저 건다. playCut이 phaseTimer를 컷 길이만큼 늘리므로, 아래에서
 	// 카드에 실어 보내는 남은 시간이 늘어난 값이어야 서버와 화면이 같은 시계를 본다.

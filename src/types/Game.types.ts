@@ -12,7 +12,7 @@
  * 수명이 다른 값이 한 파일에 있으면 "이 필드를 지워도 되는가"가 파일을
  * 봐서는 답이 안 나오는 질문이 된다.
  */
-import type { ScriptWidget, WidgetAlign } from "zep-script";
+import type { ScriptWidget, VignetteEasing, WidgetAlign } from "zep-script";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { NightIntent, NightReveal } from "../domain/NightPipeline.ts";
@@ -396,6 +396,28 @@ export interface ActiveShot {
 	readonly back: number;
 }
 
+/**
+ * 화면 가장자리를 덮는 비네팅 한 겹.
+ *
+ * 값의 뜻과 표(Screen.Veil)는 Screen.ts에 있다. 타입만 여기 있는 이유는
+ * 방이 이것을 기억해야 하기 때문이다 — 비네팅은 이전 반지름에서 다음
+ * 반지름으로 넘어가는 API라, "지금 걸려 있는 값"을 모르면 어둠이 조여드는
+ * 대신 매번 툭 나타난다(Screen.applyVeil).
+ */
+export interface VeilSpec {
+	/** 뚫린 원의 반지름(px). 클수록 덜 덮는다 */
+	readonly radius: number;
+	/** 0xRRGGBB */
+	readonly color: number;
+	/** 가장자리를 번지게 하는 폭(px) */
+	readonly blur: number;
+	/** 가장 짙은 곳의 불투명도 */
+	readonly opacity: number;
+	/** 이 상태에 도달하는 데 걸리는 시간(밀리초) */
+	readonly ms: number;
+	readonly easing: VignetteEasing;
+}
+
 /** 게임 방 하나 */
 export interface Room {
 	readonly num: number;
@@ -556,6 +578,19 @@ export interface Room {
 	 * ActiveShot.back으로 되돌아간다. 즉 "지금 실제로 보이는 배율"이다.
 	 */
 	zoom: number;
+	/**
+	 * 지금 방 전체에 걸려 있는 비네팅(Screen.Veil의 값 하나).
+	 *
+	 * null이 아니라 항상 무언가가 들어 있다 — 아무것도 덮지 않은 상태가
+	 * Veil.NONE이다. 없음을 null로 두면 다음 전환의 출발 반지름을 어디서
+	 * 가져올지 매번 분기해야 하는데, 그 분기가 곧 "밤에서 낮으로 갈 때만
+	 * 어둠이 툭 사라지는" 버그가 된다.
+	 *
+	 * ambience와 같은 성질이다: 보이는 것은 사람마다지만 "무엇이 걸려
+	 * 있는가"는 방의 사실이라, 도중에 들어온 사람에게 그대로 입혀줄 수 있다
+	 * (Screen.restoreView).
+	 */
+	veil: VeilSpec;
 }
 
 /**

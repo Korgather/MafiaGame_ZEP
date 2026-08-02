@@ -76,7 +76,7 @@ export function beginDay(room: Room): void {
 	beginDayStage(room);
 	// 밤에서 낮으로. 배율이 기준으로 돌아오고 음악이 바뀌는 이 한 줄이
 	// "밤이 끝났다"를 가장 먼저 알린다 — 아침 컷보다도 빠르다
-	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY);
+	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY, Screen.Veil.NONE);
 	playSound(room, Sound.MORNING);
 
 	// 아침이 왔다는 사실은 방 전체가 같이 겪는 일이다. 전에는 사람 수만큼
@@ -124,7 +124,7 @@ export function resumeDay(room: Room): void {
 
 	// 소리도 컷도 다시 틀지 않지만 장면은 되돌려야 한다. 여기 오기 직전이
 	// 재판이라 화면은 아직 단상을 당겨 비추고 있고 음악도 재판 곡이다
-	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY);
+	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY, Screen.Veil.NONE);
 	Chat.say(room, "🌞 처형이 무산되어 토론을 이어갑니다. 곧 다시 투표합니다.");
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 }
@@ -248,7 +248,7 @@ export function beginVote(room: Room): void {
 
 	// 낮과 같은 곡을 이어 쓰되 화면만 한 뼘 당긴다. 곡이 같으므로
 	// setScene은 다시 시작하지 않는다 — 토론 중이던 음악이 그대로 흐른다
-	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY);
+	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY, Screen.Veil.NONE);
 	playSound(room, Sound.VOTE);
 	centerLabel(room, "투표가 시작되었습니다.");
 	// 중앙 라벨은 몇 초 뒤 사라진다. 늦게 화면을 본 사람과 재접속한 사람에게는
@@ -459,7 +459,7 @@ export function beginVoteResult(room: Room): void {
 	// 화면은 투표 때 그대로다. 단상에 오른 사람이 있을 때만 그 자리로
 	// 잠깐 카메라를 옮긴다 — 아무도 오르지 않은 개표에서 카메라가 움직이면
 	// 그 자체가 "뭔가 있었다"는 잘못된 신호가 된다
-	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY);
+	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY, Screen.Veil.NONE);
 	if (nominee !== 0) {
 		Screen.focusSeat(room, nominee, Screen.Hold.NOMINEE, Screen.Zoom.SPOT, Screen.Zoom.VOTE);
 	}

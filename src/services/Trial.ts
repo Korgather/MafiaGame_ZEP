@@ -42,7 +42,7 @@ export function beginDefense(room: Room): void {
 	// 배율이 아니라 카메라가 주인공을 정하므로, 반론 시간(15초)보다 훨씬
 	// 짧게 잡아 4.5초 뒤에는 방 전체가 다시 보이게 둔다 — 반론을 듣는 동안
 	// 다른 사람 반응도 봐야 추리가 된다
-	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL);
+	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL, Screen.Veil.TRIAL);
 	Screen.focusSeat(room, room.nominee, Screen.Hold.DEFENSE, Screen.Zoom.SPOT, Screen.Zoom.TRIAL);
 
 	const name = nomineeLabel(room);
@@ -62,7 +62,7 @@ export function beginJudgement(room: Room): void {
 	// 반론 클로즈업이 아직 안 끝났을 수 있다(시간 단축으로 DEFENSE가 잘리면
 	// 그렇다). setScene이 카메라를 사람에게 돌려놓으므로 찬반은 언제나
 	// 방 전체가 보이는 화면에서 시작한다
-	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL);
+	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL, Screen.Veil.TRIAL);
 	playSound(room, Sound.VOTE);
 	Chat.say(room, `🗳️ ${nomineeLabel(room)}를 처형할지 정하세요. ${tieClause(room)} 처형됩니다.`);
 
@@ -311,6 +311,10 @@ export function resolveJudgement(room: Room): boolean {
 	// 이 직후가 곧바로 밤 컷이기 때문이다 — 컷 위젯이 모바일에서 화면을
 	// 덮으므로 팬은 아무에게도 안 보이고, 짧은 진동만 컷 아래로 전해진다
 	Screen.shake(room, Screen.Tremor.EXECUTION);
+	// 진동과 같은 이유로 setScene이 아니라 flash다. 여기서 음악까지 갈아치우면
+	// 곧 이어질 밤이 같은 곡을 다시 시작하며 두 번 끊긴다. 이 붉은 기는 다음
+	// setScene(밤 아니면 종료 — 처형 뒤에 다른 길은 없다)이 걷어간다
+	Screen.flash(room, Screen.Veil.STRIKE);
 	kill(room, nominee, DeathCause.EXECUTION);
 	return true;
 }

@@ -130,7 +130,7 @@ export function beginNight(room: Room): void {
 	// 밤의 인상은 소리와 배율이 만든다. 조금 당겨진 화면은 옆자리까지만
 	// 보이게 해서 "누가 무엇을 하는지 모른다"를 시야로 만들고, 음악은
 	// 낮과 다른 곡으로 갈아 낀다. 아침에 setScene(DAY)이 그대로 되돌린다
-	Screen.setScene(room, Screen.Zoom.NIGHT, Bgm.NIGHT);
+	Screen.setScene(room, Screen.Zoom.NIGHT, Bgm.NIGHT, Screen.Veil.NIGHT);
 	playSound(room, Sound.NIGHT);
 	// 밤에는 방 채팅이 잠기지만 읽기는 열려 있다. 이 한 줄이 없으면 채팅
 	// 기록만 봤을 때 아침과 아침 사이가 비어 무슨 일이 있었는지 알 수 없다

@@ -153,6 +153,34 @@ export interface Shake {
 	readonly power: number;
 }
 
+/**
+ * applyVignetteEffect 한 번의 기록.
+ *
+ * 중첩된 option을 그대로 담지 않고 평평하게 펴는 것은 테스트가 묻는 것이
+ * 셋뿐이기 때문이다 — 얼마나 조였나(radius), 정말 걷혔나(opacity),
+ * 이전 값에서 이어졌나(startRadius). 나머지는 표(Screen.Veil)의 사실이라
+ * 여기서 다시 확인할 것이 없다.
+ */
+export interface Vignette {
+	readonly radius: number;
+	readonly startRadius: number;
+	readonly color: number;
+	readonly opacity: number;
+}
+
+/**
+ * applyVignetteEffect의 둘째 인자에서 위 기록이 읽는 부분.
+ *
+ * 진짜 타입은 zep-script의 VignetteOption이지만 이 파일에는 import가 하나도
+ * 없다 — 전역을 심는 쪽이 src보다 먼저 평가돼야 해서다(머리말). 읽는 필드만
+ * 구조로 적어 그 성질을 지킨다.
+ */
+interface VignetteArg {
+	readonly color: number;
+	readonly opacity: number;
+	readonly tweenOption: { readonly startRadius: number };
+}
+
 /** 가짜 ScriptPlayer. 부작용은 전부 배열에 기록해 테스트가 관찰한다 */
 export class FakePlayer {
 	// ZEP이 주는 필드
@@ -192,6 +220,7 @@ export class FakePlayer {
 	readonly stoppedSounds: string[] = [];
 	readonly cameraShots: CameraShot[] = [];
 	readonly shakes: Shake[] = [];
+	readonly veils: Vignette[] = [];
 	saveCount = 0;
 	updatedCount = 0;
 
@@ -259,6 +288,17 @@ export class FakePlayer {
 		this.shakes.push({ ms: args[0] as number, power: args[1] as number });
 	}
 
+	applyVignetteEffect(...args: unknown[]): void {
+		checkCall("player.applyVignetteEffect", args, 2, 2);
+		const option = args[1] as VignetteArg;
+		this.veils.push({
+			radius: args[0] as number,
+			startRadius: option.tweenOption.startRadius,
+			color: option.color,
+			opacity: option.opacity,
+		});
+	}
+
 	spawnAt(...args: unknown[]): void {
 		checkCall("player.spawnAt", args, 2, 3);
 		this.tileX = args[0] as number;
@@ -291,6 +331,7 @@ export class FakePlayer {
 		this.stoppedSounds.length = 0;
 		this.cameraShots.length = 0;
 		this.shakes.length = 0;
+		this.veils.length = 0;
 	}
 }
 
