@@ -1,5 +1,5 @@
 /**
- * 화면 연출 — 카메라 배율, 클로즈업, 흔들기, 비네팅, 배경음.
+ * 화면 연출 — 카메라 배율, 흔들기, 비네팅, 배경음.
  *
  * 왜 한 파일인가
  * --------------
@@ -7,12 +7,25 @@
  * displayRatio를 직접 만지고, 처형하는 코드가 그 옆에서 shakeScreen을 부르고,
  * 승리 화면이 또 어딘가에서 소리를 끄는 식이다. 그렇게 되면 세기와 길이를
  * 조율하려 할 때 값이 여덟 파일에 흩어져 있고, 무엇보다 **되돌리는 코드가
- * 빠진 곳**을 찾을 수 없다. 카메라·배율·비네팅은 사람에게 붙는 상태라 한 번
- * 어긋나면 그 사람은 다음 판 내내 남의 자리를, 혹은 어두운 화면을 본다.
+ * 빠진 곳**을 찾을 수 없다. 배율과 비네팅은 사람에게 붙는 상태라 한 번
+ * 어긋나면 그 사람은 다음 판 내내 어두운 화면을, 혹은 남의 배율을 본다.
  *
  * 그래서 단계 코드가 부르는 것은 대부분 setScene 한 줄이고, 값은 아래 세 표
  * (Zoom·Tremor·Veil)에만 있다. "지속시간과 강도를 자연스럽게 조정"하는 일은
  * 이 파일의 상수만 만지면 끝난다.
+ *
+ * 일부러 쓰지 않는 API: setCameraTarget
+ * -------------------------------------
+ * 개표와 반론에서 단상에 오른 사람을 클로즈업했었다. 구현해 놓고 보니 카메라가
+ * 움직이는 것 자체가 어색했다 — 이 게임의 화면은 좌석 배치가 곧 정보라
+ * 시점이 남의 자리로 미끄러지는 동안 방을 읽을 수 없고, 몇 초 뒤 제자리로
+ * 돌아오는 동작까지 합치면 한 사건에 화면이 두 번 흔들린다. 잃은 것은
+ * "지금 누구를 보는 자리인가"인데, 그 말은 비네팅(Veil.TRIAL)과 재판 곡이
+ * 카메라를 움직이지 않고 대신한다.
+ *
+ * 되살릴 생각이라면 함께 딸려 오는 것을 알고 시작할 것: ZEP 런타임에 타이머가
+ * 없어 "몇 초 뒤 되돌리기"를 방 상태와 프레임 루프로 굴려야 하고(Cut.ts와
+ * 같은 방식), 재접속·단계 전환·판 종료 세 경로 전부에 되돌리는 코드가 필요하다.
  *
  * 왜 leaf인가
  * -----------
@@ -24,7 +37,6 @@
 import type { ScriptPlayer } from "zep-script";
 import type { Room, VeilSpec } from "../types/Game.types.ts";
 import { BGM_VOLUME } from "../constants/Assets.ts";
-import { seatPosition } from "../constants/RoomLayout.ts";
 import { forEachAudience } from "./Broadcast.ts";
 
 /**
@@ -51,8 +63,6 @@ export const Zoom = {
 	VOTE: 1.1,
 	/** 최후의 반론과 찬반 — 단상 하나에 방이 집중한다 */
 	TRIAL: 1.2,
-	/** 한 사람을 비추는 클로즈업 */
-	SPOT: 1.35,
 	/** 게임 종료 — 물러서서 방 전체를 본다 */
 	FINALE: 0.9,
 } as const;
@@ -87,20 +97,6 @@ export const Tremor = {
 	BLOCKED: { ms: 220, power: 0.002 },
 	/** 살아남았다 — 안도는 짧고 약하게 */
 	SAVED: { ms: 200, power: 0.0015 },
-} as const;
-
-/**
- * 클로즈업을 얼마나 물고 있을 것인가(초).
- *
- * 전부 그 단계의 길이보다 한참 짧다. 카메라가 남의 자리에 가 있는 동안에는
- * 내 주변에서 무슨 일이 일어나는지 보이지 않으므로, 클로즈업은 "봐야 할
- * 한순간"에만 걸리고 나머지 시간은 각자에게 돌려주는 것이 맞다.
- */
-export const Hold = {
-	/** 개표에서 단상에 오른 사람 (단계 7초) */
-	NOMINEE: 2.8,
-	/** 최후의 반론 (단계 15초) — 말을 시작하는 동안만 */
-	DEFENSE: 4.5,
 } as const;
 
 /**
@@ -191,11 +187,6 @@ const OPACITY_CAP = 0.55;
  */
 const MOBILE_VEIL = 0.65;
 
-/** 카메라가 목표로 이동하는 데 걸리는 시간(초) */
-const PAN = 0.6;
-/** 자기 캐릭터로 돌아오는 시간(초). 갈 때보다 조금 빠르다 */
-const RETURN = 0.45;
-
 /**
  * BGM을 담는 사운드 슬롯 이름. 방마다 다를 필요가 없다 — 한 사람은 한
  * 방에만 있으므로, 이 키 하나면 "지금 이 사람에게 깔린 곡"이 유일하다.
@@ -264,10 +255,10 @@ function applyVeil(player: ScriptPlayer, from: VeilSpec, to: VeilSpec): void {
 /**
  * 이 방의 "장면"을 바꾼다. 단계를 여는 함수가 한 줄로 부른다.
  *
- * 네 가지를 한꺼번에 한다: 돌던 클로즈업 해제, 방 전체 배율, BGM 교체,
- * 비네팅 교체. 넷을 따로 두지 않은 이유는 넷 다 빠뜨리면 티가 나지 않기
- * 때문이다. 클로즈업만 안 풀면 다음 단계 내내 남의 자리를 보고 있게 되는데,
- * 화면은 정상으로 보이므로 아무도 버그라고 말하지 않는다.
+ * 세 가지를 한꺼번에 한다: 방 전체 배율, BGM 교체, 비네팅 교체. 셋을 따로
+ * 두지 않은 이유는 셋 다 빠뜨려도 티가 나지 않기 때문이다. 밤의 비네팅만 안
+ * 걷으면 다음 단계 내내 어두운 화면을 보게 되는데, 그 화면도 그것대로 말이
+ * 되어 보이므로 아무도 버그라고 말하지 않는다.
  *
  * bgm이 지금 곡과 같으면 다시 시작하지 않는다. 낮→투표→개표처럼 곡이
  * 이어지는 구간에서 3초마다 곡이 처음으로 돌아가면 그건 음악이 아니라
@@ -277,8 +268,6 @@ function applyVeil(player: ScriptPlayer, from: VeilSpec, to: VeilSpec): void {
  * 출렁인다.
  */
 export function setScene(room: Room, factor: number, bgm: string, veil: VeilSpec): void {
-	const hadShot = room.shot !== null;
-	room.shot = null;
 	const changed = room.ambience !== bgm;
 	room.ambience = bgm;
 	room.zoom = factor;
@@ -287,68 +276,8 @@ export function setScene(room: Room, factor: number, bgm: string, veil: VeilSpec
 	room.veil = veil;
 	forEachAudience(room, player => {
 		applyRatio(player, factor);
-		// 클로즈업이 걸려 있었을 때만 되돌린다. 아무 데도 안 갔는데 돌아오라고
-		// 하면 카메라가 자기 캐릭터를 향해 한 번 미끄러진다 — 단계가 바뀔 때마다
-		// 화면이 흔들리는 것처럼 보인다
-		if (hadShot) player.setCameraTarget(player, RETURN);
 		if (changed) applyAmbience(player, bgm);
 		if (shifted) applyVeil(player, from, veil);
-	});
-}
-
-/**
- * 한 좌석을 클로즈업한다. 단상에 오른 사람처럼 방 전체가 함께 봐야 하는 순간.
- *
- * hold(초)가 지나면 각자 자기 캐릭터로 돌아간다. 되돌리는 일을 여기서
- * 예약하지 못하는 이유는 ZEP 런타임에 타이머가 없어서다 — 방에 남겨 두고
- * GameFlow의 프레임 루프가 굴린다(advanceShot).
- *
- * hold는 그 단계의 남은 시간보다 짧아야 한다. 넘겨도 사고는 나지 않는다:
- * 다음 단계의 setScene이 클로즈업을 걷는다. 다만 그 순간 카메라가 두 번
- * 움직이므로 값은 넉넉히 잡는 편이 낫다.
- */
-export function focusSeat(
-	room: Room,
-	seatIndex: number,
-	hold: number,
-	factor: number,
-	back: number
-): void {
-	const position = seatPosition(room.num, seatIndex);
-	// 자리를 못 찾으면 연출을 건너뛴다. 카메라를 0,0으로 보내는 것보다
-	// 아무것도 하지 않는 쪽이 낫다
-	if (!position) return;
-	room.shot = { tileX: position.x, tileY: position.y, timer: hold, back };
-	room.zoom = factor;
-	forEachAudience(room, player => {
-		applyRatio(player, factor);
-		player.setCameraTarget(position.x, position.y, PAN);
-	});
-}
-
-/** 매 프레임. 시간이 다 되면 카메라를 각자에게 돌려준다 */
-export function advanceShot(room: Room, dt: number): void {
-	const shot = room.shot;
-	if (!shot) return;
-	shot.timer -= dt;
-	if (shot.timer > 0) return;
-	releaseShot(room);
-}
-
-/**
- * 클로즈업을 지금 끝낸다. 시간이 남았어도 사건이 끝났으면 부른다
- * (부결처럼 단상이 그 자리에서 해제되는 경우).
- */
-export function releaseShot(room: Room): void {
-	const shot = room.shot;
-	if (!shot) return;
-	// 상태를 먼저 지운다. 되돌리는 도중에 예외가 나도 클로즈업이 영원히
-	// 남지 않는다 (Cut.advanceCut과 같은 순서)
-	room.shot = null;
-	room.zoom = shot.back;
-	forEachAudience(room, player => {
-		applyRatio(player, shot.back);
-		player.setCameraTarget(player, RETURN);
 	});
 }
 
@@ -368,14 +297,14 @@ export function shakeOne(player: ScriptPlayer, tremor: TremorSpec): void {
  * 비네팅만 바꾼다. 단계가 넘어가지 않는데 화면이 반응해야 하는 순간 —
  * 지금은 처형 하나뿐이다.
  *
- * setScene과 달리 배율·음악·클로즈업을 건드리지 않는다. 처형은 재판 화면
- * 안에서 일어나는 사건이라 카메라가 그대로 있어야 하고, 음악을 여기서
- * 끊으면 다음 단계가 곡을 다시 시작하면서 두 번 끊긴다.
+ * setScene과 달리 배율과 음악을 건드리지 않는다. 처형은 재판 화면 안에서
+ * 일어나는 사건이라 시야가 그대로 있어야 하고, 음악을 여기서 끊으면 다음
+ * 단계가 곡을 다시 시작하면서 두 번 끊긴다.
  *
  * 이 상태를 걷는 것은 다음 setScene이다. 걷는 코드를 여기 둘 수 없는 것은
- * ZEP 런타임에 타이머가 없어서인데(focusSeat의 hold와 같은 사정), 처형
- * 직후에는 반드시 밤이나 종료가 이어지므로 프레임 루프까지 동원할 이유는
- * 없다. 그 둘이 아닌 경로가 생기면 여기에 걷는 자리를 만들어야 한다.
+ * ZEP 런타임에 타이머가 없어서인데, 처형 직후에는 반드시 밤이나 종료가
+ * 이어지므로 프레임 루프까지 동원할 이유는 없다. 그 둘이 아닌 경로가
+ * 생기면 여기에 걷는 자리를 만들어야 한다.
  */
 export function flash(room: Room, veil: VeilSpec): void {
 	const from = room.veil;
@@ -395,8 +324,6 @@ export function flash(room: Room, veil: VeilSpec): void {
  */
 export function restoreView(room: Room, player: ScriptPlayer): void {
 	applyRatio(player, room.zoom);
-	const shot = room.shot;
-	if (shot) player.setCameraTarget(shot.tileX, shot.tileY, PAN);
 	applyAmbience(player, room.ambience);
 	// from과 to가 같다. 이 사람에게는 옮겨올 이전 상태가 없으므로 지금 방의
 	// 어둠을 그대로 입혀야 한다 — 다른 값에서 출발시키면 이미 밤인 방에
@@ -414,7 +341,6 @@ export function restoreView(room: Room, player: ScriptPlayer): void {
  */
 export function resetView(player: ScriptPlayer): void {
 	player.displayRatio = baseRatio(player);
-	player.setCameraTarget(player, RETURN);
 	player.stopSound(BGM_KEY);
 	// NONE은 짙기가 0이라 tween이 무엇이든 그 자리에서 사라진다. 이 함수가
 	// 불리는 곳(대기실 복귀·스크립트 종료)에서는 그게 맞다 — 판을 떠나는

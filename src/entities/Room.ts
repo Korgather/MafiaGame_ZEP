@@ -59,7 +59,6 @@ export function createRoom(num: number): Room {
 		silhouettes: [],
 		chatLog: [],
 		cut: null,
-		shot: null,
 		ambience: "",
 		// 1은 "각자의 기본 배율 그대로"다(Screen.Zoom.LOBBY). 대기실에서
 		// 카메라를 건드리지 않는다는 뜻이라 0이 아니라 1이 초기값이다
@@ -422,10 +421,10 @@ export function resetRoom(room: Room): void {
 	// 돌던 컷도 여기서 끊는다. 위젯은 나가는 사람마다 destroyWidgets가
 	// 닫으므로 남는 것은 이 상태 하나다
 	room.cut = null;
-	// 카메라와 BGM은 사람에게 붙어 있다. 여기서는 방의 기억만 지우고,
-	// 실제 복구(배율·카메라·정지)는 사람마다 resetPlayerAppearance가 한다 —
-	// 이 함수는 테스트 격리에서도 불리므로 접속한 사람을 전제할 수 없다.
-	room.shot = null;
+	// 배율·비네팅·BGM은 사람에게 붙어 있다. 여기서는 방의 기억만 지우고,
+	// 실제 복구(배율 되돌리기·어둠 걷기·정지)는 사람마다
+	// resetPlayerAppearance가 한다 — 이 함수는 테스트 격리에서도 불리므로
+	// 접속한 사람을 전제할 수 없다.
 	room.ambience = "";
 	room.zoom = 1;
 	room.veil = Veil.NONE;

@@ -1,14 +1,14 @@
 /*
- * 화면 연출 배선 — 배율·카메라·흔들기·비네팅·배경음이 언제 누구에게 가는가.
+ * 화면 연출 배선 — 배율·흔들기·비네팅·배경음이 언제 누구에게 가는가.
  *
- * 효과음(sfx.test.ts)과 같은 종류의 위험이지만 한 가지가 더 나쁘다. 카메라와
- * 배율은 **사람에게 붙는 상태**여서 되돌리는 코드가 빠져도 그 순간에는
+ * 효과음(sfx.test.ts)과 같은 종류의 위험이지만 한 가지가 더 나쁘다. 배율과
+ * 비네팅은 **사람에게 붙는 상태**여서 되돌리는 코드가 빠져도 그 순간에는
  * 아무 일도 일어나지 않는다. 대기실로 돌아간 사람이 밤의 배율로 걸어 다니고
  * 밤 음악을 계속 듣는 것이 그 증상이고, 화면이 깨진 것은 아니라서 본인도
  * 무엇이 다른지 말하기 어렵다 — 그런 종류는 사람이 눈으로 못 찾는다.
  *
  * 그래서 여기서 지키는 것은 대부분 "돌아왔는가"다. 밤에 당긴 배율이 아침에
- * 풀리는가, 단상에 간 카메라가 각자에게 오는가, 판이 끝나면 음악이 멈추는가.
+ * 풀리는가, 조여든 어둠이 낮에 걷히는가, 판이 끝나면 음악이 멈추는가.
  */
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -17,7 +17,7 @@ import type { VeilSpec } from "../src/types/Game.types.ts";
 import { GamePhase, Role } from "../src/types/Game.types.ts";
 import { Bgm } from "../src/constants/Assets.ts";
 import type { TremorSpec } from "../src/services/Screen.ts";
-import { Hold, Tremor, Veil, Zoom } from "../src/services/Screen.ts";
+import { Tremor, Veil, Zoom } from "../src/services/Screen.ts";
 import type { FakePlayer } from "./helpers/Harness.ts";
 import {
 	connect,
@@ -49,24 +49,6 @@ function silence(players: readonly FakePlayer[]): void {
 
 function heard(player: FakePlayer, sound: string): boolean {
 	return player.sounds.indexOf(sound) >= 0;
-}
-
-/** 좌표로 보낸 카메라 이동 — 클로즈업 */
-function pans(player: FakePlayer): number {
-	let count = 0;
-	for (const shot of player.cameraShots) {
-		if (shot.tileX !== null) count++;
-	}
-	return count;
-}
-
-/** 자기 캐릭터로 돌아온 카메라 */
-function homings(player: FakePlayer): number {
-	let count = 0;
-	for (const shot of player.cameraShots) {
-		if (shot.tileX === null) count++;
-	}
-	return count;
 }
 
 /** 그 세기로 흔들린 횟수 */
@@ -175,14 +157,14 @@ describe("배율", () => {
 	});
 });
 
-describe("클로즈업", () => {
+describe("개표", () => {
 	/**
-	 * 개표에서 단상에 오른 사람. 물고 있는 시간이 단계 길이보다 짧아서
-	 * 카메라는 반드시 각자에게 돌아와야 하는데, 그 복귀는 ZEP에 타이머가
-	 * 없어 프레임 루프가 굴린다(GameFlow → Screen.advanceShot). 그 연결이
-	 * 끊기면 카메라가 남의 자리에 붙은 채로 판이 계속된다.
+	 * 개표는 투표 화면 안에서 결과만 바뀌는 자리다. 단상에 누가 올랐든
+	 * 배율은 투표 때 그대로여야 한다 — 여기서 화면이 움직이면 그 움직임
+	 * 자체가 "뭔가 있었다"는 신호가 되어, 아무도 오르지 않은 개표와
+	 * 오른 개표를 화면 흔들림만으로 구별할 수 있게 된다.
 	 */
-	it("단상을 비추고 시간이 지나면 각자에게 돌아온다", () => {
+	it("단상에 올라도 배율은 투표 그대로다", () => {
 		const players = startGame(6, 1, ONE_MAFIA);
 		const target = room(1);
 		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
@@ -195,37 +177,7 @@ describe("클로즈업", () => {
 		finishPhase(target); // → VOTE_RESULT
 
 		assert.equal(target.nominee, nominee.index);
-		for (const player of players) {
-			assert.equal(pans(player), 1);
-			assert.equal(player.displayRatio, Zoom.SPOT);
-		}
-
-		tick(Hold.NOMINEE + 0.01);
-
-		for (const player of players) {
-			assert.equal(homings(player), 1);
-			// 돌아갈 곳은 개표 화면의 배율이다. 기본값으로 되돌리면 다음
-			// 단계까지 화면이 한 번 더 튄다
-			assert.equal(player.displayRatio, Zoom.VOTE);
-		}
-	});
-
-	/**
-	 * 아무도 오르지 않은 개표에서는 카메라가 움직이지 않는다. 빈 단상을
-	 * 비추면 그 자리에 아무도 없으므로 "카메라가 고장났다"로 읽힌다.
-	 */
-	it("단상이 비면 카메라를 보내지 않는다", () => {
-		const players = startGame(6, 1, ONE_MAFIA);
-		const target = room(1);
-
-		finishPhase(target); // ROLE_REVEAL → NIGHT
-		finishPhase(target); // 첫 밤(무사) → DAY
-		finishPhase(target); // → VOTE
-		silence(players);
-		finishPhase(target); // → VOTE_RESULT (아무도 투표하지 않았다)
-
-		assert.equal(target.nominee, 0);
-		for (const player of players) assert.equal(pans(player), 0);
+		for (const player of players) assert.equal(player.displayRatio, Zoom.VOTE);
 	});
 });
 
@@ -467,7 +419,7 @@ describe("배경음", () => {
 	});
 
 	/** 재판만 곡이 따로다. 방 전체가 한 사람을 보는 유일한 시간이다 */
-	it("재판에서 곡이 바뀌고 단상에 카메라가 붙는다", () => {
+	it("재판에서 곡이 바뀌고 시야가 좁아진다", () => {
 		const players = startGame(6, 1, ONE_MAFIA);
 		const target = room(1);
 		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
@@ -483,8 +435,8 @@ describe("배경음", () => {
 		assert.equal(target.phase, GamePhase.DEFENSE);
 		for (const player of players) {
 			assert.equal(heard(player, Bgm.TRIAL), true);
-			assert.equal(pans(player), 1);
-			assert.equal(player.displayRatio, Zoom.SPOT);
+			assert.equal(player.displayRatio, Zoom.TRIAL);
+			assert.equal(lastVeil(player).radius, Veil.TRIAL.radius);
 		}
 	});
 
@@ -508,10 +460,11 @@ describe("배경음", () => {
 	});
 
 	/**
-	 * 클로즈업 도중에 돌아온 사람에게도 같은 화면을 준다. 배율만 맞추고
-	 * 카메라를 두면 남들은 단상을 보는데 혼자 자기 자리를 확대해 보고 있다.
+	 * 재판 도중에 돌아온 사람도 같은 화면을 받는다. 재접속 복구가 배율만
+	 * 챙기고 어둠을 빠뜨리면 남들이 좁아진 시야로 반론을 듣는 동안 혼자
+	 * 환한 화면에 앉아 있게 된다.
 	 */
-	it("클로즈업 도중에 돌아오면 카메라도 따라간다", () => {
+	it("재판 도중에 돌아오면 어둠도 다시 걸린다", () => {
 		const players = startGame(6, 1, ONE_MAFIA);
 		const target = room(1);
 		const nominee = seatsWithRole(target, Role.CITIZEN)[1];
@@ -520,14 +473,15 @@ describe("배경음", () => {
 		finishPhase(target); // 첫 밤(무사) → DAY
 		finishPhase(target); // → VOTE
 		for (const player of players) vote(player, nominee.index);
-		finishPhase(target); // → VOTE_RESULT (단상 클로즈업이 돌고 있다)
+		finishPhase(target); // → VOTE_RESULT
+		finishPhase(target); // → DEFENSE
 
 		const returning = playerOf(seatsWithRole(target, Role.CITIZEN)[2]);
 		disconnect(returning);
 		returning.clearLog();
 		reconnect(returning);
 
-		assert.equal(pans(returning), 1);
-		assert.equal(returning.displayRatio, Zoom.SPOT);
+		assert.equal(returning.displayRatio, Zoom.TRIAL);
+		assert.equal(lastVeil(returning).radius, Veil.TRIAL.radius);
 	});
 });

@@ -456,13 +456,9 @@ export function beginVoteResult(room: Room): void {
 	// 울리면 소리가 "개표 화면이 떴다"는 뜻이 되어 사건과 구별되지 않는다
 	if (nominee !== 0) playSound(room, Sound.NOMINATE);
 
-	// 화면은 투표 때 그대로다. 단상에 오른 사람이 있을 때만 그 자리로
-	// 잠깐 카메라를 옮긴다 — 아무도 오르지 않은 개표에서 카메라가 움직이면
-	// 그 자체가 "뭔가 있었다"는 잘못된 신호가 된다
+	// 화면은 투표 때 그대로다. 개표는 결과 위젯과 위 소리가 말하므로 여기서
+	// 배율까지 움직이면 같은 사건을 세 번 알리는 셈이 된다
 	Screen.setScene(room, Screen.Zoom.VOTE, Bgm.DAY, Screen.Veil.NONE);
-	if (nominee !== 0) {
-		Screen.focusSeat(room, nominee, Screen.Hold.NOMINEE, Screen.Zoom.SPOT, Screen.Zoom.VOTE);
-	}
 
 	forEachPlayer(room, (player, seat) => openVoteResultView(room, player, seat));
 	Chat.announce(room, room.voteRecord.message);

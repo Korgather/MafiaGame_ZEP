@@ -158,9 +158,6 @@ function advanceGame(room: Room, dt: number): void {
 	// 컷은 단계 안에서 산다. 단계 시간을 컷 길이만큼 늘려 두었으므로(playCut)
 	// 같은 dt로 함께 줄이면 컷이 걷히는 시점과 단계가 끝나는 시점이 서로 밀리지 않는다.
 	advanceCut(room, dt);
-	// 클로즈업도 같은 시계를 쓴다. 컷과 달리 단계 시간을 늘리지 않으므로
-	// 단계가 먼저 끝나면 물고 있던 카메라는 다음 단계의 setScene이 걷는다
-	Screen.advanceShot(room, dt);
 
 	if (!room.tickTockPlayed && room.phaseTimer < room.ruleSet.timing.TICK_TOCK_AT) {
 		room.tickTockPlayed = true;

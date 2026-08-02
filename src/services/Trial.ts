@@ -37,13 +37,10 @@ export function beginDefense(room: Room): void {
 	// 지난 판의 O/X가 남으면 아무도 누르지 않아도 결과가 나온다
 	for (const seat of room.seats) seat.judgement = Judgement.NONE;
 
-	// 재판은 이 판에서 유일하게 한 사람만 말하는 시간이다. 음악을 바꾸고
-	// 그 사람에게 카메라를 붙여 "지금 누구를 보는 자리인가"를 화면으로 말한다.
-	// 배율이 아니라 카메라가 주인공을 정하므로, 반론 시간(15초)보다 훨씬
-	// 짧게 잡아 4.5초 뒤에는 방 전체가 다시 보이게 둔다 — 반론을 듣는 동안
-	// 다른 사람 반응도 봐야 추리가 된다
+	// 재판은 이 판에서 유일하게 한 사람만 말하는 시간이다. 곡을 바꾸고 시야를
+	// 좁혀 "지금은 한 사람의 자리다"를 화면으로 말한다. 좁히되 가리지는 않는
+	// 정도에서 멈춘다 — 반론을 듣는 동안 다른 사람 반응도 봐야 추리가 된다
 	Screen.setScene(room, Screen.Zoom.TRIAL, Bgm.TRIAL, Screen.Veil.TRIAL);
-	Screen.focusSeat(room, room.nominee, Screen.Hold.DEFENSE, Screen.Zoom.SPOT, Screen.Zoom.TRIAL);
 
 	const name = nomineeLabel(room);
 	centerLabel(room, `${name}의 최후의 반론`);
