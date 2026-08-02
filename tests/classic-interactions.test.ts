@@ -43,7 +43,11 @@ import {
 import { VoteOutcome, tallyVotes } from "../src/domain/Vote.ts";
 import { countAlive, evaluateWinner } from "../src/domain/WinCondition.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
-import { LOOSE_CONTEXT, accessOf } from "../src/domain/chat/ChatPermission.ts";
+import {
+	LOOSE_CONTEXT,
+	accessOf,
+	readableChannels,
+} from "../src/domain/chat/ChatPermission.ts";
 import type { ChatContext } from "../src/domain/chat/ChatPermission.ts";
 import { seat } from "./helpers/seat.ts";
 import {
@@ -769,31 +773,32 @@ describe("클래식 상호작용 · 승리 판정", () => {
 		assert.equal(evaluateWinner(lone), Team.MAFIA);
 	});
 
-	it("22. 사망자는 밤의 비밀 대화를 듣고, 영매가 그것을 무덤에서 건져 온다", () => {
+	it("22. 무덤에서 열리는 채널은 유령과 방 둘뿐이다", () => {
+		/*
+		 * 이 항목의 요구는 원래 반대였다 — "사망자는 밤의 비밀 대화를 볼 수
+		 * 있게 한다". 그대로 구현했다가 뒤집었다. 유령 채널이 무덤과 영매를
+		 * 잇고 있어서, 무덤 쪽에 밀담을 읽히면 그것이 하룻밤 만에 낮으로
+		 * 돌아온다 — 죽은 사람 하나만 나와도 마피아 명단이 공개된다.
+		 */
 		const dead = chatCtx({ seated: true, started: true, alive: false, phase: GamePhase.NIGHT });
 
-		// 죽은 시민은 밀담 참가자가 아니다(mafiaChat이 거짓이다). 그래도
-		// 읽는다 — 클래식의 기본 규칙이고, 아래 영매 경로의 출발점이 여기다
-		assert.equal(dead.mafiaChat, false);
-		assert.equal(accessOf(dead, ChatChannel.MAFIA).read, true, "사망자가 밀담을 듣지 못합니다");
-		assert.equal(accessOf(dead, ChatChannel.MAFIA).write, false, "사망자가 밀담에 끼어듭니다");
-		assert.equal(dead.loverChat, false);
-		assert.equal(accessOf(dead, ChatChannel.LOVER).read, true, "사망자가 연인의 대화를 듣지 못합니다");
-		assert.equal(accessOf(dead, ChatChannel.LOVER).write, false, "사망자가 연인 대화에 끼어듭니다");
+		// 남는 채널이 정확히 둘이라는 것을 목록으로 못 박는다. 비밀 채널이
+		// 하나 늘 때 그것이 조용히 무덤으로 새는 것을 잡는 자리다
+		assert.deepEqual(readableChannels(dead), [ChatChannel.GHOST, ChatChannel.ROOM]);
 
-		// 들은 것을 옮길 곳이 있어야 이 규칙에 값이 생긴다
+		// locked가 아니라 채널 자체가 없어야 한다. 읽기만 열어 두면 무덤에서
+		// 읽은 밀담이 아래 영매 경로를 타고 그대로 낮으로 나간다
+		assert.equal(accessOf(dead, ChatChannel.MAFIA).read, false, "사망자에게 밀담이 열렸습니다");
+		assert.equal(accessOf(dead, ChatChannel.LOVER).read, false, "사망자에게 연인 대화가 열렸습니다");
+
+		// 남긴 둘은 그대로다. 유령 채널에는 말하고, 낮 토론은 보되 끼지 않는다
 		assert.equal(accessOf(dead, ChatChannel.GHOST).write, true, "사망자가 유령 채널에 말하지 못합니다");
+		assert.equal(accessOf(dead, ChatChannel.ROOM).read, true, "사망자가 낮 토론을 보지 못합니다");
+		assert.equal(accessOf(dead, ChatChannel.ROOM).write, false, "사망자가 산 사람에게 말합니다");
 
-		// 살아 있는 영매가 밤에 그 채널을 읽는다. 세 줄이 이어져야
-		// "영매가 밀담 내용을 전달받는다"가 성립한다
-		const shaman = chatCtx({ seated: true, started: true, ghostChat: true, phase: GamePhase.NIGHT });
-		assert.equal(accessOf(shaman, ChatChannel.GHOST).read, true, "영매가 밤에 유령의 말을 듣지 못합니다");
-		// 영매 본인에게 밀담이 직접 열리지는 않는다. 산 사람이기 때문이고,
-		// 여기가 열리면 무덤을 거칠 이유가 사라져 영매가 경찰이 된다
-		assert.equal(accessOf(shaman, ChatChannel.MAFIA).read, false, "산 영매에게 밀담이 직접 열렸습니다");
-
-		// 죽은 마피아도 듣기만 한다. 무덤에서 팀에게 지시를 내리면
-		// 그 밤의 결정이 죽은 사람 손에 남는다
+		// 죽은 마피아도 예외가 아니다. 판정을 mafiaChat 검사 **위**에 두는
+		// 이유가 이 줄이다 — 아래로 내리면 그들만 규칙에서 빠져나가고,
+		// 무덤에 앉아 오늘 밤 표적을 미리 읽는다
 		const deadMafia = chatCtx({
 			seated: true,
 			started: true,
@@ -801,26 +806,30 @@ describe("클래식 상호작용 · 승리 판정", () => {
 			mafiaChat: true,
 			phase: GamePhase.NIGHT,
 		});
-		assert.equal(accessOf(deadMafia, ChatChannel.MAFIA).write, false, "죽은 마피아가 밀담에 지시를 남깁니다");
+		assert.equal(accessOf(deadMafia, ChatChannel.MAFIA).read, false, "죽은 마피아가 밀담을 계속 듣습니다");
 
-		// 낮에도 닫지 않는다. 밀담은 밤에만 오가므로 낮에 열어 두어도
-		// 보이는 것은 어젯밤 기록뿐이고, 그것은 이미 읽은 줄이다
+		// 낮에도 마찬가지다. 밤에만 닫으면 어젯밤 기록이 아침에 통째로 열린다
 		const deadDay = chatCtx({ seated: true, started: true, alive: false, phase: GamePhase.DAY });
-		assert.equal(accessOf(deadDay, ChatChannel.MAFIA).read, true, "사망자가 낮에 어젯밤 밀담을 다시 읽지 못합니다");
+		assert.equal(accessOf(deadDay, ChatChannel.MAFIA).read, false, "사망자가 낮에 어젯밤 밀담을 읽습니다");
+
+		// 영매는 남는다. 무덤에서 건져 오는 것이 밀담에서 성불로 확인한 직업
+		// 하나와 죽은 사람들의 추측으로 줄었을 뿐, 채널은 밤에만 열린다
+		const shaman = chatCtx({ seated: true, started: true, ghostChat: true, phase: GamePhase.NIGHT });
+		assert.equal(accessOf(shaman, ChatChannel.GHOST).read, true, "영매가 밤에 유령의 말을 듣지 못합니다");
+		// 영매 본인에게 밀담이 직접 열리지는 않는다. 산 사람이기 때문이고,
+		// 여기가 열리면 영매가 경찰이 된다
+		assert.equal(accessOf(shaman, ChatChannel.MAFIA).read, false, "산 영매에게 밀담이 직접 열렸습니다");
 
 		// 살아 있는 일반 시민에게는 아무것도 새지 않는다
 		const alive = chatCtx({ seated: true, started: true, phase: GamePhase.NIGHT });
 		assert.equal(accessOf(alive, ChatChannel.MAFIA).read, false, "산 시민에게 밀담이 노출됩니다");
 		assert.equal(accessOf(alive, ChatChannel.LOVER).read, false, "산 시민에게 연인 대화가 노출됩니다");
 
-		// 관전자는 죽은 것이 아니라 앉지 않은 것이다. 여기를 열면 판이
-		// 끝나기도 전에 정보가 방 밖으로 나간다
+		// 관전자와 방 밖 사람은 원래부터 막혀 있었다. 사망자 판정을 뒤집으면서
+		// 그 두 길이 함께 흔들리지 않았는지 같은 자리에서 확인한다
 		const watcher = chatCtx({ seated: false, spectating: true, started: true, phase: GamePhase.NIGHT });
 		assert.equal(accessOf(watcher, ChatChannel.MAFIA).read, false, "관전자에게 밀담이 열렸습니다");
 		assert.equal(accessOf(watcher, ChatChannel.LOVER).read, false, "관전자에게 연인 대화가 열렸습니다");
-
-		// 방 밖에 서 있는 사람도 마찬가지다. LOOSE_CONTEXT의 alive가 참이라
-		// 사망자 줄에 걸리지 않고, mafiaChat이 거짓이라 그다음 줄에서 닫힌다
 		assert.equal(accessOf(LOOSE_CONTEXT, ChatChannel.MAFIA).read, false, "방 밖 사람에게 밀담이 열렸습니다");
 	});
 
