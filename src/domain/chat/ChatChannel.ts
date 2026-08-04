@@ -144,7 +144,9 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 	GHOST: {
 		label: "유령",
 		glyph: "👻",
-		revealsRole: true,
+		// 죽은 뒤에도 서로의 직업은 비밀이다. 유령끼리 확정 정보를 합치면
+		// 관전 재미가 사라지고, 옆에서 화면을 보는 사람에게도 역할이 노출된다.
+		revealsRole: false,
 		// 죽은 사람의 말풍선은 같은 방의 산 사람에게 보인다. 그 순간 판이 끝난다.
 		speaksInto: null,
 		placeholder: "죽은 사람들에게",

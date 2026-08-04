@@ -14,8 +14,10 @@ import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import type { VeilSpec } from "../src/types/Game.types.ts";
-import { GamePhase, Role } from "../src/types/Game.types.ts";
+import { GamePhase, Role, Team } from "../src/types/Game.types.ts";
 import { Bgm } from "../src/constants/Assets.ts";
+import { roomCameraTarget } from "../src/constants/RoomLayout.ts";
+import { finish } from "../src/services/Outcome.ts";
 import type { TremorSpec } from "../src/services/Screen.ts";
 import { Tremor, Veil, Zoom } from "../src/services/Screen.ts";
 import type { FakePlayer } from "./helpers/Harness.ts";
@@ -87,6 +89,50 @@ function veiledAt(player: FakePlayer, veil: VeilSpec): number {
 function lastVeil(player: FakePlayer): { radius: number; startRadius: number; opacity: number } {
 	return player.veils[player.veils.length - 1];
 }
+
+describe("고정 카메라", () => {
+	it("직업 공개 단계부터 방 가운데 y+1 좌표를 본다", () => {
+		const players = startGame(6, 1, ONE_MAFIA);
+		const expected = roomCameraTarget(1);
+		assert.deepEqual(expected, { x: 30, y: 26 });
+		for (const player of players) {
+			assert.deepEqual(player.cameraShots[player.cameraShots.length - 1], {
+				tileX: expected.x,
+				tileY: expected.y,
+			});
+		}
+
+		finishPhase(room(1)); // NIGHT
+		finishPhase(room(1)); // DAY
+		for (const player of players) {
+			assert.deepEqual(player.cameraShots[player.cameraShots.length - 1], {
+				tileX: expected.x,
+				tileY: expected.y,
+			});
+		}
+	});
+
+	it("진행 중 재접속은 방 중심을 복구하고 게임 종료는 자기 시점으로 돌아간다", () => {
+		const players = startGame(6, 1, ONE_MAFIA);
+		const target = room(1);
+		const returning = players[players.length - 1];
+		disconnect(returning);
+		returning.clearLog();
+		reconnect(returning);
+		assert.deepEqual(returning.cameraShots[returning.cameraShots.length - 1], {
+			tileX: 30,
+			tileY: 26,
+		});
+
+		finish(target, Team.CITIZEN);
+		for (const player of players) {
+			assert.deepEqual(player.cameraShots[player.cameraShots.length - 1], {
+				tileX: null,
+				tileY: null,
+			});
+		}
+	});
+});
 
 describe("배율", () => {
 	/**

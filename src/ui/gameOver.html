@@ -65,6 +65,25 @@
 				letter-spacing: -0.02em;
 			}
 
+			.recap {
+				display: flex;
+				flex-direction: column;
+				gap: 3px;
+				margin-bottom: var(--s2);
+				padding: var(--s2);
+				font-size: var(--t-xs);
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+			}
+
+			.recap::before {
+				content: "내 플레이 복기";
+				font-weight: 800;
+				color: var(--accent);
+			}
+
 			/*
 			 * 정체 공개 표. 한 줄에 한 명.
 			 *
@@ -116,7 +135,7 @@
 
 			.rev .seat {
 				flex: 0 0 auto;
-				width: 18px;
+				width: 30px;
 				font-weight: 800;
 				color: var(--ink-3);
 				text-align: right;
@@ -217,6 +236,7 @@
 			</div>
 
 			<div class="body scroll" id="listbox">
+				<div class="recap" id="recap"></div>
 				<div class="reveal" id="reveal"></div>
 			</div>
 
@@ -241,8 +261,9 @@
 				return html`<div
 					class="rev ${team}${p.alive ? "" : " gone"}"
 					style="animation-delay:${i * 60}ms"
+					aria-label="${p.num}번 ${p.name || ""}, ${p.role || ""}, ${p.alive ? "생존" : "사망"}"
 				>
-					<span class="seat">${p.num}</span>
+					<span class="seat">${p.num}번</span>
 					<span class="grow ellip">${p.name || ""}</span>
 					<span class="g" aria-hidden="true">${p.glyph || ""}</span>
 					<span class="job">${p.role || ""}</span>
@@ -313,6 +334,8 @@
 					startTimer(qs("#timer"), data.timer);
 
 					const players = Array.isArray(data.players) ? data.players : [];
+					const recap = Array.isArray(data.recap) ? data.recap.slice(0, 3) : [];
+					qs("#recap").innerHTML = html`${recap.map(line => html`<span>${line}</span>`)}`;
 					qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
 					// 목록을 그린 직후에만 잰다. 이 화면에서 상자 높이가 바뀌는
 					// 다른 경로는 없다 — 아래 rematch 조각은 버튼 안의 글자만 바꾼다

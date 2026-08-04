@@ -114,6 +114,7 @@ describe("게임 중 이탈", () => {
 		assert.equal(target.started, false);
 		assert.equal(target.phase, GamePhase.LOBBY);
 		assert.equal(target.seats.length, 0, "방이 비워지지 않아 아무도 못 들어옵니다");
+		assert.equal(players[3].disableAttack, false, "중단 뒤 남은 사람의 기본 공격이 잠겨 있습니다");
 	});
 
 	/**
@@ -167,6 +168,7 @@ describe("재접속", () => {
 		assert.equal(seatOf(leaver), seat);
 		assert.equal(seat.role, role);
 		assert.equal(seat.connected, true);
+		assert.equal(leaver.disableAttack, true, "진행 중 재접속인데 기본 공격 잠금이 복구되지 않았습니다");
 	});
 
 	it("밤에 돌아오면 자기 직업의 밤 화면을 다시 받는다", () => {
@@ -373,6 +375,11 @@ describe("재접속", () => {
 		const result = widget.lastOfType("init");
 		assert.ok(result, "결과 화면이 payload 없이 열렸습니다");
 		assert.equal(result.winner, Team.MAFIA);
+		assert.equal(player.disableAttack, false, "종료 화면 재접속 뒤 기본 공격이 잠겨 있습니다");
+		assert.deepEqual(player.cameraShots[player.cameraShots.length - 1], {
+			tileX: null,
+			tileY: null,
+		});
 	});
 });
 

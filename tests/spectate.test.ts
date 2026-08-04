@@ -19,10 +19,12 @@ import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
 	castRoles,
+	cardWidget,
 	chat,
 	chatChannels,
 	chatSaw,
 	connect,
+	changeName,
 	disconnect,
 	findMainWidget,
 	findSeatOf,
@@ -57,6 +59,14 @@ describe("게임 중 난입", () => {
 		assert.equal(findSeatOf(watcher), undefined, "관전자에게 좌석이 생겼습니다");
 		assert.equal(room(1).spectators.length, 1);
 		assert.equal(mainWidget(watcher).fileName, WidgetFile.PHASE);
+		assert.equal(watcher.disableAttack, true, "관전 중 기본 공격이 열려 있습니다");
+		assert.deepEqual(watcher.cameraShots[watcher.cameraShots.length - 1], { tileX: 30, tileY: 26 });
+	});
+
+	it("관전 화면에서 게임 방법을 다시 열 수 있다", () => {
+		const { watcher } = gameWithWatcher();
+		send(watcher, { type: "guide" });
+		assert.equal(cardWidget(watcher).lastOfType("init")?.nav, "steps");
 	});
 
 	it("좌석 수와 총원에 잡히지 않는다", () => {
@@ -176,6 +186,11 @@ describe("관전 종료", () => {
 
 		assert.equal(room(1).spectators.length, 0);
 		assert.equal(mainWidget(watcher).fileName, WidgetFile.LOBBY);
+		assert.equal(watcher.disableAttack, false);
+		assert.deepEqual(watcher.cameraShots[watcher.cameraShots.length - 1], {
+			tileX: null,
+			tileY: null,
+		});
 		const tabs = chatChannels(watcher).map(view => view.id);
 		assert.ok(tabs.indexOf(ChatChannel.ROOM) < 0, "나갔는데 방 탭이 남았습니다");
 	});
@@ -190,7 +205,68 @@ describe("관전 종료", () => {
 	});
 });
 
+describe("게스트 정책", () => {
+	it("게스트가 빈 방을 누르면 로그인 안내만 받고 로비에 남는다", () => {
+		const guest = connect("게스트", { isGuest: true });
+
+		joinRoom(guest, 1);
+
+		assert.equal(room(1).seats.length, 0);
+		assert.equal(room(1).spectators.length, 0);
+		assert.equal(mainWidget(guest).fileName, WidgetFile.LOBBY);
+		assert.deepEqual(mainWidget(guest).lastOfType("loginRequired"), {
+			type: "loginRequired",
+			message: "게임에 참가하려면 로그인이 필요합니다.",
+		});
+	});
+
+	it("게스트는 비로그인 번호 이름으로 관전만 한다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const guest = connect("임시 이름", { isGuest: true });
+		const assigned = guest.name;
+		const seatCount = room(1).seats.length;
+		assert.match(assigned, /^비로그인_\d+$/);
+
+		joinRoom(guest, 1);
+		assert.equal(room(1).seats.length, seatCount);
+		assert.equal(findSeatOf(guest), undefined);
+		assert.equal(room(1).spectators.length, 1);
+		assert.equal(mainWidget(guest).fileName, WidgetFile.PHASE);
+
+		changeName(guest, "바꾼 이름");
+		assert.equal(guest.name, assigned, "게스트가 익명 이름을 벗어났습니다");
+		assert.equal(room(1).spectators[0].name, assigned);
+	});
+
+	it("게임 종료 뒤에도 게스트 관전자는 좌석으로 승격되지 않는다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const guest = connect("게스트", { isGuest: true });
+		joinRoom(guest, 1);
+		finish(room(1), Team.MAFIA);
+		assert.equal(guest.disableAttack, false);
+		finishPhase(room(1));
+
+		assert.equal(findSeatOf(guest), undefined);
+		assert.equal(mainWidget(guest).fileName, WidgetFile.LOBBY);
+	});
+});
+
 describe("판이 끝난 뒤", () => {
+	it("결과 공개 중 들어온 관전자는 공격과 카메라가 이미 풀려 있다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finish(target, Team.MAFIA);
+
+		const late = connect("늦은관전자");
+		joinRoom(late, 1);
+
+		assert.equal(late.disableAttack, false);
+		assert.deepEqual(late.cameraShots[late.cameraShots.length - 1], {
+			tileX: null,
+			tileY: null,
+		});
+	});
+
 	it("기다린 관전자가 좌석에 앉는다", () => {
 		const { watcher } = gameWithWatcher();
 		finish(room(1), Team.MAFIA);

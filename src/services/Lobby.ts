@@ -44,7 +44,9 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachSpectator, label, playSoundTo } from "./Broadcast.ts";
 import { needsGuide, showBook, showGuide } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
+import { FtueEvent, trackBeforeFirstGame } from "./FtueAnalytics.ts";
 import { countAbandon, rankOf } from "./Rewards.ts";
+import * as Screen from "./Screen.ts";
 import type { PhasePayload } from "./Widgets.ts";
 import { bindMessage, openLobby, openPhase, pushLobby, updateMain } from "./Widgets.ts";
 
@@ -202,6 +204,19 @@ function handleMessage(player: ScriptPlayer, data: unknown): void {
 		case "book":
 			showBook(player);
 			break;
+		case "guide":
+			showGuide(player);
+			break;
+	}
+}
+
+/** 접속·이탈 직후 로비 위젯에 현재 맵 전체 접속자 수를 보낸다. */
+export function broadcastOnlineCount(leavingPlayerId: string | null = null): void {
+	const players = ScriptApp.players.filter(player => player.id !== leavingPlayerId);
+	const online = players.length;
+	for (const player of players) {
+		const widget = tagOf(player).widget;
+		if (widget) widget.sendMessage({ type: "updateOnlineCount", online });
 	}
 }
 
@@ -216,6 +231,22 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 	// 같은 일이고, 갈래마다 검사를 붙이면 세 번째 갈래가 생길 때 빠뜨린다.
 	if (isKickBanned(player.id)) {
 		label(player, "강퇴당한 직후에는 잠시 참가할 수 없습니다.");
+		return;
+	}
+	// 빈 방은 곧 참가 요청이다. 관전할 판도 없는 상태에서 게스트를 관전 화면으로
+	// 보내면 게임을 시작할 수 있을 것처럼 보이므로, 로그인 필요 여부를 클릭한
+	// 자리에서 바로 알려 준다. 확인창은 위젯이 띄우되 판정과 문구는 서버가 정한다.
+	if (player.isGuest && !room.started && room.seats.length === 0) {
+		updateMain(player, {
+			type: "loginRequired",
+			message: "게임에 참가하려면 로그인이 필요합니다.",
+		});
+		return;
+	}
+	// 게스트는 사람이 있는 방에서만 관전석을 받는다. 좌석을 만들지 않아야
+	// 준비·직업 배정·재경기 승격 어느 경로에도 참가하지 않는다.
+	if (player.isGuest) {
+		spectate(player, room);
 		return;
 	}
 	// 진행 중인 방은 튕겨내는 대신 관전으로 받는다. 한 판이 5~15분이라
@@ -234,6 +265,7 @@ function join(player: ScriptPlayer, roomNum: number | null): void {
 
 	const name = player.name;
 	room.seats.push(createSeat(player.id, name, rankOf(player)));
+	trackBeforeFirstGame(player, FtueEvent.ROOM_JOINED);
 	playSoundTo(player, Sound.JOIN);
 
 	// 방에 들어온 사람이 볼 곳은 방 탭이다. 옮겨 주지 않으면 로비 광장을
@@ -326,13 +358,18 @@ function spectate(player: ScriptPlayer, room: Room): void {
 	}
 
 	room.spectators.push(createSeat(player.id, player.name, rankOf(player)));
+	trackBeforeFirstGame(player, FtueEvent.ROOM_JOINED);
+	player.disableAttack = room.started && room.phase !== GamePhase.GAME_OVER;
+	player.sendUpdated();
 
 	// 방 탭을 먼저 붙인 뒤 화면을 연다. 순서를 뒤집으면 관전 화면이 뜬 뒤에야
 	// 채팅 탭이 생겨서, 지금까지의 대화를 못 받은 것처럼 보인다.
 	Chat.refresh(player);
 	openSpectateView(room, player);
+	Screen.restoreView(room, player);
 	broadcastRoomCounts();
-	label(player, "👀 관전을 시작합니다.");
+	label(player, player.isGuest ? "👀 비로그인 상태에서는 관전만 가능합니다." : "👀 관전을 시작합니다.");
+	if (needsGuide(player)) showGuide(player);
 }
 
 /**
@@ -344,17 +381,21 @@ function spectate(player: ScriptPlayer, room: Room): void {
  * 진행 화면 하나를 띄워두고 내용만 다시 그린다(refreshSpectators).
  */
 function openSpectateView(room: Room, player: ScriptPlayer): void {
-	bindMessage(openPhase(player, room, spectateView(room)), "spectate", (sender, data) => {
-		if (messageType(data) !== "spectate-quit") return;
-		// 이 버튼 한 번이 접속자 전원에게 방 목록을 다시 보낸다.
-		// 대기실 위젯의 다섯 갈래와 같은 이유로 같은 관문을 지난다.
-		if (!spend(tagOf(sender).actionRate, ACTION_RATE, Time.getUtcTime())) return;
-		stopSpectating(sender);
+	bindMessage(openPhase(player, room, spectateView(room, player)), "spectate", (sender, data) => {
+		switch (messageType(data)) {
+			case "spectate-quit":
+				if (!spend(tagOf(sender).actionRate, ACTION_RATE, Time.getUtcTime())) return;
+				stopSpectating(sender);
+				break;
+			case "guide":
+				showGuide(sender);
+				break;
+		}
 	});
 }
 
 /** 진행 중인 방을 밖에서 본 모습 */
-function spectateView(room: Room): PhasePayload {
+function spectateView(room: Room, player: ScriptPlayer): PhasePayload {
 	const night = room.phase === GamePhase.NIGHT;
 	return {
 		type: "init",
@@ -385,12 +426,38 @@ function spectateView(room: Room): PhasePayload {
 		glyph: SPECTATE_GLYPH,
 		abilityLine: SPECTATE_ABILITY,
 		lead: SPECTATE_LEAD,
-		note: SPECTATE_NOTE,
+		note: spectateNote(room, player.isGuest),
 		deaths: room.nightReport,
 		spectating: true,
 		// 판 바깥에서 남의 토론 시간을 늘릴 수는 없다
 		timeVote: false,
 	};
+}
+
+function spectateNote(room: Room, guest: boolean): string {
+	const next = guest
+		? "로그인하면 다음 판에 참가할 수 있습니다."
+		: "이번 판이 끝나면 자동으로 자리에 앉습니다.";
+	switch (room.phase) {
+		case GamePhase.ROLE_REVEAL:
+			return `직업을 비밀리에 확인하는 중입니다. ${next}`;
+		case GamePhase.NIGHT:
+			return `밤입니다. 능력이 있는 참가자들이 대상을 선택합니다. ${next}`;
+		case GamePhase.DAY:
+			return `아침 결과를 확인하고 대화로 마피아를 추리하는 중입니다. ${next}`;
+		case GamePhase.VOTE:
+			return `투표로 처형할 참가자를 고르는 중입니다. ${next}`;
+		case GamePhase.VOTE_RESULT:
+		case GamePhase.DEFENSE:
+		case GamePhase.JUDGEMENT:
+			return `투표 결과와 처형 여부를 결정하는 중입니다. ${next}`;
+		case GamePhase.GAME_OVER:
+			return guest
+				? `승패와 전원의 직업을 공개하고 있습니다. ${next}`
+				: "승패와 전원의 직업을 공개하고 있습니다. 곧 다음 판 좌석으로 이동합니다.";
+		default:
+			return guest ? `관전 중입니다. ${next}` : SPECTATE_NOTE;
+	}
 }
 
 /**
@@ -403,8 +470,7 @@ function spectateView(room: Room): PhasePayload {
  */
 export function refreshSpectators(room: Room): void {
 	if (room.spectators.length === 0) return;
-	const view = spectateView(room);
-	forEachSpectator(room, player => updateMain(player, view));
+	forEachSpectator(room, player => updateMain(player, spectateView(room, player)));
 }
 
 /** 관전자 목록에서만 뺀다. 화면을 어떻게 되돌릴지는 부르는 쪽이 정한다 */
@@ -418,6 +484,9 @@ function stopSpectating(player: ScriptPlayer): void {
 	const watching = locateSpectator(player.id);
 	if (!watching) return;
 	dropSpectator(watching.room, player.id);
+	player.disableAttack = false;
+	Screen.resetView(player);
+	player.sendUpdated();
 	// 대기실 위젯이 관전 화면을 덮는다(메인 위젯 슬롯은 하나뿐이다)
 	enterLobby(player);
 	// 방 탭이 사라진다
@@ -448,7 +517,8 @@ export function seatSpectators(room: Room, watchers: readonly Seat[]): string[] 
 		if (room.seats.length >= room.ruleSet.maxPlayers) break;
 		// 좌석의 connected 대신 지금 접속을 직접 확인한다. 관전자의 connected는
 		// 화면을 보낼 때만 내려가는 값이라 마지막 갱신 이후의 이탈을 모른다.
-		if (!ScriptApp.getPlayerByID(watcher.playerId)) continue;
+		const player = ScriptApp.getPlayerByID(watcher.playerId);
+		if (!player || player.isGuest) continue;
 		room.seats.push(watcher);
 		seated.push(watcher.playerId);
 	}
@@ -551,7 +621,9 @@ export function handleDisconnect(player: ScriptPlayer): void {
 	}
 	if (found.room.started) {
 		found.seat.connected = false;
-		countAbandon(player);
+		// 승패가 이미 난 뒤 결과 화면에서 나가는 것은 중도 이탈이 아니다.
+		// 이 시점에는 보상도 정산됐고 플레이어가 할 게임 행동도 남아 있지 않다.
+		if (found.room.phase !== GamePhase.GAME_OVER) countAbandon(player);
 		centerLabel(found.room, `${participantLabel(found.seat)}의 접속이 끊겼습니다.`);
 		// 라벨은 3초 뒤 사라진다. 판이 끝난 뒤 "저 사람 언제 나갔지"를
 		// 되짚을 수 있으려면 기록으로도 남아야 한다.

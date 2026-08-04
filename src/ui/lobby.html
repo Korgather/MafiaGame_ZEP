@@ -154,6 +154,26 @@
 				flex-direction: column;
 				gap: 5px;
 			}
+
+			.online-status {
+				flex: 0 0 auto;
+				padding: 3px var(--s2);
+				font-size: var(--t-xs);
+				white-space: nowrap;
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: 999px;
+			}
+			.online-status strong {
+				color: var(--ok);
+				font-variant-numeric: tabular-nums;
+			}
+			.guide-open {
+				min-height: 28px;
+				padding: 3px var(--s2);
+				font-size: var(--t-xs);
+			}
 		</style>
 	</head>
 	<body>
@@ -163,6 +183,8 @@
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
+				<span class="online-status" aria-label="현재 접속자 수">접속 <strong id="online">0</strong>명</span>
+				<button class="btn ghost guide-open" id="guide" type="button">게임 방법</button>
 				<!--
 					도감을 여는 자리는 여기 하나뿐이다. 게임이 시작되면 이 위젯은
 					닫히므로(GameFlow.beginGame → closeMain) 밤·투표 중에 도감을
@@ -200,6 +222,11 @@
 			 */
 			const config = { min: 4, max: 12, kickVotes: 3 };
 			let counts = {};
+
+			function paintOnline(value) {
+				const online = Number(value);
+				qs("#online").textContent = Number.isFinite(online) ? Math.max(0, Math.floor(online)) : 0;
+			}
 
 			/* ---------- 방 목록 ---------- */
 			/*
@@ -313,6 +340,10 @@
 				Parent.send({ type: "book" });
 			});
 
+			qs("#guide").addEventListener("click", () => {
+				Parent.send({ type: "guide" });
+			});
+
 			/* ---------- 화면 전환 ---------- */
 			function showRooms(inRoom) {
 				qs("#rooms").classList.toggle("hidden", inRoom);
@@ -329,6 +360,7 @@
 			Parent.on({
 				setID(data) {
 					myId = data.id;
+					paintOnline(data.online);
 				},
 
 				init(data) {
@@ -347,6 +379,15 @@
 				updatePlayerCount(data) {
 					counts = data.data || {};
 					if (!qs("#rooms").classList.contains("hidden")) paintRooms();
+				},
+
+				updateOnlineCount(data) {
+					paintOnline(data.online);
+				},
+
+				loginRequired(data) {
+					if (!window.confirm(String(data.message))) return;
+					Parent.openSignin();
 				},
 			});
 		</script>

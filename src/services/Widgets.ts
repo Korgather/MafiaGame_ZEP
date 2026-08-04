@@ -409,6 +409,8 @@ export interface GameOverPayload {
 	team: Team;
 	reason: string;
 	players: RevealView[];
+	/** 본인에게만 전달되는 직업·행동·생존 복기 */
+	recap: string[];
 	/** 대기실로 돌아가기까지. 이 화면만 남은 시간이 없으면 갑자기 사라진다 */
 	timer: number;
 	/** 같은 방에서 한 판 더 — 현재 상태 */
@@ -558,6 +560,8 @@ export interface ChatPayload {
 	quick: string[];
 	/** 펼친 상태인가. 위젯 크기가 이 값으로 갈린다 */
 	open: boolean;
+	/** 게스트처럼 채팅 입력 자체가 금지된 사용자인가 */
+	inputDisabled: boolean;
 	/**
 	 * 내 playerId.
 	 *
@@ -655,6 +659,8 @@ export interface ChatChannelsPayload {
 	channels: ChatChannelView[];
 	active: string;
 	quick: string[];
+	/** 채널 권한과 별개로 입력기 전체를 잠가야 하는가 */
+	inputDisabled: boolean;
 }
 
 /** 새 메시지 한 줄 + 갱신된 미확인 개수 */
@@ -774,6 +780,7 @@ export function openLobby(player: ScriptPlayer): ScriptWidget {
 	return openMain(player, null, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY_ROOMS, {
 		type: "setID",
 		id: player.id,
+		online: ScriptApp.playerCount,
 	});
 }
 

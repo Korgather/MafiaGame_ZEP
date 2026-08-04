@@ -104,6 +104,7 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		noteText: "",
 		kickedBy: [],
 		connected: true,
+		matchRecap: [],
 	};
 }
 
@@ -147,6 +148,7 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	// 되돌리지 않으면 지난 판에 쓴 스파이가 이번 판에 못 쓴다
 	seat.extraProbeIndex = 0;
 	seat.extraProbeSpent = false;
+	seat.matchRecap = [];
 	// loverIndex는 여기서 건드리지 않는다. 짝은 좌석 하나로 정할 수 없어
 	// 배정이 끝난 뒤 두 좌석을 함께 보는 쪽(GameFlow)이 서로를 적는다.
 	// 이 함수가 0으로 밀면 그 쌍이 배정 순서에 따라 반쪽만 남는다
@@ -246,7 +248,7 @@ export function revealViews(room: Room): RevealView[] {
 		.sort((a, b) => a.index - b.index)
 		.map(seat => ({
 			num: seat.index,
-			name: participantLabel(seat),
+			name: seat.name,
 			role: roleName(seat.role),
 			glyph: roleDef(seat.role).glyph,
 			team: seat.team,

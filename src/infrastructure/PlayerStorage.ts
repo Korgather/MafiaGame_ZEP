@@ -29,6 +29,26 @@ export interface PlayerStorage {
 	mafiaLose?: number;
 	citizenWin?: number;
 	citizenLose?: number;
+	/** 이미 전송한 FTUE 이벤트 비트. 개인 정보나 이벤트 본문은 저장하지 않는다. */
+	ftueEvents?: number;
+}
+
+/** playCount가 생기기 전 전적도 기존 사용자로 판별한다. */
+export function priorPlayStarts(storage: PlayerStorage): number {
+	if (typeof storage.playCount === "number" && storage.playCount > 0) return storage.playCount;
+	const legacy = [
+		storage.exp,
+		storage.runCount,
+		storage.mafiaWin,
+		storage.mafiaLose,
+		storage.citizenWin,
+		storage.citizenLose,
+	];
+	return legacy.some(value => typeof value === "number" && value > 0) ? 1 : 0;
+}
+
+export function hasPriorGame(storage: PlayerStorage): boolean {
+	return priorPlayStarts(storage) > 0;
 }
 
 export function read(player: ScriptPlayer): PlayerStorage {
@@ -45,6 +65,7 @@ export function read(player: ScriptPlayer): PlayerStorage {
 			mafiaLose: parsed.mafiaLose,
 			citizenWin: parsed.citizenWin,
 			citizenLose: parsed.citizenLose,
+			ftueEvents: parsed.ftueEvents,
 		};
 	} catch (e) {
 		// 깨진 저장소는 초기값으로 취급한다. 한 명 때문에 게임이 멈추는 것보다 낫다.

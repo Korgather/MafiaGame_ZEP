@@ -444,7 +444,7 @@
 			}
 
 			qs("#close").addEventListener("click", () => {
-				Parent.send({ type: "close" });
+				Parent.send({ type: "close", completed: nav === "steps" && index >= cards.length - 1 });
 			});
 
 			qs("#book").addEventListener("click", () => {

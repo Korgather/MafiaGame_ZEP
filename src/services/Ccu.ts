@@ -14,8 +14,8 @@
  * 마지막 변화로부터 일정 시간이 지난 뒤 한 번만 보낸다.
  */
 import { CCU_REPORT_DEBOUNCE, CCU_REPORT_INTERVAL } from "../constants/GameConfig.ts";
+import { sendLiveMetric } from "../infrastructure/LiveMetrics.ts";
 
-const AWS_API = "https://jstvymmti6.execute-api.ap-northeast-2.amazonaws.com/liveAppDBRequest";
 const CATEGORY = "mafia";
 
 /** 남은 대기 시간(초). 0 이하면 예약된 보고가 없다 */
@@ -40,19 +40,5 @@ export function tick(dt: number): void {
 
 function send(): void {
 	const key = `CCU_${CATEGORY}_${ScriptApp.spaceHashID}_${ScriptApp.mapHashID}`;
-	ScriptApp.httpPostJson(
-		AWS_API,
-		{},
-		{
-			category: CATEGORY,
-			channelId: ScriptApp.mapHashID,
-			onlineUsers: ScriptApp.playerCount,
-			collection: "CCU",
-			spaceHashID: ScriptApp.spaceHashID,
-			key,
-		},
-		() => {
-			// 응답은 쓰지 않는다. 기존 코드도 콜백 본문이 비어 있었다.
-		}
-	);
+	sendLiveMetric("CCU", key, { onlineUsers: ScriptApp.playerCount });
 }

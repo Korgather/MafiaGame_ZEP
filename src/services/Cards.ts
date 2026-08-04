@@ -24,7 +24,8 @@ import { playSoundTo } from "./Broadcast.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import type { CardView } from "../types/Widget.types.ts";
-import { messageType } from "../types/Widget.types.ts";
+import { field, messageType } from "../types/Widget.types.ts";
+import { FtueEvent, trackBeforeFirstGame } from "./FtueAnalytics.ts";
 import type { CardPayload } from "./Widgets.ts";
 import { bindMessage, closeCard, openCard } from "./Widgets.ts";
 
@@ -36,16 +37,22 @@ import { bindMessage, closeCard, openCard } from "./Widgets.ts";
  * 생각하게 하려는 것이고, 그 판단을 빠뜨렸을 때 조용히 큰 쪽으로 붙는
  * 것이 바로 도움말에서 일어난 일이다.
  */
-function show(player: ScriptPlayer, payload: CardPayload, size: WidgetBox): void {
-	bindMessage(openCard(player, payload, size), "card", handleMessage);
+function show(player: ScriptPlayer, payload: CardPayload, size: WidgetBox, guide = false): void {
+	bindMessage(openCard(player, payload, size), "card", (sender, data) =>
+		handleMessage(sender, data, guide)
+	);
 }
 
-function handleMessage(player: ScriptPlayer, data: unknown): void {
+function handleMessage(player: ScriptPlayer, data: unknown, guide: boolean): void {
 	switch (messageType(data)) {
 		case "close":
+			if (guide && field(data, "completed") === true) {
+				trackBeforeFirstGame(player, FtueEvent.GUIDE_COMPLETED);
+			}
 			closeCard(player);
 			break;
 		case "book":
+			if (guide) trackBeforeFirstGame(player, FtueEvent.GUIDE_COMPLETED);
 			// 안내 마지막 장에서 도감으로 건너간다. 같은 슬롯을 이어받으므로
 			// 카드가 둘 겹치지 않는다 (openCard가 먼저 닫는다)
 			showBook(player);
@@ -85,8 +92,9 @@ export function showRoleReveal(player: ScriptPlayer, seat: Seat, timer: number):
 	);
 }
 
-/** 규칙 요약 3장. 마지막 장에서 도감으로 이어진다 */
+/** 규칙과 첫 행동을 잇는 요약 4장. 마지막 장에서 도감으로 이어진다 */
 export function showGuide(player: ScriptPlayer): void {
+	trackBeforeFirstGame(player, FtueEvent.GUIDE_OPENED);
 	tagOf(player).guideSeen = true;
 	show(
 		player,
@@ -102,7 +110,8 @@ export function showGuide(player: ScriptPlayer): void {
 			// 그 조합은 위젯이 만든다
 			heading: "",
 		},
-		WidgetSize.CARD
+		WidgetSize.CARD,
+		true
 	);
 }
 
@@ -177,5 +186,5 @@ export function showHelp(player: ScriptPlayer, cards: CardView[]): void {
  */
 export function needsGuide(player: ScriptPlayer): boolean {
 	if (tagOf(player).guideSeen) return false;
-	return !Storage.read(player).playCount;
+	return !Storage.hasPriorGame(Storage.read(player));
 }

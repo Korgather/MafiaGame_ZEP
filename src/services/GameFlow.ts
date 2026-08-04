@@ -25,7 +25,7 @@ import { newSeed, seededRng } from "../domain/Rng.ts";
 import { assignRole, enterPhase, readyCount, resetRoom } from "../entities/Room.ts";
 import { allRooms } from "../entities/RoomRegistry.ts";
 import { guard } from "../infrastructure/Fault.ts";
-import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
+import { centerLabel, forEachAudience, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import { showRoleReveal } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
 import { advanceCut, playCut, showCut } from "./Cut.ts";
@@ -43,8 +43,9 @@ import {
 	openNightView,
 	resolveNight,
 } from "./Night.ts";
-import { finishIfDecided, openWinView } from "./Outcome.ts";
+import { broadcastRematchProgress, finishIfDecided, openWinView } from "./Outcome.ts";
 import { countPlay } from "./Rewards.ts";
+import { trackGameStarted } from "./FtueAnalytics.ts";
 import * as Screen from "./Screen.ts";
 import {
 	clearSilhouettes,
@@ -316,6 +317,7 @@ export function refreshProgress(room: Room): void {
 	if (room.phase === GamePhase.NIGHT) broadcastNightProgress(room);
 	else if (room.phase === GamePhase.VOTE) broadcastVoteProgress(room);
 	else if (room.phase === GamePhase.JUDGEMENT) broadcastJudgeProgress(room);
+	else if (room.phase === GamePhase.GAME_OVER) broadcastRematchProgress(room);
 }
 
 /**
@@ -396,12 +398,18 @@ function beginGame(room: Room): void {
 	// 갈아 끼우지 않아서, 판이 열리고 첫 밤이 될 때까지 음악이 끊기지 않는다.
 	// 배율은 밤보다 살짝 덜 당긴다. 아직 볼 것이 자기 카드뿐이다
 	Screen.setScene(room, Screen.Zoom.REVEAL, Bgm.NIGHT, Screen.Veil.NIGHT);
+	Screen.lockRoomCamera(room);
+	forEachAudience(room, player => {
+		player.disableAttack = true;
+		player.sendUpdated();
+	});
 
 	// 컷을 먼저 건다. playCut이 phaseTimer를 컷 길이만큼 늘리므로, 아래에서
 	// 카드에 실어 보내는 남은 시간이 늘어난 값이어야 서버와 화면이 같은 시계를 본다.
 	playCut(room, "neutral", "🎭 게임 시작", [`${room.total}명이 참가합니다.`]);
 
 	forEachPlayer(room, (player, seat) => {
+		trackGameStarted(player);
 		countPlay(player);
 		// 대기실 위젯을 먼저 치운다. 직업 카드는 별도 슬롯이라 이걸 빼면
 		// 준비 버튼이 달린 대기실 화면이 직업 공개 5초 내내 뒤에 남는다.

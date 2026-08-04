@@ -129,6 +129,14 @@ export function roomOrigin(roomNum: number): readonly [number, number] {
 	return origin;
 }
 
+/** 게임 중 고정할 방 중심. 좌석 사각형의 중심에서 아래로 한 타일(y + 1)이다. */
+export function roomCameraTarget(roomNum: number): { x: number; y: number } {
+	const origin = roomOrigin(roomNum);
+	const centerX = Math.floor((SEAT_BOUNDS.minX + SEAT_BOUNDS.maxX) / 2);
+	const centerY = Math.floor((SEAT_BOUNDS.minY + SEAT_BOUNDS.maxY) / 2) + 1;
+	return { x: origin[0] + centerX, y: origin[1] + centerY };
+}
+
 /**
  * 참가 번호(1..MAX_PLAYERS)에 해당하는 맵 절대 좌표.
  * 유효하지 않은 번호면 null을 돌려준다 — 기존 코드는 undefined 좌표로

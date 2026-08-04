@@ -126,6 +126,17 @@ const Parent = (function () {
 		send(message);
 	}
 
+	/** ZEP 클라이언트의 로그인 모달을 연다 */
+	function openSignin() {
+		window.parent.postMessage(
+			{
+				type: "ScriptAction:OPEN_Signin_Modal",
+				zepSystem: true,
+			},
+			"*"
+		);
+	}
+
 	// ────────────────────────────────────────────── 3. 부모 문서의 키 입력
 
 	/** 남이 글을 쓰고 있는 칸인가. ZEP 기본 채팅 입력창이 여기 걸린다 */
@@ -213,6 +224,7 @@ const Parent = (function () {
 		onKey,
 		grabFocus,
 		releaseFocus,
+		openSignin,
 		store,
 		/** 게임 화면의 키 입력을 받을 수 있는가 (부모와 같은 출처인가) */
 		canReadKeys: HostWindow !== null,

@@ -125,6 +125,7 @@
 			let quick = [];
 			let active = "";
 			let myId = "";
+			let inputDisabled = false;
 
 			/*
 			 * 보낸 글 기록(↑/↓). 이 문서보다 오래 살아야 한다.
@@ -226,7 +227,7 @@
 					 */
 					const token = line.num > 0 ? String(line.num) : line.name;
 					const reply =
-						pm !== "" && line.senderId !== ""
+						!inputDisabled && pm !== "" && line.senderId !== ""
 							? html`<button
 									type="button"
 									class="reply"
@@ -319,17 +320,24 @@
 				if (chosen) chosen.scrollIntoView({ inline: "nearest", block: "nearest" });
 
 				const view = viewOf(active);
+				const input = qs("#input");
 				/*
-				 * 입력창은 잠그지 않는다. 명령어(/도움말)는 채널 권한과 무관하게
-				 * 서버가 받아주고, 밤의 시민처럼 쓸 수 있는 탭이 하나도 없는
-				 * 상황이 정상이기 때문이다. 잠그면 그 사람은 명령어를 영영 쓸 수
-				 * 없다. 대신 안내 문구와 탭의 자물쇠로 지금 상태를 알린다.
+				 * 일반 플레이어는 입력창을 잠그지 않는다. 명령어(/도움말)는 채널
+				 * 권한과 무관하게 서버가 받아주고, 밤의 시민처럼 쓸 수 있는 탭이
+				 * 하나도 없는 상황이 정상이기 때문이다. 게스트만 inputDisabled로
+				 * 입력기 전체를 잠근다 — 채널 하나의 상태가 아니라 계정 권한이다.
 				 *
 				 * 문구는 서버가 통째로 준다. 여기서 지어내면 밤·사망·관전이
 				 * 모두 "지금은 읽기만 됩니다" 한 줄로 뭉개진다 — 이유를 아는
 				 * 곳은 권한 표 하나뿐인데 그것이 서버에 있다.
 				 */
-				qs("#input").placeholder = view ? view.placeholder : "";
+				input.disabled = inputDisabled;
+				input.placeholder = view ? view.placeholder : "";
+				for (const id of ["#emoji", "#help", "#submit"]) qs(id).disabled = inputDisabled;
+				if (inputDisabled) {
+					input.value = "";
+					qs("#pad").classList.add("hidden");
+				}
 			}
 
 			/**
@@ -379,7 +387,7 @@
 
 			function drawQuick() {
 				const view = viewOf(active);
-				const usable = view !== null && view.write && quick.length > 0;
+				const usable = !inputDisabled && view !== null && view.write && quick.length > 0;
 				qs("#quick").classList.toggle("hidden", !usable);
 				if (!usable) return;
 				// data-index는 누르는 쪽이 아니라 세는 쪽이 쓴다 — 장면 검사기가
@@ -473,6 +481,7 @@
 			// ────────────────────────────────────────────────── 보내기
 
 			function submit(text) {
+				if (inputDisabled) return false;
 				const trimmed = String(text == null ? "" : text).trim();
 				if (trimmed === "") return false;
 				const view = viewOf(active);
@@ -567,6 +576,7 @@
 			 * 갈아치우므로 줄에 직접 건 리스너는 다음 탭 전환에 사라진다.
 			 */
 			qs("#log").addEventListener("click", event => {
+				if (inputDisabled) return;
 				const el = event.target.closest(".reply");
 				if (!el) return;
 				qs("#input").value = "/귓속말 " + el.dataset.who + " ";
@@ -616,6 +626,7 @@
 			 * 포커스를 줄지 서버에 함께 알려주고, 새로 뜬 문서가 init에서 받는다.
 			 */
 			function focusInput(slash) {
+				if (inputDisabled) return;
 				if (qs("#full").classList.contains("hidden")) {
 					Parent.send({ type: "toggle", open: true, focus: slash ? "command" : "input" });
 					return;
@@ -624,6 +635,7 @@
 			}
 
 			function takeFocus(slash) {
+				if (inputDisabled) return;
 				// 게임 화면에서 들어온 길에서는 포커스가 아직 캔버스에 있다
 				Parent.grabFocus();
 				const input = qs("#input");
@@ -706,6 +718,7 @@
 					quick = data.quick || [];
 					active = data.active || "";
 					lines = data.lines || [];
+					inputDisabled = data.inputDisabled === true;
 
 					const open = data.open === true;
 					qs("#full").classList.toggle("hidden", !open);
@@ -720,7 +733,9 @@
 					 * 접혀 있었다면 서버가 펴면서 이 길로 실어 보낸다 — 펴기는
 					 * 위젯을 다시 여는 것이라 접혀 있던 문서가 남겨 줄 방법이 없다.
 					 */
-					if (data.prefill) qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
+					if (!inputDisabled && data.prefill) {
+						qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
+					}
 
 					// 게임 화면에서 Enter로 펴고 들어온 경우. 앞 문서가 남긴
 					// 의도를 이어받는 곳은 여기 하나뿐이다
@@ -729,6 +744,7 @@
 
 				/** 이미 펴져 있을 때의 같은 부탁. 문서가 살아 있으니 바로 채운다 */
 				prefill(data) {
+					if (inputDisabled) return;
 					qs("#input").value = String(data.text || "").slice(0, MAX_TEXT);
 					takeFocus(false);
 				},
@@ -745,6 +761,7 @@
 					const before = channels.map(view => view.id);
 					channels = data.channels || [];
 					quick = data.quick || [];
+					inputDisabled = data.inputDisabled === true;
 					active = next;
 					draw();
 					// init에서는 부르지 않는다 — 접었다 펴는 것도 새 문서라

@@ -14,18 +14,9 @@
  * (Zoom·Tremor·Veil)에만 있다. "지속시간과 강도를 자연스럽게 조정"하는 일은
  * 이 파일의 상수만 만지면 끝난다.
  *
- * 일부러 쓰지 않는 API: setCameraTarget
- * -------------------------------------
- * 개표와 반론에서 단상에 오른 사람을 클로즈업했었다. 구현해 놓고 보니 카메라가
- * 움직이는 것 자체가 어색했다 — 이 게임의 화면은 좌석 배치가 곧 정보라
- * 시점이 남의 자리로 미끄러지는 동안 방을 읽을 수 없고, 몇 초 뒤 제자리로
- * 돌아오는 동작까지 합치면 한 사건에 화면이 두 번 흔들린다. 잃은 것은
- * "지금 누구를 보는 자리인가"인데, 그 말은 비네팅(Veil.TRIAL)과 재판 곡이
- * 카메라를 움직이지 않고 대신한다.
- *
- * 되살릴 생각이라면 함께 딸려 오는 것을 알고 시작할 것: ZEP 런타임에 타이머가
- * 없어 "몇 초 뒤 되돌리기"를 방 상태와 프레임 루프로 굴려야 하고(Cut.ts와
- * 같은 방식), 재접속·단계 전환·판 종료 세 경로 전부에 되돌리는 코드가 필요하다.
+ * 카메라는 특정 참가자를 따라가지 않는다. 대신 게임 시작부터 방 중심 한 곳에
+ * 고정해 좌석 배치를 안정적으로 보여 주고, 종료·중단·관전 종료에는 즉시 본인
+ * 시점으로 되돌린다. 일시적인 클로즈업과 달리 타이머가 없어 복구 경로가 단순하다.
  *
  * 왜 leaf인가
  * -----------
@@ -36,7 +27,9 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { Room, VeilSpec } from "../types/Game.types.ts";
+import { GamePhase } from "../types/Game.types.ts";
 import { BGM_VOLUME } from "../constants/Assets.ts";
+import { roomCameraTarget } from "../constants/RoomLayout.ts";
 import { forEachAudience } from "./Broadcast.ts";
 
 /**
@@ -293,6 +286,25 @@ export function shakeOne(player: ScriptPlayer, tremor: TremorSpec): void {
 	player.shakeScreen(tremor.ms, tremor.power);
 }
 
+function applyCamera(room: Room, player: ScriptPlayer): void {
+	if (!room.started || room.phase === GamePhase.GAME_OVER) {
+		player.setCameraTarget(player);
+		return;
+	}
+	const target = roomCameraTarget(room.num);
+	player.setCameraTarget(target.x, target.y);
+}
+
+/** 직업 공개 단계부터 참가자와 관전자의 시점을 방 중심에 고정한다. */
+export function lockRoomCamera(room: Room): void {
+	forEachAudience(room, player => applyCamera(room, player));
+}
+
+/** 승패 확정 시 전원의 카메라를 각자 아바타로 되돌린다. */
+export function releaseRoomCamera(room: Room): void {
+	forEachAudience(room, player => player.setCameraTarget(player));
+}
+
 /**
  * 비네팅만 바꾼다. 단계가 넘어가지 않는데 화면이 반응해야 하는 순간 —
  * 지금은 처형 하나뿐이다.
@@ -329,6 +341,7 @@ export function restoreView(room: Room, player: ScriptPlayer): void {
 	// 어둠을 그대로 입혀야 한다 — 다른 값에서 출발시키면 이미 밤인 방에
 	// 들어온 사람의 화면에서만 어둠이 뒤늦게 조여든다
 	applyVeil(player, room.veil, room.veil);
+	applyCamera(room, player);
 }
 
 /**
@@ -340,6 +353,7 @@ export function restoreView(room: Room, player: ScriptPlayer): void {
  * 반드시 틀린다.
  */
 export function resetView(player: ScriptPlayer): void {
+	player.setCameraTarget(player);
 	player.displayRatio = baseRatio(player);
 	player.stopSound(BGM_KEY);
 	// NONE은 짙기가 0이라 tween이 무엇이든 그 자리에서 사라진다. 이 함수가

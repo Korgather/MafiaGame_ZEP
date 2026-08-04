@@ -427,6 +427,10 @@ body {
 .icon-btn:hover {
 	color: var(--ink);
 }
+.icon-btn:disabled {
+	cursor: default;
+	opacity: 0.35;
+}
 .icon-btn:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -962,6 +966,10 @@ body {
 .chat-input::placeholder {
 	color: var(--ink-3);
 }
+.chat-input:disabled {
+	cursor: default;
+	color: var(--ink-3);
+}
 .chat-input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -1167,7 +1175,10 @@ body {
 				<div class="stack hidden" id="deaths"></div>
 			</div>
 
-			<button type="button" class="btn ghost" id="quit" hidden>관전 종료</button>
+			<div class="foot" id="spectateActions" hidden>
+				<button type="button" class="btn ghost grow" id="guide">게임 방법</button>
+				<button type="button" class="btn ghost grow" id="quit">관전 종료</button>
+			</div>
 		</div>
 
 		<script>
@@ -1279,6 +1290,12 @@ const Parent = function() {
   if (layout.zIndex) message.zIndex = layout.zIndex;
   send(message);
  }
+ function openSignin() {
+  window.parent.postMessage({
+   type: "ScriptAction:OPEN_Signin_Modal",
+   zepSystem: true
+  }, "*");
+ }
  function editable(el) {
   if (!el || !el.tagName) return false;
   const tag = String(el.tagName).toUpperCase();
@@ -1317,6 +1334,7 @@ const Parent = function() {
   onKey: onKey,
   grabFocus: grabFocus,
   releaseFocus: releaseFocus,
+  openSignin: openSignin,
   store: store,
   canReadKeys: HostWindow !== null
  };
@@ -1344,6 +1362,12 @@ qs("#quit").addEventListener("click", () => {
  });
 });
 
+qs("#guide").addEventListener("click", () => {
+ Parent.send({
+  type: "guide"
+ });
+});
+
 function paintTimeVote(on) {
  qs("#timevote").classList.toggle("hidden", !on);
 }
@@ -1363,16 +1387,19 @@ qs("#tminus").addEventListener("click", () => sendTime(-15));
 Parent.on({
  init(data) {
   const night = data.phase === "night";
-  qs("#panel").classList.add(night ? "night" : "day");
+  const panel = qs("#panel");
+  panel.classList.remove("night", "day");
+  panel.classList.add(night ? "night" : "day");
   qs("#sky").textContent = night ? "🌙" : "🌅";
   qs("#turn").textContent = data.turn ? data.turn + (night ? "번째 밤" : "번째 아침") : night ? "밤" : "아침";
   const role = qs("#myrole");
   role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+  role.classList.remove("dead", "mafia", "citizen");
   role.classList.add(data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
   qs("#ability").textContent = data.abilityLine || "";
   qs("#lead").textContent = data.lead || (night ? "기다리세요" : "토론하세요");
-  qs("#quit").hidden = !data.spectating;
-  qs("#panel").classList.toggle("watching", data.spectating === true || data.alive === false);
+  qs("#spectateActions").hidden = !data.spectating;
+  panel.classList.toggle("watching", data.spectating === true || data.alive === false);
   paintRoster(Array.isArray(data.seats) ? data.seats : [], data.aliveCount, data.total);
   qs("#note").textContent = data.note || "";
   const deaths = Array.isArray(data.deaths) ? data.deaths : [];

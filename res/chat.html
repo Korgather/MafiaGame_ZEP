@@ -427,6 +427,10 @@ body {
 .icon-btn:hover {
 	color: var(--ink);
 }
+.icon-btn:disabled {
+	cursor: default;
+	opacity: 0.35;
+}
 .icon-btn:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -962,6 +966,10 @@ body {
 .chat-input::placeholder {
 	color: var(--ink-3);
 }
+.chat-input:disabled {
+	cursor: default;
+	color: var(--ink-3);
+}
 .chat-input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -1182,6 +1190,12 @@ const Parent = function() {
   if (layout.zIndex) message.zIndex = layout.zIndex;
   send(message);
  }
+ function openSignin() {
+  window.parent.postMessage({
+   type: "ScriptAction:OPEN_Signin_Modal",
+   zepSystem: true
+  }, "*");
+ }
  function editable(el) {
   if (!el || !el.tagName) return false;
   const tag = String(el.tagName).toUpperCase();
@@ -1220,6 +1234,7 @@ const Parent = function() {
   onKey: onKey,
   grabFocus: grabFocus,
   releaseFocus: releaseFocus,
+  openSignin: openSignin,
   store: store,
   canReadKeys: HostWindow !== null
  };
@@ -1423,6 +1438,8 @@ let active = "";
 
 let myId = "";
 
+let inputDisabled = false;
+
 const sent = Parent.store.chatSent || (Parent.store.chatSent = []);
 
 let sentAt = sent.length;
@@ -1472,7 +1489,7 @@ function bubble(line) {
 							>` : "";
   const name = line.num > 0 ? line.num + "번 참가자" : line.name;
   const token = line.num > 0 ? String(line.num) : line.name;
-  const reply = pm !== "" && line.senderId !== "" ? html`<button
+  const reply = !inputDisabled && pm !== "" && line.senderId !== "" ? html`<button
 									type="button"
 									class="reply"
 									data-who="${token}"
@@ -1547,7 +1564,14 @@ function drawTabs() {
   block: "nearest"
  });
  const view = viewOf(active);
- qs("#input").placeholder = view ? view.placeholder : "";
+ const input = qs("#input");
+ input.disabled = inputDisabled;
+ input.placeholder = view ? view.placeholder : "";
+ for (const id of [ "#emoji", "#help", "#submit" ]) qs(id).disabled = inputDisabled;
+ if (inputDisabled) {
+  input.value = "";
+  qs("#pad").classList.add("hidden");
+ }
 }
 
 function flashNew(before) {
@@ -1577,7 +1601,7 @@ function drawBadges() {
 
 function drawQuick() {
  const view = viewOf(active);
- const usable = view !== null && view.write && quick.length > 0;
+ const usable = !inputDisabled && view !== null && view.write && quick.length > 0;
  qs("#quick").classList.toggle("hidden", !usable);
  if (!usable) return;
  qs("#quick").innerHTML = html`${quick.map((text, i) => html`<button type="button" data-index="${i}">${text}</button>`)}`;
@@ -1634,6 +1658,7 @@ function recall(step) {
 }
 
 function submit(text) {
+ if (inputDisabled) return false;
  const trimmed = String(text == null ? "" : text).trim();
  if (trimmed === "") return false;
  const view = viewOf(active);
@@ -1707,6 +1732,7 @@ qs("#log").addEventListener("scroll", () => {
 });
 
 qs("#log").addEventListener("click", event => {
+ if (inputDisabled) return;
  const el = event.target.closest(".reply");
  if (!el) return;
  qs("#input").value = "/귓속말 " + el.dataset.who + " ";
@@ -1741,6 +1767,7 @@ qs("#quick").addEventListener("click", event => {
 qs("#submit").addEventListener("click", submitInput);
 
 function focusInput(slash) {
+ if (inputDisabled) return;
  if (qs("#full").classList.contains("hidden")) {
   Parent.send({
    type: "toggle",
@@ -1753,6 +1780,7 @@ function focusInput(slash) {
 }
 
 function takeFocus(slash) {
+ if (inputDisabled) return;
  Parent.grabFocus();
  const input = qs("#input");
  if (slash && input.value === "") input.value = "/";
@@ -1805,15 +1833,19 @@ Parent.on({
   quick = data.quick || [];
   active = data.active || "";
   lines = data.lines || [];
+  inputDisabled = data.inputDisabled === true;
   const open = data.open === true;
   qs("#full").classList.toggle("hidden", !open);
   qs("#mini").classList.toggle("hidden", open);
   draw();
   render();
-  if (data.prefill) qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
+  if (!inputDisabled && data.prefill) {
+   qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
+  }
   if (data.focus) takeFocus(data.focus === "command");
  },
  prefill(data) {
+  if (inputDisabled) return;
   qs("#input").value = String(data.text || "").slice(0, MAX_TEXT);
   takeFocus(false);
  },
@@ -1823,6 +1855,7 @@ Parent.on({
   const before = channels.map(view => view.id);
   channels = data.channels || [];
   quick = data.quick || [];
+  inputDisabled = data.inputDisabled === true;
   active = next;
   draw();
   flashNew(before);

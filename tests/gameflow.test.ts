@@ -91,10 +91,21 @@ describe("대기실 → 게임 시작", () => {
 		const setId = widget.lastOfType("setID");
 		assert.ok(setId, "setID를 받지 못했습니다");
 		assert.equal(setId.id, player.id);
+		assert.equal(setId.online, 1, "현재 접속자 수가 초기 화면에 없습니다");
 		// 위젯이 차지할 상자는 서버가 정해 payload에 실어 보낸다. 빠뜨리면
 		// 위젯이 showWidget에 넘긴 데스크톱 픽셀 그대로 뜬다 (실제로 있던 회귀 —
 		// 예전에는 위젯이 스스로 rearrange를 불러야 했고 둘이 부르지 않았다).
 		assert.ok(setId.layout, "layout을 받지 못했습니다");
+	});
+
+	it("접속과 이탈 직후 로비의 현재 접속자 수가 갱신된다", () => {
+		const first = connect("첫째");
+		const second = connect("둘째");
+		assert.equal(mainWidget(first).lastOfType("updateOnlineCount")?.online, 2);
+		assert.equal(mainWidget(second).lastOfType("setID")?.online, 2);
+
+		disconnect(second);
+		assert.equal(mainWidget(first).lastOfType("updateOnlineCount")?.online, 1);
 	});
 
 	it("최소 인원 미만이면 전원 준비해도 시작하지 않는다", () => {
@@ -138,6 +149,7 @@ describe("대기실 → 게임 시작", () => {
 		for (const player of players) {
 			const seat = seatOf(player);
 			assert.equal(seat.alive, true);
+			assert.equal(player.disableAttack, true, "직업 공개 중 기본 공격이 열려 있습니다");
 			assert.equal(player.name, seat.name, "게임룸 이동 전에 참가 번호가 공개됐습니다");
 			assert.notEqual(player.title, "", "게임룸 이동 전에 title이 지워졌습니다");
 			assert.equal(player.sprite, null, "게임룸 이동 전에 기본 캐릭터로 변신했습니다");
@@ -148,6 +160,18 @@ describe("대기실 → 게임 시작", () => {
 			const seat = seatOf(player);
 			assert.equal(player.name, `${seat.index}번 참가자`);
 			assert.equal(player.title, "");
+		}
+	});
+
+	it("게임이 끝나는 즉시 참가자의 기본 공격이 다시 열린다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		for (const player of players) assert.equal(player.disableAttack, true);
+
+		finish(target, Team.CITIZEN);
+
+		for (const player of players) {
+			assert.equal(player.disableAttack, false, `${player.name}의 기본 공격이 잠긴 채 남았습니다`);
 		}
 	});
 
@@ -183,18 +207,19 @@ describe("대기실 → 게임 시작", () => {
 		 * 저장소만 보면 방을 드나들 때마다 안내가 다시 뜬다.
 		 */
 		it("게스트도 한 접속에 한 번만 본다", () => {
+			startPlainGame(MIN_PLAYERS);
 			const player = connect("게스트", { isGuest: true });
 			joinRoom(player, 1);
 			sendCard(player, { type: "close" });
 			assert.equal(hasCard(player), false);
 
-			send(player, { type: "quit" });
+			send(player, { type: "spectate-quit" });
 			joinRoom(player, 1);
 
 			assert.equal(hasCard(player), false, "게스트에게 안내가 다시 떴습니다");
 		});
 
-		it("대기실 안내판에 부딪히면 안내를 다시 볼 수 있다", () => {
+		it("대기실 안내판에 부딪히면 게임 방법을 다시 볼 수 있다", () => {
 			// 안내는 한 번만 뜨므로, 넘긴 사람이 규칙을 다시 읽을 통로가 필요하다.
 			// 맵 에디터의 param1 문자열이 이 배선의 유일한 입력이다.
 			const player = connect("경험자", { storage: JSON.stringify({ exp: 0, playCount: 5 }) });
@@ -204,7 +229,7 @@ describe("대기실 → 게임 시작", () => {
 			touchObject(player, MapTrigger.GUIDE_BOARD);
 
 			const init = cardWidget(player).messages[0] as { nav: string };
-			assert.equal(init.nav, "grid");
+			assert.equal(init.nav, "steps");
 		});
 
 		it("대기실의 📖 버튼은 직업 도감을 연다", () => {
@@ -1261,7 +1286,12 @@ describe("승패와 대기실 복귀", () => {
 		// 전원 직업 공개는 채팅이 아니라 화면에 남는다
 		const revealed = result.players as Array<{ num: number; name: string }>;
 		assert.equal(revealed.length, MIN_PLAYERS);
-		assert.ok(revealed.every(player => player.name === `${player.num}번 참가자`));
+		assert.ok(
+			revealed.every(view =>
+				target.seats.some(seat => seat.index === view.num && seat.name === view.name)
+			),
+			"정체 공개에 참가 번호와 원래 닉네임이 함께 남지 않았습니다"
+		);
 		assert.ok(chatSaw(survivor, "전원의 직업"), "종료 시 직업 공개가 없습니다");
 		/*
 		 * 표는 문자열이 아니라 구조로 내려간다.
@@ -1375,6 +1405,36 @@ describe("승패와 대기실 복귀", () => {
 		// 왜 끝났는지가 화면에 남는다. 예전에는 그림 한 장뿐이라 이유가 없었다
 		assert.ok((result.reason as string).length > 0, "승리 이유가 비어 있습니다");
 	});
+
+	it("종료 화면의 개인 복기는 본인의 직업과 마지막 행동만 보여 준다", () => {
+		startGame(MIN_PLAYERS, 1, [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // NIGHT
+
+		const doctor = seatsWithRole(target, Role.DOCTOR)[0];
+		const citizen = seatsWithRole(target, Role.CITIZEN)[0];
+		send(playerOf(doctor), { type: "select", num: citizen.index });
+
+		finishPhase(target); // DAY
+		finishPhase(target); // VOTE
+		vote(playerOf(doctor), citizen.index);
+		finish(target, Team.CITIZEN);
+
+		const doctorResult = mainWidget(playerOf(doctor)).lastOfType("init");
+		assert.ok(doctorResult, "의사의 결과 화면이 없습니다");
+		const doctorRecap = doctorResult.recap as string[];
+		assert.match(doctorRecap[0], /의사.*시민 팀/);
+		assert.ok(doctorRecap.some(line => line.startsWith("밤 행동:")));
+		assert.ok(doctorRecap.some(line => line === `낮 투표: ${citizen.index}번 참가자`));
+
+		const citizenResult = mainWidget(playerOf(citizen)).lastOfType("init");
+		assert.ok(citizenResult, "시민의 결과 화면이 없습니다");
+		assert.doesNotMatch(
+			JSON.stringify(citizenResult.recap),
+			/밤 행동:|낮 투표:/,
+			"다른 참가자의 개인 행동이 시민의 복기에 노출됐습니다"
+		);
+	});
 });
 
 /**
@@ -1442,6 +1502,32 @@ describe("같은 방에서 한 판 더", () => {
 			count: 1,
 			of: MIN_PLAYERS,
 			mine: false,
+		});
+	});
+
+	it("결과 화면 이탈은 중도 이탈로 세지 않고 한 판 더 현황에서 빠진다", () => {
+		const players = startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finish(target, Team.MAFIA);
+		send(players[0], { type: "again" });
+
+		disconnect(players[1]);
+
+		const storage = JSON.parse(players[1].storage || "{}") as { runCount?: number };
+		assert.equal(storage.runCount || 0, 0, "승패가 난 뒤 이탈이 중도 이탈로 기록됐습니다");
+		assert.deepEqual(mainWidget(players[0]).lastOfType("rematch"), {
+			type: "rematch",
+			count: 1,
+			of: MIN_PLAYERS - 1,
+			mine: true,
+		});
+
+		reconnect(players[1]);
+		assert.deepEqual(mainWidget(players[0]).lastOfType("rematch"), {
+			type: "rematch",
+			count: 1,
+			of: MIN_PLAYERS,
+			mine: true,
 		});
 	});
 

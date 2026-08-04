@@ -258,7 +258,10 @@
 				없고, 이 화면이 판이 끝날 때까지 유지되므로 여기 말고는 돌아갈
 				길이 없다. 참가자에게는 숨긴다 — 게임 중 이탈 버튼이 아니다.
 			-->
-			<button type="button" class="btn ghost" id="quit" hidden>관전 종료</button>
+			<div class="foot" id="spectateActions" hidden>
+				<button type="button" class="btn ghost grow" id="guide">게임 방법</button>
+				<button type="button" class="btn ghost grow" id="quit">관전 종료</button>
+			</div>
 		</div>
 
 		<!--@shared-->
@@ -288,6 +291,9 @@
 			qs("#quit").addEventListener("click", () => {
 				Parent.send({ type: "spectate-quit" });
 			});
+			qs("#guide").addEventListener("click", () => {
+				Parent.send({ type: "guide" });
+			});
 
 			/**
 			 * 시간 조절 버튼을 켜고 끈다.
@@ -312,7 +318,11 @@
 			Parent.on({
 				init(data) {
 					const night = data.phase === "night";
-					qs("#panel").classList.add(night ? "night" : "day");
+					const panel = qs("#panel");
+					// 관전자는 같은 위젯을 단계마다 다시 쓴다. 이전 클래스를 걷지
+					// 않으면 밤에도 day와 night가 함께 남아 선언 순서에 따라 낮 배경이 이긴다.
+					panel.classList.remove("night", "day");
+					panel.classList.add(night ? "night" : "day");
 					qs("#sky").textContent = night ? "🌙" : "🌅";
 					qs("#turn").textContent = data.turn
 						? data.turn + (night ? "번째 밤" : "번째 아침")
@@ -326,6 +336,7 @@
 					// 몇 종인지도, 무슨 능력이 있는지도 알 필요가 없다
 					const role = qs("#myrole");
 					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.classList.remove("dead", "mafia", "citizen");
 					role.classList.add(
 						data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen"
 					);
@@ -335,14 +346,14 @@
 					// 빈 줄이 남는 것보다 낫다
 					qs("#lead").textContent = data.lead || (night ? "기다리세요" : "토론하세요");
 
-					qs("#quit").hidden = !data.spectating;
+					qs("#spectateActions").hidden = !data.spectating;
 
 					/*
 					 * 볼 수만 있는 사람인가. 관전자와 유령을 한 상태로 묶는다 —
 					 * 둘의 차이는 이 판에 좌석이 있었느냐뿐이고, 지금 할 수 있는
 					 * 일은 똑같이 없다. 그 사실을 화면 전체가 말하게 한다.
 					 */
-					qs("#panel").classList.toggle(
+					panel.classList.toggle(
 						"watching",
 						data.spectating === true || data.alive === false
 					);

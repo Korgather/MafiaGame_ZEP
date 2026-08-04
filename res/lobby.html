@@ -427,6 +427,10 @@ body {
 .icon-btn:hover {
 	color: var(--ink);
 }
+.icon-btn:disabled {
+	cursor: default;
+	opacity: 0.35;
+}
 .icon-btn:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -962,6 +966,10 @@ body {
 .chat-input::placeholder {
 	color: var(--ink-3);
 }
+.chat-input:disabled {
+	cursor: default;
+	color: var(--ink-3);
+}
 .chat-input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -1138,6 +1146,25 @@ body {
 				flex-direction: column;
 				gap: 5px;
 			}
+			.online-status {
+				flex: 0 0 auto;
+				padding: 3px var(--s2);
+				font-size: var(--t-xs);
+				white-space: nowrap;
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: 999px;
+			}
+			.online-status strong {
+				color: var(--ok);
+				font-variant-numeric: tabular-nums;
+			}
+			.guide-open {
+				min-height: 28px;
+				padding: 3px var(--s2);
+				font-size: var(--t-xs);
+			}
 		</style>
 	</head>
 	<body>
@@ -1147,6 +1174,8 @@ body {
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
+				<span class="online-status" aria-label="현재 접속자 수">접속 <strong id="online">0</strong>명</span>
+				<button class="btn ghost guide-open" id="guide" type="button">게임 방법</button>
 				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
 					📖
 				</button>
@@ -1276,6 +1305,12 @@ const Parent = function() {
   if (layout.zIndex) message.zIndex = layout.zIndex;
   send(message);
  }
+ function openSignin() {
+  window.parent.postMessage({
+   type: "ScriptAction:OPEN_Signin_Modal",
+   zepSystem: true
+  }, "*");
+ }
  function editable(el) {
   if (!el || !el.tagName) return false;
   const tag = String(el.tagName).toUpperCase();
@@ -1314,6 +1349,7 @@ const Parent = function() {
   onKey: onKey,
   grabFocus: grabFocus,
   releaseFocus: releaseFocus,
+  openSignin: openSignin,
   store: store,
   canReadKeys: HostWindow !== null
  };
@@ -1331,6 +1367,11 @@ const config = {
 };
 
 let counts = {};
+
+function paintOnline(value) {
+ const online = Number(value);
+ qs("#online").textContent = Number.isFinite(online) ? Math.max(0, Math.floor(online)) : 0;
+}
 
 function roomHtml(num) {
  const info = counts[num] || {
@@ -1425,6 +1466,12 @@ qs("#book").addEventListener("click", () => {
  });
 });
 
+qs("#guide").addEventListener("click", () => {
+ Parent.send({
+  type: "guide"
+ });
+});
+
 function showRooms(inRoom) {
  qs("#rooms").classList.toggle("hidden", inRoom);
  qs("#seats").classList.toggle("hidden", !inRoom);
@@ -1440,6 +1487,7 @@ function showRooms(inRoom) {
 Parent.on({
  setID(data) {
   myId = data.id;
+  paintOnline(data.online);
  },
  init(data) {
   const list = Array.isArray(data.data) ? data.data : [];
@@ -1452,6 +1500,13 @@ Parent.on({
  updatePlayerCount(data) {
   counts = data.data || {};
   if (!qs("#rooms").classList.contains("hidden")) paintRooms();
+ },
+ updateOnlineCount(data) {
+  paintOnline(data.online);
+ },
+ loginRequired(data) {
+  if (!window.confirm(String(data.message))) return;
+  Parent.openSignin();
  }
 });
 </script>

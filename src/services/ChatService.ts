@@ -225,6 +225,7 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 	return readableChannels(ctx).map(channel => {
 		const def = channelDef(channel);
 		const access = accessOf(ctx, channel);
+		const writable = !player.isGuest && access.write;
 		const floor = seen[channel] || 0;
 		let unread = 0;
 		for (const message of log) {
@@ -234,13 +235,16 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 			id: channel,
 			label: def.label,
 			glyph: def.glyph,
-			write: access.write,
+			write: writable,
 			unread,
 			// 잠긴 탭의 안내 문구는 채널이 아니라 잠근 이유가 정한다.
 			// 위젯이 지어내던 문장(“지금은 읽기만 됩니다”)이 밤·사망·관전을
 			// 한 마디로 덮고 있었다 — 세 경우에 해야 할 행동이 전혀 다르다.
-			placeholder:
-				access.write && access.freeText ? def.placeholder : `${access.note} (/도움말)`,
+			placeholder: player.isGuest
+				? "로그인 후 채팅을 이용할 수 있습니다."
+				: access.write && access.freeText
+					? def.placeholder
+					: `${access.note} (/도움말)`,
 		};
 	});
 }
@@ -378,6 +382,7 @@ export function openFor(player: ScriptPlayer, focus: ChatFocus, prefilled: strin
 		active: tag.chatChannel,
 		quick: quickFor(ctx),
 		open: tag.chatOpen,
+		inputDisabled: player.isGuest,
 		myId: player.id,
 		lines: log.slice(-HISTORY_LIMIT),
 		focus,
@@ -457,6 +462,7 @@ export function refresh(player: ScriptPlayer): void {
 		channels: channelViews(player, ctx),
 		active: tag.chatChannel,
 		quick: quickFor(ctx),
+		inputDisabled: player.isGuest,
 	});
 }
 
@@ -489,6 +495,13 @@ function submit(sender: ScriptPlayer, data: unknown): void {
 	 * 걸리는 말이 든 닉네임은 그 자체로 신고 대상이니 감수할 만하다.
 	 */
 	const text = maskProfanity(raw);
+
+	// 위젯에서 입력기를 잠가도 조작된 클라이언트는 send를 직접 보낼 수 있다.
+	// 명령어도 귓속말처럼 발언 경로가 될 수 있으므로 분기 전에 전부 막는다.
+	if (sender.isGuest) {
+		label(sender, "로그인 후 채팅을 이용할 수 있습니다.");
+		return;
+	}
 
 	/*
 	 * 여유분을 값이 나가기 직전에 치른다.
@@ -575,6 +588,7 @@ function switchChannel(sender: ScriptPlayer, data: unknown): void {
 		channels: channelViews(sender, ctx),
 		active: channel,
 		quick: quickFor(ctx),
+		inputDisabled: sender.isGuest,
 	});
 }
 

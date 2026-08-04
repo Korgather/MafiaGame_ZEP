@@ -10,19 +10,22 @@
  *
  * 이 파일이 얇게 유지되는 한, 게임 로직은 ZEP 없이도 읽고 테스트할 수 있다.
  */
+import type { ScriptPlayer } from "zep-script";
 import { MapTrigger } from "./constants/Assets.ts";
-import { attachedRoom, locate } from "./entities/RoomRegistry.ts";
+import { attachedRoom, locate, locateSpectator } from "./entities/RoomRegistry.ts";
 import { guard } from "./infrastructure/Fault.ts";
 import { destroyWidgets } from "./infrastructure/PlayerTag.ts";
 import { label } from "./services/Broadcast.ts";
-import { showBook } from "./services/Cards.ts";
+import { showGuide } from "./services/Cards.ts";
 import * as Ccu from "./services/Ccu.ts";
 import * as Chat from "./services/ChatService.ts";
 import * as GameFlow from "./services/GameFlow.ts";
-import { enterLobby, handleDisconnect } from "./services/Lobby.ts";
+import { enforceGuestName, releaseGuestIdentity } from "./services/GuestIdentity.ts";
+import { broadcastOnlineCount, enterLobby, handleDisconnect } from "./services/Lobby.ts";
 import { showProfile } from "./services/Profile.ts";
 import {
 	auditRoomAreas,
+	applyNameplate,
 	resetPlayerAppearance,
 	restoreAppearance,
 	seatPlayer,
@@ -59,6 +62,7 @@ ScriptApp.onStart.Add(() => guard("시작", () => {
 
 ScriptApp.onJoinPlayer.Add(player => guard("접속", () => {
 	Ccu.schedule();
+	enforceGuestName(player);
 
 	// 이름표를 판 밖 모습(등급 + 닉네임)으로 세운다
 	resetPlayerAppearance(player);
@@ -89,11 +93,25 @@ ScriptApp.onJoinPlayer.Add(player => guard("접속", () => {
 		// 늘려주지 않으면 그들은 "다 냈는데 왜 안 넘어가지"를 겪는다.
 		GameFlow.refreshProgress(found.room);
 		label(player, "진행 중이던 게임에 다시 참가했습니다.");
+		broadcastOnlineCount();
 		return;
 	}
 
 	spawnInLobby(player);
 	enterLobby(player);
+	broadcastOnlineCount();
+}));
+
+ScriptApp.onPlayerNameChanged.Add((player: ScriptPlayer, oldName: string) => guard("닉네임 변경", () => {
+	if (player.name === oldName) return;
+	if (!enforceGuestName(player)) return;
+
+	const found = locate(player.id);
+	if (found) found.seat.name = player.name;
+	const watching = locateSpectator(player.id);
+	if (watching) watching.seat.name = player.name;
+	applyNameplate(player, found ? found.seat : null);
+	player.sendUpdated();
 }));
 
 ScriptApp.onLeavePlayer.Add(player => guard("이탈", () => {
@@ -101,6 +119,8 @@ ScriptApp.onLeavePlayer.Add(player => guard("이탈", () => {
 	// 좌석을 지워버려 뒤에서는 찾을 수 없다.
 	const found = locate(player.id);
 	handleDisconnect(player);
+	if (player.isGuest) releaseGuestIdentity(player.id);
+	broadcastOnlineCount(player.id);
 	// 한 명이 빠지면 진행률의 분모가 남은 전원에게서 함께 줄어든다.
 	if (found) GameFlow.refreshProgress(found.room);
 	// 마지막 한 명이 나갔으면 0명을 즉시 보고한다. 디바운스를 기다릴
@@ -134,7 +154,7 @@ ScriptApp.onUpdate.Add(dt => {
 // 대기실 안내판. 규칙을 잊었거나 첫 안내를 넘긴 사람이 다시 읽는 통로다.
 // x·y·tileID는 어느 판인지가 아니라 어느 칸인지라 여기서는 쓸 일이 없다.
 ScriptApp.onObjectTouched.Add((player, _x, _y, _tileID, obj) => guard("오브젝트 접촉", () => {
-	if (obj.param1 === MapTrigger.GUIDE_BOARD) showBook(player);
+	if (obj.param1 === MapTrigger.GUIDE_BOARD) showGuide(player);
 }));
 
 // 대기실에서 사람을 클릭하면 이 게임의 프로필 창이 열린다(ZEP 기본 창은 onStart에서 껐다).

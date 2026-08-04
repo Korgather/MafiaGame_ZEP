@@ -427,6 +427,10 @@ body {
 .icon-btn:hover {
 	color: var(--ink);
 }
+.icon-btn:disabled {
+	cursor: default;
+	opacity: 0.35;
+}
 .icon-btn:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -962,6 +966,10 @@ body {
 .chat-input::placeholder {
 	color: var(--ink-3);
 }
+.chat-input:disabled {
+	cursor: default;
+	color: var(--ink-3);
+}
 .chat-input:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: -2px;
@@ -1064,6 +1072,23 @@ body {
 				font-weight: 800;
 				letter-spacing: -0.02em;
 			}
+			.recap {
+				display: flex;
+				flex-direction: column;
+				gap: 3px;
+				margin-bottom: var(--s2);
+				padding: var(--s2);
+				font-size: var(--t-xs);
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+			}
+			.recap::before {
+				content: "내 플레이 복기";
+				font-weight: 800;
+				color: var(--accent);
+			}
 			.reveal {
 				display: flex;
 				flex-direction: column;
@@ -1098,7 +1123,7 @@ body {
 			}
 			.rev .seat {
 				flex: 0 0 auto;
-				width: 18px;
+				width: 30px;
 				font-weight: 800;
 				color: var(--ink-3);
 				text-align: right;
@@ -1165,6 +1190,7 @@ body {
 			</div>
 
 			<div class="body scroll" id="listbox">
+				<div class="recap" id="recap"></div>
 				<div class="reveal" id="reveal"></div>
 			</div>
 
@@ -1285,6 +1311,12 @@ const Parent = function() {
   if (layout.zIndex) message.zIndex = layout.zIndex;
   send(message);
  }
+ function openSignin() {
+  window.parent.postMessage({
+   type: "ScriptAction:OPEN_Signin_Modal",
+   zepSystem: true
+  }, "*");
+ }
  function editable(el) {
   if (!el || !el.tagName) return false;
   const tag = String(el.tagName).toUpperCase();
@@ -1323,6 +1355,7 @@ const Parent = function() {
   onKey: onKey,
   grabFocus: grabFocus,
   releaseFocus: releaseFocus,
+  openSignin: openSignin,
   store: store,
   canReadKeys: HostWindow !== null
  };
@@ -1334,8 +1367,9 @@ function revealHtml(p, i) {
  return html`<div
 					class="rev ${team}${p.alive ? "" : " gone"}"
 					style="animation-delay:${i * 60}ms"
+					aria-label="${p.num}번 ${p.name || ""}, ${p.role || ""}, ${p.alive ? "생존" : "사망"}"
 				>
-					<span class="seat">${p.num}</span>
+					<span class="seat">${p.num}번</span>
 					<span class="grow ellip">${p.name || ""}</span>
 					<span class="g" aria-hidden="true">${p.glyph || ""}</span>
 					<span class="job">${p.role || ""}</span>
@@ -1378,6 +1412,8 @@ Parent.on({
   qs("#note").textContent = data.team ? data.team === data.winner ? "당신의 팀이 이겼습니다" : "당신의 팀이 졌습니다" : "게임 종료";
   startTimer(qs("#timer"), data.timer);
   const players = Array.isArray(data.players) ? data.players : [];
+  const recap = Array.isArray(data.recap) ? data.recap.slice(0, 3) : [];
+  qs("#recap").innerHTML = html`${recap.map(line => html`<span>${line}</span>`)}`;
   qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
   paintCut();
   paintRematch(data.rematch);

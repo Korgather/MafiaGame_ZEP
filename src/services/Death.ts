@@ -16,6 +16,7 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import { Judgement, Role, Team } from "../types/Game.types.ts";
 import { Sound } from "../constants/Assets.ts";
 import { CONSOLATION_EXP } from "../domain/Progression.ts";
+import { rememberMatchMoment } from "../domain/MatchRecap.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { participantLabel, seatAt } from "../entities/Room.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
@@ -66,6 +67,7 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 	seat.attackedBy = [];
 	seat.healed = false;
 	seat.voteCount = 0;
+	rememberMatchMoment(seat, deathRecap(cause));
 
 	announce(room, seat, cause);
 	// 마담이 죽으면 그 밤의 유혹이 풀린다(클래식 규칙). 유혹은 누가 걸었는지를
@@ -104,6 +106,23 @@ export function kill(room: Room, seat: Seat, cause: DeathCause): void {
 	if (cause === DeathCause.EXECUTION) {
 		detonate(room, seat);
 		mourn(room, seat);
+	}
+}
+
+function deathRecap(cause: DeathCause): string {
+	switch (cause) {
+		case DeathCause.EXECUTION:
+			return "낮 투표로 처형되었습니다.";
+		case DeathCause.BACKFIRE:
+			return "밤 행동의 역효과로 사망했습니다.";
+		case DeathCause.SUICIDE_BOMB:
+			return "폭발에 휘말려 사망했습니다.";
+		case DeathCause.SACRIFICE:
+			return "연인을 잃고 뒤따랐습니다.";
+		case DeathCause.LOVER_SHIELD:
+			return "연인을 대신해 사망했습니다.";
+		default:
+			return "밤에 공격받아 사망했습니다.";
 	}
 }
 

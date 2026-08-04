@@ -19,6 +19,7 @@ import { Bgm, Sound } from "../constants/Assets.ts";
 import { inMafiaChat, NightActionKind, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { QUICK_NOTE } from "../domain/chat/QuickPhrases.ts";
+import { rememberMatchMoment } from "../domain/MatchRecap.ts";
 import {
 	hasExtraProbe,
 	hasNightTurn,
@@ -43,6 +44,7 @@ import { forEachPlayer, label, playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { DeathCause, kill, revive } from "./Death.ts";
+import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import * as Screen from "./Screen.ts";
 import { applyNightSprite, beginNightStage } from "./Stage.ts";
 import type { AllyPick, AllyPickPayload, PhasePayload } from "./Widgets.ts";
@@ -373,6 +375,8 @@ function bindNightWidget(widget: ScriptWidget): void {
 		}
 		label(sender, result.label, result.labelDurationMs);
 		if (result.confirmed) {
+			rememberMatchMoment(seat, `밤 행동: ${result.label}`);
+			trackDuringFirstGame(sender, FtueEvent.FIRST_NIGHT_ACTION_COMPLETED);
 			// again이 참이면 위젯이 격자를 잠그지 않고 한 칸을 더 받는다.
 			// 잠근 뒤에 여는 메시지를 따로 보내지 않는 이유는, 그 사이에 위젯이
 			// 한 번이라도 "끝났다"로 그려지면 스파이 화면이 깜빡이기 때문이다
@@ -426,6 +430,8 @@ function chooseNotePhrase(
 
 	seat.noteText = QUICK_NOTE[index];
 	seat.usedSkill = true;
+	rememberMatchMoment(seat, `밤 행동: ${target}번 참가자에게 쪽지를 보냈습니다.`);
+	trackDuringFirstGame(sender, FtueEvent.FIRST_NIGHT_ACTION_COMPLETED);
 
 	label(sender, `✉️ ${target}번에게 쪽지를 보냅니다.\n내일 아침에 도착합니다.`);
 	// 소리는 첫 클릭이 아니라 여기다. 쪽지만 지목을 두 번 받는데(대상 → 문구)

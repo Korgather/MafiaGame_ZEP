@@ -35,7 +35,7 @@ export function forEachPlayer(room: Room, fn: (player: ScriptPlayer, seat: Seat)
 }
 
 /**
- * 참가자 + 관전자. **채팅과 관전 화면 갱신에만 쓴다.**
+ * 참가자 + 관전자. 채팅·관전 화면과 방 전체에 걸리는 카메라/공격 상태에 쓴다.
  *
  * forEachPlayer를 넓히지 않은 이유가 이 파일에서 가장 중요하다. 그 함수는
  * 직업 카드 배포, 밤 화면 열기, 승리 화면, 실루엣 배치, 방 라벨, 효과음을

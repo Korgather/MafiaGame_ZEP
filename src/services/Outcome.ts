@@ -17,15 +17,17 @@ import { Sound } from "../constants/Assets.ts";
 import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { spend } from "../domain/RateLimit.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
+import { personalRecap } from "../domain/MatchRecap.ts";
 import { enterPhase, findSeat, revealViews } from "../entities/Room.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { messageType } from "../types/Widget.types.ts";
-import { forEachPlayer, playSound } from "./Broadcast.ts";
+import { forEachAudience, forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
 import { settleMatch } from "./Rewards.ts";
 import * as Screen from "./Screen.ts";
 import { clearSilhouettes } from "./Stage.ts";
+import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import type { RematchPayload } from "./Widgets.ts";
 import { bindMessage, closeCard, openGameOver, updateMain } from "./Widgets.ts";
 
@@ -63,6 +65,11 @@ export function finish(room: Room, winner: TeamType): void {
 	// 승리 소리보다 먼저 "끝났다"를 알리고, 넓어진 화면은 살아남은 사람과
 	// 쓰러진 사람이 한 화면에 들어오게 한다. 빈 문자열이 곧 "정지"다
 	Screen.setScene(room, Screen.Zoom.FINALE, "", Screen.Veil.NONE);
+	Screen.releaseRoomCamera(room);
+	forEachAudience(room, player => {
+		player.disableAttack = false;
+		player.sendUpdated();
+	});
 	playSound(room, winner === Team.MAFIA ? Sound.MAFIA_WIN : Sound.CITIZEN_WIN);
 	Chat.announce(room, "🔎 전원의 직업", roster(room));
 	// 방 밖에도 한 줄 흘린다. 로비에 선 사람이 어느 방이 곧 비는지 알 수 있는
@@ -78,6 +85,7 @@ export function finish(room: Room, winner: TeamType): void {
 	);
 
 	forEachPlayer(room, (player, seat) => {
+		trackDuringFirstGame(player, FtueEvent.FIRST_GAME_FINISHED);
 		openWinView(room, player, seat);
 		// 보상은 판당 한 번이다. 재접속으로 화면만 다시 열릴 때는 지급하지 않는다.
 		settleMatch(player, seat, winner);
@@ -120,6 +128,7 @@ function winReason(winner: TeamType): string {
  */
 export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	closeCard(player);
+	player.disableAttack = false;
 	player.hidden = false;
 	player.moveSpeed = 80;
 	player.sendUpdated();
@@ -132,6 +141,7 @@ export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		team: seat.team,
 		reason: winReason(winner),
 		players: revealViews(room),
+		recap: personalRecap(seat),
 		timer: room.phaseTimer,
 		rematch: rematchView(room, seat),
 	});
@@ -158,9 +168,15 @@ function wantRematch(room: Room, player: ScriptPlayer): void {
 	const seat = findSeat(room, player.id);
 	if (!seat || seat.rematch) return;
 	seat.rematch = true;
+	trackDuringFirstGame(player, FtueEvent.REMATCH_SELECTED);
 	// 분모와 분자가 함께 움직이므로 전원에게 다시 보낸다. mine이 사람마다
 	// 다른 값이라 방송이 아니라 각자에게 보내는 형태가 된다
-	forEachPlayer(room, (each, eachSeat) => updateMain(each, rematchView(room, eachSeat)));
+	broadcastRematchProgress(room);
+}
+
+/** 결과 화면에서 접속/이탈 또는 선택이 바뀐 직후 한 판 더 현황을 다시 계산한다. */
+export function broadcastRematchProgress(room: Room): void {
+	forEachPlayer(room, (player, seat) => updateMain(player, rematchView(room, seat)));
 }
 
 function rematchView(room: Room, seat: Seat): RematchPayload {

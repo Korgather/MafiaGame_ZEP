@@ -249,6 +249,8 @@ export interface Seat {
 	kickedBy: string[];
 	/** 현재 접속 중인가 */
 	connected: boolean;
+	/** 본인의 종료 화면에만 표시할 서버 확정 행동 기록 */
+	matchRecap: string[];
 
 	/*
 	 * ── 클래식 모드가 더한 상태 ──────────────────────────────────
@@ -645,6 +647,12 @@ export interface PlayerTag {
 	 * 접속 범위 플래그가 그 구멍을 막는다.
 	 */
 	guideSeen: boolean;
+	/** 이번 접속/계정에서 이미 보낸 FTUE 이벤트 비트 */
+	ftueEvents: number;
+	/** 기존 전적을 포함해 지금까지 시작한 판 수 */
+	playStarts: number;
+	/** 기존 사용자 오염 없이 이 접속을 FTUE 퍼널에 포함할 수 있는가 */
+	ftueEligible: boolean;
 	/**
 	 * 통합 채팅 위젯.
 	 *

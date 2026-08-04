@@ -17,6 +17,7 @@ import { Bgm, Sound } from "../constants/Assets.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { SKIP_VOTE, tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
+import { rememberMatchMoment } from "../domain/MatchRecap.ts";
 import { aliveSeats, enterPhase, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
@@ -24,6 +25,7 @@ import type { VoteProgressPayload } from "./Widgets.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
+import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import * as Screen from "./Screen.ts";
 import { beginDayStage } from "./Stage.ts";
 import {
@@ -378,12 +380,16 @@ function bindVoteWidget(widget: ScriptWidget): void {
 			voter.votedFor = target.index;
 			target.voteCount += voteWeight(voter);
 			label(sender, `${participantLabel(target)}에게 투표했습니다.`);
+			rememberMatchMoment(voter, `낮 투표: ${participantLabel(target)}`);
 		} else if (skip) {
 			voter.votedFor = SKIP_VOTE;
 			label(sender, "'투표 없음'을 골랐습니다.");
+			rememberMatchMoment(voter, "낮 투표: 투표 없음");
 		} else {
 			label(sender, "기권했습니다.");
+			rememberMatchMoment(voter, "낮 투표: 기권");
 		}
+		trackDuringFirstGame(sender, FtueEvent.FIRST_VOTE_COMPLETED);
 
 		broadcastVoteProgress(room);
 	});

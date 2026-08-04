@@ -201,6 +201,7 @@ export function restoreAppearance(room: Room, player: ScriptPlayer, seat: Seat):
 	applyNameplate(player, seat);
 	player.sprite = seat.alive ? basicSprite : sprite("ghost");
 	player.hidden = room.phase === GamePhase.NIGHT;
+	player.disableAttack = room.started && room.phase !== GamePhase.GAME_OVER;
 	player.sendUpdated();
 }
 
@@ -217,6 +218,7 @@ export function resetPlayerAppearance(player: ScriptPlayer): void {
 	player.attackSprite = DEFAULT_SPRITE;
 	player.moveSpeed = 80;
 	player.hidden = false;
+	player.disableAttack = false;
 	// sendUpdated는 이쪽이 먼저 부른다. resetView가 배율을 넣고 다시 한 번
 	// 보내므로 두 번 나가지만, 순서를 바꾸면 이 함수가 고친 값이 한 프레임
 	// 늦게 반영된다

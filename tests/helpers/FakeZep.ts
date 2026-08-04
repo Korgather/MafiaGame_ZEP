@@ -141,6 +141,12 @@ export interface Shake {
 	readonly power: number;
 }
 
+/** setCameraTarget 호출. null 좌표는 플레이어 자신에게 시점을 돌린 경우다. */
+export interface CameraShot {
+	readonly tileX: number | null;
+	readonly tileY: number | null;
+}
+
 /**
  * applyVignetteEffect 한 번의 기록.
  *
@@ -190,6 +196,7 @@ export class FakePlayer {
 	attackType = 0;
 	attackParam1 = 0;
 	attackParam2 = 0;
+	disableAttack = false;
 	displayRatio = 1;
 	/*
 	 * 서 있는 타일. 이름이 실제 ScriptPlayer와 같아야 한다 — 전에는 x/y였고,
@@ -207,6 +214,7 @@ export class FakePlayer {
 	readonly sounds: string[] = [];
 	readonly stoppedSounds: string[] = [];
 	readonly shakes: Shake[] = [];
+	readonly cameraShots: CameraShot[] = [];
 	readonly veils: Vignette[] = [];
 	saveCount = 0;
 	updatedCount = 0;
@@ -262,6 +270,16 @@ export class FakePlayer {
 		this.shakes.push({ ms: args[0] as number, power: args[1] as number });
 	}
 
+	setCameraTarget(...args: unknown[]): void {
+		checkCall("player.setCameraTarget", args, 1, 4);
+		if (typeof args[0] === "number") {
+			if (typeof args[1] !== "number") throw new Error("좌표 카메라에는 x와 y가 모두 필요합니다.");
+			this.cameraShots.push({ tileX: args[0], tileY: args[1] });
+			return;
+		}
+		this.cameraShots.push({ tileX: null, tileY: null });
+	}
+
 	applyVignetteEffect(...args: unknown[]): void {
 		checkCall("player.applyVignetteEffect", args, 2, 2);
 		const option = args[1] as VignetteArg;
@@ -304,6 +322,7 @@ export class FakePlayer {
 		this.sounds.length = 0;
 		this.stoppedSounds.length = 0;
 		this.shakes.length = 0;
+		this.cameraShots.length = 0;
 		this.veils.length = 0;
 	}
 }
@@ -340,6 +359,8 @@ export const world = {
 	tiles: {} as { [layerAndPosition: string]: number },
 	spriteLoads: [] as SpriteLoad[],
 	httpPosts: [] as HttpPost[],
+	/** httpPostJson이 요청 시작을 받아들이는가 */
+	httpPostAccepted: true,
 	/**
 	 * 스태프에게만 보인 알림 (infrastructure/Fault).
 	 *
@@ -361,6 +382,8 @@ export const world = {
 		objectTouched: new Hook<[FakePlayer, number, number, number, { param1: string }]>(),
 		/** 아바타 클릭. (누른 사람, 눌린 사람) */
 		unitClicked: new Hook<[FakePlayer, FakePlayer]>(),
+		/** 닉네임 변경. (플레이어, 이전 이름) */
+		nameChanged: new Hook<[FakePlayer, string]>(),
 	},
 };
 
@@ -400,10 +423,12 @@ const fakeScriptApp = {
 		return load;
 	},
 
-	httpPostJson(...args: unknown[]): void {
+	httpPostJson(...args: unknown[]): boolean {
 		checkCall("ScriptApp.httpPostJson", args, 4, 4);
+		if (!world.httpPostAccepted) return false;
 		world.httpPosts.push({ url: args[0] as string, body: args[2] });
 		(args[3] as (response: string) => void)("{}");
+		return true;
 	},
 
 	sayToStaffs(...args: unknown[]): void {
@@ -422,6 +447,7 @@ const fakeScriptApp = {
 	onUpdate: world.hooks.update,
 	onObjectTouched: world.hooks.objectTouched,
 	onUnitClicked: world.hooks.unitClicked,
+	onPlayerNameChanged: world.hooks.nameChanged,
 };
 
 /**

@@ -58,6 +58,7 @@ export function resetWorld(seed = 1): void {
 	resetGlobalLog();
 	world.players.length = 0;
 	world.httpPosts.length = 0;
+	world.httpPostAccepted = true;
 	world.staffSays.length = 0;
 	for (const key of Object.keys(world.mapObjects)) delete world.mapObjects[key];
 	// 칠한 프라이빗 영역도 테스트마다 지운다. 남으면 영역을 칠하지 않은
@@ -130,6 +131,13 @@ export function leaveWhileStillListed(player: FakePlayer): void {
 export function reconnect(player: FakePlayer): void {
 	world.players.push(player);
 	world.hooks.join.emit(player);
+}
+
+/** 닉네임을 바꾸고 ZEP의 onPlayerNameChanged 이벤트를 발생시킨다. */
+export function changeName(player: FakePlayer, name: string): void {
+	const oldName = player.name;
+	player.name = name;
+	world.hooks.nameChanged.emit(player, oldName);
 }
 
 /** dt초만큼 시간이 흐른다. ZEP의 onUpdate가 실제로 발생한다 */

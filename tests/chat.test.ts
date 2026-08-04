@@ -38,6 +38,7 @@ import {
 	chatLines,
 	chatPrefill,
 	chatSaw,
+	chatWidget,
 	clearTile,
 	clickUnit,
 	connect,
@@ -244,6 +245,28 @@ describe("채널 권한 표", () => {
 	});
 });
 
+describe("게스트 채팅", () => {
+	it("입력기는 읽기 전용이고 조작된 발언도 서버가 버린다", () => {
+		const guest = connect("게스트", { isGuest: true });
+		const listener = connect("로그인 사용자");
+		const guestInit = chatWidget(guest).lastOfType("init");
+		const listenerInit = chatWidget(listener).lastOfType("init");
+
+		assert.equal(guestInit?.inputDisabled, true);
+		assert.equal(listenerInit?.inputDisabled, false);
+		assert.ok(
+			(guestInit?.channels as Array<{ write: boolean }>).every(channel => channel.write === false),
+			"게스트에게 쓰기 가능한 채팅 탭이 보입니다"
+		);
+
+		sendChat(guest, { type: "send", channel: ChatChannel.GLOBAL, text: "우회 발언" });
+
+		assert.equal(chatSaw(listener, "우회 발언"), false);
+		assert.equal(spokenAloud(guest).some(line => line.text === "우회 발언"), false);
+		assert.ok(guest.labels.some(text => text.indexOf("로그인 후 채팅") >= 0));
+	});
+});
+
 describe("채널 격리", () => {
 	it("밤 안내는 전체가 아니라 방 탭에 온다", () => {
 		startPlainGame(MIN_PLAYERS);
@@ -330,6 +353,12 @@ describe("채널 격리", () => {
 		assert.ok(chatSaw(ghost, "죽인 건 1번입니다"));
 		assert.equal(chatSaw(doctor, "죽인 건 1번입니다"), false, "유령의 말이 산 사람에게 샜습니다");
 		assert.equal(chatSaw(mafia, "죽인 건 1번입니다"), false);
+		const ghostLine = chatLines(ghost, ChatChannel.GHOST).find(
+			line => line.text === "죽인 건 1번입니다"
+		);
+		assert.ok(ghostLine);
+		assert.equal(ghostLine.role, "", "유령 채팅에서 직업이 공개됐습니다");
+		assert.equal(ghostLine.team, "", "유령 채팅에서 진영이 공개됐습니다");
 	});
 
 	it("죽은 사람도 낮 토론은 계속 본다", () => {

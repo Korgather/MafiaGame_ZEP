@@ -13,6 +13,7 @@ import type { PlayerTag } from "../types/Game.types.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { newBucket } from "../domain/RateLimit.ts";
 import { ACTION_RATE, CHAT_RATE } from "../constants/GameConfig.ts";
+import * as Storage from "./PlayerStorage.ts";
 
 export function tagOf(player: ScriptPlayer): PlayerTag {
 	const existing = player.tag as PlayerTag | undefined | null;
@@ -21,6 +22,7 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 	if (existing && typeof existing === "object" && "chatRate" in existing) {
 		return existing;
 	}
+	const storage = Storage.read(player);
 	const created: PlayerTag = {
 		widget: null,
 		mainBox: null,
@@ -29,6 +31,9 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 		cutWidget: null,
 		profileWidget: null,
 		guideSeen: false,
+		ftueEvents: storage.ftueEvents || 0,
+		playStarts: Storage.priorPlayStarts(storage),
+		ftueEligible: !Storage.hasPriorGame(storage) || (storage.ftueEvents || 0) !== 0,
 		chatWidget: null,
 		/*
 		 * 데스크톱은 펼친 채로 시작한다. 채팅이 있다는 사실 자체를 모르고

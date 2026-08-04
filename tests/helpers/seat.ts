@@ -45,5 +45,6 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		kickedBy: [],
 		connected: true,
 		...overrides,
+		matchRecap: overrides.matchRecap || [],
 	};
 }
