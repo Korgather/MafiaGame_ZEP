@@ -96,6 +96,42 @@ const Parent = (function () {
 	// ────────────────────────────────────────────── 2. ZEP 클라이언트에게
 
 	/**
+	 * 폰을 가로로 들었는가. 서버는 방향을 모르므로 여기서만 판단한다.
+	 * iOS는 screen.width가 돌지 않아 window.orientation을 먼저 본다.
+	 */
+	function isLandscape() {
+		const o = window.screen && window.screen.orientation;
+		if (o && o.type) return o.type.indexOf("landscape") === 0;
+		if (typeof window.orientation === "number") return Math.abs(window.orientation) === 90;
+		return window.screen.width > window.screen.height;
+	}
+
+	/**
+	 * 폰 가로: 세로 기준 %를 그대로 쓰면 96% 폭 × 180px 띠가 된다.
+	 * PC와 같은 배치로 바꾼다 — 메인은 오른쪽 위, 채팅은 왼쪽 아래에 반폭씩
+	 * 서서 서로 겹치지 않으므로 높이를 1.8배(최대 86%)까지 키운다.
+	 * 태블릿(60%)과 화면을 덮는 위젯(100%)은 건드리지 않는다.
+	 */
+	function landscapeLayout(layout) {
+		if (layout.width !== "96%" || !isLandscape()) return layout;
+		const pct = parseFloat(layout.height);
+		const out = { ...layout, width: "46%" };
+		if (pct > 0 && String(layout.height).slice(-1) === "%")
+			out.height = `${Math.min(Math.round(pct * 1.8), 86)}%`;
+		if (layout.anchor === "top") out.anchor = "topright";
+		else if (layout.anchor === "bottom") out.anchor = "bottomleft";
+		return out;
+	}
+
+	let lastLayout = null;
+	const relayout = () => lastLayout && applyLayout(lastLayout);
+	if (window.screen && window.screen.orientation && window.screen.orientation.addEventListener) {
+		window.screen.orientation.addEventListener("change", relayout);
+	} else {
+		window.addEventListener("orientationchange", relayout);
+	}
+
+	/**
 	 * 위젯이 차지할 상자를 ZEP 클라이언트에게 알린다.
 	 * 서버가 아니라 클라이언트가 읽고 처리하는 메시지다.
 	 *
@@ -107,11 +143,13 @@ const Parent = (function () {
 	 * 아예 부르지 않았다 — 모바일 보정이 통째로 빠진 화면이 둘 있었다.
 	 *
 	 * 지금은 서버(Widgets.ts의 layoutOf)가 한 곳에서 정해 payload에 실어
-	 * 보내고, 여기서는 받은 대로 넘기기만 한다. 기기 판정도 서버가 한다
+	 * 보내고, 여기서는 받은 대로 넘긴다 — 폰 가로만 landscapeLayout이 고친다. 기기 판정도 서버가 한다
 	 * (player.isMobile / isTablet) — window.screen.width로 태블릿을
 	 * 넘겨짚을 이유가 없어졌다.
 	 */
-	function applyLayout(layout) {
+	function applyLayout(raw) {
+		lastLayout = raw;
+		const layout = landscapeLayout(raw);
 		const message = {
 			type: "WidgetRearrange",
 			anchor: layout.anchor,
