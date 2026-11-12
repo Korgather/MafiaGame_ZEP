@@ -22,7 +22,7 @@ import { participantLabel, seatAt } from "../entities/Room.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
 import { playSound, playSoundTo } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
-import { awardExp } from "./Rewards.ts";
+import { awardExp, lastWordOf } from "./Rewards.ts";
 import * as Screen from "./Screen.ts";
 import { applyNameplate, restoreAppearance, seatPlayer } from "./Stage.ts";
 
@@ -183,6 +183,7 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 				? `☠️ ${name}가 처형당했습니다. 그는 마피아 팀이었습니다!`
 				: `☠️ ${name}가 처형당했습니다. 그는 마피아 팀이 아니었습니다.`
 		);
+		announceLastWord(room, seat, name);
 		return;
 	}
 	// 아침 화면이 그대로 읽는다. 채팅으로만 흘리면 토론에 밀려 사라진다.
@@ -204,6 +205,20 @@ function announce(room: Room, seat: Seat, cause: DeathCause): void {
 					: `☠️ ${name}가 죽었습니다.`;
 	room.nightReport.push(line);
 	Chat.announce(room, line);
+	announceLastWord(room, seat, name);
+}
+
+/**
+ * 상점에서 산 유언을 죽는 순간 한 줄 흘린다.
+ *
+ * 정해진 문구만 있다(domain/Economy.ts). 직접 쓰게 하면 죽은 사람이
+ * 그 한 줄로 직업을 말할 수 있다. 채팅에만 싣고 nightReport에는 넣지 않는다 —
+ * 그쪽은 "누가 죽었는가"를 세는 곳이라 꾸밈 줄이 섞이면 아침 화면이 흐려진다.
+ */
+function announceLastWord(room: Room, seat: Seat, name: string): void {
+	const player = ScriptApp.getPlayerByID(seat.playerId);
+	const word = player ? lastWordOf(player) : "";
+	if (word) Chat.announce(room, `🕯️ ${name}의 유언 — "${word}"`);
 }
 
 /**

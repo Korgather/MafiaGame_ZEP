@@ -19,6 +19,7 @@ export function seat(index: number, role: Role, overrides: Partial<Seat> = {}): 
 		alive: true,
 		ready: false,
 		rematch: false,
+		praised: false,
 		votedFor: 0,
 		voteCount: 0,
 		judgement: Judgement.NONE,

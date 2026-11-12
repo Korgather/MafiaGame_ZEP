@@ -27,11 +27,16 @@
 import type { ScriptPlayer } from "zep-script";
 import type { ProfileStat } from "../types/Widget.types.ts";
 import { messageType } from "../types/Widget.types.ts";
+import { ACTION_RATE } from "../constants/GameConfig.ts";
+import { SHOP, useItem } from "../domain/Economy.ts";
+import { spend } from "../domain/RateLimit.ts";
+import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { locate, locateSpectator } from "../entities/RoomRegistry.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import * as Chat from "./ChatService.ts";
 import { rankOf } from "./Rewards.ts";
-import type { ProfilePayload } from "./Widgets.ts";
+import { applyNameplate } from "./Stage.ts";
+import type { ProfilePayload, ShopPayload } from "./Widgets.ts";
 import { bindMessage, closeProfile, openProfile } from "./Widgets.ts";
 
 /**
@@ -63,6 +68,7 @@ export function showProfile(clicker: ScriptPlayer, target: ScriptPlayer): void {
 		where: whereOf(target),
 		stats: statsOf(target),
 		self: clicker.id === target.id,
+		shop: clicker.id === target.id && !clicker.isGuest ? shopOf(clicker) : undefined,
 		// 자기 자신에게는 보낼 수 없다(ChatCommands가 거절한다). 눌러 봐야
 		// 거절만 돌아오는 버튼은 그리지 않는다
 		canWhisper: clicker.id !== target.id && Chat.canWhisper(clicker),
@@ -77,8 +83,53 @@ export function showProfile(clicker: ScriptPlayer, target: ScriptPlayer): void {
 	);
 }
 
+/** 상점 진열. 잔액과 물건마다 보유·장착 여부 */
+function shopOf(player: ScriptPlayer): ShopPayload {
+	const storage = Storage.read(player);
+	const owned = storage.owned || [];
+	return {
+		type: "shop",
+		coin: storage.coin || 0,
+		items: SHOP.map(item => ({
+			...item,
+			owned: owned.indexOf(item.id) >= 0,
+			on: storage.title === item.id || storage.lastWord === item.id,
+		})),
+	};
+}
+
+/**
+ * 상점 물건을 눌렀다 — 없으면 사고, 있으면 장착/해제한다(Economy.useItem).
+ *
+ * 프로필을 여는 것과 달리 이쪽은 연타 관문을 지난다. 누를 때마다 저장소에
+ * 쓰기 때문이다.
+ */
+function pressItem(player: ScriptPlayer, id: unknown): void {
+	if (player.isGuest || typeof id !== "string") return;
+	// 판이 도는 동안에는 바꿀 수 없다. 대기실에서 열어 둔 프로필이 시작 뒤에도
+	// 남아 있어서, 밤마다 유언을 갈아 끼우면 죽는 순간 그 문구가 암호가 된다
+	const seated = locate(player.id);
+	if (seated && seated.room.started) return;
+	if (!spend(tagOf(player).actionRate, ACTION_RATE, Time.getUtcTime())) return;
+	Storage.update(player, storage => {
+		useItem(storage, id);
+	});
+	// 판 밖에 서 있으면 머리 위 등급 줄에 칭호가 바로 붙는다. 방 안에서는
+	// 다음에 이름표가 다시 그려질 때 반영된다
+	if (!locate(player.id) && !locateSpectator(player.id)) {
+		applyNameplate(player, null);
+		player.sendUpdated();
+	}
+	const widget = tagOf(player).profileWidget;
+	if (widget) widget.sendMessage(shopOf(player));
+}
+
 function handleMessage(player: ScriptPlayer, target: ScriptPlayer, data: unknown): void {
 	switch (messageType(data)) {
+		case "item":
+			// 남의 프로필에는 상점이 없다. 그래도 메시지는 올 수 있으므로 막는다
+			if (player.id === target.id) pressItem(player, (data as { id?: unknown }).id);
+			break;
 		case "close":
 			closeProfile(player);
 			break;
@@ -133,5 +184,6 @@ function statsOf(target: ScriptPlayer): ProfileStat[] {
 		{ label: "시민", value: `${storage.citizenWin || 0}승 ${storage.citizenLose || 0}패` },
 		{ label: "참가", value: `${storage.playCount || 0}판` },
 		{ label: "중도 이탈", value: `${storage.runCount || 0}판` },
+		{ label: "칭찬", value: `${storage.praise || 0}회` },
 	];
 }

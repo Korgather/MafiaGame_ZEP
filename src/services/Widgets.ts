@@ -419,6 +419,29 @@ export interface GameOverPayload {
 	timer: number;
 	/** 같은 방에서 한 판 더 — 현재 상태 */
 	rematch: RematchPayload;
+	/** 보는 사람의 좌석 번호. 자기 줄에는 칭찬 버튼을 그리지 않는다 */
+	me: number;
+	/** 이번 판의 칭찬을 이미 썼는가 (재접속으로 화면이 다시 열릴 때) */
+	praised: boolean;
+}
+
+/** 상점 물건 한 줄. 살 수 있는지는 위젯이 coin과 price로 판단한다 */
+export interface ShopItemView {
+	id: string;
+	/** "title" | "lastWord" (domain/Economy.ts) */
+	kind: string;
+	name: string;
+	price: number;
+	owned: boolean;
+	/** 지금 장착 중인가 */
+	on: boolean;
+}
+
+/** 내 프로필의 상점. 사고 장착할 때마다 이 조각만 다시 보낸다 */
+export interface ShopPayload {
+	type: "shop";
+	coin: number;
+	items: ShopItemView[];
 }
 
 /**
@@ -644,6 +667,8 @@ export interface ProfilePayload {
 	stats: ProfileStat[];
 	/** 자기 자신을 클릭했는가. 머리말이 갈린다 */
 	self: boolean;
+	/** 상점. 로그인한 본인의 프로필에만 실린다 */
+	shop?: ShopPayload;
 	/**
 	 * 귓속말 버튼을 내밀어도 되는가.
 	 *

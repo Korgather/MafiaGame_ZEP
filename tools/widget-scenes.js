@@ -1807,8 +1807,9 @@ const SCENES = [
 	 * 것이 기본값이라 그 셋만으로는 "영영 뜨지 않는 버튼"이 통과한다.
 	 *
 	 * .hidden을 세는 이유: 이 화면에서 감춰져야 하는 것은 아바타 그림
-	 * 하나뿐이다(avatar가 ""이라 글리프로 그린다). 둘이 나오면 귓속말
-	 * 버튼이 함께 숨은 것이고, 그것이 이 장면이 잡으려는 것 전부다.
+	 * (avatar가 ""이라 글리프로 그린다)과 상점(남의 프로필에는 없다)
+	 * 둘뿐이다. 셋이 나오면 귓속말 버튼이 함께 숨은 것이고, 그것이 이
+	 * 장면이 잡으려는 것 전부다.
 	 */
 	{
 		label: "프로필 — 귓속말을 걸 수 있는 사람",
@@ -1831,7 +1832,37 @@ const SCENES = [
 				canWhisper: true,
 			},
 		],
-		expect: { ".stat": 4, ".hidden": 1 },
+		expect: { ".stat": 4, ".hidden": 2 },
+	},
+	/*
+	 * 내 프로필의 상점. 가진 것 · 살 수 있는 것 · 돈이 모자란 것이 한 줄씩이다.
+	 * 꺼진 버튼이 하나여야 한다 — 가진 물건은 잔액과 무관하게 눌린다.
+	 */
+	{
+		label: "프로필 — 내 상점",
+		file: "profile.html",
+		size: PROFILE_SIZE,
+		messages: [
+			{
+				type: "init",
+				name: "김철수",
+				rank: "Lv.3 · 명탐정",
+				avatar: "",
+				where: "대기실",
+				stats: [{ label: "참가", value: "6판" }],
+				self: true,
+				shop: {
+					type: "shop",
+					coin: 40,
+					items: [
+						{ id: "t_detective", kind: "title", name: "명탐정", price: 100, owned: true, on: true },
+						{ id: "w_watch", kind: "lastWord", name: "끝까지 지켜보겠습니다.", price: 30, owned: false, on: false },
+						{ id: "t_legend", kind: "title", name: "전설", price: 1000, owned: false, on: false },
+					],
+				},
+			},
+		],
+		expect: { ".item": 3, ".item.on": 1 },
 	},
 ];
 

@@ -154,6 +154,8 @@ export interface Seat {
 	 * 건드리게 된다.
 	 */
 	rematch: boolean;
+	/** 이번 판 종료 화면에서 칭찬을 이미 썼는가. 한 판에 한 번이다 */
+	praised: boolean;
 	/**
 	 * 이번 투표에서 찍은 대상의 참가 번호. 0이면 아직 안 찍었다.
 	 *

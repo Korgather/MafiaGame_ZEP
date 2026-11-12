@@ -79,6 +79,7 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		alive: false,
 		ready: false,
 		rematch: false,
+		praised: false,
 		votedFor: 0,
 		voteCount: 0,
 		judgement: Judgement.NONE,

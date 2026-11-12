@@ -16,6 +16,13 @@
 import type { ScriptPlayer } from "zep-script";
 import type { Seat, Team } from "../types/Game.types.ts";
 import { ADMIN_ROLE_LEVEL } from "../constants/GameConfig.ts";
+import {
+	coinReward,
+	dayOf,
+	equippedName,
+	FIRST_GAME_BONUS,
+	PRAISE_COIN,
+} from "../domain/Economy.ts";
 import { expReward, levelFromExp, recordKey } from "../domain/Progression.ts";
 import * as Storage from "../infrastructure/PlayerStorage.ts";
 import { label } from "./Broadcast.ts";
@@ -34,7 +41,28 @@ const ADMIN_RANK = "운영자";
 export function rankOf(player: ScriptPlayer): string {
 	if (player.role >= ADMIN_ROLE_LEVEL) return ADMIN_RANK;
 	if (player.isGuest) return GUEST_RANK;
-	return `Lv.${levelFromExp(Storage.read(player).exp)}`;
+	const storage = Storage.read(player);
+	const level = `Lv.${levelFromExp(storage.exp)}`;
+	// 칭호는 상점에서 산 꾸밈이다. 레벨 뒤에 붙여 등급 한 줄을 유지한다
+	const title = equippedName(storage, "title");
+	return title ? `${level} · ${title}` : level;
+}
+
+/** 장착한 유언. 없거나 게스트면 빈 문자열 */
+export function lastWordOf(player: ScriptPlayer): string {
+	return player.isGuest ? "" : equippedName(Storage.read(player), "lastWord");
+}
+
+/** 종료 화면에서 칭찬을 받았다. 게스트는 저장이 없어 알림만 받는다 */
+export function praise(player: ScriptPlayer): void {
+	Storage.update(player, storage => {
+		storage.praise = (storage.praise || 0) + 1;
+		storage.coin = (storage.coin || 0) + PRAISE_COIN;
+	});
+	label(
+		player,
+		player.isGuest ? "👍 칭찬을 받았습니다" : `👍 칭찬을 받았습니다 · 코인 ${PRAISE_COIN} 획득`
+	);
 }
 
 export function awardExp(player: ScriptPlayer, amount: number): void {
@@ -45,17 +73,28 @@ export function awardExp(player: ScriptPlayer, amount: number): void {
 	label(player, `경험치 ${amount} 획득`);
 }
 
-/** 게임 종료 보상: 경험치 + 승패 전적을 한 번에 반영한다 */
+/** 게임 종료 보상: 경험치 + 코인 + 승패 전적을 한 번에 반영한다 */
 export function settleMatch(player: ScriptPlayer, seat: Seat, winner: Team): void {
 	const amount = expReward(winner, seat);
 	if (player.isGuest) return;
 
 	const key = recordKey(winner, seat);
+	const today = dayOf(Time.getUtcTime());
+	let coin = coinReward(winner, seat);
+	let first = false;
 	Storage.update(player, storage => {
 		storage.exp += amount;
 		storage[key] = (storage[key] || 0) + 1;
+		// 하루의 첫 판은 더 준다. 매일 한 판이라도 하러 올 이유다
+		first = storage.lastDay !== today;
+		if (first) coin += FIRST_GAME_BONUS;
+		storage.lastDay = today;
+		storage.coin = (storage.coin || 0) + coin;
 	});
-	label(player, `경험치 ${amount} 획득`);
+	label(
+		player,
+		`경험치 ${amount} · 코인 ${coin} 획득${first ? " (오늘의 첫 판 보너스)" : ""}`
+	);
 }
 
 /** 게임을 한 판 시작했음을 기록한다 */

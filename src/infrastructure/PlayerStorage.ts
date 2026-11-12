@@ -31,6 +31,18 @@ export interface PlayerStorage {
 	citizenLose?: number;
 	/** 이미 전송한 FTUE 이벤트 비트. 개인 정보나 이벤트 본문은 저장하지 않는다. */
 	ftueEvents?: number;
+	/** 코인 잔액 (domain/Economy.ts). 판을 하면 쌓이고 상점에서 쓴다 */
+	coin?: number;
+	/** 받은 칭찬 수 */
+	praise?: number;
+	/** 마지막으로 정산받은 날(KST 일 번호). 오늘의 첫 판 보너스를 가린다 */
+	lastDay?: number;
+	/** 산 상점 물건의 id */
+	owned?: string[];
+	/** 장착한 칭호의 id */
+	title?: string;
+	/** 장착한 유언의 id */
+	lastWord?: string;
 }
 
 /** playCount가 생기기 전 전적도 기존 사용자로 판별한다. */
@@ -66,6 +78,16 @@ export function read(player: ScriptPlayer): PlayerStorage {
 			citizenWin: parsed.citizenWin,
 			citizenLose: parsed.citizenLose,
 			ftueEvents: parsed.ftueEvents,
+			// 숫자가 아닌 값이 들어 있으면 가격 비교가 전부 거짓이 되어 공짜로 팔린다
+			coin: typeof parsed.coin === "number" ? parsed.coin : undefined,
+			praise: typeof parsed.praise === "number" ? parsed.praise : undefined,
+			lastDay: typeof parsed.lastDay === "number" ? parsed.lastDay : undefined,
+			// 배열이 아닌 값이 들어 있으면 상점의 indexOf가 예외를 던진다
+			owned: Array.isArray(parsed.owned)
+				? parsed.owned.filter(id => typeof id === "string")
+				: undefined,
+			title: parsed.title,
+			lastWord: parsed.lastWord,
 		};
 	} catch (e) {
 		// 깨진 저장소는 초기값으로 취급한다. 한 명 때문에 게임이 멈추는 것보다 낫다.

@@ -106,6 +106,67 @@
 				word-break: keep-all;
 				font-variant-numeric: tabular-nums;
 			}
+
+			/* ---------- 상점 (내 프로필에만) ---------- */
+			.shop {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s1);
+				margin-top: var(--s3);
+			}
+
+			.shop-hd {
+				display: flex;
+				justify-content: space-between;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				color: var(--ink-3);
+			}
+
+			/*
+			 * 물건 한 줄이 곧 버튼이다. 없으면 사고, 있으면 장착/해제한다 —
+			 * 무엇이 일어날지는 오른쪽 글자가 말한다.
+			 */
+			.item {
+				display: flex;
+				align-items: baseline;
+				justify-content: space-between;
+				gap: var(--s3);
+				width: 100%;
+				padding: var(--s2) var(--s3);
+				font: inherit;
+				font-size: var(--t-sm);
+				color: inherit;
+				text-align: left;
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				cursor: pointer;
+			}
+			.item:hover:not(:disabled) {
+				border-color: var(--accent);
+			}
+			.item:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+			}
+			.item:disabled {
+				opacity: 0.5;
+				cursor: default;
+			}
+			.item.on {
+				border-color: var(--accent);
+			}
+			.item .k {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+			}
+			.item .act {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				font-weight: 700;
+			}
 		</style>
 	</head>
 	<body>
@@ -132,7 +193,13 @@
 					</div>
 				</div>
 
-				<div class="stats scroll" id="stats"></div>
+				<div class="scroll">
+					<div class="stats" id="stats"></div>
+					<div class="shop hidden" id="shop">
+						<div class="shop-hd"><span>상점</span><span id="coin"></span></div>
+						<div class="stats" id="items"></div>
+					</div>
+				</div>
 			</div>
 
 			<div class="foot">
@@ -184,8 +251,46 @@
 				Parent.send({ type: "whisper" });
 			});
 
+			/**
+			 * 상점을 그린다. 사고 장착할 때마다 서버가 이 조각만 다시 보낸다.
+			 * 살 수 있는지(잔액)와 성공 여부는 서버가 정한다 — 여기서는 돈이
+			 * 모자란 버튼을 미리 꺼 둘 뿐이다.
+			 */
+			function paintShop(shop) {
+				qs("#shop").classList.toggle("hidden", !shop);
+				if (!shop) return;
+				const coin = Number(shop.coin) || 0;
+				qs("#coin").textContent = `🪙 ${coin} 코인`;
+				const items = Array.isArray(shop.items) ? shop.items : [];
+				qs("#items").innerHTML = html`${items.map(
+					item =>
+						html`<button
+							type="button"
+							class="item${item.on ? " on" : ""}"
+							data-id="${item.id}"
+							${flag(!item.owned && coin < item.price, "disabled")}
+						>
+							<span class="k">${item.kind === "title" ? "칭호" : "유언"}</span>
+							<span class="grow">${item.name}</span>
+							<span class="act"
+								>${item.on ? "사용 중 · 해제" : item.owned ? "장착" : `${item.price} 코인`}</span
+							>
+						</button>`
+				)}`;
+			}
+
+			qs("#items").addEventListener("click", event => {
+				const button = event.target.closest(".item");
+				if (button) Parent.send({ type: "item", id: button.dataset.id });
+			});
+
 			Parent.on({
+				shop(data) {
+					paintShop(data);
+				},
+
 				init(data) {
+					paintShop(data.shop);
 					// 자기 자신을 클릭하는 일이 실제로 흔하다(아바타가 겹쳐 있을 때).
 					// 머리말이 갈리지 않으면 남의 전적을 자기 것으로 읽는다
 					qs("#heading").textContent = data.self ? "내 프로필" : "프로필";

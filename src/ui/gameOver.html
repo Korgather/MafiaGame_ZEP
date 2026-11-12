@@ -115,6 +115,33 @@
 				animation: slide 320ms var(--ease) backwards;
 			}
 
+			/* 칭찬 버튼. 한 판에 한 번이라 쓰고 나면 전부 꺼진다 */
+			.rev .praise {
+				flex: 0 0 auto;
+				padding: 0 var(--s2);
+				font: inherit;
+				line-height: 1.6;
+				background: transparent;
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				cursor: pointer;
+			}
+			.rev .praise:hover:not(:disabled) {
+				border-color: var(--accent);
+			}
+			.rev .praise:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+			}
+			.rev .praise:disabled {
+				opacity: 0.35;
+				cursor: default;
+			}
+			.rev .praise.sent {
+				opacity: 1;
+				border-color: var(--accent);
+			}
+
 			.rev.mafia {
 				border-left-color: var(--mafia);
 			}
@@ -255,6 +282,24 @@
 
 		<!--@shared-->
 		<script>
+			/** 내 좌석 번호. 자기 줄에는 칭찬 버튼이 없다 */
+			let me = 0;
+
+			/** 칭찬은 한 판에 한 번이다. 쓰고 나면 전부 끄고, 고른 줄만 남긴다 */
+			function paintPraised(num) {
+				qsa(".praise").forEach(button => {
+					button.disabled = true;
+					button.classList.toggle("sent", Number(button.dataset.num) === num);
+				});
+			}
+
+			qs("#reveal").addEventListener("click", event => {
+				const button = event.target.closest(".praise");
+				// 꺼지는 것은 서버의 praised 답이 온 뒤다. 상대가 이미 나갔으면
+				// 답이 오지 않고, 그때는 다른 사람을 고를 수 있어야 한다
+				if (button) Parent.send({ type: "praise", num: Number(button.dataset.num) });
+			});
+
 			/** 정체 한 줄. 순서대로 조금씩 늦게 나타나 한 명씩 밝혀지는 것처럼 보인다 */
 			function revealHtml(p, i) {
 				const team = p.team === "mafia" ? "mafia" : "citizen";
@@ -268,6 +313,16 @@
 					<span class="g" aria-hidden="true">${glyphHtml(p.glyph)}</span>
 					<span class="job">${p.role || ""}</span>
 					<span class="fate${p.alive ? " alive" : ""}">${p.alive ? "생존" : "사망"}</span>
+					${p.num === me
+						? ""
+						: html`<button
+								type="button"
+								class="praise"
+								data-num="${p.num}"
+								aria-label="${p.num}번 ${p.name || ""} 칭찬하기"
+							>
+								👍
+							</button>`}
 				</div>`;
 			}
 
@@ -333,6 +388,7 @@
 
 					startTimer(qs("#timer"), data.timer);
 
+					me = Number(data.me) || 0;
 					const players = Array.isArray(data.players) ? data.players : [];
 					const recap = Array.isArray(data.recap) ? data.recap.slice(0, 3) : [];
 					qs("#recap").innerHTML = html`${recap.map(line => html`<span>${line}</span>`)}`;
@@ -340,8 +396,13 @@
 					// 목록을 그린 직후에만 잰다. 이 화면에서 상자 높이가 바뀌는
 					// 다른 경로는 없다 — 아래 rematch 조각은 버튼 안의 글자만 바꾼다
 					paintCut();
+					if (data.praised === true) paintPraised(0);
 
 					paintRematch(data.rematch);
+				},
+
+				praised(data) {
+					paintPraised(Number(data.num) || 0);
 				},
 
 				// 키를 따옴표로 감쌀 필요는 없지만 이름은 메시지 타입과 글자

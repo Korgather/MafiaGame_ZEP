@@ -18,13 +18,13 @@ import type { MessageRow } from "../domain/chat/ChatMessage.ts";
 import { spend } from "../domain/RateLimit.ts";
 import { evaluateWinner } from "../domain/WinCondition.ts";
 import { personalRecap } from "../domain/MatchRecap.ts";
-import { enterPhase, findSeat, revealViews } from "../entities/Room.ts";
+import { enterPhase, findSeat, revealViews, seatAt } from "../entities/Room.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { messageType } from "../types/Widget.types.ts";
 import { forEachAudience, forEachPlayer, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { playCut } from "./Cut.ts";
-import { settleMatch } from "./Rewards.ts";
+import { praise as grantPraise, settleMatch } from "./Rewards.ts";
 import * as Screen from "./Screen.ts";
 import { clearSilhouettes } from "./Stage.ts";
 import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
@@ -144,17 +144,44 @@ export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		recap: personalRecap(seat),
 		timer: room.phaseTimer,
 		rematch: rematchView(room, seat),
+		me: seat.index,
+		// 게스트는 칭찬을 줄 수 없다(아래 praise) — 처음부터 쓴 것으로 그린다
+		praised: seat.praised || player.isGuest,
 	});
 
 	// 받는 것은 "again", 되보내는 것은 "rematch"다. 한 이름을 쓰면 서버가
 	// 방금 뿌린 현황이 위젯을 거쳐 다시 서버로 오는 모양과 구분되지 않는다
 	bindMessage(widget, "rematch", (sender, data) => {
-		if (messageType(data) !== "again") return;
+		const type = messageType(data);
+		if (type !== "again" && type !== "praise") return;
 		// 대기실 위젯의 갈래들과 같은 관문을 지난다. 이 버튼 한 번이
 		// 방 전원에게 메시지를 뿌리므로 연타를 막아야 하는 쪽이다
 		if (!spend(tagOf(sender).actionRate, ACTION_RATE, Time.getUtcTime())) return;
-		wantRematch(room, sender);
+		if (type === "again") wantRematch(room, sender);
+		else praise(room, sender, (data as { num?: unknown }).num);
 	});
+}
+
+/**
+ * 종료 화면에서 한 사람을 칭찬한다. 한 판에 한 번, 자기 자신은 안 된다.
+ *
+ * 받는 쪽만 코인이 오른다(Rewards.praise). 주는 쪽에 보상이 없어야
+ * "서로 눌러주기"가 판 보상보다 남는 장사가 되지 않는다.
+ * 상대가 이미 나갔으면 쓰지 않은 것으로 둔다 — 다른 사람을 고를 수 있다.
+ */
+function praise(room: Room, sender: ScriptPlayer, num: unknown): void {
+	const from = findSeat(room, sender.id);
+	// 게스트가 주는 칭찬은 받지 않는다. 계정 없이 들어온 부계정 여럿이
+	// 한 사람에게 코인을 몰아줄 수 있기 때문이다
+	if (sender.isGuest) return;
+	if (!from || from.praised || typeof num !== "number") return;
+	const to = seatAt(room, num);
+	if (!to || to === from) return;
+	const target = ScriptApp.getPlayerByID(to.playerId);
+	if (!target) return;
+	from.praised = true;
+	grantPraise(target);
+	updateMain(sender, { type: "praised", num: to.index });
 }
 
 /**
