@@ -199,13 +199,26 @@ const GLYPH_ICON = {
 	"?": "unknown",
 };
 
+/** codex가 움직이는 GIF로 만든 글리프(res/ui_<이름>.gif). 나머지는 정지 PNG다 */
+const GLYPH_ANIMATED = new Set([
+	"trophy",
+	"mic",
+	"ballot",
+	"ghost",
+	"dove",
+	"moon",
+	"shaman",
+	"sunrise",
+	"terrorist",
+]);
+
 /** 글리프 하나를 그림으로. 그림이 안 뜨면 alt의 이모지가 대신 보인다 */
 function glyphHtml(glyph) {
 	const name = GLYPH_ICON[glyph];
 	if (!name) return html`${glyph || ""}`;
 	return html`<img
 		class="gi"
-		src="${assetUrl(`ui_${name}.png`)}"
+		src="${assetUrl(`ui_${name}.${GLYPH_ANIMATED.has(name) ? "gif" : "png"}`)}"
 		alt="${glyph === "?" ? "" : glyph}"
 	/>`;
 }
