@@ -298,7 +298,9 @@ const NativeChat = (function () {
 		if (connectionTried) return gameConnection;
 		connectionTried = true;
 		if (!HostWindow) {
-			return fold("게임 화면을 읽을 수 없습니다 — 위젯 iframe이 다른 출처이거나 동일 출처 허용이 꺼져 있습니다");
+			return fold(
+				"게임 화면을 읽을 수 없습니다 — 위젯 iframe이 다른 출처이거나 동일 출처 허용이 꺼져 있습니다"
+			);
 		}
 
 		// 남의 앱 내부를 뒤지는 구간이라 통째로 감싼다. 아래 함수들이 저마다

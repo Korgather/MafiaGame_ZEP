@@ -46,7 +46,9 @@
 				border: 1px solid var(--line);
 				border-radius: var(--r2);
 				cursor: pointer;
-				transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+				transition:
+					background var(--dur) var(--ease),
+					border-color var(--dur) var(--ease);
 			}
 
 			.room:hover:not(:disabled) {
@@ -183,7 +185,9 @@
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
-				<span class="online-status" aria-label="현재 접속자 수">접속 <strong id="online">0</strong>명</span>
+				<span class="online-status" aria-label="현재 접속자 수"
+					>접속 <strong id="online">0</strong>명</span
+				>
 				<button class="btn ghost guide-open" id="guide" type="button">게임 방법</button>
 				<!--
 					도감을 여는 자리는 여기 하나뿐이다. 게임이 시작되면 이 위젯은
@@ -191,7 +195,13 @@
 					여는 길은 채팅의 /도감 하나만 남는다 — 지목 화면을 가릴 수
 					있는 버튼을 지목 화면에 두지 않기 위해서다.
 				-->
-				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
+				<button
+					class="icon-btn"
+					id="book"
+					type="button"
+					aria-label="직업 도감 열기"
+					title="직업 도감"
+				>
 					📖
 				</button>
 			</div>
@@ -286,9 +296,15 @@
 
 				// .grow 안의 두 span은 한 줄로 둔다. 사이의 공백이 화면에 그대로
 				// 나오는 자리라, 줄을 나누면 들여쓰기가 이름 뒤에 붙는다
-				return html`<div class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}" role="listitem">
+				return html`<div
+					class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}"
+					role="listitem"
+				>
 					<span class="idx">${i + 1}</span>
-					<span class="grow ellip"><span class="nm">${seat.name}${mine ? " (나)" : ""}</span> <span class="meta">${seat.rank} · ${seat.runCount}판</span></span>
+					<span class="grow ellip"
+						><span class="nm">${seat.name}${mine ? " (나)" : ""}</span>
+						<span class="meta">${seat.rank} · ${seat.runCount}판</span></span
+					>
 					<span class="state">${seat.ready ? "준비" : "대기"}</span>
 					${kick}
 				</div>`;
