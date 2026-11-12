@@ -150,7 +150,7 @@
 			<div class="progress" aria-hidden="true"><i id="progress"></i></div>
 
 			<div class="stand">
-				<div class="stand-mark" id="mark" aria-hidden="true">🎤</div>
+				<div class="stand-mark" id="mark" aria-hidden="true" data-glyph="auto">🎤</div>
 				<div class="stand-name ellip" id="name"></div>
 				<div class="stand-sub" id="standsub"></div>
 			</div>
@@ -231,7 +231,7 @@
 				// 신분 줄. 단상 위 본인도 자기 직업을 보고 있어야 한다 —
 				// 해명할 말을 고르는 근거가 그것이다
 				const role = qs("#myrole");
-				role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+				role.innerHTML = String(html`${glyphHtml(data.glyph)} ${data.role || ""}`);
 				role.className =
 					"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
 				qs("#ability").textContent = data.abilityLine || "";
@@ -239,7 +239,7 @@
 				// 가장 큰 글씨는 할 일이다. 서버가 보내지 않으면 단계에 맞는
 				// 기본 명령문으로 물러난다
 				qs("#heading").textContent = data.lead || (judging ? "처형할까요?" : "해명을 들으세요");
-				qs("#mark").textContent = judging ? "🗳️" : "🎤";
+				setGlyph(qs("#mark"), judging ? "🗳️" : "🎤");
 				qs("#name").textContent = data.nomineeName || `${nominee}번`;
 				qs("#standsub").textContent = judging ? "이 사람을 처형할까요?" : "해명을 듣는 중입니다";
 

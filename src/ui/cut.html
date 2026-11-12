@@ -39,7 +39,11 @@
 				--cut-1: var(--surface);
 				--cut-2: var(--bg);
 				--vignette: rgba(0, 0, 0, 0.45);
-				background: linear-gradient(160deg, var(--cut-1) 0%, var(--cut-2) 100%);
+				/* --art: codex가 그린 톤별 배경(res/cut_<톤>.png). 글자가 읽히게 어둡게 깐다 */
+				background:
+					linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.5)),
+					var(--art, none) center / cover no-repeat,
+					linear-gradient(160deg, var(--cut-1) 0%, var(--cut-2) 100%);
 				/*
 				 * 맵이 희미하게 비쳐야 "게임이 잠깐 멈춘 것"이지 "다른 화면으로
 				 * 넘어간 것"이 아니다. 불투명도를 그라디언트 색이 아니라 여기서
@@ -87,7 +91,11 @@
 				position: absolute;
 				inset: 0;
 				pointer-events: none;
-				background: radial-gradient(ellipse 78% 62% at 50% 50%, transparent 38%, var(--vignette) 100%);
+				background: radial-gradient(
+					ellipse 78% 62% at 50% 50%,
+					transparent 38%,
+					var(--vignette) 100%
+				);
 			}
 
 			/*
@@ -251,7 +259,9 @@
 					const lines = Array.isArray(data.lines) ? data.lines : [];
 					const cut = qs("#cut");
 
-					cut.classList.add(data.tone || "neutral");
+					const tone = data.tone || "neutral";
+					cut.classList.add(tone);
+					cut.style.setProperty("--art", `url("${assetUrl(`cut_${tone}.png`)}")`);
 					// 나타남과 사라짐을 한 줄에 싣는다. 걷는 것은 서버(Cut.ts의 advanceCut)라
 					// 여기서는 그 순간에 맞춰 흐려지기만 하면 된다
 					cut.style.animation =
@@ -261,12 +271,16 @@
 						Math.max(0, ms - OUT) +
 						"ms both";
 
-					qs("#title").textContent = data.title || "";
+					const title = String(data.title || "");
+					const sp = title.indexOf(" ");
+					const lead = sp > 0 ? title.slice(0, sp) : "";
+					qs("#title").innerHTML = GLYPH_ICON[lead]
+						? String(html`${glyphHtml(lead)} ${title.slice(sp + 1)}`)
+						: String(html`${title}`);
 					qs("#lines").innerHTML = html`${lines.map(
 						(line, i) =>
-							html`<span style="animation-delay:${Math.round(
-								ms * (HEAD + (BODY * i) / lines.length)
-							)}ms"
+							html`<span
+								style="animation-delay:${Math.round(ms * (HEAD + (BODY * i) / lines.length))}ms"
 								>${line}</span
 							>`
 					)}`;

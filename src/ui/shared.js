@@ -141,3 +141,78 @@ function startTimer(el, seconds) {
 function scrollToEnd(el) {
 	if (el) el.scrollTop = el.scrollHeight;
 }
+
+/**
+ * res/ 그림 파일의 주소.
+ *
+ * 위젯은 /spaces/app/file?appHashId=..&fileName=<위젯>.html 에서 열리므로
+ * 상대경로 ui_x.png는 /spaces/app/ui_x.png로 풀려 404가 난다. 자기 주소의
+ * fileName만 바꿔 앱 파일 주소를 만든다. appHashId가 없는 곳(미리보기)은
+ * 상대경로 그대로 둔다. 앱을 올린 뒤에야 보인다.
+ */
+function assetUrl(file) {
+	try {
+		const url = new URL(document.baseURI);
+		if (!url.searchParams.has("appHashId")) return file;
+		url.searchParams.set("fileName", file);
+		return url.href;
+	} catch (e) {
+		return file;
+	}
+}
+
+/** 서버가 보내는 글리프(이모지) → res/ui_<이름>.png (codex 생성). 없는 글리프는 글자 그대로 */
+const GLYPH_ICON = {
+	"🔪": "mafia",
+	"💉": "doctor",
+	"🔍": "police",
+	"🕵️": "spy",
+	"🔮": "shaman",
+	"🎖️": "politician",
+	"🔫": "vigilante",
+	"🪖": "soldier",
+	"🥊": "gangster",
+	"📰": "reporter",
+	"🐺": "werewolf",
+	"🎭": "swindler",
+	"🃏": "fortune",
+	"💋": "madam",
+	"🧤": "thief",
+	"💞": "lover",
+	"🔦": "detective",
+	"⛏️": "graverobber",
+	"💣": "terrorist",
+	"⛪": "priest",
+	"🧑": "citizen",
+	"🌙": "moon",
+	"🌅": "sunrise",
+	"🌞": "sunrise",
+	"🎤": "mic",
+	"🗳️": "ballot",
+	"🏆": "trophy",
+	"☠": "skull",
+	"☠️": "skull",
+	"👻": "ghost",
+	"🕊️": "dove",
+	"💬": "chat",
+	"🙂": "face",
+	"?": "unknown",
+};
+
+/** 글리프 하나를 그림으로. 그림이 안 뜨면 alt의 이모지가 대신 보인다 */
+function glyphHtml(glyph) {
+	const name = GLYPH_ICON[glyph];
+	if (!name) return html`${glyph || ""}`;
+	return html`<img
+		class="gi"
+		src="${assetUrl(`ui_${name}.png`)}"
+		alt="${glyph === "?" ? "" : glyph}"
+	/>`;
+}
+
+function setGlyph(el, glyph) {
+	if (el) el.innerHTML = String(glyphHtml(glyph));
+}
+
+/** 마크업에 박힌 글리프(data-glyph)를 그림으로 바꾼다. shared는 body 끝에 들어가 DOM이 이미 있다 */
+qsa('[data-glyph="auto"]').forEach(el => setGlyph(el, el.textContent.trim()));

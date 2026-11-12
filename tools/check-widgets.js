@@ -198,7 +198,11 @@ function element(node, doc) {
 	const el = {
 		tagName: node.tag.toUpperCase(),
 		dataset,
-		style: {},
+		style: {
+			setProperty(name, value) {
+				this[name] = value;
+			},
+		},
 		textContent: "",
 		value: "",
 		placeholder: "",
@@ -402,7 +406,7 @@ function fakeZepClient(spoken, executed, mode) {
 		 * 실행해서는 안 된다 — 아직 실행되지 않은 남의 모듈을 임의로 돌리는
 		 * 것은 부작용이고, 말풍선이 덤이라는 원칙에 어긋난다.
 		 */
-		"1": function irrelevant() {
+		1: function irrelevant() {
 			executed.push("1");
 			return { plain: {} };
 		},
@@ -412,7 +416,7 @@ function fakeZepClient(spoken, executed, mode) {
 		 * PlayLostConnection이 실제로 이렇다 — isMigrating만 읽는다.
 		 * 사전 필터는 통과하므로 여기서 멈추면 안 된다.
 		 */
-		"2": function reader() {
+		2: function reader() {
 			class NotConnection {
 				static get instance() {
 					throw new Error("연결이 없습니다");
@@ -426,7 +430,7 @@ function fakeZepClient(spoken, executed, mode) {
 		},
 
 		/** 진짜 */
-		"3": function real() {
+		3: function real() {
 			class GameConnection {
 				static get instance() {
 					return {};
@@ -644,7 +648,9 @@ function checkWidget(name, client) {
 				payload: { message: say.text, chatAreaType: say.area },
 			}));
 		if (JSON.stringify(spoken) !== JSON.stringify(want)) {
-			report(`말풍선 패킷이 다릅니다\n    나간 것:   ${JSON.stringify(spoken)}\n    나가야 할 것: ${JSON.stringify(want)}`);
+			report(
+				`말풍선 패킷이 다릅니다\n    나간 것:   ${JSON.stringify(spoken)}\n    나가야 할 것: ${JSON.stringify(want)}`
+			);
 		}
 	}
 

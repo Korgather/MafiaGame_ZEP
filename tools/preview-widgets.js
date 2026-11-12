@@ -44,7 +44,10 @@ function inject(source, messages) {
 	const script = `<script>[${payload}].forEach(function (data) {
 		window.dispatchEvent(new MessageEvent("message", { data: data }));
 	});<\/script>`;
-	return source.replace("</body>", `${script}</body>`);
+	// srcdoc의 baseURI는 미리보기 페이지라 ui_*.png가 preview/에서 찾아진다. res/를 기준으로 돌린다
+	return source
+		.replace("<head>", '<head><base href="../res/">')
+		.replace("</body>", `${script}</body>`);
 }
 
 function build() {

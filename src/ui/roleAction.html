@@ -246,7 +246,7 @@
 					targetsDead = !!data.targetsDead;
 
 					const role = qs("#myrole");
-					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.innerHTML = String(html`${glyphHtml(data.glyph)} ${data.role || ""}`);
 					role.classList.add(data.team === "mafia" ? "mafia" : "citizen");
 					qs("#ability").textContent = data.abilityLine || "";
 					qs("#prompt").textContent = data.prompt || "";

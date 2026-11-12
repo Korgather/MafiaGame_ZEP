@@ -74,8 +74,16 @@ body {
 	overflow: hidden;
 }
 body {
-	font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-		"Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;
+	font-family:
+		"Pretendard",
+		-apple-system,
+		BlinkMacSystemFont,
+		"Apple SD Gothic Neo",
+		"Malgun Gothic",
+		"맑은 고딕",
+		"Noto Sans KR",
+		system-ui,
+		sans-serif;
 	font-size: var(--t-md);
 	line-height: 1.45;
 	color: var(--ink);
@@ -265,7 +273,9 @@ body {
 	width: 100%;
 	border-radius: 99px;
 	background: var(--accent);
-	transition: width 1s linear, background var(--dur) var(--ease);
+	transition:
+		width 1s linear,
+		background var(--dur) var(--ease);
 }
 .timeline.urgent i {
 	background: var(--danger);
@@ -370,7 +380,9 @@ body {
 	border: 1px solid var(--line);
 	border-radius: var(--r1);
 	cursor: pointer;
-	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+	transition:
+		background var(--dur) var(--ease),
+		border-color var(--dur) var(--ease),
 		transform var(--dur) var(--ease);
 }
 .btn:hover:not(:disabled) {
@@ -467,7 +479,9 @@ body {
 	border: 1px solid var(--line);
 	border-radius: var(--r2);
 	cursor: pointer;
-	transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+	transition:
+		background var(--dur) var(--ease),
+		border-color var(--dur) var(--ease),
 		transform var(--dur) var(--ease);
 }
 .tile:hover:not(:disabled) {
@@ -656,7 +670,9 @@ body {
 	border-radius: var(--r1) var(--r1) 0 0;
 	white-space: nowrap;
 	cursor: pointer;
-	transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+	transition:
+		color var(--dur) var(--ease),
+		background var(--dur) var(--ease);
 }
 .tab:hover {
 	color: var(--ink-2);
@@ -716,7 +732,9 @@ body {
 	border-radius: var(--r1);
 	white-space: nowrap;
 	cursor: pointer;
-	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+	transition:
+		color var(--dur) var(--ease),
+		border-color var(--dur) var(--ease);
 }
 .chat-fold:hover {
 	color: var(--ink);
@@ -991,7 +1009,9 @@ body {
 	border-radius: 99px;
 	box-shadow: var(--shadow);
 	cursor: pointer;
-	transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+	transition:
+		color var(--dur) var(--ease),
+		border-color var(--dur) var(--ease);
 }
 .chat-mini:hover {
 	color: var(--ink);
@@ -1033,6 +1053,338 @@ body {
 	white-space: nowrap;
 	border: 0;
 }
+:root {
+	--edge: #0b0710;
+	--plate: linear-gradient(180deg, #4a3a55, #2b2034);
+	--plate-hover: linear-gradient(180deg, #57456a, #33263e);
+	--plate-hi: inset 0 2px 0 rgba(255, 255, 255, 0.14);
+	--drop: 0 4px 0 var(--edge);
+	--gold: linear-gradient(180deg, #ffe48f, #f0aa29);
+	--gold-ink: #2a1606;
+	--blood: linear-gradient(180deg, #ff7b8b, #c4223f);
+	--cream: #fff4bd;
+	--stripe: repeating-linear-gradient(
+		-45deg,
+		rgba(255, 255, 255, 0.22) 0 5px,
+		transparent 5px 10px
+	);
+	--slot: linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.18));
+	--r3: 18px;
+}
+.panel,
+.chat {
+	height: calc(100% - 4px);
+	border: 3px solid var(--edge);
+	border-radius: var(--r3);
+	background: linear-gradient(180deg, #34232f 0%, #1c1219 100%);
+	box-shadow:
+		var(--drop),
+		inset 0 0 0 2px rgba(255, 255, 255, 0.07);
+}
+.panel.night {
+	background: linear-gradient(180deg, #26396d 0%, #141d3d 100%);
+	border-color: var(--edge);
+}
+.panel.day {
+	background: linear-gradient(180deg, #6a4a1f 0%, #2c1d0e 100%);
+	border-color: var(--edge);
+}
+.panel.vote {
+	background: linear-gradient(180deg, #5a1f36 0%, #24101c 100%);
+	border-color: var(--edge);
+}
+.lead-title,
+.hd-title {
+	font-weight: 900;
+	color: var(--cream);
+	text-shadow: 0 2px 0 var(--edge);
+}
+.clock .n {
+	font-weight: 900;
+	color: #ffd76a;
+	text-shadow: 0 3px 0 var(--edge);
+}
+.clock.urgent .n {
+	color: #ff6b7d;
+}
+.timeline,
+.progress {
+	height: 12px;
+	border: 2px solid var(--edge);
+	border-radius: 99px;
+	background: #0e0a16;
+	box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+.timeline i {
+	background: var(--stripe), var(--gold);
+}
+.timeline.urgent i {
+	background: var(--stripe), var(--blood);
+}
+.timeline.urgent {
+	background: #0e0a16;
+	box-shadow:
+		inset 0 2px 0 rgba(0, 0, 0, 0.4),
+		0 0 10px rgba(255, 77, 109, 0.55);
+}
+.progress i {
+	background: var(--stripe), linear-gradient(180deg, #9ffbe2, #2fd3a8);
+}
+.stack {
+	border: 2px solid var(--edge);
+	border-left: 5px solid #e0304d;
+	border-radius: var(--r2);
+	background: var(--slot);
+	box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+.btn {
+	min-height: 40px;
+	font-weight: 900;
+	color: var(--cream);
+	background: var(--plate);
+	border: 3px solid var(--edge);
+	border-radius: 12px;
+	box-shadow:
+		0 3px 0 var(--edge),
+		var(--plate-hi);
+	text-shadow: 0 1px 0 var(--edge);
+}
+.btn:hover:not(:disabled) {
+	background: var(--plate-hover);
+}
+.btn:active:not(:disabled) {
+	transform: translateY(2px);
+	box-shadow:
+		0 1px 0 var(--edge),
+		var(--plate-hi);
+}
+.btn:focus-visible,
+.tile:focus-visible,
+.icon-btn:focus-visible {
+	outline: 3px solid #9fe7ff;
+	outline-offset: 2px;
+}
+.btn.primary {
+	color: var(--gold-ink);
+	text-shadow: none;
+	background: var(--gold);
+	border-color: var(--edge);
+	box-shadow:
+		0 3px 0 var(--edge),
+		inset 0 2px 0 rgba(255, 255, 255, 0.55);
+}
+.btn.primary:hover:not(:disabled) {
+	background: linear-gradient(180deg, #fff0b8, #f7b93f);
+	filter: none;
+}
+.btn.ok {
+	color: #06281f;
+	text-shadow: none;
+	background: linear-gradient(180deg, #9ffbe2, #2fd3a8);
+	border-color: var(--edge);
+}
+.btn.danger {
+	color: #fff;
+	background: var(--blood);
+	border-color: var(--edge);
+}
+.btn.ghost {
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+}
+.btn:disabled {
+	opacity: 0.5;
+	box-shadow: none;
+	transform: translateY(2px);
+}
+.tile {
+	font-weight: 900;
+	background: var(--plate);
+	border: 3px solid var(--edge);
+	border-radius: 14px;
+	box-shadow:
+		0 3px 0 var(--edge),
+		var(--plate-hi);
+	text-shadow: 0 1px 0 var(--edge);
+}
+.tile:hover:not(:disabled) {
+	background: var(--plate-hover);
+	border-color: var(--edge);
+}
+.tile:active:not(:disabled) {
+	transform: translateY(2px);
+	box-shadow:
+		0 1px 0 var(--edge),
+		var(--plate-hi);
+}
+.tile .cap {
+	font-weight: 700;
+	color: #d3c4dd;
+}
+.tile.me {
+	border-color: var(--edge);
+	box-shadow:
+		0 3px 0 var(--edge),
+		inset 0 0 0 2px #5ff0c9;
+}
+.tile.me .cap {
+	color: #5ff0c9;
+}
+.tile:disabled,
+.tile.dead {
+	color: #6c5d73;
+	text-shadow: none;
+	background: #1a1220;
+	border: 3px dashed #3c2f45;
+	box-shadow: none;
+}
+.tile.dead .cap {
+	color: #6c5d73;
+}
+.tile.picked {
+	color: #fff;
+	background: var(--blood);
+	border-color: var(--edge);
+	box-shadow:
+		0 3px 0 var(--edge),
+		0 0 0 2px var(--cream),
+		inset 0 2px 0 rgba(255, 255, 255, 0.4);
+}
+.tile.picked .cap {
+	color: #ffe9ec;
+}
+.tile.ally {
+	border-color: var(--edge);
+	background: linear-gradient(180deg, #6b2333, #3a1320);
+}
+.tile .tally {
+	color: #ffd76a;
+	text-shadow: 0 1px 0 var(--edge);
+}
+.chip {
+	font-weight: 900;
+	color: var(--cream);
+	border: 2px solid var(--edge);
+	border-radius: 8px;
+	background: var(--plate);
+	box-shadow: 0 2px 0 var(--edge);
+	text-shadow: 0 1px 0 var(--edge);
+}
+.chip.mafia {
+	color: #fff;
+	border-color: var(--edge);
+	background: linear-gradient(180deg, #ff6b7d, #c4223f);
+}
+.chip.citizen {
+	color: #fff;
+	border-color: var(--edge);
+	background: linear-gradient(180deg, #6fb8ff, #2d6fd6);
+}
+.chip.dead {
+	color: #cbbfd2;
+	border-color: var(--edge);
+	background: #2a2030;
+}
+.chat-head {
+	border-bottom: 3px solid var(--edge);
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
+}
+.chat-tabwrap::after {
+	background: linear-gradient(to right, rgba(52, 35, 47, 0), #34232f);
+}
+.tab {
+	font-weight: 900;
+	border-radius: 8px 8px 0 0;
+}
+.tab[aria-selected="true"] {
+	color: var(--gold-ink);
+	background: var(--gold);
+	border-bottom-color: var(--edge);
+}
+.badge-n {
+	color: #fff;
+	background: #e0304d;
+	box-shadow: 0 0 0 2px var(--edge);
+}
+.chat-fold,
+.quick button {
+	font-weight: 800;
+	color: var(--cream);
+	border: 2px solid var(--edge);
+	background: var(--plate);
+	box-shadow: 0 2px 0 var(--edge);
+}
+.msg .txt {
+	border: 2px solid var(--edge);
+	border-radius: 10px;
+	background: #3a2c42;
+}
+.msg.mine .txt {
+	color: var(--gold-ink);
+	background: var(--gold);
+}
+.msg.sys .txt,
+.msg.ntc .txt {
+	border: none;
+}
+.msg.evt .txt {
+	color: var(--cream);
+	border: 2px solid var(--edge);
+	background: linear-gradient(180deg, #8a2a3c, #5a1828);
+}
+.msg.card {
+	border: 2px solid var(--edge);
+	background: var(--slot);
+}
+.msg.card .ttl {
+	color: #ffd76a;
+}
+.msg.pm .txt {
+	border: 2px solid var(--edge);
+	border-left: 5px solid #6fb8ff;
+	background: rgba(45, 111, 214, 0.28);
+}
+.chat-entry {
+	border-top: 3px solid var(--edge);
+	background: #140d18;
+}
+.chat-jump {
+	color: var(--gold-ink);
+	border: 2px solid var(--edge);
+	background: var(--gold);
+	box-shadow: 0 2px 0 var(--edge);
+}
+.emoji-pad {
+	border-top: 3px solid var(--edge);
+	background: #241a2b;
+}
+.chat-mini {
+	height: calc(100% - 4px);
+	font-weight: 900;
+	color: var(--cream);
+	border: 3px solid var(--edge);
+	background: var(--plate);
+	box-shadow: var(--drop), var(--plate-hi);
+}
+.chat-mini.alert {
+	color: var(--gold-ink);
+	border-color: var(--edge);
+	background: var(--gold);
+}
+@media (prefers-reduced-motion: reduce) {
+	.btn:active:not(:disabled),
+	.tile:active:not(:disabled),
+	.btn:disabled {
+		transform: none;
+	}
+}
+.gi {
+	display: inline-block;
+	width: 1.2em;
+	height: 1.2em;
+	vertical-align: -0.25em;
+	object-fit: contain;
+	filter: drop-shadow(0 1px 0 var(--edge));
+}
 
 </style>
 		<style>			.rooms {
@@ -1057,7 +1409,9 @@ body {
 				border: 1px solid var(--line);
 				border-radius: var(--r2);
 				cursor: pointer;
-				transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+				transition:
+					background var(--dur) var(--ease),
+					border-color var(--dur) var(--ease);
 			}
 			.room:hover:not(:disabled) {
 				background: var(--surface-3);
@@ -1174,9 +1528,17 @@ body {
 					<span id="heading">방 선택</span>
 					<span class="hd-sub" id="sub"></span>
 				</div>
-				<span class="online-status" aria-label="현재 접속자 수">접속 <strong id="online">0</strong>명</span>
+				<span class="online-status" aria-label="현재 접속자 수"
+					>접속 <strong id="online">0</strong>명</span
+				>
 				<button class="btn ghost guide-open" id="guide" type="button">게임 방법</button>
-				<button class="icon-btn" id="book" type="button" aria-label="직업 도감 열기" title="직업 도감">
+				<button
+					class="icon-btn"
+					id="book"
+					type="button"
+					aria-label="직업 도감 열기"
+					title="직업 도감"
+				>
 					📖
 				</button>
 			</div>
@@ -1267,6 +1629,70 @@ function scrollToEnd(el) {
  if (el) el.scrollTop = el.scrollHeight;
 }
 
+function assetUrl(file) {
+ try {
+  const url = new URL(document.baseURI);
+  if (!url.searchParams.has("appHashId")) return file;
+  url.searchParams.set("fileName", file);
+  return url.href;
+ } catch (e) {
+  return file;
+ }
+}
+
+const GLYPH_ICON = {
+ "🔪": "mafia",
+ "💉": "doctor",
+ "🔍": "police",
+ "🕵️": "spy",
+ "🔮": "shaman",
+ "🎖️": "politician",
+ "🔫": "vigilante",
+ "🪖": "soldier",
+ "🥊": "gangster",
+ "📰": "reporter",
+ "🐺": "werewolf",
+ "🎭": "swindler",
+ "🃏": "fortune",
+ "💋": "madam",
+ "🧤": "thief",
+ "💞": "lover",
+ "🔦": "detective",
+ "⛏️": "graverobber",
+ "💣": "terrorist",
+ "⛪": "priest",
+ "🧑": "citizen",
+ "🌙": "moon",
+ "🌅": "sunrise",
+ "🌞": "sunrise",
+ "🎤": "mic",
+ "🗳️": "ballot",
+ "🏆": "trophy",
+ "☠": "skull",
+ "☠️": "skull",
+ "👻": "ghost",
+ "🕊️": "dove",
+ "💬": "chat",
+ "🙂": "face",
+ "?": "unknown"
+};
+
+function glyphHtml(glyph) {
+ const name = GLYPH_ICON[glyph];
+ if (!name) return html`${glyph || ""}`;
+ return html`<img
+		class="gi"
+		src="${assetUrl(`ui_${name}.png`)}"
+		alt="${glyph === "?" ? "" : glyph}"
+	/>`;
+}
+
+function setGlyph(el, glyph) {
+ if (el) el.innerHTML = String(glyphHtml(glyph));
+}
+
+qsa('[data-glyph="auto"]').forEach(el => setGlyph(el, el.textContent.trim()));
+
 const HostWindow = function() {
  try {
   void window.parent.document.readyState;
@@ -1294,7 +1720,33 @@ const Parent = function() {
    if (handler) handler(data);
   });
  }
- function applyLayout(layout) {
+ function isLandscape() {
+  const o = window.screen && window.screen.orientation;
+  if (o && o.type) return o.type.indexOf("landscape") === 0;
+  if (typeof window.orientation === "number") return Math.abs(window.orientation) === 90;
+  return window.screen.width > window.screen.height;
+ }
+ function landscapeLayout(layout) {
+  if (layout.width !== "96%" || !isLandscape()) return layout;
+  const pct = parseFloat(layout.height);
+  const out = {
+   ...layout,
+   width: "46%"
+  };
+  if (pct > 0 && String(layout.height).slice(-1) === "%") out.height = `${Math.min(Math.round(pct * 1.8), 86)}%`;
+  if (layout.anchor === "top") out.anchor = "topright"; else if (layout.anchor === "bottom") out.anchor = "bottomleft";
+  return out;
+ }
+ let lastLayout = null;
+ const relayout = () => lastLayout && applyLayout(lastLayout);
+ if (window.screen && window.screen.orientation && window.screen.orientation.addEventListener) {
+  window.screen.orientation.addEventListener("change", relayout);
+ } else {
+  window.addEventListener("orientationchange", relayout);
+ }
+ function applyLayout(raw) {
+  lastLayout = raw;
+  const layout = landscapeLayout(raw);
   const message = {
    type: "WidgetRearrange",
    anchor: layout.anchor,
@@ -1417,9 +1869,15 @@ function seatHtml(seat, i) {
 						>
 							강퇴 ${seat.kickCount}/${config.kickVotes}
 						</button>`;
- return html`<div class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}" role="listitem">
+ return html`<div
+					class="seat${seat.ready ? " ready" : ""}${mine ? " me" : ""}"
+					role="listitem"
+				>
 					<span class="idx">${i + 1}</span>
-					<span class="grow ellip"><span class="nm">${seat.name}${mine ? " (나)" : ""}</span> <span class="meta">${seat.rank} · ${seat.runCount}판</span></span>
+					<span class="grow ellip"
+						><span class="nm">${seat.name}${mine ? " (나)" : ""}</span>
+						<span class="meta">${seat.rank} · ${seat.runCount}판</span></span
+					>
 					<span class="state">${seat.ready ? "준비" : "대기"}</span>
 					${kick}
 				</div>`;

@@ -271,7 +271,7 @@
 
 				<!-- 카드 한 장 -->
 				<div class="card" id="card" role="status" aria-live="polite">
-					<div class="glyph" id="glyph" aria-hidden="true">🎭</div>
+					<div class="glyph" id="glyph" aria-hidden="true" data-glyph="auto">🎭</div>
 					<div>
 						<div class="role" id="role"></div>
 						<span class="chip hidden" id="team"></span>
@@ -348,7 +348,7 @@
 						data-i="${i}"
 						aria-label="${card.title} 설명 보기"
 					>
-						<span class="g" aria-hidden="true">${card.glyph}</span>
+						<span class="g" aria-hidden="true">${glyphHtml(card.glyph)}</span>
 						<span class="nm">${card.title}</span>
 						<span class="sm">${card.summary || card.body}</span>
 					</button>`;
@@ -366,7 +366,7 @@
 				// 넘길 것이 없는 화면에서만 제대로 뒤집는다
 				face.classList.toggle("solo", nav === "none");
 
-				qs("#glyph").textContent = card.glyph || "🎭";
+				setGlyph(qs("#glyph"), card.glyph || "?");
 				qs("#role").textContent = card.title || "";
 				qs("#ability").textContent = card.body || "";
 				qs("#tip").textContent = card.note || "";

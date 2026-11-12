@@ -199,7 +199,9 @@
 				border: 1px solid var(--line);
 				border-radius: var(--r1);
 				cursor: pointer;
-				transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+				transition:
+					color var(--dur) var(--ease),
+					border-color var(--dur) var(--ease);
 			}
 			.time-vote button:hover {
 				color: var(--ink);
@@ -241,7 +243,7 @@
 
 			<div class="stage">
 				<div class="sky-row">
-					<span class="sky" id="sky" aria-hidden="true">🌙</span>
+					<span class="sky" id="sky" aria-hidden="true" data-glyph="auto">🌙</span>
 					<span class="turn" id="turn">밤</span>
 					<!--
 						살아 있는 번호. 옆의 stat이 "생존 4/5"를 글자로 읽어
@@ -323,7 +325,7 @@
 					// 않으면 밤에도 day와 night가 함께 남아 선언 순서에 따라 낮 배경이 이긴다.
 					panel.classList.remove("night", "day");
 					panel.classList.add(night ? "night" : "day");
-					qs("#sky").textContent = night ? "🌙" : "🌅";
+					setGlyph(qs("#sky"), night ? "🌙" : "🌅");
 					qs("#turn").textContent = data.turn
 						? data.turn + (night ? "번째 밤" : "번째 아침")
 						: night
@@ -335,7 +337,7 @@
 					// glyph와 abilityLine도 같은 곳에서 온다 — 위젯은 직업이
 					// 몇 종인지도, 무슨 능력이 있는지도 알 필요가 없다
 					const role = qs("#myrole");
-					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.innerHTML = String(html`${glyphHtml(data.glyph)} ${data.role || ""}`);
 					role.classList.remove("dead", "mafia", "citizen");
 					role.classList.add(
 						data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen"
@@ -353,16 +355,9 @@
 					 * 둘의 차이는 이 판에 좌석이 있었느냐뿐이고, 지금 할 수 있는
 					 * 일은 똑같이 없다. 그 사실을 화면 전체가 말하게 한다.
 					 */
-					panel.classList.toggle(
-						"watching",
-						data.spectating === true || data.alive === false
-					);
+					panel.classList.toggle("watching", data.spectating === true || data.alive === false);
 
-					paintRoster(
-						Array.isArray(data.seats) ? data.seats : [],
-						data.aliveCount,
-						data.total
-					);
+					paintRoster(Array.isArray(data.seats) ? data.seats : [], data.aliveCount, data.total);
 					qs("#note").textContent = data.note || "";
 
 					// 밤사이 죽은 사람. 예전에는 채팅으로만 흘러가 놓치기 쉬웠다.

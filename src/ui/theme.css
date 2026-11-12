@@ -1796,3 +1796,13 @@ body {
 		transform: none;
 	}
 }
+
+/* 이모지 대신 쓰는 codex 그림(shared.js glyphHtml). 글자 크기를 따라간다 */
+.gi {
+	display: inline-block;
+	width: 1.2em;
+	height: 1.2em;
+	vertical-align: -0.25em;
+	object-fit: contain;
+	filter: drop-shadow(0 1px 0 var(--edge));
+}

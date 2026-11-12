@@ -231,7 +231,7 @@
 			<div class="timeline" aria-hidden="true"><i></i></div>
 
 			<div class="verdict" id="verdict">
-				<span class="crown" id="crown" aria-hidden="true">🏆</span>
+				<span class="crown" id="crown" aria-hidden="true" data-glyph="auto">🏆</span>
 				<span class="who" id="who">게임 종료</span>
 			</div>
 
@@ -265,7 +265,7 @@
 				>
 					<span class="seat">${p.num}번</span>
 					<span class="grow ellip">${p.name || ""}</span>
-					<span class="g" aria-hidden="true">${p.glyph || ""}</span>
+					<span class="g" aria-hidden="true">${glyphHtml(p.glyph)}</span>
 					<span class="job">${p.role || ""}</span>
 					<span class="fate${p.alive ? " alive" : ""}">${p.alive ? "생존" : "사망"}</span>
 				</div>`;
@@ -319,7 +319,7 @@
 				init(data) {
 					const mafiaWon = data.winner === "mafia";
 					qs("#verdict").classList.add(mafiaWon ? "mafia" : "citizen");
-					qs("#crown").textContent = mafiaWon ? "🔪" : "🕊️";
+					setGlyph(qs("#crown"), mafiaWon ? "🔪" : "🕊️");
 					qs("#who").textContent = mafiaWon ? "마피아 승리" : "시민 승리";
 					qs("#reason").textContent = data.reason || "";
 

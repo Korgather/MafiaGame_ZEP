@@ -280,7 +280,7 @@
 					myPick = Number(data.picked) || null;
 
 					const role = qs("#myrole");
-					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.innerHTML = String(html`${glyphHtml(data.glyph)} ${data.role || ""}`);
 					role.className =
 						"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
 					qs("#ability").textContent = data.abilityLine || "";
@@ -314,7 +314,7 @@
 					const list = seats(data);
 
 					const role = qs("#myrole");
-					role.textContent = (data.glyph ? data.glyph + " " : "") + (data.role || "");
+					role.innerHTML = String(html`${glyphHtml(data.glyph)} ${data.role || ""}`);
 					role.className =
 						"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
 					qs("#ability").textContent = data.abilityLine || "";
