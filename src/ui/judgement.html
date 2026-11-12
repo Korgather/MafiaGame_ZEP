@@ -68,6 +68,13 @@
 				min-height: 56px;
 			}
 
+			/* 폰에서 채팅을 펼치면 위젯 높이가 170px 아래로 준다. 이름과 O/X가 함께 들어가야 한다 */
+			@media (max-height: 260px) {
+				.judge-btn {
+					min-height: 40px;
+				}
+			}
+
 			.judge-btn .mark {
 				font-size: var(--t-lg);
 				font-weight: 800;

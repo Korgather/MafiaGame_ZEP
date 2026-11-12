@@ -678,10 +678,11 @@ body {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: var(--s2);
-	align-content: center;
+	/* 넘치면 위쪽 줄이 잘려 스크롤로도 못 닿는다. safe가 그때만 위로 붙인다 */
+	align-content: safe center;
 }
 
-@media (max-width: 340px) {
+@media (max-width: 300px) {
 	.grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
@@ -695,7 +696,8 @@ body {
 	align-items: center;
 	justify-content: center;
 	gap: 2px;
-	aspect-ratio: 1;
+	/* 정사각이면 400px 높이에 두 줄도 다 안 보인다. 조금 납작하게 */
+	aspect-ratio: 6 / 5;
 	padding: var(--s1);
 	font: inherit;
 	font-size: var(--t-sm);
@@ -1805,4 +1807,72 @@ body {
 	vertical-align: -0.25em;
 	object-fit: contain;
 	filter: drop-shadow(0 1px 0 var(--edge));
+}
+
+/*
+ * 가운데 정렬된 가변 영역이 넘칠 때.
+ *
+ * .stage·.stand·.card는 flex:1에 justify-content:center라, 밤사이 사건이
+ * 많거나 위젯이 낮아지면 내용이 위아래 양쪽으로 넘쳐 머리말과 버튼을 덮었다.
+ * safe center는 넘치는 순간 위쪽 정렬로 물러나고, 나머지는 스크롤로 받는다.
+ */
+.stage,
+.stand,
+.card {
+	justify-content: safe center;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: none;
+}
+
+/*
+ * 낮은 위젯. 폰에서 채팅을 펼치면 메인 위젯이 MAIN_TIGHT배(0.6)로 줄어
+ * 120~240px이 된다. 고정 층(신분·지시·시간 선·버튼)의 합이 그보다 커서
+ * 가운데가 0으로 눌리고 버튼이 잘렸다. 층마다 여백과 글자를 줄인다.
+ */
+@media (max-height: 260px) {
+	.panel {
+		padding: var(--s2) var(--s3);
+		gap: 6px;
+	}
+	.lead-title {
+		font-size: var(--t-md);
+	}
+	.clock .n {
+		font-size: var(--t-2xl);
+	}
+	.timeline,
+	.progress {
+		height: 8px;
+		border-width: 1.5px;
+	}
+	.btn {
+		min-height: 30px;
+		padding: 4px var(--s3);
+	}
+}
+
+/* 더 낮으면 읽을거리(능력 설명·보조 문구·시간 선)를 내린다. 남은 초는 숫자로 남는다 */
+@media (max-height: 190px) {
+	.idbar .ability,
+	.lead-sub,
+	.timeline {
+		display: none;
+	}
+	.panel {
+		padding: 6px var(--s2);
+		gap: 4px;
+	}
+}
+
+/* 능력 줄이 빠져도 생존 수는 오른쪽 끝에 남는다 */
+.idbar .stat {
+	margin-left: auto;
+}
+
+/* 넘칠 때 줄이지 말고 스크롤한다. 줄어든 이름 칸은 글자 위아래가 잘린다 */
+.stage > *,
+.stand > *,
+.card > * {
+	flex-shrink: 0;
 }

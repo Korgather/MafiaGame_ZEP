@@ -41,7 +41,27 @@
 				min-height: 0;
 			}
 
+			/* 무대는 줄 하나(차례·번호)를 고정하고 사건 목록만 스크롤한다 */
+			.stage {
+				overflow: hidden;
+			}
+
+			.stage .stack {
+				flex: 0 1 auto;
+				min-height: 0;
+				overflow-y: auto;
+				scrollbar-width: none;
+			}
+
+			/* 폰+채팅(120px 안팎)에서는 무대를 접는다. 지시·시간·버튼이 먼저다. 사건은 채팅에도 남는다 */
+			@media (max-height: 150px) {
+				.stage {
+					display: none;
+				}
+			}
+
 			.sky-row {
+				flex: 0 0 auto;
 				display: flex;
 				align-items: center;
 				gap: var(--s2);
