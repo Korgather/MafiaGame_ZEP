@@ -98,13 +98,17 @@ function layoutOf(
 	const mobile = player.isMobile;
 	const tablet = mobile && player.isTablet;
 	const percent = size.mobile ? Math.round(size.mobile * (tight ? MAIN_TIGHT : 1)) : 0;
+	// 모바일 %가 없는 위젯(접은 채팅 바)은 기기와 상관없이 픽셀 그대로다.
+	// 96%로 늘리면 한 줄짜리 버튼이 화면 아래를 통째로 막는다
 	const layout: WidgetLayout = {
 		anchor: align,
-		width: mobile ? (tablet ? MobileWidth.TABLET : MobileWidth.PHONE) : `${size.width}px`,
+		width:
+			mobile && size.mobile ? (tablet ? MobileWidth.TABLET : MobileWidth.PHONE) : `${size.width}px`,
 		height: mobile && percent > 0 ? `${percent}%` : `${size.height}px`,
 	};
 	// 상단 보정은 위쪽에 붙는 위젯에만 뜻이 있다. 아래(채팅)나 가운데(직업
 	// 카드)에 붙이면 제자리에서 그만큼 밀려난다. startsWith는 Jint에 없다.
+	if (mobile && size.mobile) layout.wide = `${size.mobile}%`;
 	if (align.indexOf("top") === 0) {
 		layout.top = !mobile ? TopNudge.DESKTOP : tablet ? TopNudge.TABLET : TopNudge.PHONE;
 	}
@@ -931,7 +935,9 @@ export function openCard(
 	const widget = open(
 		player,
 		WidgetFile.CARD,
-		player.isMobile ? "middle" : "middleright",
+		// PC도 가운데다. 오른쪽 가운데는 1280×720에서 오른쪽 위 메인 위젯을 반쯤
+		// 덮었다. 직업 공개는 잠깐 보고 닫는 장면이라 시선 한가운데가 맞다
+		"middle",
 		size,
 		payload,
 		false
@@ -968,8 +974,8 @@ export function openCut(player: ScriptPlayer, payload: CutPayload): ScriptWidget
  * 카드와 자리를 나눠 쓰지 않는다(PlayerTag.profileWidget). 직업 카드를 읽는
  * 중에 옆 사람을 잘못 눌러 카드가 사라지는 쪽이 더 나쁘다.
  *
- * 자리는 카드의 반대편이다. 둘이 함께 떠 있을 수 있는데(도감 + 프로필)
- * 같은 쪽에 두면 뒤엣것이 완전히 가려진다.
+ * PC에서 자리는 왼쪽 가운데다. 카드(도감)는 화면 가운데라 둘이 함께 떠
+ * 있어도(도감 + 프로필) 1280×720에서도 겹치지 않는다.
  */
 export function openProfile(player: ScriptPlayer, payload: ProfilePayload): ScriptWidget {
 	closeProfile(player);

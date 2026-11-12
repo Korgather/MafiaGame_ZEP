@@ -98,6 +98,15 @@ describe("위젯 크기", () => {
 		assert.equal(layoutOf(chatWidget(player)).top, undefined);
 	});
 
+	it("접은 채팅 바는 폰에서도 픽셀 폭이다", () => {
+		// 96%로 늘이면 한 줄짜리 버튼이 화면 아래를 통째로 막는다
+		const player = connect("폰", { isMobile: true });
+		const layout = layoutOf(chatWidget(player));
+
+		assert.equal(layout.width, `${WidgetSize.CHAT_BAR.width}px`);
+		assert.equal(layout.height, `${WidgetSize.CHAT_BAR.height}px`);
+	});
+
 	it("방 선택 화면은 좌석 목록보다 낮다", () => {
 		const player = connect("폰", { isMobile: true });
 		const before = heightPercent(mainWidget(player));

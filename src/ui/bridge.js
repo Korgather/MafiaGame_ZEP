@@ -110,14 +110,26 @@ const Parent = (function () {
 	 * 폰 가로: 세로 기준 %를 그대로 쓰면 96% 폭 × 180px 띠가 된다.
 	 * PC와 같은 배치로 바꾼다 — 메인은 오른쪽 위, 채팅은 왼쪽 아래에 반폭씩
 	 * 서서 서로 겹치지 않으므로 높이를 1.8배(최대 86%)까지 키운다.
-	 * 태블릿(60%)과 화면을 덮는 위젯(100%)은 건드리지 않는다.
+	 * 폭은 40%씩이다. 46%면 가운데 틈이 8%(70px)뿐이라 화면 한가운데의 내
+	 * 캐릭터를 메인 위젯이 덮는다. 높이는 채팅이 펼쳐져 줄어든 값이 아니라
+	 * 서버가 따로 실어 보낸 wide를 바탕으로 한다 — 나란히 서므로 줄일 까닭이 없다.
+	 * 태블릿(60%)도 가로면 같은 배치로 바꾼다. 60% 폭이 그대로면 1180px
+	 * 화면에서 708px 띠가 한가운데를 가로지른다. 태블릿 가로는 세로 높이가
+	 * 넉넉해 폭 34%(약 400px, PC 위젯과 비슷), 높이 1.2배(최대 70%)면 된다.
+	 * 화면을 덮는 위젯(100%)과 픽셀 폭 위젯(접은 채팅 바)은 건드리지 않는다.
 	 */
+	const LANDSCAPE = {
+		"96%": { width: "40%", grow: 1.8, max: 86 },
+		"60%": { width: "34%", grow: 1.2, max: 70 },
+	};
 	function landscapeLayout(layout) {
-		if (layout.width !== "96%" || !isLandscape()) return layout;
-		const pct = parseFloat(layout.height);
-		const out = { ...layout, width: "46%" };
-		if (pct > 0 && String(layout.height).slice(-1) === "%")
-			out.height = `${Math.min(Math.round(pct * 1.8), 86)}%`;
+		const fit = LANDSCAPE[layout.width];
+		if (!fit || !isLandscape()) return layout;
+		const base = layout.wide || layout.height;
+		const pct = parseFloat(base);
+		const out = { ...layout, width: fit.width };
+		if (pct > 0 && String(base).slice(-1) === "%")
+			out.height = `${Math.min(Math.round(pct * fit.grow), fit.max)}%`;
 		if (layout.anchor === "top") out.anchor = "topright";
 		else if (layout.anchor === "bottom") out.anchor = "bottomleft";
 		return out;

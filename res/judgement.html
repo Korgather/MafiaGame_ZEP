@@ -221,14 +221,28 @@ const Parent = function() {
   if (typeof window.orientation === "number") return Math.abs(window.orientation) === 90;
   return window.screen.width > window.screen.height;
  }
+ const LANDSCAPE = {
+  "96%": {
+   width: "40%",
+   grow: 1.8,
+   max: 86
+  },
+  "60%": {
+   width: "34%",
+   grow: 1.2,
+   max: 70
+  }
+ };
  function landscapeLayout(layout) {
-  if (layout.width !== "96%" || !isLandscape()) return layout;
-  const pct = parseFloat(layout.height);
+  const fit = LANDSCAPE[layout.width];
+  if (!fit || !isLandscape()) return layout;
+  const base = layout.wide || layout.height;
+  const pct = parseFloat(base);
   const out = {
    ...layout,
-   width: "46%"
+   width: fit.width
   };
-  if (pct > 0 && String(layout.height).slice(-1) === "%") out.height = `${Math.min(Math.round(pct * 1.8), 86)}%`;
+  if (pct > 0 && String(base).slice(-1) === "%") out.height = `${Math.min(Math.round(pct * fit.grow), fit.max)}%`;
   if (layout.anchor === "top") out.anchor = "topright"; else if (layout.anchor === "bottom") out.anchor = "bottomleft";
   return out;
  }
