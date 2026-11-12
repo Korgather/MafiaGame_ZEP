@@ -43,7 +43,7 @@ import {
 	resolveRuleSet,
 	rulesForRoom,
 } from "../src/domain/RuleSet.ts";
-import type { RosterEntry } from "../src/domain/RuleSet.ts";
+import type { JudgementTie, RosterEntry, RuleSet } from "../src/domain/RuleSet.ts";
 import { STEP_ORDER, putIntent, resolveNightIntents } from "../src/domain/NightPipeline.ts";
 import type { NightSettlement } from "../src/domain/NightPipeline.ts";
 import {
@@ -815,10 +815,10 @@ describe("클래식 회귀 · 투표와 재판", () => {
 		// 단상에 2번을 올리고, 남은 일곱 중 여섯만 누른다. 8번은 기권이다
 		const agree = [1, 3, 4];
 		const oppose = [5, 6, 7];
-		function runTie(roomNum: number, tie: string): Room {
+		function runTie(roomNum: number, tie: JudgementTie): Room {
 			resetWorld();
 			const reached = reachVote(8, roomNum, plainRoles(8));
-			assert.equal(reached.target.ruleSet.judgementTie, tie);
+			(reached.target as { ruleSet: RuleSet }).ruleSet = { ...reached.target.ruleSet, judgementTie: tie };
 			vote(reached.at(3), 2);
 			vote(reached.at(4), 2);
 			vote(reached.at(5), 2);
@@ -838,9 +838,10 @@ describe("클래식 회귀 · 투표와 재판", () => {
 		const classic = runTie(1, "execute");
 		assert.equal(seatAt(classic, 2).alive, false, "동수인데 살아남았습니다");
 
-		// 같은 상황이 표준전에서는 무산된다. 동수 규칙이 모드의 값이라는 증거다
-		const standard = runTie(5, "spare");
-		assert.equal(seatAt(standard, 2).alive, true, "표준전에서 동수가 처형됐습니다");
+		// 지금은 모든 모드가 처형이다(마피아42 기준). 무산 쪽 가지는 룰셋 값을
+		// 바꿔 끼워 지킨다 — 동수 규칙이 여전히 룰셋의 값이라는 증거다
+		const spared = runTie(5, "spare");
+		assert.equal(seatAt(spared, 2).alive, true, "spare인데 동수가 처형됐습니다");
 	});
 });
 

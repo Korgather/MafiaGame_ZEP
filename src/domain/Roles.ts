@@ -320,7 +320,7 @@ export interface RoleDef {
 	 */
 	readonly isMafiaSupport?: boolean;
 	/**
-	 * 접선해야 마피아로 인정받는가 (스파이·짐승인간).
+	 * 접선해야 마피아로 인정받는가 (스파이·짐승인간·사기꾼).
 	 *
 	 * isMafiaSupport와 겹쳐 보이지만 다른 축이다. 마담과 도둑은 보조이면서도
 	 * 처음부터 마피아와 대화하고 승리 인원에 세지지만, 스파이와 짐승인간은
@@ -328,7 +328,8 @@ export interface RoleDef {
 	 * 한 필드로 합치면 마담이 첫 밤에 혼자 앉아 있게 된다.
 	 *
 	 * 접선하는 *방법*은 여기 없다 — 스파이는 조사(defectsToMafia), 짐승인간은
-	 * 같은 대상 지목(STALK)으로, 각자의 능력이 곧 조건이다. 이 플래그는
+	 * 같은 대상 지목(STALK), 사기꾼은 마피아의 칼에 맞는 것(immuneToMafiaKill,
+	 * NightPipeline.contactAttacked)으로, 각자의 능력이 곧 조건이다. 이 플래그는
 	 * "seat.contacted를 false로 시작하는가"만 정한다.
 	 */
 	readonly needsContact?: boolean;
@@ -576,7 +577,8 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "짐승인간",
 		team: Team.MAFIA,
 		glyph: "🐺",
-		ability: "마피아와 같은 사람을 노리면 접선합니다. 접선한 뒤에는 밤마다 한 명을 물어 죽입니다.",
+		ability:
+			"마피아와 같은 사람을 노리거나 마피아가 당신을 노리면 접선합니다. 접선한 뒤에는 밤마다 한 명을 물어 죽입니다. 마피아가 모두 사라지면 혼자 사냥합니다.",
 		// 예전에는 처음부터 혼자 무는 독립 공격자였고, 조언도 "마피아와 겹치지
 		// 말라"였다. 클래식에서는 정확히 반대다 — 겹쳐야 합류한다.
 		summary: "마피아와 접선한 뒤 밤마다 뭅니다",
@@ -606,18 +608,27 @@ export const ROLE_DEFS: Record<Role, RoleDef> = {
 		displayName: "사기꾼",
 		team: Team.MAFIA,
 		glyph: "🎭",
-		ability: "경찰 조사에 시민으로 나옵니다. 조사당하면 다음 아침에 알게 됩니다.",
+		ability:
+			"경찰 조사에 시민으로 나옵니다. 조사당하면 다음 아침에 알게 됩니다. 마피아가 밤에 당신을 노리면 죽지 않고 접선합니다.",
 		summary: "경찰 조사에 시민으로 나옵니다",
-		tip: "당당하게 조사를 요구하세요. 당신은 절대 마피아로 나오지 않습니다.",
+		tip: "당당하게 조사를 요구하세요. 마피아가 당신을 찾아낼 때까지는 혼자입니다.",
 		nightAction: null,
 		nightStep: NightStep.AFTER,
-		nightChat: ChatChannel.MAFIA,
+		// 마피아42의 보조직업처럼 접선 전에는 마피아를 모른다. 처음부터 밀담에
+		// 앉아 있으면 경찰이 못 잡는 마피아가 하나 더 있는 판이 되어, 7인 이상
+		// 표준전의 시민 승률이 40% 아래로 내려간다(tools/balance)
+		nightChat: null,
 		nightSprite: null,
 		nightAttackSprite: null,
 		nightPrompt: null,
-		nightNotice: MAFIA_CHAT,
+		nightNotice: LONE_MAFIA_TEAM,
 		immuneToVote: false,
 		notifiesOnInspect: true,
+		isMafiaSupport: true,
+		needsContact: true,
+		// 이 면역이 곧 접선 방법이다 — 마피아의 칼이 빗나간 자리에서 만난다
+		// (NightPipeline.contactAttacked)
+		immuneToMafiaKill: true,
 		// appearsAsMafia를 켜지 않는다 — 그것이 이 직업의 전부다
 	},
 	SEER: {
@@ -911,6 +922,20 @@ export function winWeightOf(seat: { role: Role }): number {
  */
 export function countsForMafiaWin(seat: { role: Role; team: Team; contacted: boolean }): boolean {
 	return seat.team === Team.MAFIA && seat.contacted;
+}
+
+/**
+ * 밤에 사람을 죽일 수 있는 마피아 진영 좌석인가. 시민 승리가 묻는 것이 이것이다.
+ *
+ * 마피아42와 같다 — 칼을 든 마피아가 모두 사라지면 스파이·사기꾼이 살아
+ * 있어도 시민이 이긴다. 진영 머릿수로 물으면 죽일 수단이 없는 보조직업만
+ * 남은 판이 처형될 때까지 밤만 반복한다. 짐승인간은 접선 전에도 센다 —
+ * 마피아가 사라지면 혼자 사냥을 시작하기 때문이다(NightPipeline STALK).
+ */
+export function killsForMafia(seat: { role: Role; team: Team }): boolean {
+	if (seat.team !== Team.MAFIA) return false;
+	const kind = ROLE_DEFS[seat.role].nightAction;
+	return kind === NightActionKind.ATTACK || kind === NightActionKind.STALK;
 }
 
 /**

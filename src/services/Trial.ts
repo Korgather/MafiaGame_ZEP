@@ -209,9 +209,8 @@ export function broadcastJudgeProgress(room: Room): void {
  * 서는 셈이라, 인원이 늘수록 처형이 구조적으로 불가능해졌다.
  *
  * 지금은 기권이 어느 쪽도 아니고, 남은 질문 하나("3:3이면?")를 룰셋의
- * judgementTie가 답한다. 클래식은 원작을 따라 `execute`(같으면 죽인다),
- * 나머지 모드는 `spare`(넘어야 죽인다)다. 이 값을 룰셋에 둔 이유는
- * 인원과 시간이 모드마다 다르기 때문이다 — RuleSet.JudgementTie 참고.
+ * judgementTie가 답한다. 모든 모드가 원작을 따라 `execute`(같으면 죽인다)다.
+ * `spare`(넘어야 죽인다)는 값으로만 남아 있다 — RuleSet.JudgementTie 참고.
  *
  * **전원이 기권한 낮은 어느 모드에서도 처형하지 않는다.** `execute`에서
  * 0 = 0을 그냥 통과시키면 아무도 버튼을 누르지 않은 판이 곧 처형이 되어,

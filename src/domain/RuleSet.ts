@@ -185,10 +185,10 @@ export type ChatMode = "free" | "phrasesOnly";
  * 더 무거운 짐을 지운다. `execute`는 같은 수여도 죽인다 — 원작 클래식의
  * 규칙이고, 시민 쪽이 한 표 모자라 마피아를 놓치는 판을 줄인다.
  *
- * 모드마다 다른 이유는 인원과 시간이 다르기 때문이다. 찬반은 5초짜리
- * 단계라 인원이 늘수록 못 누른 사람이 늘고, 그 사람들이 전부 기권으로
- * 빠지면 동수가 흔해진다. 클래식은 그 흔한 동수를 처형 쪽으로 보내고,
- * 정원이 작거나 시간이 더 짧은 모드는 반대쪽으로 보낸다.
+ * 지금은 모든 모드가 `execute`다 (마피아42 기준). 찬반은 5초짜리 단계라
+ * 못 누른 사람이 전부 기권으로 빠지면 동수가 흔하고, 그 동수를 살리는
+ * 쪽으로 보내면 낮이 통째로 허탕이 된다. `spare`는 시뮬레이터 비교용으로
+ * 남겨 둔 값이다 (npm run balance).
  */
 export type JudgementTie = "execute" | "spare";
 
@@ -363,7 +363,7 @@ export const STANDARD_RULES: RuleSet = {
 	minPlayers: 4,
 	maxPlayers: 12,
 	chatMode: "free",
-	judgementTie: "spare",
+	judgementTie: "execute",
 };
 
 /**
@@ -407,7 +407,7 @@ export const BLITZ_RULES: RuleSet = {
 	chatMode: "free",
 	// 찬반이 4초다. 못 누른 사람이 동수를 만드는 판이 흔한데 그 판마다
 	// 처형까지 나가면 3분 단판이 지목 한 번으로 끝난다
-	judgementTie: "spare",
+	judgementTie: "execute",
 };
 
 /**
@@ -435,7 +435,7 @@ export const SILENCE_RULES: RuleSet = {
 	maxPlayers: 12,
 	chatMode: "phrasesOnly",
 	// 표준전에서 갈라져 나온 모드다. 표준전과 다르게 둘 이유가 없다
-	judgementTie: "spare",
+	judgementTie: "execute",
 };
 
 /**

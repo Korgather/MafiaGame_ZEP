@@ -1044,7 +1044,7 @@ describe("스킵 · 재판 · 시간 조절", () => {
 	 * 5초 안에 버튼을 못 찾은 사람과 화면을 안 보고 있는 사람이 전부
 	 * 반대편에 서는 셈이라 인원이 늘수록 처형이 구조적으로 불가능해졌다.
 	 * 지금은 기권이 어느 쪽도 아니고, 동수를 어느 쪽으로 보낼지는 모드가
-	 * 정한다 — 클래식은 처형(`execute`), 나머지는 무산(`spare`)이다.
+	 * 정한다 — 모든 모드가 처형(`execute`)이고, 무산(`spare`)은 값으로만 남아 있다.
 	 *
 	 * 넷을 나눠 둔 이유는 증상이 제각각이어서다. 기권 규칙이 무너지면
 	 * 처형이 안 되고, 동수 규칙이 무너지면 두 모드 중 하나가 조용히 다른
@@ -1096,12 +1096,13 @@ describe("스킵 · 재판 · 시간 조절", () => {
 		assert.equal(nominee.alive, false, "1 대 1인데 살아남았습니다");
 	});
 
-	// 표준전은 반대쪽이다. 같은 코드가 두 규칙을 다 태우는지 보려면
-	// 두 모드를 나란히 두는 수밖에 없다
-	it("표준전은 찬성과 반대가 같으면 살린다", () => {
+	// 표준전도 처형이다(마피아42 기준). 무산 쪽 가지는 룰셋 값을 바꿔 끼워
+	// 지킨다 — 같은 코드가 두 규칙을 다 태우는지 보려면 나란히 둘 수밖에 없다
+	it("룰셋이 spare면 찬성과 반대가 같을 때 살린다", () => {
 		startPlainGame(MIN_PLAYERS, 5);
 		const target = reachVote(5);
-		assert.equal(target.ruleSet.judgementTie, "spare", "5번 방이 표준전이 아닙니다");
+		assert.equal(target.ruleSet.judgementTie, "execute", "표준전의 동수는 처형이어야 합니다");
+		(target as { ruleSet: typeof target.ruleSet }).ruleSet = { ...target.ruleSet, judgementTie: "spare" };
 		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
 		const others = target.seats.filter(seat => seat.index !== nominee.index);
 

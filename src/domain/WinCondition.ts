@@ -7,7 +7,13 @@
  */
 import type { Seat } from "../types/Game.types.ts";
 import { Team } from "../types/Game.types.ts";
-import { NightActionKind, ROLE_DEFS, countsForMafiaWin, winWeightOf } from "./Roles.ts";
+import {
+	NightActionKind,
+	ROLE_DEFS,
+	countsForMafiaWin,
+	killsForMafia,
+	winWeightOf,
+} from "./Roles.ts";
 
 /**
  * 생존자를 네 가지로 센다. 넷이 따로 있는 이유는 각자 다른 질문에 답해서다.
@@ -100,9 +106,10 @@ function citizenHoldsRevive(seats: readonly Seat[]): boolean {
  *
  * 네 줄의 순서가 곧 규칙이다.
  *
- *   1. 마피아 진영이 한 명도 없으면 시민 승리. 무게가 아니라 머릿수로 보는
- *      이유는 위와 같다 — 접선하지 못한 짐승인간이 살아 있는 판은 끝난 판이
- *      아니다.
+ *   1. 밤에 죽일 수 있는 마피아 진영이 한 명도 없으면 시민 승리
+ *      (killsForMafia). 접선하지 못한 짐승인간이 살아 있는 판은 끝난 판이
+ *      아니지만, 스파이·사기꾼만 남은 판은 끝난 판이다 — 죽일 수단이 없어
+ *      처형될 때까지 밤만 반복한다. 마피아42도 그렇게 끝낸다.
  *   2. 시민 진영이 한 명도 없으면 마피아 승리. 접선하지 못한 스파이만 남은
  *      판이 여기 걸린다. 무게로만 보면 그 스파이가 시민 쪽에 서 있어서
  *      혼자 남은 방이 영원히 끝나지 않는다.
@@ -120,7 +127,7 @@ function citizenHoldsRevive(seats: readonly Seat[]): boolean {
  */
 export function evaluateWinner(seats: readonly Seat[]): Team | null {
 	const alive = countAlive(seats);
-	if (alive.mafiaAlive <= 0) return Team.CITIZEN;
+	if (!seats.some(seat => seat.alive && killsForMafia(seat))) return Team.CITIZEN;
 	if (alive.citizenAlive <= 0) return Team.MAFIA;
 	if (alive.mafiaPower > alive.citizenPower) return Team.MAFIA;
 	if (alive.mafiaPower < alive.citizenPower) return null;

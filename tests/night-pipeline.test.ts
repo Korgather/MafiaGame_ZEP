@@ -152,13 +152,14 @@ const TRACE_BY_KIND: Record<
 			assert.equal(actor.markIndex, target.index);
 		},
 	},
-	// 접선 전 짐승인간은 물지 못한다. 마피아가 같은 사람을 노리지 않은
-	// 밤이라 헛짚음이 맞다 — 여기서 물면 접선 조건이 없는 것과 같다
+	// 이 표의 판에는 마피아가 없다. 접선할 상대가 없는 짐승인간은 혼자
+	// 사냥한다 — 마피아가 살아 있는 밤의 헛짚음은 「짐승인간」 쪽이 본다.
+	// 채팅 합류가 아니므로 defected에는 실리지 않는다
 	STALK: {
 		actor: Role.BEAST,
 		check: (target, settlement, actor) => {
-			noTrace(target);
-			assert.equal(actor.contacted, false);
+			assert.deepEqual(target.attackedBy, [1]);
+			assert.equal(actor.contacted, true);
 			assert.deepEqual(settlement.defected, []);
 		},
 	},

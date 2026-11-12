@@ -420,12 +420,16 @@ describe("WinCondition", () => {
 		assert.equal(evaluateWinner(seats), null);
 	});
 
-	it("접선하지 못한 스파이만 남은 방도 끝난다", () => {
-		// 시민 머릿수가 0인데 무게로는 스파이가 시민 쪽에 서 있다. 우세
-		// 판정만으로는 영원히 끝나지 않는 방이라 머릿수 판정이 따로 있다
-		const spy = seat(2, Role.SPY, { team: Team.MAFIA });
-		const seats = [seat(1, Role.CITIZEN, { alive: false }), spy];
-		assert.equal(evaluateWinner(seats), Team.MAFIA);
+	it("죽일 수 있는 마피아가 없으면 보조직업이 남아도 시민이 이긴다", () => {
+		// 마피아42의 규칙이다. 스파이·사기꾼·마담은 아무도 죽이지 못하므로
+		// 이들만 남은 방은 낮 처형 말고는 줄어들 길이 없어 끝나지 않는다
+		const seats = [
+			seat(1, Role.MAFIA, { alive: false }),
+			seat(2, Role.SPY, { team: Team.MAFIA, contacted: true }),
+			seat(3, Role.CON_ARTIST),
+			seat(4, Role.CITIZEN),
+		];
+		assert.equal(evaluateWinner(seats), Team.CITIZEN);
 	});
 
 	it("건달이 살아 있는 동안에는 마피아가 우세에 닿지 못한다", () => {

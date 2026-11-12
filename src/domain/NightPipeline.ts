@@ -24,6 +24,7 @@ import {
 	effectiveDef,
 	hasJobAbility,
 	inMafiaChat,
+	killsForMafia,
 	NightActionKind,
 	NightStep,
 	roleDef,
@@ -242,6 +243,38 @@ function targetedByMafiaTeam(seats: readonly Seat[], target: Seat): boolean {
 		if (inMafiaChat(shooter)) return true;
 	}
 	return false;
+}
+
+/**
+ * 밀담에 칼을 든 사람이 한 명이라도 살아 있는가.
+ *
+ * 밀담 인원으로만 물으면 마피아가 죽고 마담·도둑만 남은 판에서 짐승인간이
+ * 접선할 공격도, 혼자 사냥할 자격도 얻지 못해 밤이 헛돈다.
+ */
+function mafiaChatAlive(seats: readonly Seat[]): boolean {
+	return seats.some(seat => seat.alive && inMafiaChat(seat) && killsForMafia(seat));
+}
+
+/**
+ * 마피아의 칼이 빗나간 보조직업은 그 자리에서 접선한다 (마피아42의 접선).
+ *
+ * immuneToMafiaKill이 "죽지 않는다"를, 여기가 "그래서 만난다"를 맡는다.
+ * DEATH 직전에 도는 이유는 STALK(45)이 먼저여야 해서다 — 같은 밤에 같은
+ * 대상을 노려 접선한 짐승인간에게 접선 문구가 두 번 가지 않는다.
+ */
+function contactAttacked(seats: readonly Seat[], ledger: NightLedger): void {
+	for (const seat of seats) {
+		if (!seat.alive || seat.contacted) continue;
+		const def = roleDef(seat.role);
+		if (def.needsContact !== true || def.immuneToMafiaKill !== true) continue;
+		if (!targetedByMafiaTeam(seats, seat)) continue;
+		seat.contacted = true;
+		ledger.defected.push(seat.index);
+		ledger.reveals.push({
+			seat: seat.index,
+			line: "🤝 마피아가 당신을 찾아왔습니다.\n이제 밤마다 마피아와 대화할 수 있습니다.",
+		});
+	}
 }
 
 /**
@@ -586,6 +619,18 @@ function apply(
 				target.attackedBy.push(actor.index);
 				return true;
 			}
+			// 마피아가 모두 사라졌으면 혼자 사냥을 시작한다. 이 줄이 없으면
+			// 접선할 상대가 없는 짐승인간이 아무도 죽이지 못한 채 판이 끝나지
+			// 않는다 — 마피아가 한 명뿐인 6인 판에서 열 판에 한 판이 그랬다
+			if (!mafiaChatAlive(ctx.seats)) {
+				actor.contacted = true;
+				target.attackedBy.push(actor.index);
+				ledger.reveals.push({
+					seat: actor.index,
+					line: "🐺 마피아가 모두 사라졌습니다.\n이제 혼자 사냥합니다.",
+				});
+				return true;
+			}
 			if (targetedByMafiaTeam(ctx.seats, target)) {
 				actor.contacted = true;
 				// 접선한 밤부터 곧바로 문다. CONTACT(45)가 DEATH(50) 앞인 이유가
@@ -740,6 +785,7 @@ export function resolveNightIntents(
 	for (const step of STEP_ORDER) {
 		if (step === NightStep.DEATH) {
 			if (!opts.skipAttacks) {
+				contactAttacked(seats, ledger);
 				// 살아남은 결말(SAVED·SHIELDED)은 killed에 들어오지 않는다. 뒤 step이
 				// 묻는 것은 "오늘 죽었는가"이지 "오늘 공격받았는가"가 아니다 —
 				// 후자를 답하면 의사가 살린 사람에게 쪽지가 안 가고, 그 사실이

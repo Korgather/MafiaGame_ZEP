@@ -10,8 +10,7 @@ import { describe, it } from "node:test";
 
 import { Role, Team } from "../src/types/Game.types.ts";
 import type { Seat } from "../src/types/Game.types.ts";
-import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
-import { ROLE_DEFS } from "../src/domain/Roles.ts";
+import { ROLE_DEFS, inMafiaChat } from "../src/domain/Roles.ts";
 import {
 	hasNightTurn,
 	nightActionBlockedReason,
@@ -36,9 +35,21 @@ function reveal(settlement: NightSettlement, index: number): string {
 }
 
 describe("사기꾼", () => {
-	it("마피아 팀이고 마피아 채팅에 들어간다", () => {
+	it("마피아 팀이지만 접선 전에는 마피아 채팅에 없다", () => {
 		assert.equal(ROLE_DEFS[Role.CON_ARTIST].team, Team.MAFIA);
-		assert.equal(ROLE_DEFS[Role.CON_ARTIST].nightChat, ChatChannel.MAFIA);
+		assert.equal(inMafiaChat(seat(1, Role.CON_ARTIST)), false);
+	});
+
+	it("마피아가 밤에 노리면 죽지 않고 접선한다", () => {
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.CON_ARTIST)];
+		const result = night(seats, [[1, 2]]);
+		assert.equal(seats[1].alive, true);
+		assert.equal(inMafiaChat(seats[1]), true);
+		assert.deepEqual(result.defected, [2]);
+		assert.match(reveal(result, 2), /마피아가 당신을 찾아왔습니다/);
+		// 이미 만난 사람에게 다음 밤 또 알리지 않는다
+		for (const s of seats) s.attackedBy = [];
+		assert.deepEqual(night(seats, [[1, 2]]).defected, []);
 	});
 
 	it("밤에 고를 대상이 없다", () => {
@@ -51,13 +62,13 @@ describe("사기꾼", () => {
 		assert.match(reveal(night(seats, [[1, 2]]), 1), /마피아가 아닙니다/);
 	});
 
-	it("스파이에게는 정체가 그대로 보이고 합류가 일어난다", () => {
-		// 위장은 팀 조사에만 통한다. 직업을 읽는 능력까지 속이면
-		// 스파이가 사기꾼을 만났을 때 아무 일도 일어나지 않는다
+	it("스파이에게는 정체가 그대로 보이지만 접선 전 사기꾼으로는 합류하지 못한다", () => {
+		// 위장은 팀 조사에만 통한다. 다만 사기꾼도 아직 마피아를 못 만난
+		// 사람이라, 그를 찾아낸 것으로 마피아 채팅이 열릴 수는 없다
 		const seats = [seat(1, Role.SPY), seat(2, Role.CON_ARTIST)];
 		const result = night(seats, [[1, 2]]);
 		assert.match(reveal(result, 1), /사기꾼/);
-		assert.deepEqual(result.defected, [1]);
+		assert.deepEqual(result.defected, []);
 	});
 
 	it("조사당하면 다음 아침에 알게 된다", () => {
@@ -330,5 +341,36 @@ describe("시민의 익명 쪽지", () => {
 		// 밤이 끝날 때 오르는 값이라 그 밤 동안에는 usedSkill만 켜져 있다
 		const tonight = seat(1, Role.CITIZEN, { usedSkill: true });
 		assert.equal(hasNightTurn(tonight, 1), true);
+	});
+});
+
+describe("짐승인간 — 혼자 사냥", () => {
+	it("마피아가 살아 있으면 다른 대상을 노린 밤은 허탕이다", () => {
+		const seats = [seat(1, Role.MAFIA), seat(2, Role.BEAST), seat(3, Role.CITIZEN), seat(4, Role.CITIZEN)];
+		night(seats, [[1, 3], [2, 4]]);
+		assert.deepEqual(seats[3].attackedBy, []);
+		assert.equal(seats[1].contacted, false);
+	});
+
+	it("마피아가 모두 죽으면 접선 없이도 문다", () => {
+		// 이 줄이 없으면 접선할 상대를 잃은 짐승인간이 아무도 못 죽인 채
+		// 판이 끝나지 않는다
+		const seats = [seat(1, Role.MAFIA, { alive: false }), seat(2, Role.BEAST), seat(3, Role.CITIZEN)];
+		const result = night(seats, [[2, 3]]);
+		assert.deepEqual(result.casualties.map(c => c.seat.index), [3]);
+		assert.match(reveal(result, 2), /혼자 사냥/);
+	});
+
+	it("칼 없는 보조직업만 밀담에 남아도 혼자 문다", () => {
+		// 마담은 밀담에 앉아 있지만 죽이지 못한다. 밀담 인원으로만 물으면
+		// 짐승인간이 접선도 사냥도 못 해 밤이 헛돈다
+		const seats = [
+			seat(1, Role.MAFIA, { alive: false }),
+			seat(2, Role.BEAST),
+			seat(3, Role.CITIZEN),
+			seat(4, Role.MADAM, { contacted: true }),
+		];
+		const result = night(seats, [[2, 3]]);
+		assert.deepEqual(result.casualties.map(c => c.seat.index), [3]);
 	});
 });
