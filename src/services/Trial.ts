@@ -19,6 +19,7 @@ import { locate } from "../entities/RoomRegistry.ts";
 import { field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
+import { eventTone } from "./Cut.ts";
 import { DeathCause, kill } from "./Death.ts";
 import * as Screen from "./Screen.ts";
 import { bindMessage, identityOf, isStaleEvent, openJudgement, updateMain } from "./Widgets.ts";
@@ -290,10 +291,13 @@ export function resolveJudgement(room: Room): boolean {
 	// 협박당한 채 단상에 오른 사람이 자기 처형에 반대 한 표를 얻는 꼴이다
 	const tally = tallyJudgement(room);
 	room.nominee = 0;
+	// 컷의 첫 줄. 숫자가 먼저 뜨고 결말이 한 박자 뒤에 찍힌다
+	const count = `⚖️ 찬성 ${tally.agree} · 반대 ${tally.oppose}`;
 
 	if (!judgementPassed(room, tally)) {
 		room.rejected.push(nominee.index);
 		room.voteRecord.message = `🕊️ ${sparedReason(room, tally)} ${participantLabel(nominee)}는 살아남았습니다.`;
+		room.voteRecord.verdict = { tone: "spared", lines: [count, room.voteRecord.message] };
 		Chat.announce(room, room.voteRecord.message);
 		// 처형은 kill이 EXECUTE를 울리는데 부결에는 짝이 없었다. 소리로만
 		// 판을 따라가는 사람에게는 무음이 곧 "아직 개표 중"이었다
@@ -311,6 +315,14 @@ export function resolveJudgement(room: Room): boolean {
 	// 곧 이어질 밤이 같은 곡을 다시 시작하며 두 번 끊긴다. 이 붉은 기는 다음
 	// setScene(밤 아니면 종료 — 처형 뒤에 다른 길은 없다)이 걷어간다
 	Screen.flash(room, Screen.Veil.STRIKE);
+	// 처형이 딸려 보낸 죽음(자폭·연인)은 kill이 nightReport에 적는다. 그 줄을
+	// 컷에 함께 싣고, 자폭이 있었으면 컷도 폭발로 바꾼다
+	const before = room.nightReport.length;
 	kill(room, nominee, DeathCause.EXECUTION);
+	const collateral = room.nightReport.slice(before);
+	room.voteRecord.verdict = {
+		tone: eventTone(collateral, "execute"),
+		lines: [count, room.voteRecord.message].concat(collateral),
+	};
 	return true;
 }

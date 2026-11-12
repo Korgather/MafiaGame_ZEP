@@ -43,6 +43,27 @@ const TAIL = 0.8;
  */
 const MAX = 6;
 
+/** 줄 맨 앞 글리프 → 사건 컷. 앞에 있을수록 우선한다 */
+const EVENT_TONES: Array<[string, CutTone]> = [
+	["💥", "bomb"],
+	["💖", "save"],
+	["🛡️", "shield"],
+];
+
+/**
+ * 줄들 안에 사건(자폭·치료·방탄)이 있으면 그 컷을, 없으면 fallback을 고른다.
+ *
+ * ponytail: 문구의 첫 글리프로 가른다. 사건 문구를 고치면 여기도 함께 본다 —
+ * 사건이 늘어 글리프가 겹치면 report가 종류를 직접 싣게 바꾼다.
+ */
+export function eventTone(lines: string[], fallback: CutTone): CutTone {
+	for (let i = 0; i < EVENT_TONES.length; i++) {
+		const glyph = EVENT_TONES[i][0];
+		if (lines.some(line => line.indexOf(glyph) === 0)) return EVENT_TONES[i][1];
+	}
+	return fallback;
+}
+
 function lengthOf(lineCount: number): number {
 	const raw = LEAD + STEP * lineCount + TAIL;
 	return raw > MAX ? MAX : raw;

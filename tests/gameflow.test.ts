@@ -18,6 +18,7 @@ import { BLITZ_RULES, SILENCE_RULES, STANDARD_RULES } from "../src/domain/RuleSe
 import { roleBook } from "../src/domain/Guide.ts";
 import { SKIP_VOTE } from "../src/domain/Vote.ts";
 import { LOBBY_SPAWN_AREA } from "../src/constants/RoomLayout.ts";
+import { eventTone } from "../src/services/Cut.ts";
 import { finish } from "../src/services/Outcome.ts";
 import type { FakePlayer } from "./helpers/FakeZep.ts";
 import {
@@ -1647,14 +1648,24 @@ describe("전환 컷", () => {
 		assert.equal(target.phase, GamePhase.NIGHT);
 		const payload = cutWidget(playerOf(target.seats[0])).lastOfType("init");
 		assert.ok(payload, "밤 컷이 payload 없이 열렸습니다");
-		assert.equal(payload.tone, "night");
+		// 처형은 따로 기다리는 컷을 갖지 않고 밤 컷에 얹힌다. 그림만 처형이다
+		assert.equal(payload.tone, "execute");
 		const lines = payload.lines as string[];
-		// 처형은 자기 컷을 갖지 않는다. 개표와 반론과 찬반이 이미 시간을 쓴 뒤라
-		// 같은 소식을 한 번 더 기다리게 하는 대신 밤 컷의 첫 줄로 얹는다
+		// 집계가 먼저, 결말이 그 뒤다 — 둘 사이가 뜸이다
 		assert.ok(
-			lines.length > 0 && lines[0].indexOf(`${victim.index}번 참가자`) >= 0,
+			lines.length === 2 &&
+				lines[0].indexOf("찬성") >= 0 &&
+				lines[1].indexOf(`${victim.index}번 참가자`) >= 0,
 			`처형 결과가 밤 컷에 실리지 않았습니다: ${JSON.stringify(lines)}`
 		);
+	});
+
+	it("밤 사이 사건이 아침 컷의 그림을 고른다", () => {
+		assert.equal(eventTone(["☠️ 1번 참가자가 죽었습니다."], "day"), "day");
+		assert.equal(eventTone(["💖 의사가 누군가를 살려냈습니다."], "day"), "save");
+		assert.equal(eventTone(["🛡️ 누군가가 공격을 받았지만 버텨냈습니다."], "day"), "shield");
+		// 자폭이 가장 큰 사건이다. 같은 밤에 치료가 있었어도 폭발이 이긴다
+		assert.equal(eventTone(["💖 의사가 …", "💥 2번 참가자가 폭발에 …"], "day"), "bomb");
 	});
 });
 

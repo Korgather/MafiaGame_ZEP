@@ -24,7 +24,7 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import type { VoteProgressPayload } from "./Widgets.ts";
 import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
-import { playCut } from "./Cut.ts";
+import { eventTone, playCut } from "./Cut.ts";
 import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import * as Screen from "./Screen.ts";
 import { beginDayStage } from "./Stage.ts";
@@ -100,7 +100,7 @@ export function beginDay(room: Room): void {
 	 * 조용한 밤이면 lines가 비어 제목만 도는 짧은 컷이 된다 — 그것도
 	 * 정보다("아무도 죽지 않았다").
 	 */
-	playCut(room, "day", `🌞 ${room.turnCount}번째 아침`, room.nightReport);
+	playCut(room, eventTone(room.nightReport, "day"), `🌞 ${room.turnCount}번째 아침`, room.nightReport);
 
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 
@@ -117,17 +117,21 @@ export function beginDay(room: Room): void {
  * 판이 늘어지지는 않는다.
  *
  * 아침 사운드도 아침 컷도 다시 틀지 않는다. 새 아침이 아니라 같은 낮이다.
- * 무대(beginDayStage)도 이미 낮 상태 그대로다.
+ * 무대(beginDayStage)도 이미 낮 상태 그대로다. 대신 무산 컷이 한 번 돈다 —
+ * 찬반이 어떻게 갈렸는지가 채팅 한 줄로만 지나가던 자리다.
  */
 export function resumeDay(room: Room): void {
 	enterPhase(room, GamePhase.DAY);
 	room.phaseTimer = Math.floor(dayDuration(room, aliveSeats(room).length) / 2);
 	room.tickTockPlayed = false;
 
-	// 소리도 컷도 다시 틀지 않지만 장면은 되돌려야 한다. 여기 오기 직전이
+	// 아침 소리는 다시 틀지 않지만 장면은 되돌려야 한다. 여기 오기 직전이
 	// 재판이라 화면은 아직 단상을 당겨 비추고 있고 음악도 재판 곡이다
 	Screen.setScene(room, Screen.Zoom.DAY, Bgm.DAY, Screen.Veil.NONE);
 	Chat.say(room, "🌞 처형이 무산되어 토론을 이어갑니다. 곧 다시 투표합니다.");
+	const verdict = room.voteRecord.verdict;
+	// 컷이 phaseTimer를 늘린다. 아래 openDayView가 그 값을 화면에 싣는다
+	if (verdict) playCut(room, verdict.tone, "🕊️ 처형 무산", verdict.lines);
 	forEachPlayer(room, (player, seat) => openDayView(room, player, seat));
 }
 

@@ -344,6 +344,11 @@ export interface VoteRecord {
 	nominee: number;
 	/** 결과 화면에 띄우는 한 줄 */
 	message: string;
+	/**
+	 * 찬반이 끝난 뒤의 컷(Trial.resolveJudgement가 채운다). 집계 한 줄이 먼저
+	 * 뜨고 결말이 뒤따라 뜬다 — 그 사이가 "뜸"이다. 찬반 전에는 없다.
+	 */
+	verdict?: { tone: CutTone; lines: string[] };
 }
 
 /**
@@ -353,7 +358,19 @@ export interface VoteRecord {
  * 때문이다 — 처형 컷은 VOTE_RESULT가 아니라 다음 밤에 얹히고, 승리 컷은
  * 이긴 진영에 따라 색이 갈린다. 단계를 보내면 위젯이 그 규칙을 알아야 한다.
  */
-export type CutTone = "neutral" | "night" | "day" | "mafia" | "citizen";
+export type CutTone =
+	| "neutral"
+	| "night"
+	| "day"
+	| "mafia"
+	| "citizen"
+	// 사건 컷. 밤 사이 사건(save·shield·bomb)은 아침 컷에, 찬반 결과
+	// (execute·bomb·spared)는 그 직후 컷에 얹힌다
+	| "save"
+	| "shield"
+	| "bomb"
+	| "execute"
+	| "spared";
 
 /**
  * 지금 도는 중인 단계 전환 컷.

@@ -1661,6 +1661,52 @@ const SCENES = [
 			},
 		],
 	},
+	// 찬반 결과 컷: 첫 줄이 집계, 둘째 줄이 결말(도장처럼 찍힌다)
+	{
+		label: "컷 — 처형 (집계 뒤에 결말)",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				title: "🌙 2번째 밤",
+				lines: ["⚖️ 찬성 5 · 반대 2", "☠️ 5번 참가자가 처형되었습니다."],
+				tone: "execute",
+				ms: 3600,
+			},
+		],
+		expect: { ".cut.execute.verdict": 1, ".lines span": 2 },
+	},
+	{
+		label: "컷 — 처형 무산",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				title: "🕊️ 처형 무산",
+				lines: ["⚖️ 찬성 2 · 반대 5", "🕊️ 찬성이 반대를 넘지 못해 5번 참가자는 살아남았습니다."],
+				tone: "spared",
+				ms: 3600,
+			},
+		],
+		expect: { ".cut.spared": 1, ".lines span": 2 },
+	},
+	{
+		label: "컷 — 아침 (자폭 사건)",
+		file: "cut.html",
+		size: CUT_SIZE,
+		messages: [
+			{
+				type: "init",
+				title: "🌞 3번째 아침",
+				lines: ["☠️ 3번 참가자가 죽었습니다.", "💥 7번 참가자가 폭발에 휘말려 죽었습니다."],
+				tone: "bomb",
+				ms: 3600,
+			},
+		],
+		expect: { ".cut.bomb": 1 },
+	},
 	{
 		label: "컷 — 마피아 승리",
 		file: "cut.html",

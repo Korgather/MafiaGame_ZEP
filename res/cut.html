@@ -50,6 +50,34 @@
 				--cut-2: #0b1218;
 				--vignette: rgba(4, 14, 26, 0.5);
 			}
+			.cut.save {
+				--ink-cut: #ffb3cf;
+				--cut-1: #4a1f38;
+				--cut-2: #170c14;
+			}
+			.cut.shield {
+				--ink-cut: #a9c8e8;
+				--cut-1: #22364a;
+				--cut-2: #0b1218;
+			}
+			.cut.bomb {
+				--ink-cut: #ffb057;
+				--cut-1: #5a2a10;
+				--cut-2: #180c06;
+				--vignette: rgba(40, 12, 0, 0.6);
+			}
+			.cut.execute {
+				--ink-cut: #d9d4e6;
+				--cut-1: #2a2733;
+				--cut-2: #0c0b10;
+				--vignette: rgba(0, 0, 0, 0.7);
+			}
+			.cut.spared {
+				--ink-cut: #a8e0d2;
+				--cut-1: #1f4640;
+				--cut-2: #0b1614;
+				--vignette: rgba(0, 0, 0, 0.3);
+			}
 			.cut::after {
 				content: "";
 				position: absolute;
@@ -121,6 +149,23 @@
 				from {
 					opacity: 0;
 					transform: translateY(10px);
+				}
+			}
+			.cut.verdict .lines span:nth-child(2) {
+				font-size: var(--t-xl);
+				font-weight: 800;
+				color: var(--ink-cut);
+				text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+				animation-name: stamp;
+			}
+			@keyframes stamp {
+				from {
+					opacity: 0;
+					transform: scale(1.7);
+				}
+				60% {
+					opacity: 1;
+					transform: scale(0.96);
 				}
 			}
 			.clockbar {
@@ -443,6 +488,7 @@ Parent.on({
   const cut = qs("#cut");
   const tone = data.tone || "neutral";
   cut.classList.add(tone);
+  if (String(lines[0] || "").indexOf("⚖️") === 0) cut.classList.add("verdict");
   cut.style.setProperty("--art", `url("${assetUrl(`cut_${tone}.gif`)}")`);
   cut.style.animation = "veil 260ms var(--ease), fade " + OUT + "ms var(--ease) " + Math.max(0, ms - OUT) + "ms both";
   const title = String(data.title || "");

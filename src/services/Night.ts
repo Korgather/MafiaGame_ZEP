@@ -125,7 +125,8 @@ export function beginNight(room: Room): void {
 	 *
 	 * 첫 밤에는 비어 있다(아직 투표가 없었다) — 그때는 제목만 도는 컷이 된다.
 	 */
-	const verdict = room.voteRecord.message;
+	const verdict = room.voteRecord.verdict;
+	const message = room.voteRecord.message;
 	resetRound(room);
 
 	beginNightStage(room);
@@ -145,7 +146,14 @@ export function beginNight(room: Room): void {
 	}
 
 	// 컷이 phaseTimer를 늘린다. 아래 openNightView가 그 값을 화면에 싣는다
-	playCut(room, "night", `🌙 ${room.turnCount + 1}번째 밤`, verdict ? [verdict] : []);
+	// 처형(·자폭)이면 그 그림으로 밤을 연다. 부결은 밤의 그림 그대로다 —
+	// 무산 컷은 낮으로 돌아갈 때만 쓴다(Voting.resumeDay)
+	playCut(
+		room,
+		verdict && verdict.tone !== "spared" ? verdict.tone : "night",
+		`🌙 ${room.turnCount + 1}번째 밤`,
+		verdict ? verdict.lines : message ? [message] : []
+	);
 
 	forEachPlayer(room, (player, seat) => {
 		closeCard(player);
