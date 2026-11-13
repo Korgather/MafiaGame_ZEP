@@ -150,12 +150,13 @@ function scrollToEnd(el) {
  * fileName만 바꿔 앱 파일 주소를 만든다. appHashId가 없는 곳(미리보기)은
  * 상대경로 그대로 둔다. 앱을 올린 뒤에야 보인다.
  *
- * GIF는 앱 파일 주소로는 불러지지 않아 zep-script-resources 레포의
- * res/mafia/ 에 올려 CDN에서 받는다 (main에 push하면 S3에 올라간다).
+ * GIF는 앱 파일 주소로는 불러지지 않고, 컷 배경 webp는 커서 앱 zip을 키운다.
+ * 둘 다 zep-script-resources 레포의 res/mafia/ 에 올려 CDN에서 받는다
+ * (main에 push하면 S3에 올라간다).
  */
-const GIF_CDN = "https://cdn-static-script.zep.us/mafia/";
+const CDN = "https://cdn-static-script.zep.us/mafia/";
 function assetUrl(file) {
-	if (file.endsWith(".gif")) return GIF_CDN + file;
+	if (/\.(gif|webp)$/.test(file)) return CDN + file;
 	try {
 		const url = new URL(document.baseURI);
 		if (!url.searchParams.has("appHashId")) return file;

@@ -39,7 +39,7 @@
 				--cut-1: var(--surface);
 				--cut-2: var(--bg);
 				--vignette: rgba(0, 0, 0, 0.45);
-				/* --art: codex가 그린 톤별 배경(CDN mafia/cut_<톤>.gif, 움직이는 그림). 글자가 읽히게 어둡게 깐다 */
+				/* --art: codex가 그린 톤별 배경(CDN mafia/cut_<톤>.webp, 고해상도 그림). 글자가 읽히게 어둡게 깐다 */
 				background:
 					linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.5)),
 					var(--art, none) center / cover no-repeat,
@@ -79,7 +79,7 @@
 				--vignette: rgba(4, 14, 26, 0.5);
 			}
 
-			/* 사건 컷. 그림(cut_<톤>.gif)이 사건을 말하고 색은 그 그림을 따른다 */
+			/* 사건 컷. 그림(cut_<톤>.webp)이 사건을 말하고 색은 그 그림을 따른다 */
 			.cut.save {
 				--ink-cut: #ffb3cf;
 				--cut-1: #4a1f38;
@@ -317,7 +317,7 @@
 					cut.classList.add(tone);
 					// 아침 컷도 bomb 그림을 쓴다. 도장은 집계 줄(⚖️)로 시작하는 판결 컷에만 찍는다
 					if (String(lines[0] || "").indexOf("⚖️") === 0) cut.classList.add("verdict");
-					cut.style.setProperty("--art", `url("${assetUrl(`cut_${tone}.gif`)}")`);
+					cut.style.setProperty("--art", `url("${assetUrl(`cut_${tone}.webp`)}")`);
 					// 나타남과 사라짐을 한 줄에 싣는다. 걷는 것은 서버(Cut.ts의 advanceCut)라
 					// 여기서는 그 순간에 맞춰 흐려지기만 하면 된다
 					cut.style.animation =

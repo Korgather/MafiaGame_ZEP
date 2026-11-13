@@ -280,10 +280,10 @@ function scrollToEnd(el) {
  if (el) el.scrollTop = el.scrollHeight;
 }
 
-const GIF_CDN = "https://cdn-static-script.zep.us/mafia/";
+const CDN = "https://cdn-static-script.zep.us/mafia/";
 
 function assetUrl(file) {
- if (file.endsWith(".gif")) return GIF_CDN + file;
+ if (/\.(gif|webp)$/.test(file)) return CDN + file;
  try {
   const url = new URL(document.baseURI);
   if (!url.searchParams.has("appHashId")) return file;
@@ -492,7 +492,7 @@ Parent.on({
   const tone = data.tone || "neutral";
   cut.classList.add(tone);
   if (String(lines[0] || "").indexOf("⚖️") === 0) cut.classList.add("verdict");
-  cut.style.setProperty("--art", `url("${assetUrl(`cut_${tone}.gif`)}")`);
+  cut.style.setProperty("--art", `url("${assetUrl(`cut_${tone}.webp`)}")`);
   cut.style.animation = "veil 260ms var(--ease), fade " + OUT + "ms var(--ease) " + Math.max(0, ms - OUT) + "ms both";
   const title = String(data.title || "");
   const sp = title.indexOf(" ");
