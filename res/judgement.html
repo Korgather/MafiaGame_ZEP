@@ -122,7 +122,10 @@ function scrollToEnd(el) {
  if (el) el.scrollTop = el.scrollHeight;
 }
 
+const GIF_CDN = "https://cdn-static-script.zep.us/mafia/";
+
 function assetUrl(file) {
+ if (file.endsWith(".gif")) return GIF_CDN + file;
  try {
   const url = new URL(document.baseURI);
   if (!url.searchParams.has("appHashId")) return file;

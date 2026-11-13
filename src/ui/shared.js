@@ -149,8 +149,13 @@ function scrollToEnd(el) {
  * 상대경로 ui_x.png는 /spaces/app/ui_x.png로 풀려 404가 난다. 자기 주소의
  * fileName만 바꿔 앱 파일 주소를 만든다. appHashId가 없는 곳(미리보기)은
  * 상대경로 그대로 둔다. 앱을 올린 뒤에야 보인다.
+ *
+ * GIF는 앱 파일 주소로는 불러지지 않아 zep-script-resources 레포의
+ * res/mafia/ 에 올려 CDN에서 받는다 (main에 push하면 S3에 올라간다).
  */
+const GIF_CDN = "https://cdn-static-script.zep.us/mafia/";
 function assetUrl(file) {
+	if (file.endsWith(".gif")) return GIF_CDN + file;
 	try {
 		const url = new URL(document.baseURI);
 		if (!url.searchParams.has("appHashId")) return file;
@@ -199,7 +204,7 @@ const GLYPH_ICON = {
 	"?": "unknown",
 };
 
-/** codex가 움직이는 GIF로 만든 글리프(res/ui_<이름>.gif). 나머지는 정지 PNG다 */
+/** codex가 움직이는 GIF로 만든 글리프(CDN mafia/ui_<이름>.gif, assetUrl 참고). 나머지는 정지 PNG다 */
 const GLYPH_ANIMATED = new Set([
 	"trophy",
 	"mic",

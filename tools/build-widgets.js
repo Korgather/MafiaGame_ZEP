@@ -24,7 +24,8 @@ const SRC = path.join(ROOT, "src", "ui");
 const OUT = path.join(ROOT, "res");
 
 /** 위젯이 외부에서 받아오면 안 되는 것. 오프라인·CDN 차단 환경에서 화면이 빈다 */
-const EXTERNAL = /\b(?:https?:)?\/\/(?!localhost)[a-z0-9-]+\.[a-z]/gi;
+// 예외: cdn-static-script.zep.us (사내 zep-script-resources). 앱 파일 주소로는 GIF가 안 불러져 그쪽에 둔다
+const EXTERNAL = /\b(?:https?:)?\/\/(?!localhost|cdn-static-script\.zep\.us\/)[a-z0-9-]+\.[a-z]/gi;
 
 /**
  * 모든 위젯에 인라인되는 공통 스크립트. 순서가 곧 정의 순서다.
