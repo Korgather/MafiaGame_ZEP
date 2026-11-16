@@ -115,12 +115,16 @@ const Parent = (function () {
 	 * 서버가 따로 실어 보낸 wide를 바탕으로 한다 — 나란히 서므로 줄일 까닭이 없다.
 	 * 태블릿(60%)도 가로면 같은 배치로 바꾼다. 60% 폭이 그대로면 1180px
 	 * 화면에서 708px 띠가 한가운데를 가로지른다. 태블릿 가로는 세로 높이가
-	 * 넉넉해 폭 34%(약 400px, PC 위젯과 비슷), 높이 1.2배(최대 70%)면 된다.
+	 * 넉넉해 폭 32%(약 380px, PC 위젯과 비슷), 높이 1.2배(최대 70%)면 된다.
+	 * 태블릿 채팅은 왼쪽 아래 대신 가운데 아래에 선다 — 왼쪽 아래는 조이스틱
+	 * 자리고, 32%면 오른쪽 위 보드와 가운데 채팅이 겹치지 않는다. 폰은 폭이
+	 * 모자라 가운데에 두면 보드와 겹치므로 왼쪽 아래 그대로다(쓰는 동안은
+	 * 키보드가 어차피 조이스틱을 덮는다).
 	 * 화면을 덮는 위젯(100%)과 픽셀 폭 위젯(접은 채팅 바)은 건드리지 않는다.
 	 */
 	const LANDSCAPE = {
-		"96%": { width: "40%", grow: 1.8, max: 86 },
-		"60%": { width: "34%", grow: 1.2, max: 70 },
+		"96%": { width: "40%", grow: 1.8, max: 86, bottom: "bottomleft" },
+		"60%": { width: "32%", grow: 1.2, max: 70, bottom: "bottom" },
 	};
 	function landscapeLayout(layout) {
 		const fit = LANDSCAPE[layout.width];
@@ -130,8 +134,9 @@ const Parent = (function () {
 		const out = { ...layout, width: fit.width };
 		if (pct > 0 && String(base).slice(-1) === "%")
 			out.height = `${Math.min(Math.round(pct * fit.grow), fit.max)}%`;
-		if (layout.anchor === "top") out.anchor = "topright";
-		else if (layout.anchor === "bottom") out.anchor = "bottomleft";
+		// HUD(wide 없음)는 왼쪽 위, 보드는 오른쪽 위로 갈라 선다
+		if (layout.anchor === "top") out.anchor = layout.wide ? "topright" : "topleft";
+		else if (layout.anchor === "bottom") out.anchor = fit.bottom;
 		return out;
 	}
 

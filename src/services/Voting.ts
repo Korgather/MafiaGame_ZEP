@@ -14,26 +14,32 @@ import type { Room, Seat } from "../types/Game.types.ts";
 import type { SeatView } from "../types/Widget.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Bgm, Sound } from "../constants/Assets.ts";
+import { ACTION_RATE } from "../constants/GameConfig.ts";
+import { spend } from "../domain/RateLimit.ts";
 import type { VoteResult } from "../domain/Vote.ts";
 import { SKIP_VOTE, tallyVotes, VoteOutcome } from "../domain/Vote.ts";
 import { roleDef } from "../domain/Roles.ts";
 import { rememberMatchMoment } from "../domain/MatchRecap.ts";
 import { aliveSeats, enterPhase, participantLabel, seatAt, seatViews } from "../entities/Room.ts";
 import { locate } from "../entities/RoomRegistry.ts";
+import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { asInt, field, messageType } from "../types/Widget.types.ts";
 import type { VoteProgressPayload } from "./Widgets.ts";
-import { centerLabel, forEachPlayer, label, playSound } from "./Broadcast.ts";
+import { centerLabel, forEachPlayer, forEachSpectator, label, playSound } from "./Broadcast.ts";
 import * as Chat from "./ChatService.ts";
 import { eventTone, playCut } from "./Cut.ts";
-import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
+import { countTargetChange, FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import * as Screen from "./Screen.ts";
 import { beginDayStage } from "./Stage.ts";
 import {
 	bindMessage,
 	identityOf,
 	isStaleEvent,
-	openPhase,
-	openVote,
+	openBoard,
+	pollView,
+	syncHud,
+	updateHud,
+	timeVoteView,
 	updateMain,
 } from "./Widgets.ts";
 
@@ -73,7 +79,11 @@ export function beginDay(room: Room): void {
 	// 시간 조절권은 하루에 하나다. 부결로 낮이 다시 열려도(resumeDay)
 	// 새로 주지 않는다 — 재지목은 같은 낮이고, 두 번 주면 한 사람이
 	// 하루에 30초를 늘릴 수 있다
-	for (const seat of room.seats) seat.timeVoteSpent = false;
+	// 여론조사도 하루치다. 어제의 의심이 남으면 오늘 아침 소식을 반영하지 못한다
+	for (const seat of room.seats) {
+		seat.timeVoteSpent = false;
+		seat.suspect = 0;
+	}
 
 	beginDayStage(room);
 	// 밤에서 낮으로. 배율이 기준으로 돌아오고 음악이 바뀌는 이 한 줄이
@@ -143,15 +153,17 @@ export function resumeDay(room: Room): void {
  * 읽힌다. 누가 협박했는지는 말하지 않는다 — 알면 낮에 건달을 지목한다.
  */
 function dayNote(seat: Seat): string {
-	if (!seat.alive) return "당신은 죽었습니다. 관전 중입니다.";
+	if (!seat.alive) return "☠️ 당신은 죽었습니다 · 💬 유령 탭에서 유령끼리 이야기하세요";
 	if (seat.intimidated) return "협박당해 오늘은 투표할 수 없습니다.";
 	return "투표 전까지 이야기를 나누세요.";
 }
 
 /** 한 사람의 아침 화면 */
 export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	const widget = openPhase(player, room, {
+	const widget = openBoard(player, room, {
 		type: "init",
+		mode: "status",
+		gameId: room.gameId,
 		phase: "day",
 		turn: room.turnCount,
 		total: room.total,
@@ -171,15 +183,57 @@ export function openDayView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		note: dayNote(seat),
 		// 밤사이 무슨 일이 있었는지는 채팅이 아니라 화면에 남는다
 		deaths: room.nightReport,
+		// 나만 받은 답(조사 결과·방해 등). 채팅으로만 오면 토론에 밀려 올라간다.
+		// 공개 기록(timeline)에 없는 줄이라 따로 싣는다 — 유령도 마지막 답을 본다
+		mine: room.nightReveals.filter(reveal => reveal.seat === seat.index).map(reveal => reveal.line),
+		timeline: seat.alive ? [] : room.timeline,
 		spectating: false,
-		// 죽은 사람에게는 버튼을 그리지 않는다. 남은 사람들의 시간이다
-		timeVote: seat.alive && !seat.timeVoteSpent,
+		poll: pollView(room, seat),
+		...timeVoteView(room, seat),
 	});
-	if (seat.alive) bindTimeWidget(widget);
+	bindMessage(widget, "poll", (sender, data) => {
+		if (messageType(data) === "suspect") markSuspect(sender, data);
+	});
+	bindTimeWidget(widget);
 }
 
 /**
- * 낮 화면의 ±15초 버튼.
+ * 여론조사 한 칸. 같은 사람을 다시 누르면 지우고, 다른 사람을 누르면 옮긴다.
+ *
+ * 보드가 버튼을 막는 것은 안내일 뿐이다 — 낮인지, 모드가 켰는지, 둘 다
+ * 살아 있는지는 여기서 다시 본다. 버튼이라 연타가 쉬워 버튼용 여유분을 쓴다.
+ */
+function markSuspect(sender: ScriptPlayer, data: unknown): void {
+	const found = locate(sender.id);
+	if (!found) return;
+	const room = found.room;
+	const seat = found.seat;
+	if (isStaleEvent(room, sender)) return;
+	if (room.phase !== GamePhase.DAY || !room.ruleSet.dayPoll || !seat.alive) return;
+	const num = asInt(field(data, "num"));
+	const target = num === null ? null : seatAt(room, num);
+	if (!target || !target.alive || target === seat) return;
+	if (!spend(tagOf(sender).actionRate, ACTION_RATE, Time.getUtcTime())) return;
+
+	seat.suspect = seat.suspect === target.index ? 0 : target.index;
+	forEachPlayer(room, (player, each) => updateMain(player, { type: "poll", ...pollView(room, each) }));
+	forEachSpectator(room, player => updateMain(player, { type: "poll", ...pollView(room, null) }));
+}
+
+/** HUD를 방 전원(좌석)의 지금 단계에 맞춘다. 단계가 바뀔 때마다 GameFlow가 부른다 */
+export function refreshHud(room: Room): void {
+	forEachPlayer(room, (player, seat) => showHud(room, player, seat));
+}
+
+/** 한 사람의 HUD. 재접속 경로도 이것을 쓴다 */
+export function showHud(room: Room, player: ScriptPlayer, seat: Seat): void {
+	syncHud(player, room, seat);
+}
+
+/**
+ * 낮 보드의 ±15초 버튼. 예전에는 HUD 한 줄에 끼어 있어 아무도 찾지 못했다 —
+ * 지금은 낮 보드 머리말에 "토론 시간" 칸으로 따로 선다. 보드는 단계마다 새로
+ * 열리므로 openDayView가 열 때마다 한 번씩 문다.
  *
  * 위젯이 버튼을 숨기는 것은 안내일 뿐 방어가 아니다. 이미 썼는지, 지금이
  * 낮인지, 살아 있는지는 전부 서버가 다시 본다.
@@ -208,10 +262,13 @@ function bindTimeWidget(widget: ScriptWidget): void {
 		if (delta !== TIME_STEP && delta !== -TIME_STEP) return;
 		if (delta < 0 && room.phaseTimer <= MIN_DAY_LEFT) {
 			label(sender, "더 줄일 시간이 없습니다.");
+			// 보드는 누르자마자 "썼습니다"로 바꿔 둔다. 거절됐으니 단추를 돌려준다
+			updateMain(sender, { type: "timer", timer: room.phaseTimer, delta: 0, ...timeVoteView(room, seat) });
 			return;
 		}
 
 		seat.timeVoteSpent = true;
+		const before = room.phaseTimer;
 		const next = room.phaseTimer + delta;
 		room.phaseTimer = next < MIN_DAY_LEFT ? MIN_DAY_LEFT : next;
 
@@ -223,7 +280,7 @@ function bindTimeWidget(widget: ScriptWidget): void {
 				? `⏳ ${participantLabel(seat)}가 토론 시간을 ${TIME_STEP}초 늘렸습니다.`
 				: `⏩ ${participantLabel(seat)}가 토론 시간을 ${TIME_STEP}초 줄였습니다.`
 		);
-		broadcastDayTimer(room);
+		broadcastDayTimer(room, room.phaseTimer - before);
 	});
 }
 
@@ -233,10 +290,14 @@ function bindTimeWidget(widget: ScriptWidget): void {
  * 위젯은 자기 시계를 따로 돌린다(서버가 매 초 보내면 사람 수만큼 메시지가
  * 난다). 그래서 시간이 바깥에서 바뀐 순간에는 한 번 맞춰 줘야 한다.
  */
-function broadcastDayTimer(room: Room): void {
-	const payload = { type: "timer", timer: room.phaseTimer, timeVote: false };
+function broadcastDayTimer(room: Room, delta: number): void {
 	forEachPlayer(room, (player, seat) => {
-		updateMain(player, { ...payload, timeVote: seat.alive && !seat.timeVoteSpent });
+		const payload = { type: "timer" as const, timer: room.phaseTimer, delta, ...timeVoteView(room, seat) };
+		updateHud(player, payload);
+		updateMain(player, payload);
+	});
+	forEachSpectator(room, player => {
+		updateHud(player, { type: "timer", timer: room.phaseTimer, delta, ...timeVoteView(room, null) });
 	});
 }
 
@@ -250,6 +311,7 @@ export function beginVote(room: Room): void {
 	for (const seat of room.seats) {
 		seat.votedFor = 0;
 		seat.voteCount = 0;
+		seat.voteLogged = false;
 	}
 
 	// 낮과 같은 곡을 이어 쓰되 화면만 한 뼘 당긴다. 곡이 같으므로
@@ -281,8 +343,10 @@ function isRejected(room: Room, num: number): boolean {
  * 재접속으로 새 위젯을 열 때 다시 물어야 표가 서버에 도달한다.
  */
 export function openVoteView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	const widget = openVote(player, room, {
+	const widget = openBoard(player, room, {
 		type: "init",
+		mode: "vote",
+		gameId: room.gameId,
 		myNum: seat.index,
 		seats: seatViews(room),
 		timer: room.phaseTimer,
@@ -379,6 +443,7 @@ function bindVoteWidget(widget: ScriptWidget): void {
 			}
 		}
 
+		const before = voter.votedFor;
 		withdrawVote(room, voter);
 		if (target) {
 			voter.votedFor = target.index;
@@ -394,6 +459,14 @@ function bindVoteWidget(widget: ScriptWidget): void {
 			rememberMatchMoment(voter, "낮 투표: 기권");
 		}
 		trackDuringFirstGame(sender, FtueEvent.FIRST_VOTE_COMPLETED);
+		// 표를 거둬들이는 것(→0)은 대상을 바꾼 것이 아니다
+		if (before !== 0 && voter.votedFor !== 0 && before !== voter.votedFor) countTargetChange(sender);
+		// 누가 표를 냈는지는 방 전체의 사실이다. 누구에게는 비밀이라 적지 않고,
+		// 표를 바꿔도 한 번만 — 되돌림마다 줄이 쌓이면 마음 바꾼 사람이 드러난다
+		if ((target || skip) && !voter.voteLogged) {
+			voter.voteLogged = true;
+			Chat.say(room, `🗳️ ${participantLabel(voter)}가 투표를 마쳤습니다.`);
+		}
 
 		broadcastVoteProgress(room);
 	});
@@ -523,8 +596,10 @@ function resultSeats(room: Room): SeatView[] {
 
 /** 한 사람의 투표 결과 화면 */
 export function openVoteResultView(room: Room, player: ScriptPlayer, seat: Seat): void {
-	openVote(player, room, {
+	openBoard(player, room, {
 		type: "result",
+		mode: "vote",
+		gameId: room.gameId,
 		myNum: seat.index,
 		seats: resultSeats(room),
 		...identityOf(seat),

@@ -142,6 +142,7 @@ export function openWinView(room: Room, player: ScriptPlayer, seat: Seat): void 
 		reason: winReason(winner),
 		players: revealViews(room),
 		recap: personalRecap(seat),
+		timeline: room.timeline,
 		timer: room.phaseTimer,
 		rematch: rematchView(room, seat),
 		me: seat.index,

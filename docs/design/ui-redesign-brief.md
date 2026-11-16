@@ -176,23 +176,41 @@ zep-script 0.16.5에는 이를 숨기는 API가 없습니다.
 
 ## 3. 지금 있는 것
 
-### 3-1. 위젯 10종
+### 3-1. 세 구역과 위젯 9종
 
-| 파일 | 역할 | 데스크톱 px | 모바일 세로 |
+판 중의 화면은 세 구역으로 나뉩니다. 구역마다 위젯이 하나씩 떠 있고 서로 겹치지 않습니다.
+
+| 구역 | 위젯 | 데스크톱 자리 | 폰 자리 | 하는 일 |
+|---|---|---|---|---|
+| HUD | `hud.html` | `topright` 360px 띠. 보드와 폭·오른쪽 끝을 맞춰 한 기둥으로 읽힌다 | `top` 띠 | 단계·남은 시간(±15초가 쓰이면 바뀐 만큼을 잠깐 띄움)·내 직업·생존 수, 첫 판이면 "지금 할 일" 한 줄 |
+| 보드 | `board.html` 외 메인 위젯 | `topright`, HUD 바로 아래(8px 틈) | `top` (HUD 아래로 내려 붙음, `underHud`) | 그 단계에 할 일 하나. 낮 진행 화면 머리말에 ±15초 단추 |
+| 채팅 레일 | `chat.html` | `bottomleft` | `bottom` | 대화·사건 기록·내 추정 메모(명단 칩·채팅 번호를 눌러 표시). 접으면 막대 |
+
+`board.html`이 예전 `phase.html`(진행)·`vote.html`(투표)·`roleAction.html`(밤 지목)을
+대신합니다. 세 화면은 `mode` 필드(`status` / `vote` / `action`)로 갈립니다. 메모는 채팅이 적고
+(`memoSave`) 보드는 칸의 점선 칩으로 읽기만 합니다(`memoLoad`, 1초마다). 보드에 탭이 있으면
+메모하다 단계가 바뀌어 화면이 통째로 넘어갔습니다.
+
+크기는 `src/constants/Assets.ts`의 `WidgetSize`가 출처입니다(아래 표는 그 값을 옮긴 것).
+
+| 키 | 파일 | 데스크톱 px | 폰 세로 |
 |---|---|---|---|
-| `lobby.html` | 대기실 — 좌석 목록·준비 / 방 선택 | 400×400 / 400×280 | 46% / 30% |
-| `card.html` | 겹쳐 읽고 닫는 카드 — 직업 공개·첫 안내·직업 도감 | 320×400 (도감 360×480) | 44% / 54% |
-| `roleAction.html` | 밤 능력 지목 | 400×460 | 46% |
-| `phase.html` | 밤/아침 진행 화면 (읽기 전용 + ±15초) | 380×260 | 28% |
-| `vote.html` | 지목 투표 + 개표 | 400×400 | 46% |
-| `judgement.html` | 최후의 반론 + 찬반(O/X) 투표 | 380×320 | 36% |
-| `gameOver.html` | 결과 — 전원 직업 공개 | 380×420 | 46% |
-| `chat.html` | 통합 채팅 (접속 내내 떠 있는 유일한 위젯) | 330×320 / 접으면 막대 | 34% |
-| `cut.html` | 단계 전환 컷 — 화면 100% 덮고 자동 종료 | 전체 | 전체 |
-| `profile.html` | 플레이어 클릭 시 프로필 (ZEP 기본 창 대체) | 300×340 | 42% |
+| `LOBBY` / `LOBBY_ROOMS` | `lobby.html` 대기실 / 방 선택 | 400×400 / 400×280 | 46% / 30% |
+| `HUD` | `hud.html` | 360×48 (첫 판 360×68) | 44px 고정 띠 (`bar`) |
+| `BOARD` | `board.html` 투표·밤 지목 | 360×460 | 40% |
+| `BOARD_STATUS` | `board.html` 진행(밤 대기·낮 토론) | 360×300 | 26% |
+| `CARD` / `CARD_BOOK` | `card.html` 직업 공개·첫 안내 / 직업 도감 | 320×400 / 360×480 | 44% / 54% |
+| `JUDGEMENT` | `judgement.html` 최후의 반론 + 찬반(O/X) | 380×290 | 33% |
+| `GAME_OVER` | `gameOver.html` 결과 — 전원 직업 공개 | 380×480 | 46% |
+| `CHAT` / `CHAT_BAR` | `chat.html` 펼침 / 접힌 막대 | 360×440 / 190×44 | 34% / 44px |
+| `CUT` | `cut.html` 단계 전환 컷 | 480×320 카드 | 화면 전체 (`fill`) |
+| `PROFILE` | `profile.html` 플레이어 클릭 시 프로필 | 300×340 | 42% |
 
-**메인 위젯은 한 번에 하나만 뜹니다.** 대기실/카드/밤지목/진행/투표/찬반/결과가
-서로 교체됩니다. 채팅만 그 옆에 상시 존재합니다.
+폰 폭은 `MobileWidth`(폰 96%, 태블릿 60%), 위쪽 위젯의 끌어올림은 `TopNudge`
+(데스크톱 -12px, 폰 -62px, 태블릿 -40px)입니다.
+
+**보드 구역의 위젯은 한 번에 하나만 뜹니다.** 대기실/카드/보드/찬반/결과가
+서로 교체됩니다. HUD와 채팅만 그 옆에 상시 존재합니다.
 
 **파일을 늘리지 마세요.** 예전엔 11개였는데 그중 직업 카드 7개가
 `background-image` URL 한 줄만 다른 같은 파일이었습니다. 직업이 12종이 되면
@@ -251,16 +269,24 @@ scrollToEnd(el)     // 채팅 스크롤
 
 | 위젯 | 받는다 | 보낸다 |
 |---|---|---|
-| lobby | `init` | `join` `quit` `kick` `book` |
+| lobby | `init` | `join` `quit` `kick` `book` `guide` |
 | card | `init` | `close` `book` |
-| roleAction | `init` | `select` `phrase` |
-| phase | `init` `timer` | `time` `spectate-quit` |
-| vote | `init` `result` | `vote` |
+| hud | `init`(`coach` 포함) `timer` | `time` |
+| board | `init`(`mode`: status·vote·action) `result` `progress` `allies` `phrases` `selectResponse` `poll` | `vote` `select` `phrase` `suspect` `memo-used` `spectate-quit` `guide` |
 | judgement | `defense` `judge` | `judge` |
-| gameOver | `init` | — |
+| gameOver | `init` `praised` `rematch` | `again` `praise` |
 | chat | `init` 외 | `send` `channel` `toggle` |
 | cut | `init` | — |
-| profile | `init` | `close` |
+| profile | `init` | `close` `whisper` `item` |
+
+D단계에서 늘어난 것:
+
+- HUD `init.coach` — 첫 판(`playStarts === 1`)에만 서버가 채우는 "지금 할 일" 문장. 아니면 `""`.
+- 보드 status `init.poll` — 낮 토론의 여론조사 `{ tally: {좌석번호: 수}, suspect, canSuspect }`. 낮이 아니거나
+  규칙에서 껐으면 `null`. 누가 표시를 바꾸면 `{ type: "poll", ...같은 모양 }`이 모두에게 다시 간다.
+- 보드 → 서버 `{ type: "suspect", num }` — 의심 표시. 같은 번호를 다시 보내면 취소된다.
+- 보드 → 서버 `{ type: "memo-used" }` — 메모를 처음 쓴 순간 한 번. 첫 판 지표로만 쓴다.
+- 용어 풀이는 `shared.js`의 `TERMS` 표 하나에 있고 `termTitle(el, 단어)`가 `title`로 붙인다.
 
 **이 계약은 서버 로직과 맞물려 있습니다. 이름과 필드를 바꾸지 마세요.**
 새 필드가 필요하면 산출물에 "서버에 이 필드를 추가해 달라"고 명시하세요.
@@ -316,7 +342,7 @@ npm run check:ui
 ### 산출물
 
 1. **디자인 방향 요약** — 톤, 팔레트, 활자, 근거. 현재와 무엇이 왜 달라지는지.
-2. **화면별 시안** — 위젯 10종 각각에 대해:
+2. **화면별 시안** — 위젯 9종 각각에 대해:
    - 데스크톱과 모바일 두 상태
    - 주요 상태 변화 (예: 투표 전/투표 후/개표, 채팅 접힘/펼침, 생존/사망)
    - **모바일 세로 % 와 세로 예산 계산**

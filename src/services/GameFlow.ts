@@ -68,9 +68,11 @@ import {
 	openDayView,
 	openVoteResultView,
 	openVoteView,
+	refreshHud,
 	resumeDay,
+	showHud,
 } from "./Voting.ts";
-import { closeCard, closeCut, closeMain } from "./Widgets.ts";
+import { closeCard, closeCut, closeHud, closeMain } from "./Widgets.ts";
 
 /**
  * 게임을 계속하려면 최소한 이만큼은 접속해 있어야 한다.
@@ -192,10 +194,15 @@ function advancePhase(room: Room): void {
 			break;
 		case GamePhase.NIGHT:
 			resolveNight(room);
-			// 승패 판정보다 먼저다. 마지막 밤에 확인한 답도 알려주어야 한다 —
+			if (!finishIfDecided(room)) beginDay(room);
+			// 단계를 넘긴 **뒤에** 전한다. 개인 안내는 받는 사람이 곧 볼 탭에
+			// 놓이는데(Chat.tell), 아직 밤이면 그 탭이 영매에게는 유령 탭이다.
+			// 낮이 되면 영매의 유령 탭은 닫히므로(ChatPermission) 성불 결과가
+			// 읽을 수 없는 채널에 묻혔다. 낮·종료 화면이면 산 사람은 방 탭,
+			// 죽은 사람은 유령 탭에 놓인다.
+			// 승패와 상관없이 부른다 — 마지막 밤에 확인한 답도 알려주어야 한다.
 			// 게임이 그 밤에 끝난다고 없던 일이 되지 않는다
 			deliverNightReveals(room);
-			if (!finishIfDecided(room)) beginDay(room);
 			break;
 		case GamePhase.DAY:
 			beginVote(room);
@@ -225,6 +232,8 @@ function advancePhase(room: Room): void {
 	// 관전 화면은 begin*의 forEachPlayer 루프에 들어가지 않는다(그 루프는
 	// 좌석만 돈다). 그래서 단계 표시·타이머·사망자 목록을 여기서 갱신한다.
 	refreshSpectators(room);
+	// HUD도 같은 자리에서 맞춘다. 종료 화면으로 넘어가면 여기서 닫힌다
+	refreshHud(room);
 	// 단계가 바뀌면 채팅 권한도 바뀐다 (밤 → 마피아 탭, 낮 → 방 탭).
 	// 전이 switch 바로 옆에 두는 이유는, 단계를 추가하는 사람이 채팅 권한
 	// 갱신을 따로 기억하지 않아도 되게 하기 위해서다.
@@ -263,6 +272,8 @@ function advanceAfterTrial(room: Room): void {
  * 단계를 추가하면 두 곳이 동시에 눈에 띄게 했다.
  */
 export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): void {
+	// 끊기기 전 HUD 핸들은 죽은 위젯이다. 걷어 내야 아래 showHud가 새로 연다
+	closeHud(player);
 	switch (room.phase) {
 		case GamePhase.ROLE_REVEAL:
 			showRoleReveal(player, seat, room.phaseTimer);
@@ -290,9 +301,19 @@ export function showPhaseView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		case GamePhase.LOBBY:
 			break;
 	}
+	showHud(room, player, seat);
 	// 컷은 단계 화면 위에 얹힌다. 맨 뒤인 것이 중요하다 — 위젯은 뜬 순서대로
 	// 쌓이므로(그래서 컷은 zIndex도 함께 싣는다) 단계 화면보다 먼저 열면 가려진다.
 	showCut(room, player);
+	// 끊긴 동안 지나간 공개 사건을 한 장으로 건넨다. 채팅 기록도 돌아오지만
+	// 잡담 사이에 묻혀서, 돌아온 사람은 누가 왜 죽었는지부터 되묻게 된다
+	if (room.timeline.length > 0) {
+		Chat.tell(
+			player,
+			"🔁 놓친 사건",
+			room.timeline.map(entry => ({ label: entry.text, value: entry.when }))
+		);
+	}
 	// 배율·카메라·BGM은 단계가 바뀔 때 방 전원에게 한 번 나간다. 그 순간
 	// 접속이 끊겨 있던 사람은 못 받았으므로 여기서 지금 상태를 다시 입힌다.
 	// 이 함수의 호출처가 재접속 하나뿐이라(index.ts) BGM을 다시 트는 것이
@@ -418,6 +439,7 @@ function beginGame(room: Room): void {
 		closeMain(player);
 		showRoleReveal(player, seat, room.phaseTimer);
 	});
+	refreshHud(room);
 
 	// 대기실 채팅에서 방 채팅으로. 마피아에게는 이 시점에 마피아 탭이 생긴다
 	Chat.refreshRoom(room);

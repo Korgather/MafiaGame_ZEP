@@ -16,11 +16,12 @@ import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { Room, Seat } from "../types/Game.types.ts";
 import { GamePhase } from "../types/Game.types.ts";
 import { Bgm, Sound } from "../constants/Assets.ts";
-import { inMafiaChat, NightActionKind, roleDef, roleName } from "../domain/Roles.ts";
+import { effectiveDef, inMafiaChat, NightActionKind, roleDef, roleName } from "../domain/Roles.ts";
 import { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import { QUICK_NOTE } from "../domain/chat/QuickPhrases.ts";
 import { rememberMatchMoment } from "../domain/MatchRecap.ts";
 import {
+	canRetarget,
 	hasExtraProbe,
 	hasNightTurn,
 	isPeacefulNight,
@@ -53,8 +54,7 @@ import {
 	closeCard,
 	identityOf,
 	isStaleEvent,
-	openPhase,
-	openRoleAction,
+	openBoard,
 	updateMain,
 } from "./Widgets.ts";
 import { sprite } from "../infrastructure/Sprites.ts";
@@ -72,6 +72,8 @@ const NIGHT_PROMPT_MS = 6000;
 function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 	return {
 		type: "init",
+		mode: "status",
+		gameId: room.gameId,
 		phase: "night",
 		turn: room.turnCount + 1,
 		total: room.total,
@@ -90,9 +92,10 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
 		lead: seat.alive ? "기다리세요" : "지켜보세요",
 		note: nightNote(room, seat),
 		deaths: [],
+		timeline: seat.alive ? [] : room.timeline,
 		spectating: false,
-		// 시간 조절은 낮에만 한다. 밤은 능력을 쓰는 시간이고 길이가 고정이다
-		timeVote: false,
+		// 여론조사는 낮 토론의 것이다
+		poll: null,
 	};
 }
 
@@ -105,7 +108,7 @@ function nightPhaseView(room: Room, seat: Seat): PhasePayload {
  * "격자가 없다"와 "이유를 설명한다"가 어긋날 수 없다.
  */
 function nightNote(room: Room, seat: Seat): string {
-	if (!seat.alive) return "당신은 죽었습니다. 관전 중입니다.";
+	if (!seat.alive) return "☠️ 당신은 죽었습니다 · 💬 유령 탭에서 유령끼리 이야기하세요";
 	const blocked = nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length);
 	if (blocked) return blocked;
 	return "밤입니다. 대상을 지목하세요.";
@@ -165,7 +168,7 @@ export function beginNight(room: Room): void {
 export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): void {
 	if (!seat.alive) {
 		// 죽은 사람은 통합 채팅의 유령 채널로 대화한다. 밤 화면만 열어준다
-		openPhase(player, room, nightPhaseView(room, seat));
+		openBoard(player, room, nightPhaseView(room, seat));
 		return;
 	}
 
@@ -180,6 +183,8 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	// 첫 밤이다, 이미 골랐다, 무덤이 비었다) 전부 한 함수가 안다. 이걸 보지
 	// 않으면 자경단원이 매일 밤 눌러도 아무 일 없는 격자를 받는다.
 	const canAct = nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length) === null;
+	// 이미 고른 사람(재접속)에게는 잠긴 격자로 그 선택을 다시 보여준다
+	const picked = seat.usedSkill ? intentTarget(room.nightIntents, seat.index) : 0;
 
 	// 지목할 것이 없으면 밤 안내 화면만 본다.
 	//
@@ -187,15 +192,17 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 	// 빈 채로 열리는 마피아팀용. 셋이 갈렸던 이유는 밤 채팅이 이 위젯에
 	// 얹혀 있었기 때문이다. 채팅이 자기 위젯으로 나가면서 남은 질문은
 	// "지목할 것이 있는가" 하나뿐이 됐다.
-	if (!canAct) {
-		openPhase(player, room, nightPhaseView(room, seat));
+	if (!canAct && picked === 0) {
+		openBoard(player, room, nightPhaseView(room, seat));
 		return;
 	}
 
-	if (def.nightPrompt) label(player, def.nightPrompt, NIGHT_PROMPT_MS);
+	if (canAct && def.nightPrompt) label(player, def.nightPrompt, NIGHT_PROMPT_MS);
 
-	const widget = openRoleAction(player, room, {
+	const widget = openBoard(player, room, {
 		type: "init",
+		mode: "action",
+		gameId: room.gameId,
 		myNum: seat.index,
 		...identityOf(seat),
 		prompt: def.nightPrompt || "",
@@ -205,6 +212,11 @@ export function openNightView(room: Room, player: ScriptPlayer, seat: Seat): voi
 		targetsDead: def.targetsDead === true,
 		timer: room.phaseTimer,
 		note: def.nightNotice,
+		final: effectiveDef(seat).maxUses !== undefined,
+		picked,
+		// 고른 대상은 밤 끝까지 바꿀 수 있다. 잠그는 것은 바꿀 길이 없을 때뿐이다
+		locked: !canAct && !canRetarget(seat),
+		changeable: canRetarget(seat),
 	});
 	bindNightWidget(widget);
 	updateMain(player, nightProgress(room));
@@ -323,7 +335,7 @@ function mafiaChatSize(room: Room): number {
 function bindNightWidget(widget: ScriptWidget): void {
 	bindMessage(widget, "roleAction", (sender, data) => {
 		const kind = messageType(data);
-		if (kind !== "select" && kind !== "phrase") return;
+		if (kind !== "select" && kind !== "phrase" && kind !== "cancel") return;
 
 		const found = locate(sender.id);
 		if (!found) return;
@@ -338,11 +350,18 @@ function bindNightWidget(widget: ScriptWidget): void {
 			chooseNotePhrase(room, seat, sender, widget, asInt(field(data, "index")));
 			return;
 		}
+		if (kind === "cancel") {
+			cancelNight(room, seat, sender, widget);
+			return;
+		}
 
 		// 위젯을 잠그는 판정과 같은 함수다. 조작된 select가 와도 서버가
 		// 같은 근거로 거절하므로, 화면에서 격자가 사라진 상태와 서버가
 		// 허용하는 상태가 갈라질 수 없다.
-		const blocked = nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length);
+		const retarget = canRetarget(seat);
+		const blocked = retarget
+			? null
+			: nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length);
 		if (blocked) {
 			label(sender, blocked);
 			return;
@@ -359,6 +378,11 @@ function bindNightWidget(widget: ScriptWidget): void {
 
 		const result = recordNightIntent(seat, target);
 		if (!result) return;
+
+		if (retarget) {
+			retargetNight(room, seat, sender, widget, target.index, result);
+			return;
+		}
 
 		// 적용은 밤이 끝날 때다. 여기서는 "이 사람이 저 사람을 골랐다"만 남긴다
 		//
@@ -392,6 +416,7 @@ function bindNightWidget(widget: ScriptWidget): void {
 				type: "selectResponse",
 				num: targetIndex,
 				again: hasExtraProbe(seat) && seat.extraProbeIndex === 0,
+				changeable: canRetarget(seat),
 			});
 		}
 		if (result.needsPhrase) {
@@ -400,6 +425,57 @@ function bindNightWidget(widget: ScriptWidget): void {
 		if (result.privateSound) playSoundTo(sender, result.privateSound);
 		if (result.roomSound) playSound(room, result.roomSound);
 	});
+}
+
+/**
+ * 이미 고른 사람이 다른 칸을 눌렀다. 지목만 갈아 끼운다.
+ *
+ * 진행률은 그대로다 — 이 사람은 이미 분자에 있다. 방 전체에 들리는 소리
+ * (총성)도 다시 내지 않는다. 두 번 울리면 마피아가 마음을 바꿨다는 것이
+ * 온 방에 들린다. 회고 줄은 지난 지목을 지우고 새것으로 바꾼다.
+ */
+function retargetNight(
+	room: Room,
+	seat: Seat,
+	sender: ScriptPlayer,
+	widget: ScriptWidget,
+	targetIndex: number,
+	result: NonNullable<ReturnType<typeof recordNightIntent>>
+): void {
+	if (targetIndex === intentTarget(room.nightIntents, seat.index)) return;
+	putIntent(room.nightIntents, seat.index, targetIndex);
+	const recap = seat.matchRecap;
+	if (recap.length > 0 && recap[recap.length - 1].indexOf("밤 행동: ") === 0) recap.pop();
+	rememberMatchMoment(seat, `밤 행동: ${result.label}`);
+	label(sender, result.label, result.labelDurationMs);
+	widget.sendMessage({ type: "selectResponse", num: targetIndex, again: false, changeable: true });
+	if (result.privateSound) playSoundTo(sender, result.privateSound);
+	if (inMafiaChat(seat)) {
+		const allies = allyPicks(room);
+		forEachPlayer(room, (player, other) => {
+			if (inMafiaChat(other)) updateMain(player, allies);
+		});
+	}
+}
+
+/**
+ * 지목을 거둔다. 보드는 한 번뿐인 능력(final)에만 [사용 취소]를 그린다 —
+ * 판에 한 번인 능력을 잘못 누른 것은 그 판을 통째로 버리게 하기 때문이다.
+ *
+ * 횟수(usesSpent)는 밤 끝에 오르므로 여기서 되돌릴 것은 지목·usedSkill·회고
+ * 줄 셋뿐이다. 바꾸기(canRetarget)와 같은 관문을 쓴다 — 쪽지와 접선한
+ * 스파이는 바꿀 수 없는 것처럼 거둘 수도 없다.
+ */
+function cancelNight(room: Room, seat: Seat, sender: ScriptPlayer, widget: ScriptWidget): void {
+	// 횟수 없는 능력(마피아 등)은 다시 고르면 바뀐다. 취소는 횟수를 아끼는 몫이다
+	if (!canRetarget(seat) || effectiveDef(seat).maxUses === undefined) return;
+	room.nightIntents = room.nightIntents.filter(intent => intent.actor !== seat.index);
+	seat.usedSkill = false;
+	const recap = seat.matchRecap;
+	if (recap.length > 0 && recap[recap.length - 1].indexOf("밤 행동: ") === 0) recap.pop();
+	label(sender, "능력 사용을 취소했습니다. 이 판에 아직 한 번 남아 있습니다.");
+	widget.sendMessage({ type: "cancelled" });
+	broadcastNightProgress(room);
 }
 
 /**
@@ -507,20 +583,26 @@ export function resolveNight(room: Room): void {
 				// 이 안내가 없으면 군인은 아직 남아 있다고 믿은 채 다음 밤에 죽고,
 				// 자기 능력이 언제 소모됐는지 끝까지 알 수 없다.
 				report(room, "🛡️ 누군가가 공격을 받았지만 버텨냈습니다.");
-				tellSeat(casualty.seat, "🛡️ 밤새 공격을 받았지만 버텨냈습니다. 방탄은 이제 남아 있지 않습니다.");
+				tellSeat(
+					casualty.seat,
+					"🛡️ 밤새 공격을 받았지만 버텨냈습니다. 방탄은 이제 남아 있지 않습니다."
+				);
 				break;
 			case NightOutcome.SPARED:
-					// 방에 나가는 줄은 짝의 사망(LOVER_SHIELD)이 낸다 — 거기서 두
-					// 이름이 함께 불리므로 여기서 한 줄 더 내면 같은 사건이 두 번
-					// 실린다. 이 결말은 살아남았다는 사실을 본인에게 알릴 뿐이다
-					tellSeat(casualty.seat, "💔 밤새 공격을 받았지만 연인이 대신 죽었습니다.");
-					break;
-				case NightOutcome.BACKFIRED:
+				// 방에 나가는 줄은 짝의 사망(LOVER_SHIELD)이 낸다 — 거기서 두
+				// 이름이 함께 불리므로 여기서 한 줄 더 내면 같은 사건이 두 번
+				// 실린다. 이 결말은 살아남았다는 사실을 본인에게 알릴 뿐이다
+				tellSeat(casualty.seat, "💔 밤새 공격을 받았지만 연인이 대신 죽었습니다.");
+				break;
+			case NightOutcome.BACKFIRED:
 				// 자책의 이유는 방에 알리지 않는다 — 알리면 자경단원의 정체가
 				// 시체와 함께 공개된다. 사인은 따로 있지만 announce가 평범한
 				// 제거와 같은 문구를 내보내고, 본인에게만 왜 죽었는지 말해준다.
 				kill(room, casualty.seat, DeathCause.BACKFIRE);
-				tellSeat(casualty.seat, "🔫 당신이 쏜 사람은 같은 편이었습니다. 책임을 지고 스스로 목숨을 끊었습니다.");
+				tellSeat(
+					casualty.seat,
+					"🔫 당신이 쏜 사람은 같은 편이었습니다. 책임을 지고 스스로 목숨을 끊었습니다."
+				);
 				break;
 			case NightOutcome.KILLED:
 				kill(room, casualty.seat, DeathCause.NIGHT_KILL);
@@ -535,11 +617,11 @@ export function resolveNight(room: Room): void {
 				kill(room, casualty.seat, DeathCause.SACRIFICE);
 				break;
 			case NightOutcome.SACRIFICED:
-					// 짝(SPARED)은 이 목록에 이미 살아남은 채로 들어와 있다.
-					// 여기서 죽는 것은 대신 나선 쪽뿐이다
-					kill(room, casualty.seat, DeathCause.LOVER_SHIELD);
-					break;
-				case NightOutcome.REVIVED:
+				// 짝(SPARED)은 이 목록에 이미 살아남은 채로 들어와 있다.
+				// 여기서 죽는 것은 대신 나선 쪽뿐이다
+				kill(room, casualty.seat, DeathCause.LOVER_SHIELD);
+				break;
+			case NightOutcome.REVIVED:
 				// 유일하게 죽이지 않는 결말이다. 사망 목록에 실려 오는 이유는
 				// 파이프라인이 "이 밤에 좌석에 일어난 일"을 한 줄기로 내보내기
 				// 때문이고, 그 편이 순서(9단계 소생이 7단계 연쇄 뒤)를 지킨다
@@ -579,7 +661,7 @@ function tellSeat(seat: Seat, message: string): void {
 }
 
 /**
- * 밤에 알아낸 것을 각자에게 전한다. 아침 진입 직전에 한 번.
+ * 밤에 알아낸 것을 각자에게 전한다. 아침(또는 종료) 진입 직후에 한 번.
  *
  * 죽은 사람도 받는다. 그 밤에 죽은 경찰이 마지막으로 알아낸 것을 삼키면
  * 영매를 통해 나올 정보 하나가 그냥 사라진다.
@@ -602,7 +684,8 @@ export function deliverNightReveals(room: Room): void {
 		// 쏟아지는 안내 더미에서 이 한 줄만은 몸으로 알아채야 한다
 		if (reveal.sound === Sound.BLOCKED) Screen.shakeOne(player, Screen.Tremor.BLOCKED);
 	}
-	room.nightReveals = [];
+	// 비우지 않는다. 낮 보드가 그날 내내 내 줄을 띄우고(Voting.openDayView),
+	// 다음 밤 정산이 덮어쓴다
 }
 
 /**

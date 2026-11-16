@@ -89,3 +89,21 @@ export function tallyVotes(seats: readonly Seat[]): VoteResult {
 	}
 	return { outcome: VoteOutcome.EXECUTE, target, board, skipVotes };
 }
+
+/**
+ * 낮 여론조사 집계. {참가번호: 의심 수}.
+ *
+ * 산 사람이 산 사람에게 건 의심만 센다. 낮 중에 죽는 사람은 없지만 판이
+ * 끝난 뒤나 재접속 화면에서도 같은 값이 나와야 하고, 죽은 사람의 의심이
+ * 남으면 유령이 산 사람의 여론을 움직이게 된다. 가중치(정치인)도 없다 —
+ * 표가 아니라 의견이라서다.
+ */
+export function suspicionTally(seats: readonly Seat[]): { [num: number]: number } {
+	const alive: { [num: number]: boolean } = {};
+	for (const seat of seats) if (seat.alive) alive[seat.index] = true;
+	const tally: { [num: number]: number } = {};
+	for (const seat of seats) {
+		if (seat.alive && alive[seat.suspect]) tally[seat.suspect] = (tally[seat.suspect] || 0) + 1;
+	}
+	return tally;
+}

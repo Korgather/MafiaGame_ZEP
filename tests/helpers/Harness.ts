@@ -211,6 +211,13 @@ export function findMainWidget(player: FakePlayer): FakeWidget | undefined {
 	return widget ? (widget as unknown as FakeWidget) : undefined;
 }
 
+/** 판 내내 위에 떠 있는 상태 줄(HUD) */
+export function hudWidget(player: FakePlayer): FakeWidget {
+	const widget = tagOf(player).hudWidget;
+	if (!widget) throw new Error(`${player.name}에게 열린 HUD가 없습니다.`);
+	return widget as unknown as FakeWidget;
+}
+
 /** 통합 채팅 위젯. 접속과 동시에 열리므로 항상 있다 */
 export function chatWidget(player: FakePlayer): FakeWidget {
 	const widget = tagOf(player).chatWidget;

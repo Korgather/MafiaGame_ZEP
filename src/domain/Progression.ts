@@ -67,3 +67,24 @@ export function levelFromExp(exp: number): number {
 	}
 	return level;
 }
+
+/** 직업 하나의 누적 기록. 판 수와 그 직업으로 이긴 판 수 */
+export interface RoleRecord {
+	games: number;
+	wins: number;
+}
+
+/**
+ * 많이 해 본 직업부터 n개.
+ *
+ * 판 수가 같으면 많이 이긴 쪽, 그래도 같으면 직업 id 순이다. 저장소 키
+ * 순서에 맡기면 프로필을 열 때마다 같은 사람의 줄 순서가 달라 보일 수 있다.
+ */
+export function topRoles(
+	roles: { [role: string]: RoleRecord },
+	n: number
+): Array<{ role: string; games: number; wins: number }> {
+	const rows = Object.keys(roles).map(role => ({ role, games: roles[role].games, wins: roles[role].wins }));
+	rows.sort((a, b) => b.games - a.games || b.wins - a.wins || (a.role < b.role ? -1 : 1));
+	return rows.slice(0, n);
+}

@@ -112,6 +112,11 @@
 	box-sizing: border-box;
 }
 
+/* hidden 속성이 .foot{display:flex} 같은 규칙에 지지 않게 한다 */
+[hidden] {
+	display: none !important;
+}
+
 html,
 body {
 	width: 100%;
@@ -310,7 +315,7 @@ body {
 
 /* ---------- 지시 줄 ---------- */
 /*
- * 화면에서 가장 큰 글씨가 명령문이다 — "처형할 대상을 선택하세요".
+ * 화면에서 가장 큰 글씨가 명령문이다 — "제거할 대상을 선택하세요".
  * 전에는 가장 큰 글씨가 "밤"·"투표" 같은 상태 이름이라, 처음 하는 사람은
  * 상태는 알아도 할 일은 몰랐다.
  *
@@ -545,6 +550,72 @@ body {
 	color: #8fd6a8;
 }
 
+/* 나만 받은 답. 소식의 좋고 나쁨이 아니라 "내 것"이라는 것만 굵기로 말한다 */
+.stack span.mine {
+	font-weight: 700;
+	color: var(--ink);
+}
+
+/* ---------- 판 다시보기 ---------- */
+/*
+ * 공개 사건을 날마다 접은 묶음. 펼침 여부는 ▸/▾ 글자가 말한다 — 색만으로 갈리지 않게.
+ * .timeline은 이미 시간 막대가 쓰는 이름이라 .replay로 지었다.
+ */
+.replay {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.replay details {
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	padding: 0 var(--s2);
+}
+
+.replay summary {
+	display: flex;
+	gap: var(--s1);
+	align-items: center;
+	padding: var(--s1) 0;
+	list-style: none;
+	font-size: var(--t-xs);
+	font-weight: 700;
+	color: var(--ink-2);
+	cursor: pointer;
+}
+
+.replay summary::-webkit-details-marker {
+	display: none;
+}
+
+.replay summary::before {
+	content: "▸";
+}
+
+.replay details[open] > summary::before {
+	content: "▾";
+}
+
+.replay summary:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: var(--r1);
+}
+
+.replay .n {
+	margin-left: auto;
+	font-weight: 400;
+	color: var(--ink-3);
+}
+
+.replay p {
+	margin: 0 0 var(--s1);
+	font-size: var(--t-xs);
+	word-break: keep-all;
+}
+
 /* ---------- 푸터 ---------- */
 .foot {
 	display: flex;
@@ -685,6 +756,17 @@ body {
 @media (max-width: 300px) {
 	.grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+/* 납작한 위젯(폰 가로, 채팅을 펼친 폰)은 이름 줄까지 두 단이 안 들어간다. 번호만 촘촘히 늘어놓는다 */
+@media (min-aspect-ratio: 1/1) and (max-height: 320px) {
+	.grid {
+		grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
+		gap: var(--s1);
+	}
+	.grid .tile .cap {
+		display: none;
 	}
 }
 
@@ -1081,6 +1163,11 @@ body {
 	flex: 1 1 auto;
 	min-height: 0;
 	padding: var(--s2);
+}
+
+/* 기록이 넘치면 굴린다. 줄이면 overflow:hidden인 카드(아침·개표)가 반쯤 눌린다 */
+.chat-log > * {
+	flex-shrink: 0;
 }
 
 .msg {

@@ -19,13 +19,14 @@
  * 왜 leaf인가
  * -----------
  * GameFlow·Night·Voting·Outcome이 전부 이 파일을 부른다. 반대로 이 파일은
- * Broadcast와 Widgets만 부른다. 단계 서비스 쪽으로 화살표가 하나라도
+ * Broadcast·Widgets·ChatService만 부른다. 단계 서비스 쪽으로 화살표가 하나라도
  * 돌아가면 GameFlow ↔ Night 순환이 생기고, 그 순환은 webpack/Jint 초기화
  * 순서에서 undefined로 터진다 (GameFlow.ts의 showPhaseView 주석 참고).
  */
 import type { ScriptPlayer } from "zep-script";
 import type { CutTone, Room } from "../types/Game.types.ts";
 import { forEachAudience } from "./Broadcast.ts";
+import * as Chat from "./ChatService.ts";
 import { closeCut, openCut } from "./Widgets.ts";
 
 /** 제목이 떠오르는 데 걸리는 시간(초) */
@@ -88,6 +89,9 @@ export function playCut(room: Room, tone: CutTone, title: string, lines: string[
 	room.cut = { title, lines: lines.slice(), tone, length, timer: length };
 	room.phaseTimer += length;
 	forEachAudience(room, player => showCut(room, player));
+	// 컷은 몇 초 뒤 걷힌다. 놓친 사람·나중에 되짚는 사람을 위해 방 기록에 카드로 남긴다
+	// (컷은 전부 방 전체에 공개되는 사건이라 ROOM에 둬도 새지 않는다)
+	Chat.announce(room, title, lines.map(text => ({ label: text })));
 }
 
 /**

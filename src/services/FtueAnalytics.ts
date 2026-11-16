@@ -15,6 +15,8 @@ export const FtueEvent = {
 	FIRST_GAME_FINISHED: "first_game_finished",
 	REMATCH_SELECTED: "rematch_selected",
 	SECOND_GAME_STARTED: "second_game_started",
+	MEMO_USED: "memo_used",
+	FIRST_GAME_DROPOUT: "first_game_dropout",
 } as const;
 export type FtueEvent = (typeof FtueEvent)[keyof typeof FtueEvent];
 
@@ -28,6 +30,22 @@ const EVENT_BIT: { [event: string]: number } = {
 	[FtueEvent.FIRST_GAME_FINISHED]: 1 << 6,
 	[FtueEvent.REMATCH_SELECTED]: 1 << 7,
 	[FtueEvent.SECOND_GAME_STARTED]: 1 << 8,
+	[FtueEvent.MEMO_USED]: 1 << 9,
+	[FtueEvent.FIRST_GAME_DROPOUT]: 1 << 10,
+};
+
+/*
+ * 이벤트마다 덧붙는 숫자. 사람을 가리키지 않는 값만 싣는다(eventId와 같은 이유).
+ *   sec     — 첫 판 시작부터 걸린 초. 첫 능력·첫 투표가 얼마나 늦게 오는가
+ *   changes — 첫 판에서 투표 대상을 바꾼 횟수. 끝까지 마쳤든 중간에 나갔든 같이 본다
+ */
+const TIMED: { [event: string]: boolean } = {
+	[FtueEvent.FIRST_NIGHT_ACTION_COMPLETED]: true,
+	[FtueEvent.FIRST_VOTE_COMPLETED]: true,
+};
+const COUNTED: { [event: string]: boolean } = {
+	[FtueEvent.FIRST_GAME_FINISHED]: true,
+	[FtueEvent.FIRST_GAME_DROPOUT]: true,
 };
 
 export function trackBeforeFirstGame(player: ScriptPlayer, event: FtueEvent): void {
@@ -44,6 +62,12 @@ export function trackDuringFirstGame(player: ScriptPlayer, event: FtueEvent): vo
 	track(player, event);
 }
 
+/** 첫 판에서 투표 대상을 바꿨다. 첫 판이 끝날 때(또는 나갈 때) 한 번에 보낸다 */
+export function countTargetChange(player: ScriptPlayer): void {
+	const tag = tagOf(player);
+	if (!player.isGuest && tag.ftueEligible && tag.playStarts === 1) tag.ftueChanges++;
+}
+
 export function trackGameStarted(player: ScriptPlayer): void {
 	if (player.isGuest) return;
 	const tag = tagOf(player);
@@ -51,7 +75,10 @@ export function trackGameStarted(player: ScriptPlayer): void {
 		tag.playStarts++;
 		return;
 	}
-	if (tag.playStarts === 0) track(player, FtueEvent.FIRST_GAME_STARTED);
+	if (tag.playStarts === 0) {
+		tag.ftueStartedAt = Time.getUtcTime();
+		track(player, FtueEvent.FIRST_GAME_STARTED);
+	}
 	else if (tag.playStarts === 1) track(player, FtueEvent.SECOND_GAME_STARTED);
 	tag.playStarts++;
 }
@@ -66,7 +93,13 @@ function track(player: ScriptPlayer, event: FtueEvent): void {
 		const key = `FTUE_mafia_${ScriptApp.spaceHashID}_${ScriptApp.mapHashID}_${event}_${eventId}`;
 		// ZEP 런타임이 요청 시작 자체를 거절하면 아직 보낸 것이 아니다. 비트를
 		// 남기지 않아 같은 사건이 다시 관측될 때 재시도할 수 있게 한다.
-		if (!sendLiveMetric("FTUE", key, { event, eventId, schemaVersion: 1 })) return;
+		const body: { [name: string]: string | number } = { event, eventId, schemaVersion: 1 };
+		// 재접속하면 tag가 새로 만들어져 시작 시각이 0이다. 그때는 시간을 싣지 않는다
+		if (TIMED[event] && tag.ftueStartedAt > 0) {
+			body.sec = Math.round((Time.getUtcTime() - tag.ftueStartedAt) / 1000);
+		}
+		if (COUNTED[event]) body.changes = tag.ftueChanges;
+		if (!sendLiveMetric("FTUE", key, body)) return;
 
 		tag.ftueEvents |= bit;
 		Storage.update(player, storage => {

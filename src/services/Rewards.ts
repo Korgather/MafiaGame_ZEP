@@ -85,6 +85,11 @@ export function settleMatch(player: ScriptPlayer, seat: Seat, winner: Team): voi
 	Storage.update(player, storage => {
 		storage.exp += amount;
 		storage[key] = (storage[key] || 0) + 1;
+		// 직업별 기록. 진영 전적과 같은 기준(최종 소속 진영)으로 이겼는지 본다
+		const roles = storage.roles || {};
+		const row = roles[seat.role] || { games: 0, wins: 0 };
+		roles[seat.role] = { games: row.games + 1, wins: row.wins + (seat.team === winner ? 1 : 0) };
+		storage.roles = roles;
 		// 하루의 첫 판은 더 준다. 매일 한 판이라도 하러 올 이유다
 		first = storage.lastDay !== today;
 		if (first) coin += FIRST_GAME_BONUS;

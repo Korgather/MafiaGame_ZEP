@@ -39,6 +39,7 @@
  */
 import type { ScriptPlayer, ScriptWidget } from "zep-script";
 import type { PlayerTag, Room } from "../types/Game.types.ts";
+import { GamePhase } from "../types/Game.types.ts";
 import type { ChatMessage, MessageDraft, MessageRow } from "../domain/chat/ChatMessage.ts";
 import {
 	addressedTo,
@@ -59,14 +60,16 @@ import {
 import { hearsGhosts, inMafiaChat, roleName } from "../domain/Roles.ts";
 import { spend } from "../domain/RateLimit.ts";
 import { locate, locateSpectator } from "../entities/RoomRegistry.ts";
+import { seatViews } from "../entities/Room.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { CHAT_RATE } from "../constants/GameConfig.ts";
-import type { ChatChannelView } from "../types/Widget.types.ts";
+import type { ChatChannelView, SeatView } from "../types/Widget.types.ts";
 import { asText, field, MAX_CHAT_LENGTH, messageType } from "../types/Widget.types.ts";
 import { forEachAudience, label } from "./Broadcast.ts";
 import { inOwnRoomArea } from "./Stage.ts";
 import type { ChatVoice } from "./ChatCommands.ts";
 import { runCommand } from "./ChatCommands.ts";
+import { FtueEvent, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import type { ChatFocus } from "./Widgets.ts";
 import { bindMessage, openChat, squeezeMain, updateChat } from "./Widgets.ts";
 
@@ -94,7 +97,26 @@ const globalLog: ChatMessage[] = [];
 export function resetGlobalLog(): void {
 	globalLog.length = 0;
 	nextSeq = 1;
+	for (const id in shownContext) delete shownContext[id];
+	for (const id in reopened) delete reopened[id];
 }
+
+/**
+ * 마지막으로 위젯에 보낸 상황. refresh가 "읽을 탭이 늘었나"를 알아보는 데 쓴다.
+ *
+ * tag에 두지 않은 이유는 PlayerTag가 이 파일 바깥의 모양이라서다. 비교에 필요한
+ * 것은 이 파일이 만든 값뿐이다.
+ *
+ * ponytail: 나간 사람의 항목을 지우지 않는다. 한 사람에 객체 하나이고 재접속하면
+ * 덮어쓰므로, 한 월드가 살아 있는 동안 쌓여 봐야 다녀간 사람 수만큼이다.
+ */
+const shownContext: { [playerId: string]: ChatContext } = {};
+
+/**
+ * 판마다 이미 다시 열어 준 채널 — "게임ID/채널|" 를 이어 붙인 것.
+ * 영매의 유령 탭은 밤마다 열렸다 닫히므로, 이것 없이는 밤마다 창이 다시 열린다.
+ */
+const reopened: { [playerId: string]: string } = {};
 
 // ────────────────────────────────────────────────────────────── 상황 파악
 
@@ -245,6 +267,7 @@ function channelViews(player: ScriptPlayer, ctx: ChatContext): ChatChannelView[]
 				: access.write && access.freeText
 					? def.placeholder
 					: `${access.note} (/도움말)`,
+			audience: def.audience,
 		};
 	});
 }
@@ -299,6 +322,13 @@ export function say(room: Room, text: string): void {
  */
 export function announce(room: Room, text: string, rows?: MessageRow[]): void {
 	post(room, { channel: ChatChannel.ROOM, kind: MessageKind.EVENT, text, rows });
+	// 공개 사건은 전부 이 입구를 지나므로 판 기록도 여기서 쌓는다(Room.timeline).
+	// 표가 딸린 줄(컷 카드·전원 공개)은 뺀다 — 같은 사건을 한 줄씩 이미 적었다.
+	// 밤 정산은 turnCount를 올린 뒤 NIGHT 안에서 돌므로 "N일차 밤"이 그 밤이다
+	if (!rows) {
+		const when = `${room.turnCount}일차 ${room.phase === GamePhase.NIGHT ? "밤" : "낮"}`;
+		room.timeline.push({ when, text });
+	}
 }
 
 /** 마피아·유령처럼 특정 채널 안에서만 보이는 안내 */
@@ -319,10 +349,14 @@ export function worldNotice(text: string): void {
 /**
  * 이 사람 앞으로만 가는 줄을 어느 탭에 놓을지 정한다.
  *
- * 지금 보고 있는 탭이 기본이다. 밤에 마피아 탭을 보고 있는데 개인 안내가
- * 방 탭에 쌓이면 읽으라고 보낸 문장을 못 읽는다 — 안 읽음 표시만 뜨고
- * 정작 글은 눈앞에 없는 상태가 된다. 지금 탭을 읽을 권한이 없으면
- * (게임 시작으로 전체 탭이 사라진 경우 등) 지금 볼 수 있는 채널로 옮긴다.
+ * 곧 보게 될 탭이 기준이다 — refresh·openFor가 옮겨 줄 preferredChannel과 같은 값.
+ * 밤에 마피아 탭을 볼 사람에게 개인 안내가 방 탭에 쌓이면 읽으라고 보낸 문장을
+ * 못 읽는다 — 안 읽음 표시만 뜨고 정작 글은 눈앞에 없는 상태가 된다.
+ *
+ * "지금 탭"이 아닌 이유: 안내는 대개 탭이 옮겨지기 **전에** 나간다. 밤 안내는
+ * 단계가 바뀐 직후 refreshRoom보다 먼저, 사망 안내는 탭 갱신과 같은 순간에
+ * 온다. 지금 탭을 고르면 낮의 방 탭에 쓰이고, 곧바로 탭이 마피아·유령으로
+ * 넘어가면서 방금 쓴 줄이 화면 밖에 묻힌다.
  *
  * 방을 함께 돌려주는 이유: GLOBAL이 아닌 채널은 post가 방을 알아야 배달한다.
  * 채널과 방은 따로 고르면 어긋날 수 있는 한 쌍이라 한자리에서 정한다.
@@ -334,10 +368,25 @@ function personalTarget(player: ScriptPlayer): { room: Room | null; channel: Cha
 	const ctx = contextOf(player.id);
 	return {
 		room: found ? found.room : locateSpectator(player.id)?.room || null,
-		channel: accessOf(ctx, tag.chatChannel).read
-			? tag.chatChannel
-			: preferredChannel(ctx, tag.chatChannel),
+		channel: preferredChannel(ctx, tag.chatChannel),
 	};
+}
+
+/** 위젯이 보드 메모를 찾을 열쇠. 관전자도 같은 판을 본다 */
+function gameIdOf(player: ScriptPlayer): string {
+	const room = personalTarget(player).room;
+	return room ? room.gameId : "";
+}
+
+/**
+ * 메모 로스터 — 채팅 위에 늘어선 참가 번호 칩. 판이 돌 때만 채운다.
+ * 대기실의 자리는 아직 의심할 사람이 아니다. 생사는 refresh(누가 죽을 때마다)가 따라온다.
+ */
+function rosterOf(player: ScriptPlayer): { seats: SeatView[]; myNum: number } {
+	const room = personalTarget(player).room;
+	if (!room || !contextOf(player.id).started) return { seats: [], myNum: 0 };
+	const found = locate(player.id);
+	return { seats: seatViews(room), myNum: found ? found.seat.index : 0 };
 }
 
 /** 한 사람에게만 보이는 안내 */
@@ -380,14 +429,17 @@ export function openFor(player: ScriptPlayer, focus: ChatFocus, prefilled: strin
 		type: "init",
 		channels: channelViews(player, ctx),
 		active: tag.chatChannel,
-		quick: quickFor(ctx),
+		quick: quickFor(ctx, tag.chatChannel),
 		open: tag.chatOpen,
 		inputDisabled: player.isGuest,
 		myId: player.id,
 		lines: log.slice(-HISTORY_LIMIT),
 		focus,
 		prefill: prefilled,
+		gameId: gameIdOf(player),
+		...rosterOf(player),
 	});
+	shownContext[player.id] = ctx;
 	bind(widget);
 }
 
@@ -450,19 +502,88 @@ export function focusChannel(player: ScriptPlayer, channel: ChatChannel): void {
  *
  * 창을 다시 열지 않는 이유는 입력 중이던 글자와 스크롤 위치가 날아가기
  * 때문이다. 바뀐 것은 권한뿐이므로 권한만 보낸다.
+ *
+ * 예외는 판 안의 탭이 **늘었을** 때다. 위젯은 받은 줄만 들고 있어서, 권한만
+ * 보내면 새 탭이 빈 채로 열린다 — 막 죽은 사람의 유령 탭, 막 합류한
+ * 스파이의 마피아 탭이 그렇다. 그 탭에 이미 쌓인 기록은 openFor만 싣는다.
+ * 입력 중이던 글자는 위젯이 init에서 되살린다(chatDraft).
  */
 export function refresh(player: ScriptPlayer): void {
 	const tag = tagOf(player);
 	if (!tag.chatWidget) return;
 	const ctx = contextOf(player.id);
+	const before = shownContext[player.id];
+	// 스냅숏이 없으면 늘었는지 알 수 없다. 예전처럼 권한만 보낸다
+	const regained = before
+		? readableChannels(ctx).filter(
+				channel => opensInGame(channel) && !accessOf(before, channel).read
+			)
+		: [];
+	const fresh = regained.filter(
+		channel => (reopened[player.id] || "").indexOf(`${gameIdOf(player)}/${channel}|`) < 0
+	);
+	if (before && fresh.length > 0) {
+		reopened[player.id] =
+			(reopened[player.id] || "") +
+			fresh.map(channel => `${gameIdOf(player)}/${channel}|`).join("");
+		openFor(player, "", "");
+		tellJoinedMafia(player, before, ctx);
+		return;
+	}
+	shownContext[player.id] = ctx;
 	tag.chatChannel = preferredChannel(ctx, tag.chatChannel);
 	markSeen(tag.chatSeen, tag.chatChannel, lastSeqIn(visibleLog(player, ctx), tag.chatChannel));
 	updateChat(player, {
 		type: "channels",
 		channels: channelViews(player, ctx),
 		active: tag.chatChannel,
-		quick: quickFor(ctx),
+		quick: quickFor(ctx, tag.chatChannel),
 		inputDisabled: player.isGuest,
+		gameId: gameIdOf(player),
+		...rosterOf(player),
+	});
+	// 다시 열지 않고 다시 읽게 된 탭(영매의 밤마다 열리는 유령 탭)에는 닫혀 있던 사이의
+	// 줄을 채운다. 이미 든 줄까지 보내므로 위젯이 seq로 거른다
+	if (regained.length === 0) return;
+	const channels = channelViews(player, ctx);
+	for (const line of visibleLog(player, ctx).slice(-HISTORY_LIMIT)) {
+		if (regained.indexOf(line.channel) >= 0) updateChat(player, { type: "line", line, channels });
+	}
+}
+
+/**
+ * 판 안에서만 열리는 채널인가 — 마피아·연인·유령.
+ *
+ * 전체·방 탭이 새로 열릴 때(대기실 복귀, 다른 방 입장)는 다시 열지 않는다.
+ * 그 순간의 기록은 새 방의 것이라, 다시 열면 화면에 남아 있던 직전 판의
+ * 대화와 "오류로 중단했습니다" 같은 마지막 안내가 통째로 지워진다.
+ */
+function opensInGame(channel: ChatChannel): boolean {
+	return channel !== ChatChannel.ROOM && channel !== ChatChannel.GLOBAL;
+}
+
+/**
+ * 산 채로 밀담에 새로 들어온 사람에게 방 탭으로 알린다.
+ *
+ * 방 탭인 이유: 합류(스파이 접선·짐승인간 접선·혼자 남은 마피아에게 새 동료)는
+ * 언제나 밤 정산 안에서 일어나고 곧바로 낮이 온다. 낮에 머무는 탭이 방이라,
+ * 마피아 탭에 쓰면 다음 밤까지 아무도 안 본다. 새 탭은 init으로 열려서
+ * 깜빡이지도 않는다 — 그래서 글로 알린다.
+ *
+ * 문구가 "합류했다"가 아닌 이유: 혼자 남았다가 동료를 얻은 마피아도 이 줄을
+ * 받는다. 셋 모두에게 참인 말은 "이제 탭에서 이야기할 수 있다"뿐이다.
+ */
+function tellJoinedMafia(player: ScriptPlayer, before: ChatContext, ctx: ChatContext): void {
+	if (!before.started || !ctx.started) return;
+	if (!before.alive || !ctx.alive) return;
+	if (before.mafiaChat || !ctx.mafiaChat) return;
+	const found = locate(player.id);
+	if (!found) return;
+	post(found.room, {
+		channel: ChatChannel.ROOM,
+		kind: MessageKind.SYSTEM,
+		text: "🔪 이제 밤마다 마피아 탭에서 팀과 이야기할 수 있습니다.",
+		to: player.id,
 	});
 }
 
@@ -478,6 +599,12 @@ function bind(widget: ScriptWidget): void {
 		if (type === "send") submit(sender, data);
 		else if (type === "channel") switchChannel(sender, data);
 		else if (type === "toggle") toggle(sender, data);
+		// 메모 내용은 오지 않는다 — "첫 판에 메모를 썼는가" 한 비트뿐이다
+		else if (type === "memo-used") {
+			const found = locate(sender.id);
+			if (found && found.room.phase !== GamePhase.LOBBY)
+				trackDuringFirstGame(sender, FtueEvent.MEMO_USED);
+		}
 	});
 }
 
@@ -538,7 +665,7 @@ function submit(sender: ScriptPlayer, data: unknown): void {
 	if (!access.write) return;
 	// 침묵전. 자유 입력이 막힌 채널에는 준비된 문구만 통과시킨다 —
 	// 위젯이 입력창을 감춰도 조작된 클라이언트는 아무 문자열이나 보낸다
-	if (!access.freeText && quickFor(ctx).indexOf(text) < 0) {
+	if (!access.freeText && quickFor(ctx, channel).indexOf(text) < 0) {
 		label(sender, "🤐 준비된 문구만 보낼 수 있습니다.");
 		return;
 	}
@@ -587,8 +714,10 @@ function switchChannel(sender: ScriptPlayer, data: unknown): void {
 		type: "channels",
 		channels: channelViews(sender, ctx),
 		active: channel,
-		quick: quickFor(ctx),
+		quick: quickFor(ctx, channel),
 		inputDisabled: sender.isGuest,
+		gameId: gameIdOf(sender),
+		...rosterOf(sender),
 	});
 }
 

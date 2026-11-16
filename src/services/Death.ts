@@ -279,8 +279,15 @@ function becomeGhost(room: Room, player: ScriptPlayer, seat: Seat): void {
 	player.hidden = false;
 	player.sendUpdated();
 
-	Chat.tell(player, "☠️ 당신은 죽었습니다. 유령 탭에서 죽은 사람들과 대화하세요.");
-	// 유령 채널로 탭을 옮겨 준다. 자동 전환은 ChatPermission이 정한다
+	// 유령 채널로 탭을 옮겨 준다. 자동 전환은 ChatPermission이 정한다.
+	// 안내보다 먼저다 — 유령 탭이 새로 열리면 refresh가 기록째 다시 열고
+	// (창을 다시 만든다), 그 뒤에 쓴 줄이라야 새 창에 확실히 남는다
 	Chat.refresh(player);
+	// 둘째 줄: ZEP 기본 채팅창은 이 게임의 채널을 모른다. 거기 쓴 말은 산
+	// 사람의 화면에 그대로 뜨고, 죽은 사람이 범인을 부르는 통로가 된다
+	Chat.tell(
+		player,
+		"☠️ 당신은 죽었습니다. 유령 탭에서 죽은 사람들과 대화하세요.\nZEP 기본 채팅창에 쓰면 산 사람에게 보입니다."
+	);
 	Chat.channelSay(room, ChatChannel.GHOST, `👻 ${participantLabel(seat)}가 유령이 되었습니다.`);
 }

@@ -131,12 +131,10 @@ export const WidgetFile = {
 	LOBBY: "lobby.html",
 	/** 겹쳐 읽고 닫는 카드 — 직업 공개·첫 안내·직업 도감. 내용은 payload가 정한다 */
 	CARD: "card.html",
-	/** 밤 능력 지목 */
-	ROLE_ACTION: "roleAction.html",
-	/** 밤/아침 진행 화면. phase 필드로 갈린다 */
-	PHASE: "phase.html",
-	/** 투표 + 개표. init / result 메시지로 갈린다 */
-	VOTE: "vote.html",
+	/** 판 내내 위에 떠 있는 상태 줄 — 단계·N일차·시간·내 직업·생존 수 */
+	HUD: "hud.html",
+	/** 플레이어 보드. 진행(status)·투표(vote)·밤 능력(action)을 mode로 가른다 */
+	BOARD: "board.html",
 	/** 최후의 반론 + 찬반투표. defense / judge 메시지로 갈린다 */
 	JUDGEMENT: "judgement.html",
 	GAME_OVER: "gameOver.html",
@@ -205,14 +203,22 @@ export interface WidgetBox {
 	/** 모바일 세로. 화면 높이 대비 %. 없으면 height(px)를 그대로 쓴다 */
 	readonly mobile?: number;
 	/**
-	 * 화면을 통째로 덮는가. 켜면 width/height/mobile을 모두 무시하고
-	 * 100% × 100% + OVERLAY_Z가 된다 (Widgets.ts의 layoutOf).
+	 * 폰에서 화면을 통째로 덮는가. 켜면 폰은 width/height/mobile을 모두 무시하고
+	 * 100% × 100% + OVERLAY_Z가 되고, 데스크톱은 width×height 카드로 가운데 뜬다
+	 * (Widgets.ts의 layoutOf). 넓은 화면을 다 덮으면 몇 초짜리 소식이 게임을 가린다.
 	 *
 	 * 위 세로 예산이 적용되지 않는 유일한 예외다. 예산은 "게임 화면을 얼마나
 	 * 남길 것인가"를 정하는데, 덮는 위젯은 게임 화면을 남기지 않는 것이
 	 * 목적이고 서버가 정한 시간에 스스로 닫힌다.
 	 */
 	readonly fill?: true;
+	/**
+	 * 모바일에서도 높이를 이 픽셀로 두는 띠 위젯(HUD). 폭은 MobileWidth를 따른다.
+	 * 채팅을 펼쳐도 줄이지 않는다 — 한 줄짜리를 60%로 누르면 글자가 잘린다.
+	 */
+	readonly bar?: number;
+	/** 모바일에서 HUD 바로 아래에 붙는다 (top = 보정값 + HUD 높이) */
+	readonly underHud?: true;
 }
 
 export const WidgetSize = {
@@ -226,7 +232,29 @@ export const WidgetSize = {
 	 * 채로 게임 화면을 가리고 있었다 (모바일에서 특히 눈에 띈다).
 	 */
 	LOBBY_ROOMS: { width: 400, height: 280, mobile: 30 },
-	ROLE_ACTION: { width: 400, height: 460, mobile: 46 },
+	/**
+	 * 판 내내 뜨는 상태 줄.
+	 *
+	 * 데스크톱은 오른쪽 위(Widgets.hudAlign)에서 보드와 한 줄로 선다 — 시계와
+	 * 지금 할 일이 붙어 있고, 채팅(왼쪽 아래)과 함께 화면 구석을 둘만 쓴다.
+	 * 보드는 이 높이만큼 아래에 붙는다(Widgets.layoutOf의 underHud).
+	 */
+	HUD: { width: 360, height: 48, bar: 44 },
+	/**
+	 * 첫 판 "지금 할 일" 줄이 붙은 HUD. 둘째 줄 몫만큼 키우고 보드도 그만큼
+	 * 내려 붙인다(layoutOf의 underHud). 모바일은 44px에 두 줄을 접으면 태블릿
+	 * 글자 크기에서 둘째 줄이 잘려 12px만 키운다.
+	 */
+	HUD_COACH: { width: 360, height: 68, bar: 56 },
+	/**
+	 * 플레이어 보드 — 투표·밤 능력. 12칸 격자 + 머리말 + 하단 선택 줄.
+	 *
+	 * 모바일 40%는 HUD(44px) 아래에 붙는다. 850px 폰에서 44 + 340 = 45%를 쓰고
+	 * 접힌 채팅 바 44px을 빼도 게임 화면이 49.6% 남는다 (tests/layout.test.ts).
+	 */
+	BOARD: { width: 360, height: 460, mobile: 40, underHud: true },
+	/** 보드 — 토론·대기(status). 누를 것이 없어 옛 진행 화면처럼 낮게 둔다 */
+	BOARD_STATUS: { width: 360, height: 300, mobile: 26, underHud: true },
 	/** 카드 한 장 또는 몇 장 — 직업 공개, 첫 안내 */
 	CARD: { width: 320, height: 400, mobile: 44 },
 	/**
@@ -237,8 +265,6 @@ export const WidgetSize = {
 	 * 읽고 곧 닫는 것이라 게임 화면을 항구적으로 먹지 않는다.
 	 */
 	CARD_BOOK: { width: 360, height: 480, mobile: 54 },
-	/** 사람 8명을 타일로 그린다. PHASE보다 높아야 한다 */
-	VOTE: { width: 400, height: 400, mobile: 46 },
 	/**
 	 * 최후의 반론 / 찬반투표.
 	 *
@@ -262,7 +288,7 @@ export const WidgetSize = {
 	 * 그때는 .stand가 0으로 눌려 단상에 오른 사람의 이름이 사라진다. 36%
 	 * 시절에도 22%=187px로 이미 넘었으니 이번 축소가 만든 것은 아니다.
 	 */
-	JUDGEMENT: { width: 380, height: 290, mobile: 33 },
+	JUDGEMENT: { width: 380, height: 290, mobile: 33, underHud: true },
 	/**
 	 * 전원의 직업 공개 목록이 들어간다.
 	 *
@@ -284,15 +310,6 @@ export const WidgetSize = {
 	 */
 	GAME_OVER: { width: 380, height: 480, mobile: 46 },
 	/**
-	 * 밤/아침: 읽을 것만 있고 조작이 없다.
-	 *
-	 * 모바일 28 → 24. 재설계에서 이 화면의 층이 줄어들지는 않았지만
-	 * (신분 줄 · 지시 줄 · 시간 선 · 무대 · 사건 목록) 층마다 고정 높이가
-	 * 정해졌고 합이 203px이다. 28%는 그보다 큰 값이라 아래가 남았고,
-	 * 남은 자리는 게임 화면을 가리는 것 말고는 아무 일도 하지 않는다.
-	 */
-	PHASE: { width: 380, height: 260, mobile: 24 },
-	/**
 	 * 펼친 채팅창.
 	 *
 	 * 위젯은 iframe이라 크기만큼 화면을 실제로 가린다(투명해도 클릭을 먹는다).
@@ -300,7 +317,7 @@ export const WidgetSize = {
 	 * 접기는 CHAT_BAR 크기로 다시 여는 것으로 구현한다. 미확인 개수 같은
 	 * 상태는 서버(PlayerTag)가 들고 있어서 다시 열어도 잃지 않는다.
 	 */
-	CHAT: { width: 330, height: 320, mobile: 34 },
+	CHAT: { width: 360, height: 440, mobile: 34 },
 	/**
 	 * 접은 채팅창. 채널 아이콘과 미확인 배지만 보인다.
 	 * 글자 한 줄이라 화면이 커진다고 같이 커질 이유가 없다 — 여기만 픽셀 그대로다.
@@ -314,8 +331,7 @@ export const WidgetSize = {
 	 * 이 방식이 허용되는 조건은 "서버가 닫아 준다"이고(Assets의 CHAT 주석),
 	 * 컷은 그 조건을 만족하는 유일한 화면이다.
 	 *
-	 * width/height는 fill이 켜져 있어 쓰이지 않지만 showWidget이 픽셀을
-	 * 요구해서 남는다 — 첫 프레임의 상자 크기다.
+	 * width/height는 데스크톱 카드의 크기다. 폰에서는 fill이 덮는다.
 	 */
 	CUT: { width: 480, height: 320, fill: true },
 	/**

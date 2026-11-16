@@ -8,7 +8,8 @@
  * sendMessage를 호출했다.
  */
 import type { ScriptPlayer, ScriptWidget, WidgetAlign } from "zep-script";
-import type { CutTone, Room, Seat, Team } from "../types/Game.types.ts";
+import type { CutTone, Room, Seat, Team, TimelineEntry } from "../types/Game.types.ts";
+import { GamePhase } from "../types/Game.types.ts";
 import type {
 	CardView,
 	ChatChannelView,
@@ -19,6 +20,8 @@ import type {
 	WidgetLayout,
 } from "../types/Widget.types.ts";
 import { roleDef } from "../domain/Roles.ts";
+import { nightActionBlockedReason } from "../domain/NightResolution.ts";
+import { suspicionTally } from "../domain/Vote.ts";
 import type { RuleSet } from "../domain/RuleSet.ts";
 import type { ZepAudience } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
@@ -31,7 +34,7 @@ import {
 	WidgetFile,
 	WidgetSize,
 } from "../constants/Assets.ts";
-import { kickVotesNeeded } from "../entities/Room.ts";
+import { aliveSeats, deadSeats, kickVotesNeeded } from "../entities/Room.ts";
 import { guard } from "../infrastructure/Fault.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 
@@ -65,6 +68,9 @@ function topAlign(player: ScriptPlayer): "top" | "topright" {
 	return player.isMobile ? "top" : "topright";
 }
 
+/** 데스크톱에서 HUD 줄과 그 아래 보드 사이의 틈. 붙이면 두 상자가 한 덩어리로 읽힌다 */
+const HUD_GAP = 8;
+
 /**
  * 위젯이 실제로 차지할 상자. 여는 쪽에서 한 번 정해 payload에 실어 보낸다.
  *
@@ -88,29 +94,40 @@ function layoutOf(
 	size: WidgetBox,
 	tight: boolean
 ): WidgetLayout {
-	// 덮는 위젯은 기기도 채팅 상태도 보지 않는다. 화면 전체가 곧 크기다.
+	// 덮는 위젯은 채팅 상태를 보지 않는다. 폰은 화면 전체가 곧 크기고,
+	// 데스크톱은 가운데 카드로 띄운다 — 넓은 화면을 다 덮을 이유가 없다.
 	// 이 분기가 여기 있는 이유는 "크기를 정하는 곳은 하나"라는 이 함수의
 	// 약속 때문이다 — 부르는 쪽에서 layout을 손수 지으면 그 약속이 깨진다.
 	if (size.fill) {
-		return { anchor: align, width: "100%", height: "100%", zIndex: OVERLAY_Z };
+		return player.isMobile
+			? { anchor: align, width: "100%", height: "100%", zIndex: OVERLAY_Z }
+			: { anchor: align, width: `${size.width}px`, height: `${size.height}px`, zIndex: OVERLAY_Z };
 	}
 
 	const mobile = player.isMobile;
 	const tablet = mobile && player.isTablet;
 	const percent = size.mobile ? Math.round(size.mobile * (tight ? MAIN_TIGHT : 1)) : 0;
 	// 모바일 %가 없는 위젯(접은 채팅 바)은 기기와 상관없이 픽셀 그대로다.
-	// 96%로 늘리면 한 줄짜리 버튼이 화면 아래를 통째로 막는다
+	// 96%로 늘리면 한 줄짜리 버튼이 화면 아래를 통째로 막는다. 띠(bar)만
+	// 폭은 늘리고 높이는 픽셀로 둔다
+	const stretch = mobile && (size.mobile || size.bar);
 	const layout: WidgetLayout = {
 		anchor: align,
-		width:
-			mobile && size.mobile ? (tablet ? MobileWidth.TABLET : MobileWidth.PHONE) : `${size.width}px`,
-		height: mobile && percent > 0 ? `${percent}%` : `${size.height}px`,
+		width: stretch ? (tablet ? MobileWidth.TABLET : MobileWidth.PHONE) : `${size.width}px`,
+		height:
+			mobile && percent > 0 ? `${percent}%` : `${mobile && size.bar ? size.bar : size.height}px`,
 	};
 	// 상단 보정은 위쪽에 붙는 위젯에만 뜻이 있다. 아래(채팅)나 가운데(직업
 	// 카드)에 붙이면 제자리에서 그만큼 밀려난다. startsWith는 Jint에 없다.
 	if (mobile && size.mobile) layout.wide = `${size.mobile}%`;
 	if (align.indexOf("top") === 0) {
-		layout.top = !mobile ? TopNudge.DESKTOP : tablet ? TopNudge.TABLET : TopNudge.PHONE;
+		const nudge = !mobile ? TopNudge.DESKTOP : tablet ? TopNudge.TABLET : TopNudge.PHONE;
+		// HUD와 같은 자리(폰은 top, 데스크톱은 topright)를 쓰므로 그 높이만큼
+		// 내려 붙인다. 데스크톱 첫 판은 HUD가 안내 줄 몫만큼 크다 — 안내 줄이
+		// 없는 단계에서는 틈이 20px 생기지만, 반대로 잡으면 HUD가 보드를 덮는다
+		const hud = tagOf(player).playStarts === 1 ? WidgetSize.HUD_COACH : WidgetSize.HUD;
+		const below = !size.underHud ? 0 : mobile ? hud.bar : hud.height + HUD_GAP;
+		layout.top = below ? `${parseInt(nudge, 10) + below}px` : nudge;
 	}
 	return layout;
 }
@@ -255,7 +272,7 @@ const GHOST_ABILITY = "유령끼리 이야기할 수 있습니다";
 /**
  * 좌석에서 직업 칩을 만든다.
  *
- * "죽으면 유령으로 보인다"는 규칙이 전에는 phase.html 안에만 있었다
+ * "죽으면 유령으로 보인다"는 규칙이 전에는 옛 phase.html 안에만 있었다
  * (`data.alive === false ? "유령" : data.role`). 그래서 같은 칩을 쓰는
  * roleAction 위젯은 그 규칙을 몰라 죽은 사람에게 직업을 그대로 보여줬고,
  * 서버는 세 곳(밤 화면·낮 화면·밤 능력)에서 role/team/alive 세 줄을
@@ -274,8 +291,11 @@ export function identityOf(seat: Seat): Identity {
 }
 
 /** 밤/아침 진행 화면 */
-export interface PhasePayload extends Identity {
+export interface PhasePayload extends Identity, Partial<TimeVoteView> {
 	type: "init";
+	mode: "status";
+	/** 메모 탭이 판마다 따로 적도록 쓰는 열쇠 */
+	gameId: string;
 	phase: "night" | "day";
 	/** 몇 번째 밤/아침인가 */
 	turn: number;
@@ -308,6 +328,13 @@ export interface PhasePayload extends Identity {
 	lead: string;
 	/** 밤사이 일어난 일. 채팅으로 흘러가면 놓친다 */
 	deaths: string[];
+	/** 지난밤 나만 받은 답(Room.nightReveals 중 내 줄). 낮 화면만 싣는다 */
+	mine?: string[];
+	/**
+	 * 이 판의 공개 사건 전체(Room.timeline). 유령과 관전자만 받고 산 사람은 빈 배열이다 —
+	 * 산 사람의 보드는 지금 할 일이 먼저고, 판을 되짚는 것은 할 일이 끝난 사람의 몫이다.
+	 */
+	timeline: TimelineEntry[];
 	/**
 	 * 좌석 없이 보고만 있는가.
 	 *
@@ -316,25 +343,70 @@ export interface PhasePayload extends Identity {
 	 * 화면을 여는 네 곳이 전부 한 번씩 답하게 만든다.
 	 */
 	spectating: boolean;
-	/**
-	 * ±15초 버튼을 그릴 것인가.
-	 *
-	 * spectating과 같은 이유로 필수다. 낮에 살아 있고 아직 쓰지 않은
-	 * 사람에게만 true다 — 밤·관전·사망·이미 사용은 전부 false.
-	 */
-	timeVote: boolean;
+	/** 낮 여론조사. 낮이 아니거나 모드가 껐으면 null이고 보드가 줄을 숨긴다 */
+	poll: PollView | null;
 }
 
-/** 낮 시간이 바깥에서 바뀌었을 때 시계만 다시 맞춘다 (±15초) */
-export interface PhaseTimerPayload {
+/**
+ * 낮 여론조사 한 벌. 처음 열 때(PhasePayload.poll)와 누가 고칠 때({type:"poll"})
+ * 같은 모양이다. 투표와 무관한 의견 표시라 규칙 계산은 이 값을 읽지 않는다.
+ */
+export interface PollView {
+	/** 참가번호 → 의심 수. 산 사람끼리만 센다(Vote.suspicionTally) */
+	tally: { [num: number]: number };
+	/** 내가 의심한 번호. 0이면 없음 */
+	suspect: number;
+	/** 표시할 수 있는가. 산 참가자만 — 유령·관전자는 집계만 본다 */
+	canSuspect: boolean;
+}
+
+export interface PollPayload extends PollView {
+	type: "poll";
+}
+
+/** 좌석이 null이면 관전자다 */
+export function pollView(room: Room, seat: Seat | null): PollView | null {
+	if (room.phase !== GamePhase.DAY || !room.ruleSet.dayPoll) return null;
+	return {
+		tally: suspicionTally(room.seats),
+		suspect: seat ? seat.suspect : 0,
+		canSuspect: !!seat && seat.alive,
+	};
+}
+
+/**
+ * 낮 시간이 바깥에서 바뀌었다(±15초). HUD는 시계를 다시 맞추고 바뀐 만큼을
+ * 띄우며, 낮 보드는 ±15초 칸을 다시 그린다. 같은 메시지를 둘 다 받는다
+ */
+export interface TimerPayload extends TimeVoteView {
 	type: "timer";
 	timer: number;
+	/** 방금 바뀐 초. HUD가 시계 옆에 잠깐 띄운다 */
+	delta: number;
+}
+
+/** 낮 보드의 ±15초 칸 */
+export interface TimeVoteView {
+	/** 버튼을 그릴 것인가. 낮에 살아 있고 아직 쓰지 않은 사람만 true */
 	timeVote: boolean;
+	/** 오늘 이미 썼는가. 버튼 대신 "썼습니다" 칩을 그린다 */
+	timeSpent: boolean;
+}
+
+/** 좌석이 null이면 관전자다. 둘 다 거짓이면 보드가 그 칸을 그리지 않는다 */
+export function timeVoteView(room: Room, seat: Seat | null): TimeVoteView {
+	const can = room.phase === GamePhase.DAY && !!seat && seat.alive;
+	return {
+		timeVote: can && !!seat && !seat.timeVoteSpent,
+		timeSpent: can && !!seat && seat.timeVoteSpent,
+	};
 }
 
 /** 투표 화면 */
 export interface VotePayload extends Identity {
 	type: "init";
+	mode: "vote";
+	gameId: string;
 	myNum: number;
 	seats: SeatView[];
 	timer: number;
@@ -344,9 +416,11 @@ export interface VotePayload extends Identity {
 	rejected: number[];
 }
 
-/** 개표 화면. 같은 vote.html이 받는다 */
+/** 개표 화면. 같은 board.html이 mode: "vote"로 받는다 */
 export interface VoteResultPayload extends Identity {
 	type: "result";
+	mode: "vote";
+	gameId: string;
 	myNum: number;
 	seats: SeatView[];
 	/**
@@ -415,6 +489,8 @@ export interface GameOverPayload {
 	players: RevealView[];
 	/** 본인에게만 전달되는 직업·행동·생존 복기 */
 	recap: string[];
+	/** 판 전체의 공개 사건. 위젯이 when으로 묶어 밤낮별로 다시 보여준다 */
+	timeline: TimelineEntry[];
 	/** 대기실로 돌아가기까지. 이 화면만 남은 시간이 없으면 갑자기 사라진다 */
 	timer: number;
 	/** 같은 방에서 한 판 더 — 현재 상태 */
@@ -508,6 +584,8 @@ export interface CardPayload {
  */
 export interface NightActionPayload extends Identity {
 	type: "init";
+	mode: "action";
+	gameId: string;
 	myNum: number;
 	/** 무엇을 하라는 한 줄. 지목이 없으면 빈 문자열 */
 	prompt: string;
@@ -525,6 +603,14 @@ export interface NightActionPayload extends Identity {
 	targetsDead: boolean;
 	timer: number;
 	note: string;
+	/** 판에 한 번뿐인 능력인가 (RoleDef.maxUses). 보드가 확인을 한 번 더 받는다 */
+	final: boolean;
+	/** 이미 고른 대상. 재접속으로 다시 열 때 표시를 복원한다. 없으면 0 */
+	picked: number;
+	/** 오늘 밤 더 고를 수 없는가 (이미 썼다) */
+	locked: boolean;
+	/** 고른 대상을 밤 끝까지 바꿀 수 있는가 (NightResolution.canRetarget) */
+	changeable: boolean;
 }
 
 /** 동료 한 명의 현재 지목. from이 to를 고르고 있다 */
@@ -617,6 +703,8 @@ export interface ChatPayload {
 	 * 펴져 있을 때는 ChatPrefillPayload가 같은 일을 한다.
 	 */
 	prefill: string;
+	/** 보드 메모(Parent.store.memo[gameId])를 찾는 열쇠. 판 밖이면 "" */
+	gameId: string;
 }
 
 /**
@@ -690,6 +778,8 @@ export interface ChatChannelsPayload {
 	quick: string[];
 	/** 채널 권한과 별개로 입력기 전체를 잠가야 하는가 */
 	inputDisabled: boolean;
+	/** 판이 시작되면 탭 갱신으로만 바뀐 gameId가 전해진다 (ChatPayload.gameId) */
+	gameId: string;
 }
 
 /** 새 메시지 한 줄 + 갱신된 미확인 개수 */
@@ -804,6 +894,8 @@ export function updateChat(
  * 강퇴 필요 표수도 같은 이유로 빠진다. 둘 다 좌석 목록(pushLobby)에 실린다.
  */
 export function openLobby(player: ScriptPlayer): ScriptWidget {
+	// 대기실로 가는 길은 전부 여기를 지난다 — 판이 끝났든 중단됐든 HUD를 걷는다
+	closeHud(player);
 	// 방 선택 크기로 연다. 방 안이었다면 곧바로 오는 pushLobby가 늘려준다
 	// 대기실은 판에 매이지 않는다 — 도장 없이 열어 예전처럼 단계 검사에만 맡긴다
 	return openMain(player, null, WidgetFile.LOBBY, topAlign(player), WidgetSize.LOBBY_ROOMS, {
@@ -849,24 +941,19 @@ export function pushLobby(
 	});
 }
 
-/**
- * 밤/아침 진행 화면.
- *
- * 단계 화면 다섯은 전부 room을 받는다. 인자가 하나 늘어난 이유는 도장이다 —
- * 여는 시점의 판·단계를 화면에 새겨 두어야 늦게 도착한 클릭을 가려낼 수 있고,
- * 그 값을 아는 것은 호출부가 아니라 방이다.
- */
-export function openPhase(player: ScriptPlayer, room: Room, payload: PhasePayload): ScriptWidget {
-	return openMain(player, room, WidgetFile.PHASE, topAlign(player), WidgetSize.PHASE, payload);
-}
+/** 보드가 받는 첫 메시지. mode가 진행·투표·밤 능력을 가른다 */
+export type BoardPayload = PhasePayload | VotePayload | VoteResultPayload | NightActionPayload;
 
-/** 투표 화면. 개표도 같은 파일이라 payload 타입만 다르다 */
-export function openVote(
-	player: ScriptPlayer,
-	room: Room,
-	payload: VotePayload | VoteResultPayload
-): ScriptWidget {
-	return openMain(player, room, WidgetFile.VOTE, topAlign(player), WidgetSize.VOTE, payload);
+/**
+ * 플레이어 보드 — 진행·투표·개표·밤 능력.
+ *
+ * 단계 화면은 전부 room을 받는다. 여는 시점의 판·단계를 도장으로 새겨 두어야
+ * 늦게 도착한 클릭을 가려낼 수 있고, 그 값을 아는 것은 호출부가 아니라 방이다.
+ * 누를 것이 없는 진행 화면은 낮게 연다 — 남는 자리는 게임 화면만 가린다.
+ */
+export function openBoard(player: ScriptPlayer, room: Room, payload: BoardPayload): ScriptWidget {
+	const size = payload.mode === "status" ? WidgetSize.BOARD_STATUS : WidgetSize.BOARD;
+	return openMain(player, room, WidgetFile.BOARD, topAlign(player), size, payload);
 }
 
 /** 최후의 반론과 찬반투표. 두 단계가 한 파일을 쓴다 */
@@ -901,13 +988,148 @@ export function openGameOver(
 	);
 }
 
-/** 밤 능력 위젯. 조작 대상이 많아 모바일에서도 상단 중앙 고정 */
-export function openRoleAction(
-	player: ScriptPlayer,
-	room: Room,
-	payload: NightActionPayload
-): ScriptWidget {
-	return openMain(player, room, WidgetFile.ROLE_ACTION, "top", WidgetSize.ROLE_ACTION, payload);
+/** HUD 직업 칩. 관전자는 직업 대신 "관전"이다 */
+interface HudRole {
+	glyph: string;
+	name: string;
+	/** 관전자는 진영이 없다 */
+	team: Team | "";
+}
+
+/** 판 내내 위에 떠 있는 상태 줄 */
+export interface HudPayload {
+	type: "init";
+	phase: GamePhase;
+	glyph: string;
+	label: string;
+	/** N일차. 밤은 다가올 아침의 번호를 쓴다 — "1일차 밤"이 첫 밤이다 */
+	turn: number;
+	timer: number;
+	role: HudRole;
+	alive: number;
+	total: number;
+	/**
+	 * 첫 판인 사람에게만 뜨는 "지금 할 일" 한 줄. 첫 판이 아니면 빈 문자열이다.
+	 *
+	 * 서버가 정한다. 할 일은 단계만으로 갈리지 않는다 — 오늘 밤 능력을 쓸 수
+	 * 있는가, 단상에 오른 본인인가, 죽었는가를 아는 것은 서버뿐이다.
+	 */
+	coach: string;
+}
+
+/** 첫 판 안내 문구. 단계 이름만 보고는 무엇을 눌러야 하는지 모르는 사람을 위한 한 줄 */
+function coachLine(room: Room, seat: Seat | null): string {
+	if (!seat) return "";
+	if (!seat.alive) return "유령은 유령끼리만 대화해요. 끝까지 지켜보세요";
+	switch (room.phase) {
+		case GamePhase.ROLE_REVEAL:
+			return "카드에서 내 직업과 능력을 확인하세요";
+		case GamePhase.NIGHT: {
+			const prompt = roleDef(seat.role).nightPrompt;
+			const canAct =
+				nightActionBlockedReason(seat, room.turnCount, deadSeats(room).length) === null;
+			return canAct && prompt
+				? `보드에서 ${prompt}`
+				: "오늘 밤은 할 일이 없어요. 아침을 기다리세요";
+		}
+		case GamePhase.DAY:
+			// 첫날은 메모를 처음 보는 날이다. 채팅 번호를 눌러 적는다는 것은 말해 주지 않으면 모른다
+			return room.turnCount === 1
+				? "의심 가는 사람의 번호를 채팅에서 눌러 메모하세요"
+				: "채팅으로 의심 가는 사람을 말해 보세요";
+		case GamePhase.VOTE:
+			return "가장 의심되는 사람에게 투표하세요";
+		case GamePhase.VOTE_RESULT:
+			return "누가 단상에 오르는지 보세요";
+		case GamePhase.DEFENSE:
+			return room.nominee === seat.index
+				? "채팅으로 왜 마피아가 아닌지 말하세요"
+				: "단상에 오른 사람의 해명을 들어 보세요";
+		case GamePhase.JUDGEMENT:
+			return "처형에 찬성(O)인지 반대(X)인지 누르세요";
+		default:
+			return "";
+	}
+}
+
+const HUD_PHASE: { [phase: string]: { glyph: string; label: string } } = {
+	ROLE_REVEAL: { glyph: "🎭", label: "직업 확인" },
+	NIGHT: { glyph: "🌙", label: "밤" },
+	DAY: { glyph: "🌞", label: "낮" },
+	VOTE: { glyph: "🗳️", label: "투표" },
+	VOTE_RESULT: { glyph: "📊", label: "개표" },
+	DEFENSE: { glyph: "🎤", label: "최후의 반론" },
+	JUDGEMENT: { glyph: "⚖️", label: "찬반 투표" },
+};
+
+const SPECTATOR_ROLE: HudRole = { glyph: "👁", name: "관전", team: "" };
+
+/** 좌석이 null이면 관전자다 */
+function hudView(room: Room, seat: Seat | null, firstGame: boolean): HudPayload {
+	const shown = HUD_PHASE[room.phase];
+	const night = room.phase === GamePhase.NIGHT || room.phase === GamePhase.ROLE_REVEAL;
+	const me = seat ? identityOf(seat) : null;
+	return {
+		type: "init",
+		phase: room.phase,
+		glyph: shown.glyph,
+		label: shown.label,
+		turn: night ? room.turnCount + 1 : Math.max(1, room.turnCount),
+		timer: room.phaseTimer,
+		// 유령은 진영을 말하지 않는다 — 칩이 회색이 되고 팀 글자가 빠진다
+		role: me ? { glyph: me.glyph, name: me.role, team: me.alive ? me.team : "" } : SPECTATOR_ROLE,
+		alive: aliveSeats(room).length,
+		total: room.total,
+		coach: firstGame ? coachLine(room, seat) : "",
+	};
+}
+
+/**
+ * HUD를 지금 단계에 맞춘다. 판 밖(대기실·종료 화면)이면 닫는다.
+ *
+ * 이미 떠 있으면 다시 열지 않고 내용만 보낸다. 새로 열었을 때만 위젯을
+ * 돌려준다 — 새로 연 위젯에만 할 일이 있는 호출부를 위해서다.
+ */
+export function syncHud(player: ScriptPlayer, room: Room, seat: Seat | null): ScriptWidget | null {
+	if (!room.started || !HUD_PHASE[room.phase]) {
+		closeHud(player);
+		return null;
+	}
+	const tag = tagOf(player);
+	// 첫 판 도중이면 playStarts가 1이다(FtueAnalytics.trackGameStarted)
+	const payload = hudView(room, seat, tag.playStarts === 1);
+	const size = payload.coach ? WidgetSize.HUD_COACH : WidgetSize.HUD;
+	if (tag.hudWidget) {
+		tag.hudWidget.sendMessage({
+			...payload,
+			layout: layoutOf(player, hudAlign(player), size, false),
+		});
+		return null;
+	}
+	tag.hudWidget = open(player, WidgetFile.HUD, hudAlign(player), size, payload, false);
+	return tag.hudWidget;
+}
+
+/**
+ * HUD의 정렬. 데스크톱은 오른쪽 위, 보드 바로 위다. 왼쪽 위에 두었더니 시계와
+ * 보드와 채팅이 화면 세 구석에 흩어져 무엇이 어디 있는지 찾기 어려웠다
+ */
+function hudAlign(player: ScriptPlayer): "top" | "topright" {
+	return player.isMobile ? "top" : "topright";
+}
+
+/** 떠 있는 HUD에만 보낸다 */
+export function updateHud(player: ScriptPlayer, payload: TimerPayload): void {
+	const widget = tagOf(player).hudWidget;
+	if (widget) widget.sendMessage(payload);
+}
+
+export function closeHud(player: ScriptPlayer): void {
+	const tag = tagOf(player);
+	if (tag.hudWidget) {
+		tag.hudWidget.destroy();
+		tag.hudWidget = null;
+	}
 }
 
 /**

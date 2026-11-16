@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>플레이어 보드</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 플레이어 보드. 진행(status)·투표(vote)·밤 능력(action) 세 화면을 한
+			 * 파일이 그린다 — 예전 phase/vote/roleAction 세 파일이 같은 격자와
+			 * 같은 머리말을 각자 들고 있었다.
+			 *
+			 * 단계·시계·직업 칩·생존 수는 HUD(hud.html)로 갔다. 보드는 "지금 무엇을
+			 * 고르는가"와 그 결과만 말한다. 남은 시간은 HUD가 그리고, 보드는 마감
+			 * 10초 전부터 선택 줄로 재촉만 한다.
+			 */
+
+			/* ---------- 진행 화면 ---------- */
+			.stage {
+				display: flex;
+				flex-direction: column;
+				gap: var(--s2);
+				flex: 1 1 auto;
+				min-height: 0;
+				overflow: hidden;
+			}
+
+			.stage .stack {
+				flex: 0 1 auto;
+				min-height: 0;
+				overflow-y: auto;
+				scrollbar-width: none;
+			}
+
+			/*
+			 * 낮 여론조사. 투표 격자보다 한 단 작다 — 결정이 아니라 참고라는 것을
+			 * 크기로도 말한다. 사람이 많으면 이 줄만 굴러 위아래 줄을 밀어내지 않는다.
+			 */
+			.poll {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: center;
+				gap: var(--s1);
+				flex: 0 1 auto;
+				min-height: 0;
+				overflow-y: auto;
+				scrollbar-width: none;
+			}
+			.poll-hd {
+				flex: 1 0 100%;
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+			}
+			.poll button {
+				min-height: 28px;
+				padding: 0 var(--s2);
+				font: inherit;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				font-variant-numeric: tabular-nums;
+				color: var(--ink-2);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				cursor: pointer;
+			}
+			/* 내 표시는 테두리 색과 함께 "내 의심" 글자로도 말한다 */
+			.poll button.mine {
+				color: var(--ink);
+				border-color: var(--accent);
+			}
+			.poll button:disabled {
+				cursor: default;
+			}
+			.poll button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+
+			/* 할 일이 끝난 사람(유령·관전)에게만 오는 판 기록. 남는 높이를 다 쓰고 넘치면 굴린다 */
+			.stage .replay {
+				flex: 1 1 auto;
+				min-height: 0;
+				overflow-y: auto;
+			}
+
+			/* 밤사이 사건이 한 줄씩 도착한다. 지연은 스크립트가 줄마다 박는다 */
+			.stack span {
+				animation: deathline 300ms var(--ease) both;
+			}
+
+			@keyframes deathline {
+				from {
+					opacity: 0;
+					transform: translateX(-6px);
+				}
+			}
+
+			/* 살아 있는 번호 명단. 죽은 번호는 지우지 않고 취소선으로 남긴다 */
+			.roster {
+				display: flex;
+				gap: 3px;
+				flex-wrap: wrap;
+				min-width: 0;
+			}
+
+			.roster i {
+				min-width: 16px;
+				padding: 0 2px;
+				font-size: var(--t-xs);
+				font-style: normal;
+				font-weight: 700;
+				font-variant-numeric: tabular-nums;
+				line-height: 1.45;
+				text-align: center;
+				color: var(--bg);
+				background: var(--ok);
+				border-radius: var(--r1);
+			}
+
+			/* 색만으로 가르지 않는다. 가장 작은 글씨라 취소선을 함께 둔다 */
+			.roster i.gone {
+				color: var(--ink-2);
+				background: var(--surface-2);
+				text-decoration: line-through;
+			}
+
+			/* 볼 수만 있는 화면 (유령·관전). 화면 전체가 그 사실을 말한다 */
+			.panel.watching {
+				box-shadow:
+					inset 0 0 0 2px var(--dead),
+					var(--shadow);
+			}
+
+			.panel.watching .stage {
+				filter: saturate(0.3);
+			}
+
+			/* ---------- 토론 시간 (낮 진행 화면 머리말 오른쪽) ---------- */
+			/*
+			 * HUD 시계 바로 아래 보드에 둔다. HUD 한 줄에 끼어 있을 때는 아무도
+			 * 찾지 못했고, 접히는 채팅에 두면 접은 사람에게는 없는 기능이 된다
+			 */
+			.time-vote {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 2px;
+				flex: 0 0 auto;
+				margin-left: auto;
+			}
+			.time-vote .tv-btns {
+				display: flex;
+				gap: var(--s1);
+			}
+			.time-vote button {
+				min-height: 30px;
+				padding: 0 var(--s2);
+				font: inherit;
+				font-size: var(--t-sm);
+				font-weight: 700;
+				font-variant-numeric: tabular-nums;
+				color: var(--ink);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				cursor: pointer;
+			}
+			.time-vote button:hover {
+				border-color: var(--accent);
+			}
+			.time-vote button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+			.time-vote .tv-sub {
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+				white-space: nowrap;
+			}
+			.tv-used {
+				flex: 0 0 auto;
+				margin-left: auto;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				color: var(--ok);
+				white-space: nowrap;
+			}
+
+			/* ---------- 격자 ---------- */
+			/* 죽은 사람·관전자에게 지금 처지를 가장 먼저 읽힌다 */
+			.panel.watching .lead-sub {
+				font-weight: 700;
+				color: var(--mafia-ink);
+			}
+
+			/* 살리고 조사하는 능력은 처형의 핏빛으로 고르지 않는다 */
+			.panel.help .tile.picked {
+				background: linear-gradient(180deg, #4a9ad4, #1f5f94);
+			}
+
+			/* 지목이 받아들여진 순간 한 번 튄다. 서버 왕복 사이를 메운다 */
+			.tile.picked {
+				animation: confirm 320ms var(--ease);
+			}
+
+			@keyframes confirm {
+				40% {
+					transform: scale(1.06);
+				}
+			}
+
+			/* 확정된 격자. 고른 칸만 남기고 물러난다 */
+			.grid.locked .tile:not(.picked) {
+				opacity: 0.45;
+				filter: grayscale(1);
+			}
+
+			/* 동료가 노리는 칸. 잠긴 격자에서도 물러나지 않는다 */
+			.tile .by {
+				position: absolute;
+				bottom: 2px;
+				left: 0;
+				right: 0;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				line-height: 1;
+				color: var(--mafia-ink);
+			}
+
+			.grid.locked .tile.aimed {
+				opacity: 1;
+				filter: none;
+			}
+
+			/* 개표에서 단상에 오른 사람 */
+			.tile.out {
+				border-color: var(--danger);
+				background: var(--mafia-dim);
+				animation: shake 420ms var(--ease);
+			}
+
+			@keyframes shake {
+				0%,
+				100% {
+					transform: translateX(0);
+				}
+				25% {
+					transform: translateX(-4px);
+				}
+				75% {
+					transform: translateX(4px);
+				}
+			}
+
+			/* 방금 부결된 사람. 회색 대신 배지로 이유를 적는다 */
+			.tile.barred {
+				opacity: 0.55;
+			}
+
+			.tile.barred .badge {
+				color: var(--ink-3);
+			}
+
+			.tile.counted {
+				padding-bottom: 15px;
+			}
+
+			/* 득표 막대. 폭과 지연은 스크립트가 준다(BAR_MS·STAGGER) */
+			.bar {
+				position: absolute;
+				left: 0;
+				bottom: 0;
+				height: 3px;
+				width: 0;
+				background: var(--accent);
+				transition-property: width;
+				transition-timing-function: var(--ease);
+			}
+
+			/*
+			 * 표를 낸 사람. 무엇을 냈는지는 개표까지 감춘다. ✓만 두면 내 칸에
+			 * 붙었을 때 "나를 골랐다"로 읽혀 글자로 적는다
+			 */
+			.tile.cast::after {
+				content: "투표함";
+				position: absolute;
+				top: 2px;
+				left: 4px;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				line-height: 1;
+				color: var(--ok);
+			}
+			/* 번호만 남는 납작한 칸(theme.css 같은 조건)에서는 글자가 번호를 덮는다. 초록 점으로 줄인다 */
+			@media (min-aspect-ratio: 1/1) and (max-height: 320px) {
+				.tile.cast::after {
+					content: "";
+					top: 3px;
+					left: auto;
+					right: 3px;
+					width: 6px;
+					height: 6px;
+					border-radius: 50%;
+					background: var(--ok);
+				}
+				/* 메모·부결 글자도 번호를 덮는다. 메모는 채팅 명단에, 부결은 흐린 칸과 aria-label에 남는다 */
+				.tile .guess,
+				.tile .badge {
+					display: none;
+				}
+				/* 동료가 노리는 칸은 번호 목록 대신 붉은 점 하나 */
+				.tile .by {
+					font-size: 0;
+				}
+				.tile .by:not(:empty)::before {
+					content: "";
+					display: block;
+					width: 6px;
+					height: 6px;
+					margin: 0 auto;
+					border-radius: 50%;
+					background: var(--mafia-ink);
+				}
+				/* "동료" 캡션이 접히니 색 말고 점선으로도 가른다 */
+				.tile.ally {
+					outline: 2px dashed var(--mafia-ink);
+					outline-offset: -4px;
+				}
+			}
+
+			/*
+			 * 확정 정보와 내 추정을 모양으로 가른다. 동료·부결 같은 확정 정보는
+			 * 실선 배지(.badge), 채팅에서 붙인 메모는 점선 칩(.guess)이다.
+			 */
+			.tile .guess {
+				position: absolute;
+				right: 2px;
+				bottom: 2px;
+				padding: 0 2px;
+				font-size: var(--t-xs);
+				line-height: 1.2;
+				border: 1px dashed var(--ink-3);
+				border-radius: 99px;
+			}
+
+			.tile .guess:empty {
+				display: none;
+			}
+
+			/* ---------- 쪽지 문구 ---------- */
+			.choices {
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				gap: var(--s1);
+				overflow-y: auto;
+			}
+
+			.choices button {
+				padding: var(--s2) var(--s3);
+				font: inherit;
+				font-size: var(--t-sm);
+				text-align: left;
+				color: var(--ink);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r2);
+				cursor: pointer;
+			}
+
+			.choices button:hover {
+				background: var(--surface-3);
+			}
+
+			.choices button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+
+			/* 문구 목록에서 격자로 돌아가는 단추. 문구와 섞여 읽히지 않게 점선으로 뺀다 */
+			.choices button.back {
+				color: var(--ink-2);
+				background: none;
+				border-style: dashed;
+			}
+
+			/*
+			 * 막힌 단추는 클릭을 받지 않고 패널로 흘린다. 그래야 패널이 포커스를
+			 * 게임 화면에 돌려준다 — 막힌 칸을 눌렀다가 이동 키가 멈추지 않게
+			 */
+			.panel button:disabled {
+				pointer-events: none;
+			}
+
+			/* ---------- 선택 줄 ---------- */
+			/*
+			 * 네 상태: 미선택 / 선택됨(바꿀 수 있다) / 마감 임박 / 확정·잠김.
+			 * 글머리 기호(⏳·🔒)가 상태를 글자로 말하고, 테두리 색은 덧붙인다
+			 */
+			.pick {
+				align-items: center;
+				padding: var(--s1) var(--s2);
+				border: 1px solid var(--line);
+				border-radius: var(--r2);
+				background: rgba(0, 0, 0, 0.25);
+			}
+
+			.pick .what {
+				flex: 1 1 auto;
+				min-width: 0;
+				font-size: var(--t-sm);
+				font-weight: 700;
+				overflow: hidden;
+				white-space: nowrap;
+				text-overflow: ellipsis;
+			}
+
+			.pick.picked {
+				border-color: var(--mafia);
+			}
+
+			.pick.closing {
+				border-color: var(--danger);
+				animation: nudge 1s var(--ease) infinite;
+			}
+
+			.pick.locked .what {
+				color: var(--ink-2);
+			}
+
+			@keyframes nudge {
+				50% {
+					background: rgba(232, 85, 79, 0.18);
+				}
+			}
+
+			.pick .btn {
+				min-height: 30px;
+				padding: var(--s1) var(--s2);
+			}
+
+			.skip-btn.picked {
+				background: var(--mafia-dim);
+				border-color: var(--mafia);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel" id="panel">
+			<div class="lead">
+				<div class="lead-text">
+					<div class="lead-title" id="mode"></div>
+					<div class="lead-sub" id="sub" role="status" aria-live="polite"></div>
+				</div>
+				<!-- 토론 시간. 낮에 살아 있는 사람에게만, 하루 한 번 -->
+				<div class="time-vote hidden" id="timevote" role="group" aria-label="토론 시간 · 하루 한 번 · 모두의 시계가 바뀝니다">
+					<span class="tv-btns">
+						<button type="button" id="tplus" aria-label="토론 시간 15초 늘리기">+15초</button>
+						<button type="button" id="tminus" aria-label="토론 시간 15초 줄이기">−15초</button>
+					</span>
+					<span class="tv-sub" title="하루 한 번 · 모두의 시계가 바뀝니다">토론 시간 · 하루 한 번</span>
+				</div>
+				<span class="tv-used hidden" id="timeused" role="status"></span>
+			</div>
+
+			<div class="progress hidden" id="progressbar" aria-hidden="true"><i id="progress"></i></div>
+
+			<div class="idbar">
+				<span class="ability" id="ability"></span>
+			</div>
+
+			<div class="body" id="act">
+				<div class="stage hidden" id="stage">
+					<!-- 옆 글자(HUD의 생존 n/m)가 이미 읽어 주므로 스크린 리더에서는 뺀다 -->
+					<span class="roster" id="roster" aria-hidden="true"></span>
+					<div class="poll hidden" id="poll" role="group" aria-label="여론조사 · 투표와 무관"></div>
+					<div class="stack hidden" id="deaths"></div>
+					<div class="replay scroll hidden" id="replay"></div>
+				</div>
+				<div class="grid scroll hidden" id="grid" role="group" aria-label="대상"></div>
+				<div class="choices hidden" id="choices" role="group" aria-label="보낼 문구"></div>
+			</div>
+
+			<p class="note" id="note" role="status" aria-live="polite"></p>
+
+			<div class="foot pick none hidden" id="strip">
+				<span class="what" id="pickText"></span>
+				<button type="button" class="btn primary hidden" id="confirm">능력 쓰기</button>
+				<button type="button" class="btn ghost hidden" id="cancel">사용 취소</button>
+				<button type="button" class="btn skip-btn hidden" id="skip">🚫 투표 없음</button>
+			</div>
+
+			<!-- 관전자에게만. 좌석이 없어 대기실 위젯도 없으므로 여기 말고는 나갈 길이 없다 -->
+			<div class="foot" id="spectateActions" hidden>
+				<button type="button" class="btn ghost grow" id="guide">게임 방법</button>
+				<button type="button" class="btn ghost grow" id="quit">관전 종료</button>
+			</div>
+		</div>
+
+		<!--@shared-->
+		<script>
+			/* '투표 없음'의 대상 번호. 서버의 Vote.SKIP_VOTE와 같은 값이어야 한다 */
+			const SKIP = -1;
+			/* 개표 막대 하나가 차는 시간과 타일 사이 간격(ms) */
+			const BAR_MS = 600;
+			const STAGGER = 90;
+			/* 이 초 이하로 남으면 선택 줄이 재촉한다 */
+			const CLOSING_SEC = 10;
+			/* 숫자 단축키 안내는 키보드가 있는 화면에만 붙인다 */
+			const KEYS_HINT =
+				window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches ? " (키보드 1–0)" : "";
+
+			let mode = "status";
+			let gameId = "";
+			let myNum = 0;
+			let seatList = [];
+			/* 고른 번호. vote는 SKIP도 담는다. null이 미선택이다 */
+			let pick = null;
+			/* 더 바꿀 수 없다 (확정·유령·개표) */
+			let locked = false;
+			/* action: 서버에 보냈다. 받아들여지면 selectResponse가 잠그거나 chosen을 채운다 */
+			let sent = false;
+			/* action: 서버가 받아들인 지목. 밤이 끝날 때까지 바꿀 수 있다. 0이 없음이다 */
+			let chosen = 0;
+			/* action: 처음 제목. 사용을 취소하거나 문구에서 돌아오면 되돌린다 */
+			let promptTitle = "";
+			/* 오늘 쓴 ±15초. 썼다는 칩에 어느 쪽이었는지를 적는다 */
+			let spentDelta = 0;
+			let closing = false;
+			let closingId = 0;
+			let barred = [];
+			// 밤 능력 화면의 규칙. 셋 다 서버(RoleDef)가 정해 실어 보낸다
+			let noSelf = false;
+			let targetsDead = false;
+			let final = false;
+			/* 채팅이 적는 내 추정 메모. 보드는 1초마다 다시 읽기만 한다(refreshMemo) */
+			let memo = {};
+
+			/* 판 안의 이름은 "N번 참가자"뿐이라(Room.participantLabel) 번호만 읽어 준다 */
+			function pickName(num) {
+				return num === SKIP ? "투표 없음" : `${num}번`;
+			}
+
+			/*
+			 * 이 화면에서 고를 수 있는 칸인가. 무덤을 고르는 직업은 산 칸과 죽은
+			 * 칸이 통째로 뒤바뀐다. 잠금과 회색이 둘 다 이것을 보므로 "보이기는
+			 * 고를 수 있는데 안 눌리는" 칸이 생기지 않는다
+			 */
+			function pickable(seat) {
+				if (mode === "vote") return seat.alive && barred.indexOf(seat.num) < 0;
+				return targetsDead ? !seat.alive : seat.alive;
+			}
+
+			/* 확정 정보(동료·부결)는 실선 배지, 내 추정은 점선 칩이다 */
+			function tile(seat, extra) {
+				const mine = seat.num === myNum;
+				const out = mode === "vote" && barred.indexOf(seat.num) >= 0;
+				// 이름은 "N번 참가자"라 큰 번호를 되풀이할 뿐이다. 칸이 누구인지만 적는다
+				const caption = mine ? "나" : !seat.alive ? "사망" : seat.ally ? "동료" : "";
+				const classes =
+					"tile" +
+					(mine ? " me" : "") +
+					(pickable(seat) ? "" : " dead") +
+					(seat.ally ? " ally" : "") +
+					(out ? " barred" : "") +
+					(extra ? " " + extra : "");
+				const badge = out ? html`<span class="badge">부결</span>` : "";
+				return html`<button
+					type="button"
+					class="${classes}"
+					data-num="${seat.num}"
+					${flag(locked || !pickable(seat) || (mine && noSelf), "disabled")}
+					aria-label="${seat.num}번${mine ? " (나)" : ""}${seat.ally ? " (같은 편)" : ""}${out ? " (부결됨)" : ""}"
+				>
+					${badge}<span class="num">${seat.num}</span><span class="cap">${caption}</span>
+					<span class="by"></span><span class="guess" aria-hidden="true"></span>
+				</button>`;
+			}
+
+			function tileOf(num) {
+				return qs(`#grid .tile[data-num="${num}"]`);
+			}
+
+			// ────────────────────────── 선택 줄
+
+			function paintStrip() {
+				const state = locked ? "locked" : closing ? "closing" : pick !== null ? "picked" : "none";
+				const strip = qs("#strip");
+				strip.classList.remove("none", "picked", "closing", "locked");
+				strip.classList.add(state);
+				const what = pick === null ? "" : pickName(pick);
+				let text = `선택: 없음 · 번호를 누르세요${KEYS_HINT}`;
+				if (state === "locked") text = what ? `🔒 확정 · ${what}` : "🔒 고를 수 없습니다";
+				else if (state === "closing")
+					text = chosen
+						? `⏳ 마감 임박 · ${chosen}번으로 정해집니다`
+						: `⏳ 마감 임박 · ${what ? "선택: " + what : "아직 고르지 않았습니다"}`;
+				else if (chosen)
+					text = `✔ ${final ? chosen + "번에게 씁니다" : pickName(chosen)} · 다른 번호로 바꾸기`;
+				else if (state === "picked")
+					text =
+						`선택: ${what}` +
+						(mode === "vote" ? " · 다시 누르면 취소" : final && !sent ? " · [능력 쓰기]를 눌러야 씁니다" : "");
+				qs("#pickText").textContent = text;
+				// 판에 한 번뿐인 능력만 한 번 더 묻고, 쓴 뒤에는 거둘 길을 준다
+				const oneShot = mode === "action" && final && !locked;
+				qs("#confirm").classList.toggle("hidden", !(oneShot && pick !== null && !sent && !chosen));
+				qs("#cancel").classList.toggle("hidden", !(oneShot && chosen));
+			}
+
+			function paintPick() {
+				for (const el of qsa("#grid .tile")) {
+					el.classList.toggle("picked", Number(el.dataset.num) === pick);
+				}
+				qs("#skip").classList.toggle("picked", pick === SKIP);
+				paintStrip();
+			}
+
+			/*
+			 * 마감 임박. 시계는 HUD가 그리고 보드는 남은 초를 직접 세지 않는다 —
+			 * 10초 전이 되는 순간 한 번만 바뀌면 된다
+			 */
+			function armClosing(seconds) {
+				clearTimeout(closingId);
+				const left = Number(seconds) || 0;
+				closing = left > 0 && left <= CLOSING_SEC;
+				if (left > CLOSING_SEC) {
+					closingId = setTimeout(() => {
+						closing = true;
+						paintStrip();
+					}, (left - CLOSING_SEC) * 1000);
+				}
+			}
+
+			// ────────────────────────── 고르기
+
+			function voteNote() {
+				if (pick === null) return "기권 상태입니다. 다시 고를 수 있습니다.";
+				if (pick === SKIP) return "'투표 없음'을 골랐습니다. 다시 누르면 취소됩니다.";
+				return `${pick}번을 지목했습니다. 다시 누르면 취소됩니다.`;
+			}
+
+			/* 같은 대상을 다시 누르면 취소다. 격자·'투표 없음'·키보드가 이 하나를 쓴다 */
+			function vote(num) {
+				pick = pick === num ? null : num;
+				paintPick();
+				Parent.send({ type: "vote", target: pick });
+				qs("#note").textContent = voteNote();
+			}
+
+			/*
+			 * 밤 지목. 보통은 누르는 즉시 보내고, 받아들여진 뒤 다른 칸을 누르면
+			 * 서버가 지목을 갈아 끼운다(밤 끝에 정산되므로 잃는 것이 없다). 같은
+			 * 칸은 그대로 둔다. 한 번뿐인 능력(final)만 첫 누름은 고르기, 같은 칸
+			 * 두 번째나 [능력 쓰기]가 보내기다. 거절되면 서버가 라벨만 띄우므로
+			 * 다시 누를 수 있게 둔다
+			 */
+			function aim(num) {
+				if (num === chosen) return;
+				if (final && !chosen && pick !== num) {
+					pick = num;
+					paintPick();
+					return;
+				}
+				pick = num;
+				sent = true;
+				paintPick();
+				Parent.send({ type: "select", num });
+			}
+
+			function tap(num) {
+				if (locked) return;
+				if (mode === "vote") vote(num);
+				else if (mode === "action") aim(num);
+			}
+
+			/* 바꿀 수 있는 선택만 걷는다. 걷었으면 참 */
+			function clearPick() {
+				if (locked || pick === null) return false;
+				if (mode === "vote") {
+					vote(pick);
+					return true;
+				}
+				if (mode === "action" && !sent) {
+					pick = null;
+					paintPick();
+					return true;
+				}
+				return false;
+			}
+
+			/* 받아들여졌지만 바꿀 수 있는 지목. 격자는 잠그지 않는다 */
+			function choose(num) {
+				chosen = num;
+				pick = num;
+				sent = true;
+				qs("#choices").classList.add("hidden");
+				qs("#grid").classList.remove("hidden");
+				qs("#mode").textContent = `밤 · ${num}번 지목 — 밤이 끝나기 전까지 바꿀 수 있습니다`;
+				qs("#note").textContent = "";
+				paintPick();
+			}
+
+			/* 쪽지 문구를 고르다 대상을 다시 고른다. 문구 전이라 서버는 대상만 갖고 있고, 다음 지목이 덮어쓴다 */
+			function backToGrid() {
+				pick = null;
+				sent = false;
+				qs("#choices").classList.add("hidden");
+				qs("#grid").classList.remove("hidden");
+				qs("#mode").textContent = promptTitle;
+				paintPick();
+			}
+
+			/* 확정된 격자. 고른 칸만 남기고 나머지는 잠근다 */
+			function lockGrid(num) {
+				locked = true;
+				pick = num;
+				for (const el of qsa("#grid .tile")) {
+					if (Number(el.dataset.num) !== num) el.disabled = true;
+				}
+				qs("#grid").classList.add("locked");
+				qs("#choices").classList.add("hidden");
+				qs("#grid").classList.remove("hidden");
+				qs("#mode").textContent = "밤 · 지목했습니다 — 기다리세요";
+				qs("#note").textContent = `✔ ${num}번을 지목했습니다.`;
+				paintPick();
+			}
+
+			qs("#grid").addEventListener("click", event => {
+				const el = event.target.closest(".tile");
+				if (!el || el.disabled) return;
+				tap(Number(el.dataset.num));
+			});
+			qs("#skip").addEventListener("click", () => {
+				if (!locked) vote(SKIP);
+			});
+			qs("#confirm").addEventListener("click", () => {
+				if (pick !== null && !locked) aim(pick);
+			});
+			qs("#cancel").addEventListener("click", () => {
+				if (chosen && !locked) Parent.send({ type: "cancel" });
+			});
+			qs("#tplus").addEventListener("click", () => sendTime(15));
+			qs("#tminus").addEventListener("click", () => sendTime(-15));
+			// 대상은 보내지 않는다. 서버가 이미 갖고 있다 — 다시 받으면 조작된 한
+			// 메시지가 문구와 대상을 함께 정할 수 있게 된다
+			qs("#choices").addEventListener("click", event => {
+				const el = event.target.closest("button");
+				if (!el) return;
+				if (el.dataset.back) backToGrid();
+				else Parent.send({ type: "phrase", index: Number(el.dataset.index) });
+			});
+			qs("#quit").addEventListener("click", () => Parent.send({ type: "spectate-quit" }));
+			qs("#guide").addEventListener("click", () => Parent.send({ type: "guide" }));
+			// 보드에는 글 입력칸이 없다. 무엇을 누르든 포커스를 게임 화면에 돌려준다
+			// — 안 그러면 클릭 뒤 이동 키와 숫자 단축키가 멈춘다. 키보드로 누른
+			// 단추(detail 0)만 예외다. Tab으로 보드를 돌던 사람의 자리를 뺏지 않는다
+			qs("#panel").addEventListener("click", event => {
+				if (event.detail !== 0) Parent.releaseFocus();
+			});
+
+			/*
+			 * 게임 화면에서 숫자 1–9, 0(=10)으로 고르고 Esc로 무른다. 고르는 화면에서만
+			 * 받고, 처리한 키만 막는다 — 나머지 키는 ZEP의 이동·단축키다
+			 */
+			Parent.onKey(event => {
+				if (mode !== "vote" && mode !== "action") return;
+				if (event.key === "Escape") {
+					if (clearPick()) event.preventDefault();
+					return;
+				}
+				// 확정됐거나 문구를 고르는 중(격자가 숨음)이면 숫자는 ZEP 몫이다
+				if (!/^[0-9]$/.test(event.key) || locked || qs("#grid").classList.contains("hidden")) return;
+				const el = tileOf(event.key === "0" ? 10 : Number(event.key));
+				if (!el || el.disabled) return;
+				event.preventDefault();
+				tap(Number(el.dataset.num));
+				Parent.releaseFocus();
+			});
+
+			// ────────────────────────── 메모 (읽기만)
+
+			/* 칸의 점선 칩만 고친다. 격자는 다시 그리지 않는다 — 누르던 손 아래 칸이 바뀐다 */
+			function paintMemo() {
+				for (const el of qsa("#grid .tile")) {
+					const guess = qs(".guess", el);
+					const glyph = memo[el.dataset.num] || "";
+					if (guess && guess.dataset.glyph !== glyph) {
+						guess.dataset.glyph = glyph;
+						guess.innerHTML = String(glyphHtml(glyph));
+					}
+				}
+			}
+
+			/*
+			 * 메모는 채팅이 적는다. 두 위젯은 서로 메시지를 주고받을 길이 없으므로
+			 * 보드가 1초마다 다시 읽는다 — 칸 열 개의 글자 비교라 값싸다
+			 */
+			function refreshMemo() {
+				if (!gameId) return;
+				memo = memoLoad(gameId);
+				paintMemo();
+			}
+			setInterval(refreshMemo, 1000);
+
+			// ────────────────────────── 토론 시간
+
+			function paintTimeVote(data) {
+				const spent = data.timeSpent === true;
+				qs("#timevote").classList.toggle("hidden", data.timeVote !== true);
+				qs("#timeused").classList.toggle("hidden", !spent);
+				qs("#timeused").textContent = !spent
+					? ""
+					: spentDelta
+						? `✔ 오늘 ${spentDelta > 0 ? "+" : "−"}15초를 썼습니다`
+						: "✔ 오늘 시간 조절을 썼습니다";
+			}
+
+			/*
+			 * 누른 즉시 칩으로 바꾼다. 서버가 되보내기 전에 한 번 더 누르면 "이미
+			 * 조절했습니다"만 떠서 첫 번째가 먹혔는지 모르게 된다. 거절되면 서버가
+			 * 지금 상태를 다시 보내 단추가 돌아온다
+			 */
+			function sendTime(delta) {
+				spentDelta = delta;
+				paintTimeVote({ timeSpent: true });
+				Parent.send({ type: "time", delta });
+			}
+
+			// ────────────────────────── 화면 셋
+
+			/* 판·모드가 바뀔 때마다 처음부터. 지난 화면의 표시가 남지 않게 한다 */
+			function reset(data) {
+				mode = data.mode === "vote" || data.mode === "action" ? data.mode : "status";
+				gameId = String(data.gameId || "");
+				myNum = Number(data.myNum) || 0;
+				seatList = Array.isArray(data.seats) ? data.seats : [];
+				pick = null;
+				locked = false;
+				sent = false;
+				chosen = 0;
+				barred = [];
+				noSelf = false;
+				targetsDead = false;
+				final = false;
+
+				const panel = qs("#panel");
+				// 관전자는 같은 위젯을 단계마다 다시 쓴다. 지난 배경을 걷지 않으면
+				// 밤에도 day가 남아 선언 순서에 따라 낮 배경이 이긴다
+				panel.classList.remove("night", "day", "vote", "help");
+				panel.classList.remove("watching");
+				// 능력 설명은 쓰는 때(밤)에만. 낮에는 토론할 자리를 줄인다
+				qs("#ability").textContent = mode === "action" || data.phase === "night" ? data.abilityLine || "" : "";
+				qs("#note").textContent = "";
+				qs("#sub").textContent = "";
+				qs("#sub").classList.remove("count");
+				qs("#progressbar").classList.add("hidden");
+				qs("#progress").style.width = "0%";
+				qs("#stage").classList.add("hidden");
+				// 여론조사 칸은 낮 진행 화면에만 다시 그려진다. 다른 모드에 단추가 남지 않게 비운다
+				qs("#poll").innerHTML = "";
+				qs("#poll").classList.add("hidden");
+				qs("#grid").classList.add("hidden");
+				qs("#grid").classList.remove("locked");
+				qs("#choices").classList.add("hidden");
+				qs("#choices").innerHTML = "";
+				qs("#strip").classList.toggle("hidden", mode === "status");
+				qs("#skip").classList.add("hidden");
+				qs("#skip").disabled = false;
+				qs("#spectateActions").hidden = true;
+				paintTimeVote({});
+				armClosing(data.timer);
+				return panel;
+			}
+
+			function paintRoster(seats, alive, total) {
+				const marks = [];
+				if (seats.length > 0) {
+					for (const seat of seats) marks.push(html`<i class="${seat.alive ? "" : "gone"}">${seat.num}</i>`);
+				} else {
+					for (let i = 0; i < total; i++) marks.push(html`<i class="${i < alive ? "" : "gone"}">·</i>`);
+				}
+				qs("#roster").innerHTML = html`${marks}`;
+			}
+
+			/*
+			 * 여론조사 줄. 산 사람마다 한 칸, 의심 수는 글자로 적는다. null이면 숨긴다
+			 * (밤·투표 화면, 모드가 끈 경우). 누르면 서버가 표시를 옮기거나 지운다
+			 */
+			function paintPoll(poll) {
+				const el = qs("#poll");
+				el.classList.toggle("hidden", !poll);
+				if (!poll) return;
+				const tally = poll.tally || {};
+				const mine = Number(poll.suspect) || 0;
+				const can = poll.canSuspect === true;
+				el.innerHTML = html`<span class="poll-hd" title="${TERMS.여론조사}">여론조사 · 번호별 의심 수 (투표와 무관)</span>${seatList
+					.filter(seat => seat.alive)
+					.map(seat => {
+						const n = Number(tally[seat.num]) || 0;
+						const me = seat.num === mine;
+						return html`<button
+							type="button"
+							class="${me ? "mine" : ""}"
+							data-num="${seat.num}"
+							aria-pressed="${String(me)}"
+							${flag(!can || seat.num === myNum, "disabled")}
+							aria-label="${seat.num}번 의심 ${n}${me ? " (내 의심)" : ""}"
+						>
+							${seat.num}번 ${n}${me ? "✓" : ""}
+						</button>`;
+					})}`;
+			}
+
+			qs("#poll").addEventListener("click", event => {
+				const el = event.target.closest("button");
+				if (!el || el.disabled) return;
+				Parent.send({ type: "suspect", num: Number(el.dataset.num) });
+			});
+
+			function showStatus(data, panel) {
+				const night = data.phase === "night";
+				panel.classList.add(night ? "night" : "day");
+				// 유령과 관전자는 할 수 있는 일이 똑같이 없다. 화면 전체가 그 사실을 말한다
+				panel.classList.toggle("watching", data.spectating === true || data.alive === false);
+				qs("#mode").textContent = `${night ? "밤" : "낮"} · ${data.lead || (night ? "기다리세요" : "토론 중")}`;
+				termTitle(qs("#mode"), data.alive === false && !data.spectating ? "유령" : night ? "밤" : "낮");
+				paintPoll(data.poll || null);
+				paintTimeVote(data);
+				qs("#sub").textContent = data.note || "";
+				qs("#spectateActions").hidden = !data.spectating;
+				qs("#stage").classList.remove("hidden");
+				paintRoster(seatList, Number(data.aliveCount) || 0, Number(data.total) || 0);
+
+				// 지연을 줄마다 박는다. :nth-child로 적으면 줄 수 상한이 생긴다
+				const deaths = Array.isArray(data.deaths) ? data.deaths : [];
+				// 판 기록이 오면 펼쳐진 마지막 묶음에 같은 줄이 이미 있다. 두 번 읽히지 않게 사건 목록을 접는다
+				const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+				qs("#replay").classList.toggle("hidden", timeline.length === 0);
+				qs("#replay").innerHTML = replayHtml(timeline);
+				// 나만 받은 답은 판 기록에 없으니 기록이 와도 남긴다. 좋은 소식인지는 모르니 색을 빼고 그대로 적는다
+				const mine = Array.isArray(data.mine) ? data.mine : [];
+				const lines = (timeline.length > 0 ? [] : deaths).concat(mine);
+				qs("#deaths").classList.toggle("hidden", lines.length === 0);
+				qs("#deaths").innerHTML = html`${lines.map(
+					(line, i) =>
+						html`<span
+							class="${i >= lines.length - mine.length ? "mine" : line.indexOf("☠") >= 0 ? "" : "good"}"
+							style="animation-delay:${i * 90}ms"
+							>${line}</span
+						>`
+				)}`;
+			}
+
+			function showVote(data, panel) {
+				panel.classList.add("vote");
+				// 화면을 다시 여는 경로는 재접속뿐이라 산 사람은 계속 고칠 수 있다.
+				// 잠기는 쪽은 유령 하나다
+				const ghost = seatList.some(seat => seat.num === myNum && !seat.alive);
+				locked = ghost;
+				barred = Array.isArray(data.rejected) ? data.rejected : [];
+				// SKIP(-1)도 살아난다. 0만 "아직 안 찍음"이다
+				pick = Number(data.picked) || null;
+				qs("#mode").textContent = ghost ? "투표 · 투표할 수 없습니다" : "투표 · 처형할 사람을 고르세요";
+				termTitle(qs("#mode"), ghost ? "유령" : "투표");
+				qs("#progressbar").classList.remove("hidden");
+				qs("#grid").innerHTML = html`${seatList.map(seat => tile(seat))}`;
+				qs("#grid").classList.remove("hidden");
+				qs("#skip").classList.remove("hidden");
+				qs("#skip").disabled = locked;
+				qs("#note").textContent = ghost
+					? "👻 유령은 투표할 수 없습니다."
+					: pick === null
+						? "고르지 않으면 기권입니다. 단서가 없으면 '투표 없음'도 한 표입니다."
+						: voteNote();
+				paintPick();
+			}
+
+			function showAction(data, panel) {
+				panel.classList.add("night");
+				// ponytail: 편으로 가른다 — 시민 편 처단 능력(자경단)도 파랑이다. 능력 종류를 보내면 그때 나눈다
+				panel.classList.toggle("help", data.team !== "mafia");
+				// 격자를 그리기 전에 정한다. tile()이 이 값들을 읽는다
+				noSelf = !!data.noSelf;
+				targetsDead = !!data.targetsDead;
+				final = data.final === true;
+				promptTitle = `밤 · 능력: ${data.prompt || "대상을 고르세요"}`;
+				qs("#mode").textContent = promptTitle;
+				termTitle(qs("#mode"), "지목");
+				qs("#progressbar").classList.remove("hidden");
+				qs("#grid").innerHTML = html`${seatList.map(seat => tile(seat))}`;
+				qs("#grid").classList.toggle("hidden", seatList.length === 0);
+				qs("#note").textContent = data.note || "";
+				const picked = Number(data.picked) || 0;
+				// 재접속으로 다시 연 밤. 이미 고른 대상을 그대로 보여준다
+				if (picked && data.locked === true) lockGrid(picked);
+				else if (picked && data.changeable === true) choose(picked);
+				else if (picked) markProbed(picked);
+				else paintPick();
+			}
+
+			/* 스파이의 첫 조사. 그 칸은 다시 못 고르고, 한 칸을 더 받는다 */
+			function markProbed(num) {
+				const el = tileOf(num);
+				if (el) {
+					el.classList.add("picked");
+					el.disabled = true;
+				}
+				pick = null;
+				sent = false;
+				qs("#note").textContent = `✔ ${num}번을 조사했습니다. 한 명을 더 고를 수 있습니다.`;
+				paintStrip();
+			}
+
+			/* 동료가 노리는 칸에 동료 번호를 적는다. 누르던 손 아래 버튼이 바뀌지 않게 글자만 고친다 */
+			function paintAllies(picks) {
+				const by = {};
+				for (const entry of picks) {
+					const from = Number(entry.from) || 0;
+					const to = Number(entry.to) || 0;
+					// 내 지목은 picked 표시가 이미 말한다
+					if (!from || !to || from === myNum) continue;
+					by[to] = by[to] ? by[to] + "," + from : String(from);
+				}
+				for (const el of qsa("#grid .tile")) {
+					const list = by[Number(el.dataset.num)] || "";
+					qs(".by", el).textContent = list ? "🔻" + list : "";
+					el.classList.toggle("aimed", !!list);
+				}
+			}
+
+			Parent.on({
+				init(data) {
+					const panel = reset(data);
+					if (mode === "vote") showVote(data, panel);
+					else if (mode === "action") showAction(data, panel);
+					else showStatus(data, panel);
+					refreshMemo();
+				},
+
+				/* 누군가 ±15초를 썼거나 내 요청이 거절됐다. 시계는 HUD가 맞춘다 */
+				timer(data) {
+					if (mode === "status") paintTimeVote(data);
+				},
+
+				/* [사용 취소]가 받아들여졌다. 고르기 전으로 되돌린다 */
+				cancelled() {
+					chosen = 0;
+					pick = null;
+					sent = false;
+					qs("#mode").textContent = promptTitle;
+					paintPick();
+				},
+
+				/* 진행률. 밤은 acted/total, 투표는 voted/alive + 낸 사람 번호(대상은 없다) */
+				progress(data) {
+					const nightish = mode === "action";
+					const done = Number(nightish ? data.acted : data.voted) || 0;
+					const total = Number(nightish ? data.total : data.alive) || 0;
+					qs("#progress").style.width = (total > 0 ? (done / total) * 100 : 0) + "%";
+					const left = total - done;
+					qs("#sub").classList.add("count");
+					qs("#sub").textContent =
+						total <= 0
+							? ""
+							: nightish
+								? left > 0
+									? `${done}/${total} 지목 완료 · ${left}명 남음`
+									: `${total}명 모두 지목했습니다`
+								: `${done}/${total} 투표 완료`;
+					if (nightish) return;
+					const cast = Array.isArray(data.done) ? data.done : [];
+					for (const el of qsa("#grid .tile")) {
+						el.classList.toggle("cast", cast.indexOf(Number(el.dataset.num)) >= 0);
+					}
+				},
+
+				/* 누군가 여론조사 표시를 고쳤다. 진행 화면일 때만 다시 그린다 */
+				poll(data) {
+					if (mode === "status") paintPoll(data);
+				},
+
+				/* 마피아 채팅에 있는 사람에게만 온다. 시민 화면에는 도달하지 않는다 */
+				allies(data) {
+					paintAllies(Array.isArray(data.picks) ? data.picks : []);
+				},
+
+				/* 쪽지의 두 번째 화면. 문구 목록은 서버가 갖는다 */
+				phrases(data) {
+					const options = Array.isArray(data.options) ? data.options : [];
+					qs("#grid").classList.add("hidden");
+					qs("#choices").classList.remove("hidden");
+					qs("#choices").innerHTML = html`${options.map(
+						(text, i) => html`<button type="button" data-index="${i}">${text}</button>`
+					)}<button type="button" class="back" data-back="1">← 대상 다시 고르기</button>`;
+					qs("#mode").textContent = `밤 · ${Number(data.num) || 0}번에게 보낼 문구를 고르세요`;
+					qs("#note").textContent = "";
+				},
+
+				/* 서버가 받아들였을 때만 확정한다. 누른 즉시 확정으로 그리면 거절돼도 선택된 것처럼 보인다 */
+				selectResponse(data) {
+					const num = Number(data.num) || 0;
+					if (data.again === true) markProbed(num);
+					else if (data.changeable === true) choose(num);
+					else lockGrid(num);
+				},
+
+				result(data) {
+					const panel = reset(data);
+					locked = true;
+					panel.classList.add("vote");
+					qs("#mode").textContent = "개표";
+					termTitle(qs("#mode"), "개표");
+					// 결과 한 줄은 둘째 줄에 둔다. 아래 note에 두면 같은 글이 두 번 남는다
+					qs("#sub").textContent = data.message || "";
+					qs("#strip").classList.add("hidden");
+					qs("#progressbar").classList.remove("hidden");
+					qs("#progress").style.width = "100%";
+
+					const top = seatList.reduce((max, seat) => Math.max(max, Number(seat.votes) || 0), 0);
+					qs("#grid").innerHTML = html`${seatList.map(seat =>
+						tile(seat, "counted" + (seat.num === data.nominee ? " out" : ""))
+					)}`;
+					qs("#grid").classList.remove("hidden");
+
+					// 막대는 폭 0으로 심고 다음 프레임에 늘린다. 처음부터 박으면 transition이 안 걸린다
+					const bars = [];
+					let outTile = null;
+					seatList.forEach((seat, i) => {
+						const el = tileOf(seat.num);
+						if (!el) return;
+						if (seat.num === data.nominee) outTile = el;
+						const votes = Number(seat.votes) || 0;
+						el.insertAdjacentHTML(
+							"beforeend",
+							html`<span class="tally">${votes}표</span><span class="bar"></span>`
+						);
+						const bar = qs(".bar", el);
+						bar.style.transitionDuration = BAR_MS + "ms";
+						// 득표 내림차순으로 온다. 위에서부터 차오르면 1등이 먼저 보인다
+						bar.style.transitionDelay = i * STAGGER + "ms";
+						bars.push({ el: bar, width: top > 0 ? (votes / top) * 100 : 0 });
+					});
+					// 흔들림은 막대가 다 찬 뒤다. 겹치면 숫자를 읽다 화면이 흔들린다
+					if (outTile) outTile.style.animationDelay = seatList.length * STAGGER + BAR_MS + "ms";
+					requestAnimationFrame(() => {
+						for (const entry of bars) entry.el.style.width = entry.width + "%";
+					});
+					refreshMemo();
+				},
+			});
+		</script>
+	</body>
+</html>

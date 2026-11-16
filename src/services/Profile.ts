@@ -26,9 +26,12 @@
  */
 import type { ScriptPlayer } from "zep-script";
 import type { ProfileStat } from "../types/Widget.types.ts";
+import type { Role } from "../types/Game.types.ts";
 import { messageType } from "../types/Widget.types.ts";
 import { ACTION_RATE } from "../constants/GameConfig.ts";
 import { SHOP, useItem } from "../domain/Economy.ts";
+import { topRoles } from "../domain/Progression.ts";
+import { ROLE_DEFS } from "../domain/Roles.ts";
 import { spend } from "../domain/RateLimit.ts";
 import { tagOf } from "../infrastructure/PlayerTag.ts";
 import { locate, locateSpectator } from "../entities/RoomRegistry.ts";
@@ -185,5 +188,10 @@ function statsOf(target: ScriptPlayer): ProfileStat[] {
 		{ label: "참가", value: `${storage.playCount || 0}판` },
 		{ label: "중도 이탈", value: `${storage.runCount || 0}판` },
 		{ label: "칭찬", value: `${storage.praise || 0}회` },
+		// 많이 해 본 직업 셋. "직업 ·"을 붙이는 이유는 마피아 직업과 마피아 진영 줄이 같은 이름이라서다
+		...topRoles(storage.roles || {}, 3).map(row => {
+			const def = ROLE_DEFS[row.role as Role];
+			return { label: `직업 · ${def ? def.displayName : row.role}`, value: `${row.games}판 ${row.wins}승` };
+		}),
 	];
 }

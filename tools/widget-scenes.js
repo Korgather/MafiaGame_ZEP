@@ -51,7 +51,7 @@ const BOOK = roleBook();
 /**
  * 밤 지목 화면이 실제로 받는 값.
  *
- * Night.ts의 openRoleAction이 이 네 값을 전부 ROLE_DEFS에서 그대로 꺼내
+ * Night.ts의 밤 보드가 이 네 값을 전부 ROLE_DEFS에서 그대로 꺼내
  * 보낸다(prompt는 nightPrompt, note는 nightNotice). 여기서도 같은 자리에서
  * 꺼내야 문구를 다듬은 순간 미리보기가 따라 바뀐다.
  */
@@ -60,7 +60,7 @@ const BOOK = roleBook();
  *
  * identityOf(Widgets.ts)가 좌석에서 조립하는 것과 같은 다섯 값이다. 화면 위쪽
  * 한 줄에 늘 붙어 있고, 이제 다섯 위젯이 전부 이것을 받는다(Identity를 상속한
- * 페이로드 넷 + PhasePayload).
+ * 페이로드 넷 + PhasePayload). 보드가 능력 줄을 그린다.
  *
  * glyph와 abilityLine을 빠뜨려도 위젯은 그려진다 — 기호 자리가 비고 능력 줄이
  * 빈 칸이 된다. 그래서 미리보기에서만 조용히 빠져 있기 쉬운 값이고, 한 곳에서
@@ -123,7 +123,7 @@ const SEATS = [
  * 최대 인원. 진행 화면의 번호 줄이 한 줄에 들어가지 않는 유일한 표본이다.
  *
  * 이름을 손으로 적지 않는 것은 이 표본을 쓰는 화면이 num과 alive만 읽기
- * 때문이다(phase.html의 paintRoster). 죽은 번호를 5·10·11·12에 흩어 두면
+ * 때문이다(board.html의 paintRoster). 죽은 번호를 5·10·11·12에 흩어 두면
  * 취소선이 줄의 가운데와 끝에 함께 나타난다 — 접히는 자리가 어디든 한쪽
  * 층에는 죽은 칸이 있다.
  */
@@ -218,12 +218,12 @@ for (let num = 1; num <= MAX_PLAYERS; num++) {
 }
 
 /** Assets.ts의 WidgetSize.CHAT / CHAT_BAR와 같은 값 */
-const CHAT_SIZE = [330, 320];
+const CHAT_SIZE = [360, 440];
 const CHAT_BAR_SIZE = [190, 44];
 
 /*
- * 컷은 fill 위젯이라 실제 화면에서는 100% × 100%가 된다(Widgets.ts의 layoutOf).
- * 여기 값은 검사기가 상자를 하나 만들기 위한 것으로, WidgetSize.CUT과 맞춰만 둔다.
+ * 컷은 fill 위젯이라 폰에서는 100% × 100%, 데스크톱에서는 이 크기의 카드다
+ * (Widgets.ts의 layoutOf). WidgetSize.CUT과 맞춰 둔다.
  */
 const CUT_SIZE = [480, 320];
 
@@ -233,12 +233,113 @@ const PROFILE_SIZE = [300, 340];
 /** Assets.ts의 WidgetSize.JUDGEMENT와 같은 값 */
 const JUDGEMENT_SIZE = [380, 320];
 
+/** Assets.ts의 WidgetSize.HUD / BOARD / BOARD_STATUS와 같은 값 */
+const HUD_SIZE = [360, 48];
+const BOARD_SIZE = [360, 460];
+const BOARD_STATUS_SIZE = [360, 300];
+
+/** hudView(Widgets.ts)가 좌석에서 꺼내는 직업 칩 */
+function hudRole(role) {
+	const def = ROLE_DEFS[role];
+	return { glyph: def.glyph, name: def.displayName, team: def.team };
+}
+
+/** HUD 한 줄. 단계 기호·이름은 서버의 HUD_PHASE와 같은 값이다 */
+const HUD_PHASE = {
+	DAY: ["🌞", "낮"],
+	NIGHT: ["🌙", "밤"],
+	VOTE: ["🗳️", "투표"],
+	DEFENSE: ["🎤", "최후의 반론"],
+};
+function hud(phase, over) {
+	return Object.assign(
+		{
+			type: "init",
+			phase,
+			glyph: HUD_PHASE[phase][0],
+			label: HUD_PHASE[phase][1],
+			turn: 2,
+			timer: 40,
+			role: hudRole(Role.CITIZEN),
+			alive: 5,
+			total: 6,
+			coach: "",
+		},
+		over
+	);
+}
+
+/* 서버 Room.timeline 그대로의 모양. when이 묶음 이름이라 같은 when이 한 묶음이 된다 */
+const TIMELINE = [
+	{ when: "1일차 밤", text: "✨ 지난밤에는 아무 일도 없었습니다." },
+	{ when: "1일차 낮", text: "⚖️ 3번 박민수 님이 처형되었습니다. 시민이었습니다." },
+	{ when: "2일차 밤", text: "☠️ 5번 최유리 님이 밤사이 목숨을 잃었습니다." },
+	{ when: "2일차 밤", text: "💖 의사가 누군가를 살렸습니다." },
+];
+
+/* 보드 세 모드의 payload. 모드마다 서버가 늘 채우는 값을 기본으로 둔다 */
+const GAME_ID = "g1";
+function status(over) {
+	return Object.assign(
+		{
+			type: "init",
+			mode: "status",
+			gameId: GAME_ID,
+			phase: "day",
+			turn: 2,
+			total: 6,
+			aliveCount: 5,
+			seats: SEATS,
+			timer: 40,
+			deaths: [],
+			// 산 사람은 빈 배열이다. 판 기록은 할 일이 끝난 유령·관전자만 받는다
+			timeline: [],
+			spectating: false,
+			poll: null,
+		},
+		over
+	);
+}
+function vote(over) {
+	return Object.assign(
+		{ type: "init", mode: "vote", gameId: GAME_ID, myNum: 4, seats: SEATS },
+		over
+	);
+}
+function result(over) {
+	return Object.assign(
+		{ type: "result", mode: "vote", gameId: GAME_ID, myNum: 4, timer: 7, ...idOf(Role.POLICE) },
+		over
+	);
+}
+function action(role, over) {
+	return Object.assign(
+		{
+			type: "init",
+			mode: "action",
+			gameId: GAME_ID,
+			...nightAction(role),
+			seats: SEATS,
+			timer: 22,
+			final: ROLE_DEFS[role].maxUses !== undefined,
+			picked: 0,
+			locked: false,
+		},
+		over
+	);
+}
+
 /** ChatChannel.ts의 CHANNEL_DEFS와 같은 값 */
 const CHANNEL_DEFS = {
-	GLOBAL: { label: "전체", glyph: "🌐", placeholder: "전체에게 보내기" },
-	ROOM: { label: "방", glyph: "💬", placeholder: "같은 방 사람들에게" },
-	MAFIA: { label: "마피아", glyph: "🔪", placeholder: "마피아 팀에게만" },
-	GHOST: { label: "유령", glyph: "👻", placeholder: "죽은 사람들에게" },
+	GLOBAL: { label: "전체", glyph: "🌐", placeholder: "할 말", audience: "월드 전체" },
+	ROOM: { label: "방", glyph: "💬", placeholder: "할 말", audience: "같은 방 모두" },
+	MAFIA: { label: "마피아", glyph: "🔪", placeholder: "팀에게 할 말", audience: "마피아 팀만" },
+	GHOST: {
+		label: "유령",
+		glyph: "👻",
+		placeholder: "할 말",
+		audience: "죽은 사람과 영매",
+	},
 };
 
 /** channelViews()가 만드는 탭 하나 */
@@ -252,6 +353,7 @@ function tab(id, over) {
 			write: false,
 			unread: 0,
 			placeholder: def.placeholder,
+			audience: def.audience,
 		},
 		over
 	);
@@ -294,112 +396,140 @@ function line(seq, over) {
  * 뒤따르는 것들은 열려 있는 위젯에 나중에 오는 것들(진행률·채팅)이다.
  */
 const SCENES = [
+	/*
+	 * HUD. 판 내내 한 위젯이 단계만 바꿔 받으므로 장면 순서가 곧 한 판이다 —
+	 * 낮(누가 +15초) → 밤 → 유령 → 관전. 앞 장면의 배경·칩 색이 뒤에 남으면 걸린다.
+	 * ±15초 단추는 낮 보드 머리말로 갔다. HUD는 바뀐 만큼만 시계 옆에 띄운다.
+	 */
 	{
-		label: "밤 — 능력 없는 직업",
-		file: "phase.html",
-		size: [340, 300],
+		label: "HUD — 낮, 누군가 +15초",
+		file: "hud.html",
+		size: HUD_SIZE,
+		messages: [hud("DAY", { timer: 75 }), { type: "timer", timer: 90, delta: 15 }],
+		expect: { "#delta.delta": 1, ".panel.day": 1, ".chip.citizen": 1 },
+	},
+	{
+		label: "HUD — 밤",
+		file: "hud.html",
+		size: HUD_SIZE,
+		messages: [hud("NIGHT", { turn: 3, role: hudRole(Role.MAFIA) })],
+		expect: { "#delta.delta": 0, ".panel.day": 0, ".panel.night": 1, ".chip.mafia": 1 },
+	},
+	{
+		// 죽으면 서버가 팀을 빈 값으로 준다. 지난 장면의 마피아 색이 남으면 안 된다
+		label: "HUD — 유령",
+		file: "hud.html",
+		size: HUD_SIZE,
+		messages: [hud("VOTE", { alive: 4, role: { glyph: GHOST.glyph, name: GHOST.role, team: "" } })],
+		expect: { ".chip.mafia": 0, ".chip.dead": 1, ".panel.vote": 1 },
+	},
+	{
+		label: "HUD — 관전",
+		file: "hud.html",
+		size: HUD_SIZE,
 		messages: [
-			{
-				type: "init",
+			hud("DEFENSE", { role: { glyph: SPECTATOR.glyph, name: SPECTATOR.role, team: "" } }),
+		],
+		expect: { ".chip.dead": 1 },
+	},
+	{
+		// 첫 판에만 서버가 coach를 채운다. 데스크톱은 상자가 68px로 커진다(HUD_COACH)
+		label: "HUD — 첫 판 안내 줄",
+		file: "hud.html",
+		size: [360, 68],
+		messages: [hud("DAY", { turn: 1, coach: "의심 가는 사람의 번호를 채팅에서 눌러 메모하세요" })],
+		expect: { ".panel.coached": 1, "#coach": 1 },
+	},
+	{
+		// 폰은 보드가 HUD 바로 아래에 붙어 있어 상자를 키우지 못한다. 44px 안에 두 줄로 접힌다
+		label: "HUD — 첫 판 안내 줄 (폰 44px)",
+		file: "hud.html",
+		size: [380, 44],
+		messages: [hud("DAY", { turn: 1, coach: "의심 가는 사람의 번호를 채팅에서 눌러 메모하세요" })],
+		expect: { ".panel.coached": 1, "#coach": 1 },
+	},
+	/*
+	 * 보드 — 진행(status). 예전 phase.html 자리다.
+	 */
+	{
+		// 시계 바로 아래 머리말 오른쪽. 누르면 서버 답을 기다리지 않고 "썼습니다" 칩으로 바뀐다
+		label: "보드 진행 — 낮, 토론 시간 단추",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
+		messages: [status({ myNum: 4, ...idOf(Role.CITIZEN), alive: true, lead: "토론하세요", timeVote: true })],
+		expect: { "#timevote.hidden": 0, "#timeused.hidden": 1 },
+	},
+	{
+		label: "보드 진행 — 낮, 토론 시간을 쓴 뒤",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
+		messages: [
+			status({ myNum: 4, ...idOf(Role.CITIZEN), alive: true, lead: "토론하세요", timeVote: true }),
+			{ type: "timer", timer: 90, delta: 15, timeVote: false, timeSpent: true },
+		],
+		expect: { "#timevote.hidden": 1, "#timeused.hidden": 0 },
+	},
+	{
+		// 투표와 무관한 표시. 내가 1번 → 5번으로 바꾼 뒤의 집계를 받는다
+		label: "보드 진행 — 낮 여론조사 (내 의심 표시)",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
+		messages: [
+			status({
+				myNum: 4,
+				...idOf(Role.CITIZEN),
+				alive: true,
+				lead: "토론하세요",
+				poll: { tally: { 1: 2, 5: 1 }, suspect: 1, canSuspect: true },
+			}),
+			{ type: "poll", tally: { 1: 1, 5: 2 }, suspect: 5, canSuspect: true },
+		],
+		expect: {
+			"#poll.hidden": 0,
+			".poll button": 5,
+			".poll button.mine": 1,
+			'.poll button[aria-pressed="true"]': 1,
+		},
+	},
+	{
+		label: "보드 진행 — 밤, 능력 없는 직업",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
+		messages: [
+			status({
 				phase: "night",
-				turn: 2,
-				total: 6,
 				aliveCount: 5,
-				seats: SEATS,
 				timer: 22,
 				...noTurnNote(Role.POLITICIAN),
 				alive: true,
-				// 이 밤에 누를 것이 없는 산 사람. 낮을 준비하며 기다리는 것이 할 일이다
 				lead: "기다리세요",
-				deaths: [],
-				spectating: false,
-				// 밤에는 조절할 토론 시간이 없다
-				timeVote: false,
-			},
+			}),
 		],
-	},
-	/*
-	 * 낮의 토론 시간 조절.
-	 *
-	 * 이 장면이 없으면 ±15초 묶음은 어느 화면에서도 그려지지 않는다 —
-	 * 다른 낮 장면은 전부 죽었거나 관전이라 서버가 timeVote: false를 준다.
-	 *
-	 * timer 메시지까지 이어 붙인 이유는 그 갈래가 여기에만 있기 때문이다.
-	 * 위젯은 평소 자기 시계를 돌리고, 서버가 남은 시간을 되보내는 경우는
-	 * 누군가 ±15초를 눌렀을 때 하나뿐이다.
-	 */
-	{
-		label: "낮 — 토론 시간 조절 (쓰고 나면 사라진다)",
-		file: "phase.html",
-		size: [340, 300],
-		messages: [
-			{
-				type: "init",
-				phase: "day",
-				turn: 2,
-				total: 6,
-				aliveCount: 5,
-				seats: SEATS,
-				timer: 75,
-				...idOf(Role.POLICE),
-				lead: "토론하세요",
-				note: "토론 시간입니다.",
-				deaths: [],
-				spectating: false,
-				timeVote: true,
-			},
-			// 옆사람이 15초를 늘렸다. 나는 아직 안 썼으므로 버튼은 남는다
-			{ type: "timer", timer: 90, timeVote: true },
-			// 이번엔 내가 썼다. 여기서 묶음이 사라진다
-			{ type: "timer", timer: 75, timeVote: false },
-		],
+		expect: { ".panel.night": 1, ".roster i": 6, ".roster i.gone": 1, "#strip.hidden": 1 },
 	},
 	{
-		label: "아침 — 유령이 보는 화면 + 밤 결과",
-		file: "phase.html",
-		size: [340, 300],
+		label: "보드 진행 — 아침, 유령 + 밤 결과",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
 		messages: [
-			{
-				type: "init",
-				phase: "day",
-				turn: 2,
-				total: 6,
+			status({
 				aliveCount: 4,
-				seats: SEATS,
-				timer: 40,
-				// 칩 문구는 서버(identityOf)가 고른다. 죽으면 직업이 아니라 "유령"이
-				// 찍히므로 장면도 서버가 실제로 보내는 값을 그대로 쓴다
 				...GHOST,
 				lead: "지켜보세요",
-				note: "당신은 죽었습니다. 관전 중입니다.",
+				note: "☠️ 당신은 죽었습니다 · 💬 유령 탭에서 유령끼리 이야기하세요",
 				deaths: ["☠️ 박민수 님이 죽었습니다.", "💖 의사가 누군가를 살려냈습니다."],
-				spectating: false,
-				// 유령은 토론 시간을 조절하지 못한다
-				timeVote: false,
-			},
+			}),
 		],
 		// 판 바깥 표시. alive: false 하나로 붙으므로 관전자도 같은 값을 받는다
-		expect: { ".panel.watching": 1 },
+		expect: { ".panel.watching": 1, ".panel.night": 0, ".stack span.good": 1 },
 	},
-	/*
-	 * 열두 명.
-	 *
-	 * 번호 줄이 한 줄에 들어가지 않는 유일한 장면이다. 접힌 층이 머리말이나
-	 * 타이머를 밀어내지 않는지 — .stage가 flex: 1 1 auto라 무대에서 가져가야
-	 * 한다 — 여기서만 눈으로 볼 수 있다.
-	 *
-	 * expect가 세는 것은 두 가지다. 칸이 인원수만큼 있는가(12), 그리고 죽은
-	 * 칸이 죽은 사람 수만큼인가(4). 뒤쪽이 없으면 취소선 규칙이 지워져도
-	 * 미리보기는 멀쩡한 줄을 계속 보여준다.
-	 */
 	{
-		label: "낮 — 열두 명, 번호 줄이 접힌다",
-		file: "phase.html",
-		size: [340, 300],
+		// 번호 줄이 한 줄에 들어가지 않는 유일한 장면. 칸 수와 죽은 칸 수를 함께 센다
+		label: "보드 진행 — 낮, 열두 명",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
 		messages: [
-			{
-				type: "init",
-				phase: "day",
+			status({
 				turn: 4,
 				total: 12,
 				aliveCount: 8,
@@ -409,38 +539,320 @@ const SCENES = [
 				lead: "토론하세요",
 				note: "투표 전까지 이야기를 나누세요.",
 				deaths: ["☠️ 10번 참가자가 죽었습니다."],
-				spectating: false,
-				timeVote: true,
-			},
+			}),
 		],
 		expect: { ".roster i": 12, ".roster i.gone": 4, ".panel.watching": 0 },
 	},
 	{
-		label: "관전 — 게임 중 난입한 사람",
-		file: "phase.html",
-		size: [340, 300],
+		label: "보드 진행 — 관전 (나가는 버튼)",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
 		messages: [
-			{
-				type: "init",
-				phase: "day",
-				turn: 1,
-				total: 6,
-				aliveCount: 5,
-				seats: SEATS,
-				timer: 40,
+			status({
 				...SPECTATOR,
 				lead: "지켜보세요",
 				note: "관전 중입니다. 이번 판이 끝나면 자리에 앉습니다.",
 				deaths: ["☠️ 박민수 님이 죽었습니다."],
-				// 이 한 값이 "관전 종료" 버튼을 띄운다. 관전자에게는 대기실
-				// 위젯이 없어 이 버튼이 유일한 퇴장 경로다
+				// 관전자에게는 대기실 위젯이 없어 이 버튼이 유일한 퇴장 경로다
 				spectating: true,
-				timeVote: false,
+			}),
+		],
+		expect: { ".panel.watching": 1 },
+	},
+	{
+		// 할 일이 끝난 사람의 보드. 마지막 밤만 펼치고, 같은 줄이 사건 목록에 또 뜨지 않는다
+		label: "보드 진행 — 관전 (판 기록)",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
+		messages: [
+			status({
+				...SPECTATOR,
+				phase: "night",
+				lead: "지켜보세요",
+				deaths: ["☠️ 5번 최유리 님이 밤사이 목숨을 잃었습니다."],
+				timeline: TIMELINE,
+				spectating: true,
+			}),
+		],
+		expect: { ".replay details": 3, 'details[open=""]': 1, ".replay p": 4, ".stack.hidden": 1 },
+	},
+	{
+		// 옛 서버가 새 위젯에 말을 거는 순간. 지시문·좌석·기호가 없어도 머리말이 선다
+		label: "보드 진행 — 서버가 지시문·좌석을 안 보낼 때",
+		file: "board.html",
+		size: BOARD_STATUS_SIZE,
+		messages: [
+			{
+				type: "init",
+				mode: "status",
+				phase: "night",
+				total: 6,
+				aliveCount: 6,
+				alive: true,
+				note: noTurnNote(Role.POLITICIAN).note,
 			},
 		],
-		// 관전자는 죽은 것이 아니라 좌석이 없는 사람인데(SPECTATOR는 alive: false를
-		// 함께 보낸다) 화면에서 할 수 있는 일은 유령과 같다. 같은 표시를 받는다
-		expect: { ".panel.watching": 1 },
+		expect: { ".roster i": 6 },
+	},
+	/*
+	 * 보드 — 투표. 선택 줄의 네 상태(미선택·선택·마감 임박·잠김)를 한 장면씩.
+	 */
+	{
+		label: "보드 투표 — 미선택, 3/5 진행 중",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			vote({ timer: 17, picked: 0, ...idOf(Role.CITIZEN) }),
+			// done은 표를 낸 사람의 번호다. 나(4번)만 체크가 없다
+			{ type: "progress", voted: 3, alive: 5, done: [1, 2, 5] },
+		],
+		expect: { ".pick.none": 1, ".tile.cast": 3, ".tile.picked": 0 },
+	},
+	{
+		// 재접속으로 다시 연 투표. 찍어 둔 표가 살아나고 다시 고칠 수 있다
+		label: "보드 투표 — 선택됨 (재접속 복원)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [vote({ myNum: 6, timer: 17, picked: 2, ...idOf(Role.LOVER) })],
+		expect: { ".pick.picked": 1, ".tile.picked": 1, 'button[disabled=""]': 1 },
+	},
+	{
+		label: "보드 투표 — 마감 임박",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [vote({ timer: 8, picked: 0, ...idOf(Role.CITIZEN) })],
+		expect: { ".pick.closing": 1 },
+	},
+	/*
+	 * 재지목된 낮. 2번이 부결됐다 — 사망(3번)과 함께 잠긴 칸이 둘이고 배지가
+	 * 이유를 적는다. picked -1(스킵)이 복원되는지도 함께 본다
+	 */
+	{
+		label: "보드 투표 — 재지목 (부결된 사람은 못 고른다)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			vote({ timer: 17, picked: -1, rejected: [2], ...idOf(Role.DOCTOR) }),
+			{ type: "progress", voted: 2, alive: 5, done: [2, 4] },
+		],
+		expect: { 'button[disabled=""]': 2, "#grid .badge": 1, ".skip-btn.picked": 1 },
+	},
+	{
+		// 유령은 한 자리도 못 누른다. '투표 없음'까지 잠겨 사람 수보다 하나 많다
+		label: "보드 투표 — 유령, 잠김",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			vote({ myNum: 3, timer: 17, picked: 0, ...GHOST }),
+			{ type: "progress", voted: 2, alive: 5, done: [1, 5] },
+		],
+		expect: { 'button[disabled=""]': SEATS.length + 1, ".pick.locked": 1 },
+	},
+	{
+		label: "보드 개표 — 단상에 오른 사람",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			result({
+				seats: SEATS.map((seat, i) => ({ ...seat, votes: [1, 3, 0, 0, 1, 0][i] })),
+				nominee: 2,
+				message: "🎤 이영희 님이 단상에 올랐습니다.",
+			}),
+		],
+		expect: { ".tile.out": 1, ".tally": 6, "#strip.hidden": 1 },
+	},
+	{
+		// 동수·전원 스킵이면 nominee가 0이다. 흔들 타일이 없고 막대 분모가 0이다
+		label: "보드 개표 — 아무도 오르지 않았다 (분모 0)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			result({
+				seats: SEATS.map(seat => ({ ...seat, votes: 0 })),
+				nominee: 0,
+				message: "아무도 지목되지 않았습니다.",
+			}),
+		],
+		expect: { ".tile.out": 0 },
+	},
+	/*
+	 * 보드 — 밤 능력(action). 예전 roleAction.html 자리다.
+	 */
+	{
+		// 동료가 둘 이상이어야 "누가 어디를 노리는가"가 생긴다
+		label: "보드 밤 — 동료가 노리는 칸(마피아 셋)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			action(Role.MAFIA, {
+				myNum: 2,
+				seats: [
+					{ num: 1, name: "김철수", alive: true },
+					{ num: 2, name: "이영희", alive: true, ally: true },
+					{ num: 3, name: "박민수", alive: false },
+					{ num: 4, name: "정수연", alive: true },
+					{ num: 5, name: "최지훈매우긴이름입니다", alive: true, ally: true },
+					{ num: 6, name: "한가영", alive: true, ally: true },
+				],
+			}),
+			{ type: "progress", acted: 1, total: 3 },
+			{
+				type: "allies",
+				picks: [
+					{ from: 5, to: 1 },
+					{ from: 6, to: 4 },
+				],
+			},
+			// 나도 4번으로 붙는다. 잠긴 뒤에도 동료가 노린 칸은 회색에 묻히지 않는다
+			{ type: "selectResponse", num: 4 },
+			// 5번이 옮겨 와 한 칸에 둘이 모인다. 1번 칸의 표시는 지워진다
+			{
+				type: "allies",
+				picks: [
+					{ from: 5, to: 4 },
+					{ from: 6, to: 4 },
+					{ from: 2, to: 4 },
+				],
+			},
+			{ type: "progress", acted: 3, total: 3 },
+		],
+		expect: { ".tile.aimed": 1, ".grid.locked": 1, ".pick.locked": 1 },
+	},
+	{
+		label: "보드 밤 — 지목 확정(의사)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			action(Role.DOCTOR, { myNum: 4 }),
+			{ type: "progress", acted: 1, total: 3 },
+			{ type: "selectResponse", num: 5 },
+		],
+		expect: { ".tile.picked": 1, ".grid.locked": 1, 'button[disabled=""]': SEATS.length - 1 },
+	},
+	{
+		// 받아들여진 지목은 밤이 끝날 때까지 바꿀 수 있다. 격자는 잠기지 않는다
+		label: "보드 밤 — 지목, 바꿀 수 있음(의사)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.DOCTOR, { myNum: 4 }), { type: "selectResponse", num: 5, changeable: true }],
+		expect: { ".tile.picked": 1, ".grid.locked": 0, ".pick.picked": 1, "#cancel.hidden": 1 },
+	},
+	{
+		// 한 번뿐인 능력을 쓴 뒤. [능력 쓰기]가 [사용 취소]로 바뀐다
+		label: "보드 밤 — 1회성 능력, 쓴 뒤(취소 가능)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			action(Role.VIGILANTE, { myNum: 1, final: true }),
+			{ type: "selectResponse", num: 5, changeable: true },
+		],
+		expect: { "#confirm.hidden": 1, "#cancel.hidden": 0, ".grid.locked": 0 },
+	},
+	{
+		label: "보드 밤 — 1회성 능력, 사용 취소",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			action(Role.VIGILANTE, { myNum: 1, final: true }),
+			{ type: "selectResponse", num: 5, changeable: true },
+			{ type: "cancelled" },
+		],
+		expect: { "#cancel.hidden": 1, ".pick.none": 1, ".tile.picked": 0 },
+	},
+	{
+		// 재접속. 바꿀 수 있는 지목은 잠기지 않은 채로 살아난다
+		label: "보드 밤 — 1회성 능력, 쓴 뒤 재접속(바꿀 수 있음)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.VIGILANTE, { myNum: 1, final: true, picked: 5, changeable: true })],
+		expect: { ".tile.picked": 1, ".grid.locked": 0, "#cancel.hidden": 0 },
+	},
+	{
+		// 한 번뿐인 능력. 확정 버튼이 있는 유일한 화면이다. 고르기 전에는 숨어 있다
+		label: "보드 밤 — 1회성 능력(자경단원), 고르기 전",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.VIGILANTE, { myNum: 1, final: true })],
+		expect: { "#confirm.hidden": 1, ".pick.none": 1 },
+	},
+	{
+		// 재접속으로 다시 연 밤. 이미 쏜 대상이 잠긴 채로 살아난다
+		label: "보드 밤 — 1회성 능력, 쏜 뒤 재접속",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.VIGILANTE, { myNum: 1, final: true, picked: 5, locked: true })],
+		expect: { ".tile.picked": 1, ".pick.locked": 1, "#confirm.hidden": 1 },
+	},
+	{
+		// 산 칸과 죽은 칸이 뒤집히는 유일한 화면
+		label: "보드 밤 — 무덤을 고르는 직업(영매)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			action(Role.SHAMAN, {
+				myNum: 1,
+				seats: [
+					{ num: 1, name: "김철수", alive: true },
+					{ num: 2, name: "이영희", alive: false },
+					{ num: 3, name: "박민수", alive: false },
+					{ num: 4, name: "정수연", alive: true },
+					{ num: 5, name: "최지훈매우긴이름입니다", alive: true },
+					{ num: 6, name: "한가영", alive: false },
+				],
+			}),
+		],
+		expect: { 'button[disabled=""]': 3 },
+	},
+	{
+		label: "보드 밤 — 쪽지 문구 고르기(시민)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [
+			action(Role.CITIZEN, { myNum: 3 }),
+			{ type: "phrases", num: 5, options: QUICK_NOTE.slice() },
+		],
+		expect: { [`button[data-index="${QUICK_NOTE.length - 1}"]`]: 1, "button.back": 1 },
+	},
+	{
+		// 열린 채로 init이 다시 오면(재접속) 지난밤 문구 목록을 치운다
+		label: "보드 밤 — 지난밤 문구 목록은 다시 열 때 치운다",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.CITIZEN, { myNum: 3 })],
+		expect: { [`button[data-index="${QUICK_NOTE.length - 1}"]`]: 0 },
+	},
+	{
+		label: "보드 밤 — 자기 칸이 잠긴다(건달)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.THUG, { myNum: 4, noSelf: true })],
+		// 사망(3번) + 내 칸(4번)
+		expect: { 'button[disabled=""]': 2 },
+	},
+	{
+		// 밀담 상대가 없는 마피아팀. 분모 0에서 막대 폭이 NaN%가 되면 안 된다
+		label: "보드 밤 — 혼자인 마피아팀(짐승인간)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.BEAST, { myNum: 6 }), { type: "progress", acted: 0, total: 0 }],
+	},
+	{
+		// 스파이의 첫 조사는 격자를 잠그지 않는다. 그 칸만 막고 한 칸을 더 받는다
+		label: "보드 밤 — 한 명 더 조사(스파이)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [action(Role.SPY, { myNum: 1 }), { type: "selectResponse", num: 4, again: true }],
+		expect: { ".grid.locked": 0, ".tile.picked": 1, ".pick.none": 1 },
+	},
+	/*
+	 * 메모는 채팅이 적고 보드는 읽기만 한다. 탭이 사라졌고 칸마다 점선 칩 자리만 남는다.
+	 */
+	{
+		label: "보드 — 메모 칩 자리(읽기만)",
+		file: "board.html",
+		size: BOARD_SIZE,
+		messages: [vote({ timer: 30, picked: 0, ...idOf(Role.POLICE) })],
+		expect: { "#tags button": 0, "#memoGrid .tile": 0, ".tile .guess": SEATS.length },
 	},
 	{
 		label: "카드 — 직업 공개",
@@ -545,413 +957,6 @@ const SCENES = [
 			},
 		],
 		expect: { ".rolerow": 4, ".sect": 0 },
-	},
-	{
-		label: "밤 지목 — 마피아",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 2,
-				...nightAction(Role.MAFIA),
-				seats: SEATS,
-				timer: 22,
-			},
-			{ type: "progress", acted: 0, total: 3 },
-		],
-	},
-	{
-		// 마피아 팀에게만 오는 메시지(allies)를 걸어보는 유일한 장면이다.
-		// 공용 SEATS는 동료가 하나뿐이고 그게 나라서(2번), 여기서는 셋으로
-		// 만든다 — 동료가 둘 이상이 아니면 "누가 어디를 노리는가"라는 이
-		// 화면의 질문 자체가 생기지 않는다
-		label: "밤 지목 — 동료가 노리는 칸(마피아 셋)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 2,
-				...nightAction(Role.MAFIA),
-				seats: [
-					{ num: 1, name: "김철수", alive: true },
-					{ num: 2, name: "이영희", alive: true, ally: true },
-					{ num: 3, name: "박민수", alive: false },
-					{ num: 4, name: "정수연", alive: true },
-					{ num: 5, name: "최지훈매우긴이름입니다", alive: true, ally: true },
-					{ num: 6, name: "한가영", alive: true, ally: true },
-				],
-				timer: 22,
-			},
-			{ type: "progress", acted: 1, total: 3 },
-			// 팀이 갈렸다. 이 화면이 있으라고 만든 순간이 정확히 여기다
-			{
-				type: "allies",
-				picks: [
-					{ from: 5, to: 1 },
-					{ from: 6, to: 4 },
-				],
-			},
-			// 나도 4번으로 붙는다. 격자가 잠기고, 잠긴 뒤에도 1번 칸의 표시가
-			// 회색에 묻히지 않아야 한다(.grid.locked .tile.aimed)
-			{ type: "selectResponse", num: 4 },
-			{ type: "progress", acted: 2, total: 3 },
-			// 5번이 옮겨 와 한 칸에 둘이 모인다("🔻5,6"). 1번 칸의 표시는
-			// 지워져야 한다 — 지우는 길이 없으면 지나간 지목이 밤새 남는다.
-			// 내 지목(2→4)은 picked가 이미 말하므로 위젯이 걸러 낸다
-			{
-				type: "allies",
-				picks: [
-					{ from: 5, to: 4 },
-					{ from: 6, to: 4 },
-					{ from: 2, to: 4 },
-				],
-			},
-			{ type: "progress", acted: 3, total: 3 },
-		],
-	},
-	{
-		label: "밤 지목 — 채팅 없는 직업(의사)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 4,
-				...nightAction(Role.DOCTOR),
-				seats: SEATS,
-				timer: 22,
-			},
-			// 지목을 확정한 뒤까지 걸어본다. 여기까지 오지 않으면 격자를 물리는
-			// 길(grid.locked)과 확정 표시가 한 번도 실행되지 않는다
-			{ type: "progress", acted: 1, total: 3 },
-			{ type: "selectResponse", num: 5 },
-			{ type: "progress", acted: 2, total: 3 },
-		],
-	},
-	{
-		label: "밤 지목 — 1회성 능력(자경단원)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 1,
-				...nightAction(Role.VIGILANTE),
-				seats: SEATS,
-				timer: 22,
-			},
-		],
-	},
-	{
-		// 산 칸과 죽은 칸의 역할이 뒤집히는 유일한 화면이다. 나머지 장면이
-		// 전부 "죽은 칸은 잠긴다"만 보여주므로 이 한 장면이 없으면 뒤집는
-		// 길이 한 번도 그려지지 않는다
-		label: "밤 지목 — 무덤을 고르는 직업(영매)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 1,
-				...nightAction(Role.SHAMAN),
-				// 무덤이 둘이어야 "고를 수 있는 칸이 여럿"인 모양이 나온다.
-				// 공용 SEATS는 죽은 사람이 하나뿐이라 여기서만 따로 만든다
-				seats: [
-					{ num: 1, name: "김철수", alive: true },
-					{ num: 2, name: "이영희", alive: false },
-					{ num: 3, name: "박민수", alive: false },
-					{ num: 4, name: "정수연", alive: true },
-					{ num: 5, name: "최지훈매우긴이름입니다", alive: true },
-					{ num: 6, name: "한가영", alive: false },
-				],
-				timer: 22,
-			},
-			{ type: "progress", acted: 0, total: 3 },
-		],
-	},
-	{
-		label: "밤 지목 — 쪽지 문구 고르기(시민)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 3,
-				...nightAction(Role.CITIZEN),
-				seats: SEATS,
-				timer: 22,
-			},
-			// 두 번째 화면까지 걸어본다. 여기까지 오지 않으면 문구 목록을 그리는
-			// 길과 그것을 다시 치우는 길이 한 번도 실행되지 않는다
-			{ type: "phrases", num: 5, options: QUICK_NOTE.slice() },
-			{ type: "selectResponse", num: 5 },
-		],
-		// 예외가 없다는 것만으로는 문구 목록이 그려졌는지 알 수 없다. 마지막
-		// 문구의 버튼을 세면 여섯 개가 다 그려졌는지가 확인된다. 문구가 늘거나
-		// 줄면 기대하는 번호도 같이 움직여야 하므로 길이에서 뽑는다.
-		//
-		// 확정 표시(.picked)로는 셀 수 없다. check-widgets.js의 선택자는
-		// 파싱된 노드의 class 속성을 읽는데 classList.add는 엘리먼트 스텁의
-		// Set만 고치고 그 속성을 되쓰지 않는다 — 실행 중에 붙은 class는
-		// querySelectorAll에 잡히지 않는다(.picked로 1을 기대하면 0이 나온다)
-		expect: { [`button[data-index="${QUICK_NOTE.length - 1}"]`]: 1 },
-	},
-	{
-		// 위와 같은 장면인데 끝에 init이 한 번 더 온다. 밤마다 위젯을 새로
-		// 열지만 열린 채로 init이 다시 오는 길이 있고(재접속·화면 복구),
-		// 그때 지난밤의 문구 목록을 치우는 것이 init의 두 줄이다.
-		//
-		// 그 두 줄은 게임 화면에 흔적을 남기지 않아서 지워도 아무 장면이
-		// 빨개지지 않는다 — 위 장면은 phrases에서 끝나므로 청소를 한 번도
-		// 밟지 않는다. 지우면 지난밤 문구가 격자 대신 뜬 채로 밤이 시작된다
-		label: "밤 지목 — 지난밤 문구 목록은 다시 열 때 치운다",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 3,
-				...nightAction(Role.CITIZEN),
-				seats: SEATS,
-				timer: 22,
-			},
-			{ type: "phrases", num: 5, options: QUICK_NOTE.slice() },
-			// 둘째 밤
-			{
-				type: "init",
-				myNum: 3,
-				...nightAction(Role.CITIZEN),
-				seats: SEATS,
-				timer: 22,
-			},
-		],
-		// 위 장면이 1을 기대하는 그 버튼이 여기서는 0이어야 한다. 두 장면이
-		// 짝이라서, 청소를 지우면 이쪽이 문구 수만큼 세고 빨개진다
-		expect: { [`button[data-index="${QUICK_NOTE.length - 1}"]`]: 0 },
-	},
-	{
-		label: "밤 — 능력을 이미 쓴 직업",
-		file: "phase.html",
-		size: [340, 300],
-		messages: [
-			{
-				type: "init",
-				phase: "night",
-				turn: 3,
-				total: 6,
-				aliveCount: 4,
-				seats: SEATS,
-				timer: 22,
-				// 총알을 다 쓴 자경단원. maxUses를 넘겼다는 사실만 주면
-				// 문장은 도메인이 고른다
-				...noTurnNote(Role.VIGILANTE, { usesSpent: 1 }),
-				alive: true,
-				lead: "기다리세요",
-				deaths: [],
-				spectating: false,
-			},
-		],
-	},
-	/*
-	 * 새 세 값이 오지 않는 밤.
-	 *
-	 * 위젯과 서버는 함께 배포되지 않는다. 옛 서버가 새 위젯에 말을 거는 순간이
-	 * 반드시 있고, 그때 화면이 비어 보이면 안 된다 — 기호 자리는 비고, 능력 줄은
-	 * 빈 칸이 되고, 지시문은 위젯이 단계를 보고 고른 기본값이 대신 뜬다.
-	 *
-	 * 이 장면이 없으면 세 개의 || 오른쪽은 아무도 본 적 없는 코드가 된다. 그리고
-	 * 그 자리가 깨질 때 사라지는 것이 화면에서 가장 큰 글씨다.
-	 */
-	{
-		label: "밤 — 서버가 지시문·기호·능력 줄을 안 보낼 때",
-		file: "phase.html",
-		size: [340, 300],
-		messages: [
-			{
-				type: "init",
-				phase: "night",
-				turn: 1,
-				total: 6,
-				aliveCount: 6,
-				timer: 22,
-				// 안내 문구는 도메인에서 꺼내고 새 세 값만 일부러 뺀다.
-				// idOf/noTurnNote를 그대로 쓰면 세 값이 따라와 이 갈래가 사라진다
-				role: ROLE_DEFS[Role.POLITICIAN].displayName,
-				team: ROLE_DEFS[Role.POLITICIAN].team,
-				alive: true,
-				note: noTurnNote(Role.POLITICIAN).note,
-				deaths: [],
-				spectating: false,
-				timeVote: false,
-			},
-		],
-	},
-	{
-		label: "밤 지목 — 혼자인 마피아팀(짐승인간)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 6,
-				// 마피아 팀이지만 밀담 상대가 없다 — 채팅에 🔪 탭이 생기지 않고,
-				// nightNotice가 그 사실을 알리는 유일한 줄이다
-				...nightAction(Role.BEAST),
-				seats: SEATS,
-				timer: 22,
-			},
-			// 분모가 0인 순간. 인원이 갈리면 실제로 나올 수 있는 값이고,
-			// 나누기 전에 걸러내지 않으면 막대 폭이 NaN%가 된다
-			{ type: "progress", acted: 0, total: 0 },
-		],
-	},
-	{
-		label: "밤 지목 — 자기 칸이 잠긴다(건달)",
-		file: "roleAction.html",
-		size: [360, 440],
-		messages: [
-			{
-				type: "init",
-				myNum: 4,
-				...nightAction(Role.THUG),
-				seats: SEATS,
-				// 이 한 줄이 이 장면의 전부다
-				noSelf: true,
-				timer: 22,
-			},
-		],
-		// SEATS는 여섯 칸이고 3번이 사망이다. 여기에 내 칸(4번)이 더해져 둘.
-		// noSelf 가지를 지우면 하나만 남아 이 장면이 빨개진다 — 다른 장면들은
-		// 전부 noSelf 없이(=거짓) 돌아서 그 가지를 한 번도 밟지 않는다.
-		//
-		// class(.me)로는 셀 수 없다. 잠금은 실행 중에 붙는 것이 아니라
-		// 처음부터 속성으로 찍히므로 disabled를 센다
-		expect: { 'button[disabled=""]': 2 },
-	},
-	{
-		label: "투표 — 3/5 진행 중",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{ type: "init", myNum: 4, seats: SEATS, timer: 17, picked: 0, ...idOf(Role.CITIZEN) },
-			// done은 표를 낸 사람의 번호다. 나(4번)는 아직 안 냈으므로 빠져 있다 —
-			// 내 칸만 체크가 없는 화면이 곧 "남은 사람은 나다"라는 신호다
-			{ type: "progress", voted: 3, alive: 5, done: [1, 2, 5] },
-		],
-	},
-	{
-		label: "투표 — 유령이 보는 잠긴 화면",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{ type: "init", myNum: 3, seats: SEATS, timer: 17, picked: 0, ...GHOST },
-			{ type: "progress", voted: 2, alive: 5, done: [1, 5] },
-		],
-		// 유령은 한 자리도 누를 수 없다 — locked가 tile 전체를 disabled로 만든다.
-		// '투표 없음' 칸도 함께 잠기므로 사람 수보다 하나 많다. 그 칸을 locked에서
-		// 빼면 유령이 스킵 한 표를 넣을 수 있게 되고, 그 순간 여기가 걸린다
-		expect: { 'button[disabled=""]': SEATS.length + 1 },
-	},
-	/*
-	 * 재지목된 낮의 투표.
-	 *
-	 * 앞 라운드에서 2번이 찬반투표로 부결됐다. 같은 낮에 두 번 단상에 세우지
-	 * 않으므로 그 칸만 잠기고 배지가 붙는다 — 사망(회색)과 같은 모양이면
-	 * "죽은 줄 알았는데 살아 있다"가 되므로 이유를 글자로 남긴다.
-	 *
-	 * 3번은 원래 사망이라 잠긴 칸이 둘이다. rejected 갈래를 지우면 하나로
-	 * 줄어 이 장면이 빨개진다.
-	 *
-	 * picked를 -1로 준 것도 의도다. 재접속 복원은 Number(data.picked) || null로
-	 * 하는데, 스킵의 대상 번호가 0이었다면 그 표는 복원되지 않고 조용히
-	 * 사라졌을 것이다. -1이라 살아난다.
-	 */
-	{
-		label: "투표 — 재지목 (부결된 사람은 다시 못 고른다)",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{
-				type: "init",
-				myNum: 4,
-				seats: SEATS,
-				timer: 17,
-				picked: -1,
-				rejected: [2],
-				...idOf(Role.DOCTOR),
-			},
-			// 2번이 든 이유는 부결된 사람도 투표는 한다는 것이다. 그 칸에는
-			// 부결 배지와 완료 체크가 함께 뜨므로 둘의 자리가 겹치면 여기서 보인다
-			{ type: "progress", voted: 2, alive: 5, done: [2, 4] },
-		],
-		expect: { 'button[disabled=""]': 2, ".badge": 1 },
-	},
-	{
-		label: "개표 — 단상에 오른 사람",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{
-				type: "result",
-				myNum: 4,
-				seats: SEATS.map((seat, i) => ({ ...seat, votes: [1, 3, 0, 0, 1, 0][i] })),
-				// 예전 이름은 executed였다. 이제 이 칸은 처형된 사람이 아니라
-				// 최후의 반론으로 넘어가는 사람이다 — 죽는지는 찬반투표가 정한다
-				nominee: 2,
-				message: "🎤 이영희 님이 단상에 올랐습니다.",
-				timer: 7,
-				...idOf(Role.POLICE),
-			},
-		],
-	},
-	/*
-	 * 아무도 단상에 오르지 않은 개표.
-	 *
-	 * 전원이 '투표 없음'을 골랐거나 동수로 갈린 낮이다. 서버는 그때 nominee를
-	 * 0으로 준다(VoteResultPayload). 실제로 나오는 값인데 위 장면은 늘 누군가
-	 * 올라와 있어서, 이 화면을 밟는 것은 이 장면뿐이다.
-	 *
-	 * 두 곳이 걸린다. 처형 흔들림을 걸 타일이 없고(0번 좌석은 없다), 최고 득표가
-	 * 0이라 막대 폭이 0/0이 된다. 둘 중 하나에서 방어가 빠지면 개표 화면이
-	 * 그 자리에서 멈추거나 막대 폭이 NaN%가 된다.
-	 */
-	{
-		label: "개표 — 아무도 오르지 않았다 (분모 0)",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{
-				type: "result",
-				myNum: 4,
-				seats: SEATS.map(seat => ({ ...seat, votes: 0 })),
-				nominee: 0,
-				message: "아무도 지목되지 않았습니다.",
-				timer: 7,
-				...idOf(Role.POLICE),
-			},
-		],
-	},
-	/*
-	 * 능력 줄이 가장 긴 직업으로 보는 투표.
-	 *
-	 * 신분 줄은 한 줄이다 — 직업 칩과 능력 줄과 진행률이 그 한 줄을 나눠 쓴다.
-	 * 투표 위젯이 그 줄을 가진 화면 중 가장 좁으므로(340px), 여기서 넘치지
-	 * 않으면 다른 곳에서도 넘치지 않는다.
-	 *
-	 * 연인의 요약이 21종 중 가장 길다. 말줄임 처리를 지우면 능력 줄이 진행률
-	 * 숫자를 밀어내고, 그 숫자는 "몇 명이 아직 안 찍었는가"라 투표 화면에서
-	 * 가장 자주 읽히는 값이다.
-	 */
-	{
-		label: "투표 — 능력 줄이 가장 긴 직업(연인)",
-		file: "vote.html",
-		size: [340, 380],
-		messages: [
-			{ type: "init", myNum: 6, seats: SEATS, timer: 17, picked: 2, ...idOf(Role.LOVER) },
-			{ type: "progress", voted: 4, alive: 5, done: [1, 2, 5, 6] },
-		],
 	},
 	/*
 	 * 최후의 반론과 찬반투표 — 개표와 처형 사이의 두 단계.
@@ -1137,7 +1142,7 @@ const SCENES = [
 			},
 		],
 		// 아직 아무도 안 눌렀다. 잠긴 버튼이 하나도 없어야 한다
-		expect: { 'button[disabled=""]': 0 },
+		expect: { 'button[disabled=""]': 0, ".replay-box.hidden": 1 },
 	},
 	/*
 	 * 한 판 더를 누른 뒤.
@@ -1192,6 +1197,53 @@ const SCENES = [
 				players: REVEAL_NO_GLYPH,
 			},
 		],
+	},
+	/*
+	 * 승리 도장과 판 다시보기. 두 진영을 다 밟는다 — 진영 클래스는 init마다
+	 * 갈아끼워야 하고, 같은 문서를 이어 쓰는 이 검사에서 남은 클래스가 있으면 걸린다.
+	 */
+	{
+		label: "결과 — 마피아 승리 도장과 판 다시보기",
+		file: "gameOver.html",
+		size: [340, 460],
+		messages: [
+			{
+				type: "init",
+				winner: "mafia",
+				team: "citizen",
+				reason: "마피아 수가 시민 수와 같아졌습니다.",
+				timer: 14,
+				players: REVEAL,
+				recap: ["시민으로 2일 살아남았습니다."],
+				timeline: TIMELINE,
+				rematch: { type: "rematch", count: 0, of: 8, mine: false },
+			},
+		],
+		expect: {
+			".verdict.mafia": 1,
+			".verdict.citizen": 0,
+			".replay details": 3,
+			'details[open=""]': 1,
+			".replay-box.hidden": 0,
+		},
+	},
+	{
+		label: "결과 — 시민 승리 도장과 판 다시보기",
+		file: "gameOver.html",
+		size: [340, 460],
+		messages: [
+			{
+				type: "init",
+				winner: "citizen",
+				team: "citizen",
+				reason: "마피아가 모두 사라졌습니다.",
+				timer: 14,
+				players: REVEAL,
+				timeline: TIMELINE.slice(0, 2),
+				rematch: { type: "rematch", count: 0, of: 8, mine: false },
+			},
+		],
+		expect: { ".verdict.citizen": 1, ".verdict.mafia": 0, ".replay details": 2, ".replay-box.hidden": 0 },
 	},
 	{
 		label: "대기실 — 방 고르기",
@@ -1614,6 +1666,140 @@ const SCENES = [
 		],
 	},
 	/*
+	 * 채팅 리뉴얼 — 사실·주장·추정, 채널 띠, 누가 읽는가, 신고, 막힌 이유.
+	 *
+	 * 새 줄 개수(#jump)와 길게 누르기는 이 가짜 DOM에 스크롤·포인터가 없어
+	 * 그려지는 자리만 센다. 눈으로는 preview에서 본다.
+	 */
+	{
+		label: "채팅 — 마피아 탭: 채널 띠·번호 배지·신고·누가 읽는가",
+		file: "chat.html",
+		size: CHAT_SIZE,
+		messages: [
+			{
+				type: "init",
+				channels: [tab("MAFIA", { write: true }), tab("ROOM", { write: false })],
+				active: "MAFIA",
+				quick: [],
+				open: true,
+				focus: "",
+				myId: "p2",
+				gameId: "",
+				lines: [
+					line(1, {
+						channel: "MAFIA",
+						senderId: "p5",
+						num: 5,
+						name: "최지훈",
+						role: "스파이",
+						team: "mafia",
+						text: "4번 가자",
+					}),
+					line(2, {
+						channel: "MAFIA",
+						senderId: "p2",
+						num: 2,
+						name: "이영희",
+						role: "마피아",
+						team: "mafia",
+						text: "좋아",
+					}),
+				],
+			},
+		],
+		expect: {
+			"#aud": 1,
+			"#aud.hidden": 0,
+			".msg.say.ch-mafia": 2,
+			".msg.say.mine": 1,
+			".msg .seatno": 1,
+			".msg .report": 1,
+			// 추정 칩 자리는 있되 비어 있어 숨는다. 메모를 붙이면 로그를 다시 그리지 않고 이 칩만 고친다
+			".msg .guess": 1,
+			".msg .guess.hidden": 1,
+			// 로스터가 없으면 번호는 그냥 번호다
+			"button.seatno": 0,
+			"#roster.hidden": 1,
+			"#jump": 1,
+		},
+	},
+	{
+		label: "채팅 — 방 탭: 메모 로스터·내 추정 칩·사건 카드·투표 기록",
+		file: "chat.html",
+		size: CHAT_SIZE,
+		// 채팅에서 붙인 메모. 5번에만 추정이 있다 — 3번 줄의 칩은 숨어야 한다
+		store: { memo: { g1: { 5: "🔪" } } },
+		messages: [
+			{
+				type: "init",
+				channels: [tab("ROOM", { write: true })],
+				active: "ROOM",
+				quick: [],
+				open: true,
+				focus: "",
+				myId: "p1",
+				gameId: "g1",
+				seats: [
+					{ num: 1, name: "1번 참가자", alive: true },
+					{ num: 2, name: "2번 참가자", alive: true },
+					{ num: 3, name: "3번 참가자", alive: true },
+					{ num: 4, name: "4번 참가자", alive: false },
+					{ num: 5, name: "5번 참가자", alive: true },
+				],
+				myNum: 1,
+				lines: [
+					line(1, {
+						kind: "EVENT",
+						text: "🌞 2번째 아침",
+						rows: [{ label: "☠️ 4번 박민수 님이 죽었습니다." }],
+					}),
+					line(2, { senderId: "p5", num: 5, name: "최지훈", text: "저 시민이에요" }),
+					line(3, { senderId: "p3", num: 3, name: "김철수", text: "5번 수상해" }),
+					line(4, { kind: "SYSTEM", text: "🗳️ 5번 참가자가 투표를 마쳤습니다." }),
+				],
+			},
+		],
+		expect: {
+			".msg .guess": 2,
+			".msg .guess.hidden": 1,
+			".msg.card.evt": 1,
+			".msg.sys": 1,
+			".msg.say.ch-room": 2,
+			// 줄 번호가 메모 단추가 된다
+			"button.seatno": 2,
+			"#roster.hidden": 0,
+			"#roster .rc": 5,
+			"#roster .rc.me": 1,
+			"#roster .rc.dead": 1,
+			"#roster .rc.tagged": 1,
+			// 하나라도 붙였으면 안내 문구는 걷힌다
+			"#roster .rc-help": 0,
+			"#memoPop.hidden": 1,
+		},
+	},
+	{
+		// 접기 전에 쓰던 글이 되살아난 채로 읽기 전용 탭에서 Enter. 글은 남고 이유가 뜬다
+		label: "채팅 — 읽기 전용 탭에서 보내기",
+		file: "chat.html",
+		size: CHAT_SIZE,
+		store: { chatDraft: "3번 수상해요" },
+		messages: [
+			{
+				type: "init",
+				channels: [tab("ROOM", { write: false })],
+				active: "ROOM",
+				quick: [],
+				open: true,
+				focus: "",
+				myId: "p1",
+				gameId: "",
+				lines: [],
+			},
+		],
+		press: ["Enter"],
+		expect: { "#hint": 1, "#hint.hidden": 0 },
+	},
+	/*
 	 * 전환 컷 네 장면.
 	 *
 	 * ms는 Cut.ts의 lengthOf(LEAD 1.2 + STEP 0.8 × 줄 수 + TAIL 0.8, 상한 6초)가
@@ -1761,6 +1947,32 @@ const SCENES = [
 		expect: { ".stat": 4 },
 	},
 	{
+		// 직업별 전적은 판 수 순 상위 3개만 붙는다(topRoles)
+		label: "프로필 — 내 것 (직업별 전적)",
+		file: "profile.html",
+		size: PROFILE_SIZE,
+		messages: [
+			{
+				type: "init",
+				name: "정수연",
+				rank: "Lv.4",
+				avatar: "",
+				where: "로비",
+				stats: [
+					{ label: "마피아", value: "3승 1패" },
+					{ label: "시민", value: "12승 9패" },
+					{ label: "참가", value: "25판" },
+					{ label: "중도 이탈", value: "0판" },
+					{ label: "직업 · 의사", value: "9판 5승" },
+					{ label: "직업 · 마피아", value: "4판 3승" },
+					{ label: "직업 · 시민", value: "4판 2승" },
+				],
+				self: true,
+			},
+		],
+		expect: { ".stat": 7 },
+	},
+	{
 		label: "프로필 — 게스트 (기록이 남지 않는 사람)",
 		file: "profile.html",
 		size: PROFILE_SIZE,
@@ -1856,7 +2068,14 @@ const SCENES = [
 					coin: 40,
 					items: [
 						{ id: "t_detective", kind: "title", name: "명탐정", price: 100, owned: true, on: true },
-						{ id: "w_watch", kind: "lastWord", name: "끝까지 지켜보겠습니다.", price: 30, owned: false, on: false },
+						{
+							id: "w_watch",
+							kind: "lastWord",
+							name: "끝까지 지켜보겠습니다.",
+							price: 30,
+							owned: false,
+							on: false,
+						},
 						{ id: "t_legend", kind: "title", name: "전설", price: 1000, owned: false, on: false },
 					],
 				},

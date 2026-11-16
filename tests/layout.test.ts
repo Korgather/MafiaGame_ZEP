@@ -19,6 +19,7 @@ import {
 	chatWidget,
 	connect,
 	finishPhase,
+	hudWidget,
 	joinRoom,
 	mainWidget,
 	resetWorld,
@@ -34,6 +35,29 @@ interface Layout {
 	width: string;
 	height: string;
 	top?: string;
+}
+
+interface Rect {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
+/** 데스크톱 픽셀 layout을 화면 위 사각형으로. WidgetRearrange의 기준점 셋만 쓴다 */
+function rectOf(layout: Layout, screenW: number, screenH: number): Rect {
+	const w = parseInt(layout.width, 10);
+	const h = parseInt(layout.height, 10);
+	const top = parseInt(layout.top || "0", 10);
+	if (layout.anchor === "topright") return { x: screenW - w, y: top, w, h };
+	if (layout.anchor === "topleft") return { x: 0, y: top, w, h };
+	if (layout.anchor === "bottomleft") return { x: 0, y: screenH - h, w, h };
+	assert.equal(layout.anchor, "top", `계산할 수 없는 기준점: ${layout.anchor}`);
+	return { x: (screenW - w) / 2, y: top, w, h };
+}
+
+function overlaps(a: Rect, b: Rect): boolean {
+	return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
 /**
@@ -129,6 +153,63 @@ describe("위젯 크기", () => {
 			for (const player of players) {
 				// 크기를 못 받은 위젯이 하나라도 있으면 여기서 던진다
 				layoutOf(mainWidget(player));
+			}
+		}
+	});
+});
+
+describe("HUD와 보드의 자리", () => {
+	/*
+	 * 폰 세로(850px)의 세로 예산. 위에 HUD 한 줄 + 보드, 아래에 접은 채팅 바.
+	 * 둘을 뺀 가운데가 게임 화면이고 그것이 절반 가까이는 남아야 한다.
+	 */
+	it("폰에서 HUD+보드는 52% 이하, 게임 화면은 48% 이상 남는다", () => {
+		const SCREEN_H = 850;
+		const players = startPlainGame(5);
+		const player = players[0];
+		player.isMobile = true;
+		const target = room(1);
+
+		// 밤(능력) → 낮(진행) → 투표 → 개표 → 반론. 화면마다 보드 높이가 다르다
+		for (let i = 0; i < 5; i++) {
+			finishPhase(target);
+			const hud = layoutOf(hudWidget(player));
+			const board = layoutOf(mainWidget(player));
+			// 첫 판은 "지금 할 일" 줄 몫만큼 큰 HUD_COACH다
+			const bar = parseInt(hud.height, 10);
+			assert.ok(bar === WidgetSize.HUD.bar || bar === WidgetSize.HUD_COACH.bar, hud.height);
+			// 보드는 HUD 바로 아래에 붙는다. 같은 "top" 자리라 내려 주지 않으면 겹친다
+			assert.equal(parseInt(board.top || "", 10) - parseInt(hud.top || "", 10), bar);
+
+			const stack = bar + (heightPercent(mainWidget(player)) / 100) * SCREEN_H;
+			const game = SCREEN_H - stack - WidgetSize.CHAT_BAR.height;
+			assert.ok(stack <= SCREEN_H * 0.52, `${target.phase}: 위쪽이 ${Math.round((stack / SCREEN_H) * 100)}%를 덮습니다`);
+			assert.ok(game >= SCREEN_H * 0.48, `${target.phase}: 게임 화면이 ${Math.round((game / SCREEN_H) * 100)}%뿐입니다`);
+		}
+	});
+
+	it("데스크톱 1366×768·1280×720·1024×768에서 HUD·보드·채팅이 겹치지 않는다", () => {
+		const players = startPlainGame(5);
+		const player = players[0];
+		const target = room(1);
+
+		for (let i = 0; i < 5; i++) {
+			finishPhase(target);
+			for (const [w, h] of [
+				[1366, 768],
+				[1280, 720],
+				[1024, 768],
+			]) {
+				const hud = rectOf(layoutOf(hudWidget(player)), w, h);
+				const board = rectOf(layoutOf(mainWidget(player)), w, h);
+				const chat = rectOf(layoutOf(chatWidget(player)), w, h);
+				assert.ok(!overlaps(hud, board), `${w}px ${target.phase}: HUD가 보드와 겹칩니다`);
+				assert.ok(!overlaps(hud, chat), `${w}px ${target.phase}: HUD가 채팅과 겹칩니다`);
+				assert.ok(!overlaps(board, chat), `${w}px ${target.phase}: 보드가 채팅과 겹칩니다`);
+				// 시계와 행동은 한 덩어리로 읽혀야 한다. 화면 양 끝에 떨어져 있으면
+				// 남은 시간을 보려고 눈이 화면을 가로지른다
+				assert.equal(hud.x + hud.w, board.x + board.w, `${w}px ${target.phase}: HUD와 보드가 같은 모서리에 있지 않습니다`);
+				assert.ok(board.y - (hud.y + hud.h) <= 32, `${w}px ${target.phase}: 보드가 HUD에서 떨어져 있습니다`);
 			}
 		}
 	});

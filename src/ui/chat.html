@@ -25,6 +25,266 @@
 			 */
 
 			/* 접힌 막대와 펼친 창은 한 번에 하나만 산다 (.hidden으로 갈린다) */
+
+			/*
+			 * 사실·주장·추정을 모양으로 가른다.
+			 *   사실(안내·사건·입퇴장) — 폭 전체의 띠. 누가 한 말이 아니다.
+			 *   주장(발언) — 말풍선. 남의 말은 왼쪽, 내 말은 오른쪽.
+			 *   추정(내 메모) — 점선 칩. 확정된 직업 칩(실선)과 섞이지 않는다.
+			 */
+			.msg.sys,
+			.msg.evt,
+			.msg.ntc {
+				align-self: stretch;
+			}
+			.msg.sys .txt,
+			.msg.evt .txt,
+			.msg.ntc .txt {
+				width: 100%;
+				border-radius: var(--r1);
+			}
+			.msg.say {
+				align-self: flex-start;
+				-webkit-touch-callout: none;
+			}
+			.msg.say.mine {
+				align-self: flex-end;
+			}
+
+			/* 채널마다 왼쪽 띠와 글리프. 색만으로 가르면 색을 못 보는 사람에게는 한 채널이다 */
+			.msg.say .txt {
+				border-left: 3px solid var(--stripe, var(--line));
+			}
+			.ch-global {
+				--stripe: var(--ok);
+			}
+			.ch-room {
+				--stripe: var(--citizen);
+			}
+			.ch-mafia {
+				--stripe: var(--mafia);
+			}
+			.ch-ghost {
+				--stripe: var(--dead);
+			}
+			.ch-lover {
+				--stripe: var(--mafia-ink);
+			}
+			.msg .chg .gi,
+			.chat-aud .gi {
+				width: 12px;
+				height: 12px;
+				vertical-align: -2px;
+			}
+
+			/* 말한 사람의 참가 번호. 이름보다 먼저 눈에 걸려야 "3번이 그랬지"가 된다 */
+			.msg .seatno {
+				display: inline-grid;
+				place-items: center;
+				flex: 0 0 auto;
+				min-width: 16px;
+				height: 16px;
+				padding: 0 3px;
+				font-size: 9px;
+				font-weight: 800;
+				font-variant-numeric: tabular-nums;
+				color: var(--bg);
+				background: var(--ink-2);
+				border-radius: 99px;
+			}
+			.msg .guess {
+				flex: 0 0 auto;
+				padding: 0 4px;
+				font-size: 9px;
+				color: var(--ink-2);
+				border: 1px dashed var(--ink-3);
+				border-radius: 99px;
+			}
+
+			/* 줄의 번호는 누르면 메모가 열린다. 단추처럼 보이되 줄 머리를 키우지 않는다 */
+			button.seatno {
+				border: none;
+				font-family: inherit;
+				cursor: pointer;
+			}
+			button.seatno:hover,
+			button.seatno:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+
+			/*
+			 * 메모 로스터. 판이 도는 동안 채팅 머리말 아래에 번호 칩이 늘어선다.
+			 * 메모는 "누가 무엇을 말했나"를 읽으면서 붙이는 것이라 로그 바로 위가
+			 * 제자리다 — 행동 화면에 있을 때는 단계가 바뀔 때마다 손 아래에서 사라졌다.
+			 */
+			.roster {
+				display: flex;
+				gap: 4px;
+				flex: 0 0 auto;
+				padding: 4px var(--s2);
+				overflow-x: auto;
+				border-bottom: 1px solid var(--line);
+				scrollbar-width: none;
+			}
+			.roster .rc {
+				display: inline-flex;
+				align-items: center;
+				gap: 2px;
+				flex: 0 0 auto;
+				min-width: 30px;
+				min-height: 26px;
+				padding: 0 6px;
+				font: inherit;
+				font-size: var(--t-xs);
+				font-weight: 800;
+				font-variant-numeric: tabular-nums;
+				color: var(--ink);
+				background: var(--surface-2);
+				/* 아직 아무 추정도 없는 칸은 점선 — "여기 붙일 수 있다" */
+				border: 1px dashed var(--ink-3);
+				border-radius: 99px;
+				cursor: pointer;
+			}
+			.roster .rc.tagged {
+				border-style: solid;
+				border-color: var(--ink-2);
+			}
+			.roster .rc.dead {
+				color: var(--ink-3);
+				text-decoration: line-through;
+				opacity: 0.6;
+			}
+			.roster .rc.me {
+				cursor: default;
+				border-style: solid;
+				border-color: var(--accent);
+			}
+			.roster .rc .gi {
+				width: 14px;
+				height: 14px;
+			}
+			.roster .rc:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+			.roster .rc-help {
+				flex: 0 0 auto;
+				align-self: center;
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+				white-space: nowrap;
+			}
+
+			/* 추정 고르기. 로그 위에 뜨고, 고르면 닫힌다 */
+			.memo-pop {
+				position: absolute;
+				inset: var(--s1) var(--s1) auto var(--s1);
+				z-index: 4;
+				display: flex;
+				flex-direction: column;
+				gap: var(--s1);
+				padding: var(--s2);
+				background: var(--surface);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+			}
+			.memo-pop.hidden {
+				display: none;
+			}
+			.memo-pop .mp-title {
+				font-size: var(--t-sm);
+				font-weight: 800;
+			}
+			.memo-pop .mp-tags {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px;
+			}
+			.memo-pop .mp-tags button {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+				min-height: 32px;
+				padding: 0 var(--s2);
+				font: inherit;
+				font-size: var(--t-sm);
+				color: var(--ink);
+				background: var(--surface-2);
+				border: 1px solid var(--line);
+				border-radius: var(--r1);
+				cursor: pointer;
+			}
+			.memo-pop .mp-tags button.on {
+				border-color: var(--accent);
+				box-shadow: inset 0 0 0 1px var(--accent);
+			}
+			.memo-pop .mp-tags button.clear {
+				color: var(--ink-2);
+				border-style: dashed;
+			}
+			.memo-pop .mp-tags button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+			.memo-pop .mp-foot {
+				font-size: var(--t-xs);
+				color: var(--ink-3);
+			}
+
+			/* 🚨 신고는 길게 누르거나 우클릭한 줄에만 뜬다. 줄마다 서 있으면 로그가 버튼밭이 된다 */
+			.msg .report {
+				display: none;
+				flex: 0 0 auto;
+				min-height: 24px;
+				padding: 0 var(--s1);
+				font: inherit;
+				font-size: 11px;
+				font-weight: 700;
+				color: var(--danger);
+				background: transparent;
+				border: 1px solid var(--danger);
+				border-radius: var(--r1);
+				cursor: pointer;
+				transition: background var(--dur) var(--ease);
+			}
+			.msg .report:hover {
+				background: var(--surface-3);
+			}
+			.msg.reporting .report {
+				display: inline-flex;
+				align-items: center;
+			}
+			.msg .report:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 1px;
+			}
+
+			/* 보내기 전에 "누가 읽는가". 탭 이름만으로는 영매·관전자가 듣는지 모른다 */
+			.chat-aud {
+				flex: 0 1 auto;
+				max-width: 40%;
+				margin-left: var(--s1);
+				padding: 2px 6px;
+				overflow: hidden;
+				font-size: var(--t-xs);
+				white-space: nowrap;
+				text-overflow: ellipsis;
+				color: var(--ink-2);
+				border: 1px solid var(--line);
+				border-radius: 99px;
+			}
+
+			/* 막힌 이유. placeholder는 글을 치는 순간 가려지므로 보내려 할 때 한 번 더 말한다 */
+			.chat-hint {
+				flex: 0 0 auto;
+				padding: 2px var(--s2);
+				font-size: var(--t-xs);
+				color: var(--danger);
+				background: var(--surface);
+				border-top: 1px solid var(--line);
+			}
 		</style>
 	</head>
 	<body>
@@ -53,13 +313,22 @@
 				</button>
 			</div>
 
+			<div class="roster hidden" id="roster" role="group" aria-label="내 추정 메모"></div>
+
 			<div class="chat-body">
+				<div class="memo-pop hidden" id="memoPop" role="dialog" aria-labelledby="memoTitle">
+					<div class="mp-title" id="memoTitle"></div>
+					<div class="mp-tags" id="memoTags"></div>
+					<div class="mp-foot">내 화면에만 보입니다</div>
+				</div>
 				<div class="chat-log scroll" id="log" role="log" aria-live="polite"></div>
 				<button type="button" class="chat-jump hidden" id="jump">새 메시지 ↓</button>
 				<div class="emoji-pad hidden" id="pad" role="group" aria-label="이모지"></div>
 			</div>
 
 			<div class="quick hidden" id="quick"></div>
+
+			<div class="chat-hint hidden" id="hint" role="status" aria-live="polite"></div>
 
 			<div class="chat-entry">
 				<button type="button" class="icon-btn" id="emoji" aria-label="이모지">☺</button>
@@ -70,6 +339,7 @@
 					사람만 명령어의 존재를 모르고 지나간다.
 				-->
 				<button type="button" class="icon-btn strong" id="help" aria-label="도움말">?</button>
+				<span class="chat-aud" id="aud"></span>
 				<!--
 					maxlength는 편의일 뿐 한계가 아니다. 진짜 한계는 서버의
 					MAX_CHAT_LENGTH다 (Widget.types.ts). 두 값은 같아야 한다.
@@ -81,6 +351,7 @@
 					maxlength="200"
 					autocomplete="off"
 					aria-label="메시지 입력"
+					aria-describedby="aud"
 				/>
 				<button type="button" class="icon-btn" id="submit" aria-label="보내기">➤</button>
 			</div>
@@ -126,6 +397,33 @@
 			let active = "";
 			let myId = "";
 			let inputDisabled = false;
+			/* 메모(memoLoad/memoSave)를 찾는 열쇠. 판마다 바뀐다 */
+			let gameId = "";
+			/* 메모 로스터 — 판이 도는 동안만 서버가 채운다 */
+			let seats = [];
+			let myNum = 0;
+			/* 메모 팝오버가 열린 번호. 0이면 닫힘 */
+			let memoNum = 0;
+			// 메모를 닫을 때 돌려줄 포커스. null이면 게임(캔버스)으로 돌려준다
+			let memoBack = null;
+			// 마우스로 누르는 순간 포커스가 단추로 옮겨 가므로, 누르기 직전 것을 적어 둔다
+			let focusBefore = null;
+			qs("#full").addEventListener(
+				"pointerdown",
+				() => (focusBefore = document.activeElement),
+				true
+			);
+
+			/* 추정으로 붙일 수 있는 것. 직업 전부가 아니라 판단에 쓰는 굵은 칸만 둔다 */
+			const MEMO_TAGS = [
+				["🔪", "마피아"],
+				["💉", "의사"],
+				["🔍", "경찰"],
+				["🧑", "시민"],
+				["❓", "모름"],
+			];
+			/* 위로 올라가 읽는 동안 쌓인 줄 수 (#jump) */
+			let unseen = 0;
 
 			/*
 			 * 보낸 글 기록(↑/↓). 이 문서보다 오래 살아야 한다.
@@ -182,6 +480,11 @@
 				</div>`;
 			}
 
+			/** 내가 이 번호에 붙인 추정. 적는 곳은 이 창(로스터·줄 번호)이고 보드는 읽기만 한다 */
+			function guessOf(num) {
+				return (gameId && memoLoad(gameId)[num]) || "";
+			}
+
 			function bubble(line) {
 				const when = html`<span class="when">${clock(line.at)}</span>`;
 
@@ -206,7 +509,12 @@
 
 				// 내 말은 이름을 다시 읽을 필요가 없다. 시각만 남긴다
 				const mine = line.senderId !== "" && line.senderId === myId;
-				let who = when;
+				const view = viewOf(line.channel);
+				const mark = html`<span class="chg" aria-hidden="true"
+					>${glyphHtml(view ? view.glyph : "")}</span
+				>`;
+				let who = html`${mark}${when}`;
+				let reportable = false;
 				if (!mine) {
 					const chip = line.role
 						? html`<span class="chip ${line.team === "mafia" ? "mafia" : "citizen"}"
@@ -237,10 +545,48 @@
 									↩
 								</button>`
 							: "";
-					who = html`${chip}<span class="ellip">${name}</span>${when}${reply}`;
+					// 번호를 누르면 메모가 열린다. 로스터가 없는 대기실에서는 그냥 번호다
+					const seatNo =
+						line.num > 0 && seats.length
+							? html`<button
+									type="button"
+									class="seatno"
+									data-memo="${line.num}"
+									aria-label="${line.num}번 메모"
+								>
+									${line.num}
+								</button>`
+							: line.num > 0
+								? html`<span class="seatno" aria-hidden="true">${line.num}</span>`
+								: "";
+					// 비어 있어도 자리를 둔다. 메모를 바꾸면 로그를 다시 그리지 않고 이 칩만 고친다
+					const guess = line.num > 0 ? guessOf(line.num) : "";
+					const guessChip =
+						line.num > 0
+							? html`<span class="guess${guess ? "" : " hidden"}" data-g="${line.num}"
+									>내 추정 ${glyphHtml(guess)}</span
+								>`
+							: "";
+					// 신고는 /신고와 같은 길이다. 답장처럼 입력창만 채우므로 서버에 새 말이 없다
+					reportable = !inputDisabled && line.senderId !== "";
+					const report = reportable
+						? html`<button
+								type="button"
+								class="report"
+								data-who="${token}"
+								aria-label="${name} 신고"
+							>
+								🚨 신고
+							</button>`
+						: "";
+					who = html`${mark}${seatNo}${guessChip}${chip}<span class="ellip">${name}</span
+						>${when}${reply}${report}`;
 				}
 
-				return html`<div class="msg${mine ? " mine" : ""}${pm}">
+				return html`<div
+					class="msg say ch-${String(line.channel).toLowerCase()}${mine ? " mine" : ""}${pm}"
+					${flag(reportable, "data-report")}
+				>
 					<div class="who">${who}</div>
 					<div class="txt">${line.text}</div>
 				</div>`;
@@ -251,7 +597,10 @@
 			}
 
 			function jump(show) {
-				qs("#jump").classList.toggle("hidden", !show);
+				if (!show) unseen = 0;
+				const el = qs("#jump");
+				el.textContent = "새 메시지 " + unseen + " ↓";
+				el.classList.toggle("hidden", !show);
 			}
 
 			/** 활성 탭의 줄만 다시 그린다. 탭 전환·재접속이 지나는 길 */
@@ -263,6 +612,8 @@
 			}
 
 			function append(line) {
+				// 다시 열린 탭의 기록을 서버가 통째로 다시 보낸다(refresh). 이미 든 줄은 버린다
+				if (lines.some(held => held.seq === line.seq)) return;
 				lines.push(line);
 				if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
 				if (line.channel !== active) return;
@@ -276,7 +627,8 @@
 				while (el.childElementCount > MAX_LINES) el.removeChild(el.firstElementChild);
 
 				if (follow) scrollToEnd(el);
-				// 읽던 자리를 뺏지 않는다. 새 줄이 왔다는 것만 알린다
+				// 읽던 자리를 뺏지 않는다. 새 줄이 왔다는 것과 몇 줄인지만 알린다
+				if (!follow) unseen++;
 				jump(!follow);
 			}
 
@@ -337,6 +689,8 @@
 				 */
 				input.disabled = inputDisabled;
 				input.placeholder = view ? view.placeholder : "";
+				qs("#aud").innerHTML = view ? html`${glyphHtml(view.glyph)} ${view.audience}` : "";
+				qs("#aud").classList.toggle("hidden", !view);
 				for (const id of ["#emoji", "#help", "#submit"]) qs(id).disabled = inputDisabled;
 				if (inputDisabled) {
 					input.value = "";
@@ -422,7 +776,7 @@
 					total += view.unread;
 					if (view.unread <= 0) continue;
 					single = view.glyph;
-					marks.push(view.glyph + badgeText(view.unread));
+					marks.push(view.glyph);
 				}
 				const active_ = viewOf(active);
 
@@ -436,28 +790,129 @@
 				else if (marks.length > 1) glyph = "💬";
 
 				/*
-				 * 글자 자리에는 "새 메시지"가 아니라 어느 탭인지를 적는다.
-				 *
-				 * 접혀 있는 동안 밖에서 보이는 것은 이 한 줄뿐이다. 총합만 있으면
-				 * 5가 마피아 밀담인지 로비 잡담인지 알 수 없어서, 펴 보기 전에는
-				 * 열어야 할 이유를 알 수 없다. 셋을 넘기면 ⋯ 로 접는다.
+				 * 글자는 늘 "채팅"이다 — 접힌 막대가 무엇인지는 언제 봐도 같아야 한다.
+				 * 어느 탭이 시끄러운지는 왼쪽 글리프가, 여럿이면 뒤에 붙는 글리프
+				 * 목록이 말하고 개수는 배지 하나가 센다. 셋을 넘기면 ⋯ 로 접는다.
 				 */
 				const listed =
-					marks.length <= MINI_MARKS
-						? marks.join(" ")
-						: marks.slice(0, MINI_MARKS).join(" ") + " ⋯";
+					marks.length <= 1
+						? ""
+						: " " + marks.slice(0, MINI_MARKS).join(" ") + (marks.length > MINI_MARKS ? " ⋯" : "");
 
 				setGlyph(qs("#miniGlyph"), glyph);
-				qs("#miniText").textContent = total > 0 ? listed : MINI_LABEL;
+				qs("#miniText").textContent = total > 0 ? "채팅" + listed : MINI_LABEL;
 				qs("#miniBadge").textContent = badgeText(total);
 				qs("#miniBadge").classList.toggle("hidden", total === 0);
 				qs("#mini").classList.toggle("alert", total > 0);
 			}
 
+			/** 막힌 이유 한 줄. ""면 걷는다 */
+			function hint(text) {
+				qs("#hint").textContent = text;
+				qs("#hint").classList.toggle("hidden", text === "");
+			}
+
+			/*
+			 * 쓰던 글. 접기/펴기가 문서를 새로 만드므로 sent처럼 부모 창에 둔다 —
+			 * 펴 보니 치던 문장이 사라져 있으면 다시 칠 이유를 잃는다.
+			 */
+			function saveDraft() {
+				Parent.store.chatDraft = qs("#input").value;
+			}
+
 			function draw() {
+				// 탭이나 권한이 바뀌면 방금의 "막힌 이유"는 더 이상 맞지 않는다
+				hint("");
 				drawTabs();
 				drawQuick();
 				drawMini();
+			}
+
+			// ────────────────────────────────────────────────── 메모
+
+			function seatOf(num) {
+				for (const seat of seats) {
+					if (seat.num === num) return seat;
+				}
+				return null;
+			}
+
+			function drawRoster() {
+				const memo = gameId ? memoLoad(gameId) : {};
+				const chips = seats.map(seat => {
+					const glyph = memo[seat.num] || "";
+					const dead = seat.alive ? "" : " dead";
+					if (seat.num === myNum) {
+						return html`<span class="rc me${dead}" aria-label="${seat.num}번 나"
+							>${seat.num} 나</span
+						>`;
+					}
+					return html`<button
+						type="button"
+						class="rc${dead}${glyph ? " tagged" : ""}"
+						data-memo="${seat.num}"
+						aria-label="${seat.num}번 메모${glyph ? " · 지금 " + glyph : ""}"
+					>
+						${seat.num}${glyphHtml(glyph)}
+					</button>`;
+				});
+				const anyTag = seats.some(seat => memo[seat.num]);
+				qs("#roster").innerHTML = html`${chips}${
+					anyTag ? "" : html`<span class="rc-help">번호를 눌러 추정을 메모하세요</span>`
+				}`;
+				qs("#roster").classList.toggle("hidden", seats.length === 0);
+			}
+
+			function openMemo(num) {
+				const seat = seatOf(num);
+				if (!seat || num === myNum) return;
+				memoNum = num;
+				const now = guessOf(num);
+				qs("#memoTitle").textContent = `${seat.name} — 내 추정`;
+				qs("#memoTags").innerHTML = html`${MEMO_TAGS.map(
+					([glyph, name]) =>
+						html`<button
+							type="button"
+							class="${glyph === now ? "on" : ""}"
+							data-tag="${glyph}"
+							aria-pressed="${glyph === now ? "true" : "false"}"
+						>
+							${glyphHtml(glyph)} ${name}
+						</button>`
+				)}${now ? html`<button type="button" class="clear" data-tag="">지우기</button>` : ""}`;
+				qs("#memoPop").classList.remove("hidden");
+				qs("#pad").classList.add("hidden");
+				Parent.grabFocus();
+				const first = qs("#memoTags button");
+				if (first) first.focus();
+			}
+
+			function closeMemo() {
+				if (!memoNum) return;
+				const num = memoNum;
+				memoNum = 0;
+				qs("#memoPop").classList.add("hidden");
+				// 칩은 태그를 붙이면 다시 그려진다. 키보드로 왔으면 새로 그린 같은 칩으로 돌아간다
+				const back =
+					memoBack && (memoBack.isConnected ? memoBack : qs(`#roster [data-memo="${num}"]`));
+				memoBack = null;
+				if (back) back.focus();
+				else Parent.releaseFocus();
+			}
+
+			function setMemo(num, glyph) {
+				const memo = memoLoad(gameId);
+				// 판마다 처음 붙일 때 한 번만 알린다. 무엇을 붙였는지는 보내지 않는다
+				const first = !Object.keys(memo).some(key => memo[key]);
+				if (glyph) memo[num] = glyph;
+				else delete memo[num];
+				memoSave(gameId, memo);
+				if (first && glyph) Parent.send({ type: "memo-used" });
+				drawRoster();
+				for (const el of qsa(`.guess[data-g="${num}"]`, qs("#log"))) {
+					el.innerHTML = String(html`내 추정 ${glyphHtml(glyph)}`);
+					el.classList.toggle("hidden", !glyph);
+				}
 			}
 
 			// ────────────────────────────────────────────────── 보낸 글 기록
@@ -505,8 +960,17 @@
 			 * 다시 칠 방법이 없다. 남겨두면 탭을 옮겨 그대로 보낼 수 있다.
 			 */
 			function submitInput() {
-				if (!submit(qs("#input").value)) return;
-				qs("#input").value = "";
+				const input = qs("#input");
+				if (!submit(input.value)) {
+					// 빈 칸 Enter는 "게임으로 돌아가기"라 말하지 않는다. 글이 있는데 못 보낸 것만 알린다
+					const view = viewOf(active);
+					if (input.value.trim() !== "" || inputDisabled)
+						hint("🔒 " + (view ? view.placeholder : ""));
+					return;
+				}
+				hint("");
+				input.value = "";
+				saveDraft();
 				qs("#pad").classList.add("hidden");
 			}
 
@@ -554,6 +1018,8 @@
 			// 머리말 한 줄 전체가 훨씬 큰 과녁이다.
 			qs("#chatHead").addEventListener("click", event => {
 				if (event.target.closest(".tab")) return;
+				// 버튼·답장으로 채운 글은 input 이벤트를 안 지난다. 접기 직전에 한 번 더 적는다
+				saveDraft();
 				Parent.send({ type: "toggle", open: false });
 			});
 
@@ -567,6 +1033,8 @@
 			});
 
 			qs("#log").addEventListener("scroll", () => {
+				// 스크롤하는 손가락은 길게 누르기가 아니다
+				cancelPress();
 				if (nearBottom(qs("#log"))) jump(false);
 			});
 
@@ -581,13 +1049,93 @@
 			 * 줄 하나가 아니라 로그 전체에 건다 — render()가 innerHTML을 통째로
 			 * 갈아치우므로 줄에 직접 건 리스너는 다음 탭 전환에 사라진다.
 			 */
+			/* 줄 번호·로스터 칩 → 메모. 입력이 잠긴 관전자도 자기 메모는 쓸 수 있다 */
+			function memoClick(event) {
+				const el = event.target.closest("[data-memo]");
+				if (!el) return false;
+				const num = Number(el.dataset.memo);
+				if (memoNum === num) {
+					closeMemo();
+					return true;
+				}
+				// 키보드(detail 0)면 누른 칩으로, 마우스면 치던 입력칸으로만 돌아간다.
+				// 열린 채로 다른 번호로 옮겨 가면 처음 돌아갈 곳을 그대로 둔다
+				const input = qs("#input");
+				if (!memoNum) memoBack = event.detail === 0 ? el : focusBefore === input ? input : null;
+				openMemo(num);
+				return true;
+			}
+			qs("#roster").addEventListener("click", memoClick);
+
+			qs("#memoTags").addEventListener("click", event => {
+				const el = event.target.closest("[data-tag]");
+				if (!el || !memoNum) return;
+				setMemo(memoNum, el.dataset.tag);
+				closeMemo();
+			});
+
+			qs("#memoPop").addEventListener("keydown", event => {
+				if (event.key === "Escape") closeMemo();
+			});
+
+			// 바깥을 누르면 닫는다. 팝오버 안과 메모를 여는 단추는 제 리스너가 맡는다
+			qs("#full").addEventListener("click", event => {
+				if (memoNum && !event.target.closest("#memoPop, [data-memo]")) closeMemo();
+			});
+
 			qs("#log").addEventListener("click", event => {
+				if (memoClick(event)) return;
 				if (inputDisabled) return;
+				const report = event.target.closest(".report");
+				if (report) {
+					report.closest(".msg").classList.remove("reporting");
+					qs("#input").value = "/신고 " + report.dataset.who + " ";
+					takeFocus(false);
+					return;
+				}
 				const el = event.target.closest(".reply");
 				if (!el) return;
 				qs("#input").value = "/귓속말 " + el.dataset.who + " ";
 				takeFocus(false);
 			});
+
+			/*
+			 * 🚨 신고 꺼내기. 우클릭, 손가락은 길게 누르기(~500ms).
+			 *
+			 * 줄마다 버튼을 세워 두면 발언 하나하나가 "신고하세요"로 읽힌다. 찾는
+			 * 사람만 꺼내게 숨겨 두고, 꺼낸 줄은 한 번에 하나다.
+			 */
+			const LONG_PRESS = 500;
+			let pressTimer = 0;
+
+			function showReport(line) {
+				for (const el of qsa(".msg.reporting", qs("#log"))) el.classList.remove("reporting");
+				line.classList.add("reporting");
+			}
+
+			function cancelPress() {
+				clearTimeout(pressTimer);
+				pressTimer = 0;
+			}
+
+			qs("#log").addEventListener("contextmenu", event => {
+				const line = event.target.closest(".msg[data-report]");
+				if (!line) return;
+				event.preventDefault();
+				cancelPress();
+				showReport(line);
+			});
+
+			qs("#log").addEventListener("pointerdown", event => {
+				const line = event.target.closest(".msg[data-report]");
+				// 마우스는 우클릭이 있다. 누른 채 끌어 글을 고르는 손을 막지 않는다
+				if (!line || event.pointerType === "mouse") return;
+				cancelPress();
+				pressTimer = setTimeout(() => showReport(line), LONG_PRESS);
+			});
+			for (const type of ["pointerup", "pointercancel", "pointerleave"]) {
+				qs("#log").addEventListener(type, cancelPress);
+			}
 
 			qs("#emoji").addEventListener("click", () => {
 				qs("#pad").classList.toggle("hidden");
@@ -621,6 +1169,11 @@
 			});
 
 			qs("#submit").addEventListener("click", submitInput);
+
+			qs("#input").addEventListener("input", () => {
+				hint("");
+				saveDraft();
+			});
 
 			// ────────────────────────────────────────────────── 키보드
 
@@ -667,6 +1220,7 @@
 					// 게임으로 돌아간다. 한 걸음이면 오타를 지우려다 창을 닫는다
 					if (input.value !== "") {
 						input.value = "";
+						saveDraft();
 						resetRecall();
 						return;
 					}
@@ -725,12 +1279,16 @@
 					active = data.active || "";
 					lines = data.lines || [];
 					inputDisabled = data.inputDisabled === true;
+					gameId = data.gameId || "";
+					seats = data.seats || [];
+					myNum = Number(data.myNum) || 0;
 
 					const open = data.open === true;
 					qs("#full").classList.toggle("hidden", !open);
 					qs("#mini").classList.toggle("hidden", open);
 
 					draw();
+					drawRoster();
 					render();
 
 					/*
@@ -741,6 +1299,9 @@
 					 */
 					if (!inputDisabled && data.prefill) {
 						qs("#input").value = String(data.prefill).slice(0, MAX_TEXT);
+					} else if (!inputDisabled && Parent.store.chatDraft) {
+						// 부탁받은 글이 없으면 접기 전에 쓰던 글을 되살린다
+						qs("#input").value = String(Parent.store.chatDraft).slice(0, MAX_TEXT);
 					}
 
 					// 게임 화면에서 Enter로 펴고 들어온 경우. 앞 문서가 남긴
@@ -768,12 +1329,22 @@
 					channels = data.channels || [];
 					quick = data.quick || [];
 					inputDisabled = data.inputDisabled === true;
+					// 판이 시작되어도 채팅은 다시 열리지 않는다. 메모 열쇠는 이 길로 바뀐다
+					const game = gameId;
+					gameId = data.gameId || "";
+					const roster = seats.length;
+					seats = data.seats || [];
+					myNum = Number(data.myNum) || 0;
 					active = next;
 					draw();
+					drawRoster();
+					// 판이 바뀌면 열려 있던 메모는 지난 판의 것이다
+					if (game !== gameId) closeMemo();
 					// init에서는 부르지 않는다 — 접었다 펴는 것도 새 문서라
 					// 그때마다 모든 탭이 "방금 생긴 탭"이 되어 판마다 깜빡인다
 					flashNew(before);
-					if (moved) render();
+					// 줄 번호가 메모 단추가 되거나 그만두는 순간에도 다시 그린다
+					if (moved || (roster === 0) !== (seats.length === 0) || game !== gameId) render();
 				},
 
 				/*

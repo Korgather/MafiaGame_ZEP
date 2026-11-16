@@ -208,6 +208,13 @@ export interface RuleSet {
 	readonly chatMode: ChatMode;
 	/** 찬반 동수에서 처형하는가 살리는가 */
 	readonly judgementTie: JudgementTie;
+	/**
+	 * 낮 토론 중 여론조사(의심 표시)를 여는가.
+	 *
+	 * 표가 아니라 의견이다 — 투표·처형 어느 계산도 읽지 않는다. 끄면 보드에서
+	 * 집계 줄이 사라지고 서버는 의심 표시를 버린다 (docs/design/classic-mode-rules.md).
+	 */
+	readonly dayPoll: boolean;
 }
 
 /**
@@ -364,6 +371,7 @@ export const STANDARD_RULES: RuleSet = {
 	maxPlayers: 12,
 	chatMode: "free",
 	judgementTie: "execute",
+	dayPoll: true,
 };
 
 /**
@@ -408,6 +416,7 @@ export const BLITZ_RULES: RuleSet = {
 	// 찬반이 4초다. 못 누른 사람이 동수를 만드는 판이 흔한데 그 판마다
 	// 처형까지 나가면 3분 단판이 지목 한 번으로 끝난다
 	judgementTie: "execute",
+	dayPoll: true,
 };
 
 /**
@@ -436,6 +445,7 @@ export const SILENCE_RULES: RuleSet = {
 	chatMode: "phrasesOnly",
 	// 표준전에서 갈라져 나온 모드다. 표준전과 다르게 둘 이유가 없다
 	judgementTie: "execute",
+	dayPoll: true,
 };
 
 /**
@@ -573,6 +583,7 @@ export const CLASSIC_RULES: RuleSet = {
 	// 찬반은 5초짜리 단계고 인원이 늘수록 못 누른 사람이 늘어 동수가 흔한데,
 	// 그 동수를 전부 살리는 쪽으로 보내면 12인 판에서 처형이 거의 나지 않는다
 	judgementTie: "execute",
+	dayPoll: true,
 };
 
 /**

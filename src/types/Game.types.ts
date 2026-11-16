@@ -13,6 +13,7 @@
  * 봐서는 답이 안 나오는 질문이 된다.
  */
 import type { ScriptWidget, VignetteEasing, WidgetAlign } from "zep-script";
+import type { WidgetBox } from "../constants/Assets.ts";
 import type { ChatChannel } from "../domain/chat/ChatChannel.ts";
 import type { ChatMessage } from "../domain/chat/ChatMessage.ts";
 import type { NightIntent, NightReveal } from "../domain/NightPipeline.ts";
@@ -167,6 +168,13 @@ export interface Seat {
 	/** 이번 투표에서 받은 표 수 */
 	voteCount: number;
 	/**
+	 * 낮 여론조사에서 의심한다고 표시한 사람의 참가 번호. 0이면 없다.
+	 *
+	 * votedFor와 따로 둔다. 이것은 규칙에 닿지 않는 의견 표시라 투표·처형
+	 * 어느 계산도 읽지 않는다 — 섞이면 "의심"이 표처럼 굴게 된다.
+	 */
+	suspect: number;
+	/**
 	 * 이번 찬반투표에서 고른 것. DEFENSE에 들어갈 때 NONE으로 초기화된다.
 	 *
 	 * votedFor와 합치지 않는다 — 지목 투표는 대상을 고르는 일이고 찬반은
@@ -182,6 +190,8 @@ export interface Seat {
 	 * 부결시킨 쪽에게 다시 토론할 시간을 주는 것이 재지목의 취지다.
 	 */
 	timeVoteSpent: boolean;
+	/** 이번 투표에서 "투표를 마쳤습니다" 기록을 이미 남겼는가. 표를 바꿀 때마다 줄이 쌓이지 않게 */
+	voteLogged: boolean;
 	/** 이번 밤에 의사가 치료한 대상인가 */
 	healed: boolean;
 	/**
@@ -385,6 +395,12 @@ export type CutTone =
  * 무엇이 도는 중인가"는 방의 사실이라, 도중에 들어온 사람에게도 남은 만큼을
  * 그대로 보여줄 수 있다(GameFlow.showPhaseView).
  */
+/** 공개 사건 한 줄. when은 묶음 이름("1일차 밤")이라 위젯이 그대로 제목으로 쓴다 */
+export interface TimelineEntry {
+	when: string;
+	text: string;
+}
+
 export interface ActiveCut {
 	readonly title: string;
 	readonly lines: string[];
@@ -518,9 +534,17 @@ export interface Room {
 	 * 모른 채 토론에 들어갔다. 방에 남겨두면 재접속한 사람도 볼 수 있다.
 	 */
 	nightReport: string[];
+	/**
+	 * 이 판에서 방 전체에 공개된 사건 (오래된 것부터). Chat.announce가 적는다.
+	 *
+	 * nightReport는 하룻밤짜리라 아침마다 비워진다. 재접속 요약·유령과 관전자의
+	 * 보드·종료 화면의 다시보기는 판 전체가 필요해서 따로 쌓는다.
+	 * 공개된 줄만 들어온다 — 마피아·유령 채널과 개인 안내는 announce를 지나지 않는다.
+	 */
+	timeline: TimelineEntry[];
 	/** 이번 밤에 쌓인 지목. 밤이 끝날 때 NightPipeline이 순서대로 적용한다 */
 	nightIntents: NightIntent[];
-	/** 아침 진입 직전에 각자에게 전할 밤의 답. 전하고 나면 비운다 */
+	/** 아침에 각자에게 전할 밤의 답. 낮 보드에도 그날 내내 남고, 다음 밤 정산이 덮어쓴다 */
 	nightReveals: NightReveal[];
 	seats: Seat[];
 	/**
@@ -618,7 +642,7 @@ export interface PlayerTag {
 	 * 위젯 핸들에는 자기 크기가 남지 않는데, 채팅을 펼칠 때 메인 위젯의
 	 * 상자를 다시 계산해야 한다(Widgets.squeezeMain). 그 재료를 여기 둔다.
 	 */
-	mainBox: { align: WidgetAlign; size: { width: number; height: number; mobile?: number } } | null;
+	mainBox: { align: WidgetAlign; size: WidgetBox } | null;
 	/**
 	 * 메인 위젯이 어느 판·어느 단계의 화면으로 열렸는가.
 	 *
@@ -633,6 +657,11 @@ export interface PlayerTag {
 	 * 도장을 빠뜨린 경로가 생겨도 조용히 입력이 막히지는 않는다.
 	 */
 	mainStamp: PhaseStamp | null;
+	/**
+	 * 판 내내 위에 떠 있는 HUD (단계·시간·내 직업). 메인 위젯과 따로 산다 —
+	 * 단계마다 다시 열면 시계가 깜박이고 ±15초를 누르던 손이 허공을 친다.
+	 */
+	hudWidget: ScriptWidget | null;
 	/**
 	 * 카드 위젯 (직업 공개 · 첫 안내 · 직업 도감이 함께 쓰는 자리).
 	 *
@@ -723,4 +752,8 @@ export interface PlayerTag {
 	 * 신고 기능이 그대로 도배 도구가 된다.
 	 */
 	reported: { [playerId: string]: boolean };
+	/** 첫 판이 시작된 시각(ms). 첫 능력·첫 투표까지 걸린 시간을 재는 기준이다 */
+	ftueStartedAt: number;
+	/** 첫 판에서 투표 대상을 바꾼 횟수. 망설임의 크기를 본다 */
+	ftueChanges: number;
 }

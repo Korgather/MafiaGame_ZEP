@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>상태 줄</title>
+		<!--@theme-->
+		<style>
+			/*
+			 * 판 내내 위에 떠 있는 한 줄. 단계·N일차·남은 시간·내 직업·생존 수.
+			 *
+			 * 단계 화면(보드)은 단계마다 새로 열리지만 이 줄은 판이 끝날 때까지
+			 * 그대로다. 그래서 "지금 몇 초 남았나 / 나는 누구인가"를 보려고 보드를
+			 * 뒤질 일이 없다. 높이는 48px(폰 44px) 한 줄이다.
+			 */
+			.panel.hud {
+				flex-direction: row;
+				align-items: center;
+				gap: var(--s2);
+				padding: 0 var(--s3);
+			}
+
+			.ph {
+				display: flex;
+				align-items: center;
+				gap: var(--s1);
+				flex: 0 1 auto;
+				min-width: 0;
+				font-size: var(--t-md);
+				font-weight: 800;
+				white-space: nowrap;
+			}
+
+			.ph .day-n {
+				font-size: var(--t-xs);
+				color: var(--ink-2);
+			}
+
+			/* 한 줄 안에 들어가도록 시계 숫자를 줄인다 */
+			.hud .clock .n {
+				font-size: var(--t-xl);
+			}
+
+			/*
+			 * 누군가 ±15초를 쓰면 시계 옆에 바뀐 만큼이 잠깐 뜬다. 시계 숫자가
+			 * 말없이 튀면 고장으로 읽힌다. 누가 썼는지는 채팅 한 줄이 말한다
+			 */
+			.clock-wrap {
+				position: relative;
+				flex: 0 0 auto;
+			}
+			.delta {
+				position: absolute;
+				left: 100%;
+				top: 0;
+				margin-left: 2px;
+				font-size: var(--t-xs);
+				font-weight: 800;
+				color: var(--accent);
+				white-space: nowrap;
+				pointer-events: none;
+				animation: delta 1.5s var(--ease) both;
+			}
+			@keyframes delta {
+				0% {
+					opacity: 0;
+					transform: translateY(4px);
+				}
+				15%,
+				70% {
+					opacity: 1;
+					transform: none;
+				}
+				100% {
+					opacity: 0;
+					transform: translateY(-6px);
+				}
+			}
+
+			.hud .chip {
+				margin-left: auto;
+				min-width: 0;
+				overflow: hidden;
+			}
+
+			.hud .stat {
+				flex: 0 0 auto;
+				font-size: var(--t-xs);
+				font-weight: 700;
+				color: var(--ink-2);
+				font-variant-numeric: tabular-nums;
+				white-space: nowrap;
+			}
+
+			/* 남은 시간 선은 줄 맨 아래에 얇게 깐다. 높이를 따로 먹지 않는다 */
+			.hud .timeline {
+				position: absolute;
+				left: var(--s3);
+				right: var(--s3);
+				bottom: 3px;
+				height: 2px;
+			}
+
+			/*
+			 * 첫 판인 사람에게만 "지금 할 일" 한 줄이 붙는다. 데스크톱은 서버가 상자를
+			 * 68px로 키워 준다(Assets.WidgetSize.HUD_COACH). 모바일은 56px까지만 키우므로
+			 * 위 줄을 한 단 낮춰 넣는다.
+			 */
+			.hud .coach {
+				display: none;
+			}
+			.panel.hud.coached {
+				flex-wrap: wrap;
+				align-content: center;
+				row-gap: 0;
+			}
+			.hud.coached .coach {
+				display: block;
+				flex: 1 0 100%;
+				min-width: 0;
+				margin: 0;
+				font-size: var(--t-xs);
+				line-height: 1.25;
+				color: var(--ink-2);
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			/* 위 줄을 낮추는 것은 56px 상자(모바일)에서만. 키운 상자(데스크톱)는 그대로 둔다 */
+			@media (max-height: 59px) {
+				.hud.coached .ph {
+					font-size: var(--t-sm);
+				}
+				.hud.coached .clock .n {
+					font-size: var(--t-md);
+				}
+				.hud.coached .timeline {
+					bottom: 1px;
+				}
+			}
+			@media (min-height: 60px) {
+				.hud.coached .coach {
+					font-size: var(--t-sm);
+				}
+			}
+
+			/* 좁은 폰에서는 생존 수부터 접는다. 직업 칩과 시계가 먼저다 */
+			@media (max-width: 340px) {
+				.hud .stat {
+					display: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel hud" id="panel">
+			<span class="ph">
+				<span id="glyph" aria-hidden="true"></span>
+				<span id="phase">밤</span>
+				<span class="day-n" id="turn"></span>
+			</span>
+			<span class="clock-wrap"><span class="clock" id="timer"></span><span id="delta"></span></span>
+			<span class="chip" id="myrole">직업</span>
+			<span class="stat" id="alive"></span>
+			<p class="coach" id="coach" role="status" aria-live="polite"></p>
+			<div class="timeline" aria-hidden="true"><i></i></div>
+		</div>
+
+		<!--@shared-->
+		<script>
+			// 진영은 색만으로 말하지 않는다. 칩 글자에 팀 이름을 함께 적는다
+			const TEAM_NAME = { mafia: "마피아팀", citizen: "시민팀" };
+
+			/* 클래스를 뗐다 붙이며 그 사이에 레이아웃을 한 번 읽어야 애니메이션이 처음부터 다시 돈다 */
+			function flashDelta(delta) {
+				const el = qs("#delta");
+				el.classList.remove("delta");
+				void el.offsetWidth;
+				el.textContent = delta ? `${delta > 0 ? "+" : "−"}${Math.abs(delta)}초` : "";
+				if (delta) el.classList.add("delta");
+			}
+
+			Parent.on({
+				init(data) {
+					const phase = String(data.phase || "");
+					const panel = qs("#panel");
+					// 같은 위젯이 판 내내 단계만 바꿔 받는다. 지난 단계 배경을 걷는다
+					panel.classList.remove("night", "day", "vote");
+					panel.classList.add(
+						phase === "NIGHT" || phase === "ROLE_REVEAL" ? "night" : phase === "DAY" ? "day" : "vote"
+					);
+					setGlyph(qs("#glyph"), data.glyph || "");
+					qs("#phase").textContent = data.label || "";
+					termTitle(qs("#phase"), data.label || "");
+					qs("#turn").textContent = data.turn ? `${data.turn}일차` : "";
+
+					// 직업 칩도 판 내내 같은 엘리먼트다. 죽으면 진영 색을 걷어야 한다
+					const me = data.role || {};
+					const team = TEAM_NAME[me.team] || "";
+					const role = qs("#myrole");
+					role.innerHTML = String(html`${glyphHtml(me.glyph)} ${me.name || ""}${team ? " · " + team : ""}`);
+					role.classList.remove("dead", "mafia", "citizen");
+					role.classList.add(team ? me.team : "dead");
+					// 진영 글자가 빠진 회색 칩은 유령이다. 관전자 칩은 이름 자체가 "관전"이다
+					termTitle(role, team ? me.name || "" : me.name === "관전" ? "" : "유령");
+
+					// 첫 판이 아니면 서버가 빈 문자열을 보낸다
+					const coach = String(data.coach || "");
+					qs("#coach").textContent = coach ? `지금 할 일: ${coach}` : "";
+					panel.classList.toggle("coached", coach !== "");
+
+					qs("#alive").textContent = `생존 ${Number(data.alive) || 0}/${Number(data.total) || 0}`;
+					flashDelta(0);
+					startTimer(qs("#timer"), Number(data.timer) || 0);
+				},
+
+				/* 누군가 ±15초를 눌렀다. 시계를 다시 맞추고 바뀐 만큼을 띄운다 */
+				timer(data) {
+					flashDelta(Number(data.delta) || 0);
+					startTimer(qs("#timer"), Number(data.timer) || 0);
+				},
+			});
+		</script>
+	</body>
+</html>

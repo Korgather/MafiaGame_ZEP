@@ -33,21 +33,41 @@
 				border: 1px solid var(--line);
 				border-radius: var(--r2);
 				background: var(--surface-2);
+				/* 판이 끝났다는 도장. 비스듬히 크게 떨어져 제자리에 찍힌다.
+				   움직임 줄이기 설정은 theme.css가 모든 animation을 1ms로 눌러 처리한다 */
+				animation: stamp 520ms var(--ease) both;
 			}
 
+			@keyframes stamp {
+				from {
+					opacity: 0;
+					transform: scale(1.8) rotate(-6deg);
+				}
+				60% {
+					opacity: 1;
+					transform: scale(0.94) rotate(-2deg);
+				}
+				to {
+					transform: scale(1) rotate(-2deg);
+				}
+			}
+
+			/* 진영은 글자(마피아/시민 승리)와 글리프(🔪/🕊️)가 말하고, 색과 빛은 거든다 */
 			.verdict.mafia {
 				color: var(--mafia-ink);
 				border-color: var(--mafia);
 				background: var(--mafia-dim);
+				box-shadow: 0 0 18px var(--mafia);
 			}
 			.verdict.citizen {
 				color: var(--citizen-ink);
 				border-color: var(--citizen);
 				background: var(--citizen-dim);
+				box-shadow: 0 0 18px var(--citizen);
 			}
 
 			.verdict .crown {
-				font-size: var(--t-xl);
+				font-size: var(--t-2xl);
 				line-height: 1;
 				animation: drop 500ms var(--ease);
 			}
@@ -60,8 +80,8 @@
 			}
 
 			.verdict .who {
-				font-size: var(--t-xl);
-				font-weight: 800;
+				font-size: var(--t-2xl);
+				font-weight: 900;
 				letter-spacing: -0.02em;
 			}
 
@@ -69,7 +89,7 @@
 				display: flex;
 				flex-direction: column;
 				gap: 3px;
-				margin-bottom: var(--s2);
+				margin: var(--s2) 0;
 				padding: var(--s2);
 				font-size: var(--t-xs);
 				color: var(--ink-2);
@@ -82,6 +102,33 @@
 				content: "내 플레이 복기";
 				font-weight: 800;
 				color: var(--accent);
+			}
+
+			/* 복기할 줄이 없으면(첫 밤에 끝난 판 등) 머리말만 남은 빈 상자를 숨긴다 */
+			.recap:empty {
+				display: none;
+			}
+
+			/*
+			 * "그래서 그날 밤 무슨 일이"를 되짚는 자리. 접힌 한 줄로 목록 위에 둔다 —
+			 * 정체 목록 아래에 두면 6명 판에서도 화면 밖이라 스크롤해야 보였다
+			 */
+			.replay-box {
+				margin-bottom: var(--s2);
+			}
+
+			.replay-box > summary {
+				padding: var(--s1) 0;
+				font-size: var(--t-xs);
+				font-weight: 800;
+				color: var(--accent);
+				cursor: pointer;
+			}
+
+			.replay-box > summary:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+				border-radius: var(--r1);
 			}
 
 			/*
@@ -262,9 +309,14 @@
 				<span class="who" id="who">게임 종료</span>
 			</div>
 
+			<!-- 누가 무엇이었는지가 먼저다. 복기와 다시보기는 그 아래에서 찾아 읽는다 -->
 			<div class="body scroll" id="listbox">
-				<div class="recap" id="recap"></div>
 				<div class="reveal" id="reveal"></div>
+				<div class="recap" id="recap"></div>
+				<details class="replay-box hidden" id="replayBox">
+					<summary>판 다시보기 <span id="replayCount"></span></summary>
+					<div class="replay" id="replay"></div>
+				</details>
 			</div>
 
 			<!--
@@ -343,6 +395,8 @@
 			}
 
 			qs("#listbox").addEventListener("scroll", paintCut);
+			// 다시보기를 펼치고 접으면 목록 길이가 바뀐다. toggle은 버블링하지 않아 잡아서 받는다
+			qs("#listbox").addEventListener("toggle", paintCut, true);
 
 			/**
 			 * "한 판 더" 현황. init에 실려 오고, 누가 누를 때마다 rematch 조각으로
@@ -373,7 +427,9 @@
 			Parent.on({
 				init(data) {
 					const mafiaWon = data.winner === "mafia";
-					qs("#verdict").classList.add(mafiaWon ? "mafia" : "citizen");
+					// add가 아니라 toggle이다. 화면이 다시 열리면 지난 판의 진영 색이 남는다
+					qs("#verdict").classList.toggle("mafia", mafiaWon);
+					qs("#verdict").classList.toggle("citizen", !mafiaWon);
 					setGlyph(qs("#crown"), mafiaWon ? "🔪" : "🕊️");
 					qs("#who").textContent = mafiaWon ? "마피아 승리" : "시민 승리";
 					qs("#reason").textContent = data.reason || "";
@@ -393,8 +449,12 @@
 					const recap = Array.isArray(data.recap) ? data.recap.slice(0, 3) : [];
 					qs("#recap").innerHTML = html`${recap.map(line => html`<span>${line}</span>`)}`;
 					qs("#reveal").innerHTML = html`${players.map(revealHtml)}`;
-					// 목록을 그린 직후에만 잰다. 이 화면에서 상자 높이가 바뀌는
-					// 다른 경로는 없다 — 아래 rematch 조각은 버튼 안의 글자만 바꾼다
+					const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+					qs("#replay").innerHTML = replayHtml(timeline);
+					qs("#replayCount").textContent = `· ${timeline.length}건`;
+					qs("#replayBox").classList.toggle("hidden", timeline.length === 0);
+					// 목록을 그린 직후에 잰다. 그 뒤로 높이가 바뀌는 길은 다시보기를
+					// 펼치고 접는 것뿐이고 위 toggle이 받는다 — rematch 조각은 버튼 글자만 바꾼다
 					paintCut();
 					if (data.praised === true) paintPraised(0);
 

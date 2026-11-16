@@ -597,6 +597,8 @@ function checkWidget(name, client) {
 	const asked = [];
 	for (const scene of SCENES) {
 		if (scene.file !== name) continue;
+		// 프레임보다 오래 사는 값(Parent.store). 보드가 남긴 메모, 접기 전에 쓰던 글 같은 것
+		if (scene.store) Object.assign(window.parent.__mafiaWidget, scene.store);
 		for (const message of scene.messages) {
 			if (message.type === "say") asked.push(message);
 			for (const handler of listeners) {
@@ -606,6 +608,11 @@ function checkWidget(name, client) {
 					report(`[${scene.label}] ${message.type} 처리 중 예외: ${error.message}`);
 				}
 			}
+		}
+
+		// 화면이 다 그려진 뒤에 누르는 키 (scene.press). 막힌 탭에서 Enter 같은 것
+		for (const key of scene.press || []) {
+			for (const entry of document.keys) entry.handler(keyEvent(key, false, entry.el));
 		}
 
 		/*
@@ -670,7 +677,8 @@ function checkWidget(name, client) {
 }
 
 /** 실제로 눌러보는 키. 채팅 위젯이 다루는 것 전부다 */
-const KEYS = ["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "/", "a"];
+// 숫자는 보드의 좌석 고르기다(1–9, 0=10)
+const KEYS = ["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "/", "a", "1", "0"];
 
 function keyEvent(key, shiftKey, target) {
 	return {

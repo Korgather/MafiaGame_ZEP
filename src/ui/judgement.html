@@ -50,11 +50,6 @@
 				letter-spacing: -0.02em;
 			}
 
-			.stand-sub {
-				font-size: var(--t-sm);
-				color: var(--ink-2);
-			}
-
 			/*
 			 * O/X. 둘의 폭이 같아서 화면이 어느 쪽으로도 손을 유도하지 않는다.
 			 *
@@ -107,7 +102,24 @@
 			 * 않는다. 바깥에 링을 하나 두르는 쪽이 두 상태를 확실히 가른다.
 			 */
 			.judge-btn.picked {
-				box-shadow: 0 0 0 2px var(--accent);
+				position: relative;
+				box-shadow:
+					0 0 0 3px var(--cream),
+					0 0 0 5px var(--accent);
+			}
+			.judge-btn.picked::after {
+				content: "✔ 내 선택";
+				position: absolute;
+				top: 4px;
+				right: 6px;
+				font-size: var(--t-xs);
+			}
+			/*
+			 * 고르지 않은 쪽은 물러난다. 둘 다 원색이라 링 하나로는 어느 쪽인지 한눈에 안 온다.
+			 * 잠긴 단추(:disabled 0.55)보다 덜 흐리게 둔다 — 이쪽은 눌러서 바꿀 수 있다
+			 */
+			.has-pick .judge-btn:not(.picked) {
+				opacity: 0.7;
 			}
 
 			/*
@@ -141,7 +153,6 @@
 		<div class="panel vote">
 			<div class="idbar">
 				<span class="chip" id="myrole">직업</span>
-				<span class="ability" id="ability"></span>
 				<span class="stat" id="sub"></span>
 			</div>
 
@@ -159,7 +170,6 @@
 			<div class="stand">
 				<div class="stand-mark" id="mark" aria-hidden="true" data-glyph="auto">🎤</div>
 				<div class="stand-name ellip" id="name"></div>
-				<div class="stand-sub" id="standsub"></div>
 			</div>
 
 			<!--
@@ -195,14 +205,15 @@
 			let canJudge = false;
 
 			function paintPicked() {
+				qs("#buttons").classList.toggle("has-pick", picked !== NONE);
 				for (const el of qsa(".judge-btn")) {
 					el.classList.toggle("picked", el.dataset.pick === picked);
 				}
 			}
 
 			function pickNote() {
-				if (picked === AGREE) return "찬성했습니다. 다시 누르면 취소됩니다.";
-				if (picked === OPPOSE) return "반대했습니다. 다시 누르면 취소됩니다.";
+				if (picked === AGREE) return "찬성했습니다. 반대를 누르면 바뀌고, 다시 누르면 취소됩니다.";
+				if (picked === OPPOSE) return "반대했습니다. 찬성을 누르면 바뀌고, 다시 누르면 취소됩니다.";
 				return "고르지 않으면 반대로 셉니다.";
 			}
 
@@ -225,7 +236,7 @@
 			 *
 			 * 이 함수를 defense와 judge 두 이름으로 등록한다. 다른 위젯처럼
 			 * init 하나로 받고 단계를 따로 실어 보낼 수도 있지만, 이 파일은
-			 * vote.html과 같은 꼴이다 — 거기서도 투표와 개표가 init/result로
+			 * board.html의 투표와 같은 꼴이다 — 거기서도 투표와 개표가 init/result로
 			 * 나뉘어 있고 서버는 어느 화면을 열지를 type으로 말한다.
 			 */
 			function paint(data, judging) {
@@ -241,14 +252,14 @@
 				role.innerHTML = String(html`${glyphHtml(data.glyph)} ${data.role || ""}`);
 				role.className =
 					"chip " + (data.alive === false ? "dead" : data.team === "mafia" ? "mafia" : "citizen");
-				qs("#ability").textContent = data.abilityLine || "";
 
 				// 가장 큰 글씨는 할 일이다. 서버가 보내지 않으면 단계에 맞는
 				// 기본 명령문으로 물러난다
 				qs("#heading").textContent = data.lead || (judging ? "처형할까요?" : "해명을 들으세요");
+				// 지시문은 서버가 사람마다 바꾸지만 단계 이름의 뜻은 같다
+				termTitle(qs("#heading"), judging ? "찬반 투표" : "최후의 반론");
 				setGlyph(qs("#mark"), judging ? "🗳️" : "🎤");
 				qs("#name").textContent = data.nomineeName || `${nominee}번`;
-				qs("#standsub").textContent = judging ? "이 사람을 처형할까요?" : "해명을 듣는 중입니다";
 
 				for (const el of qsa(".judge-btn")) el.disabled = !canJudge;
 				paintPicked();

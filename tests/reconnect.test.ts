@@ -24,6 +24,7 @@ import {
 	findMainWidget,
 	findSeatOf,
 	finishPhase,
+	hudWidget,
 	joinRoom,
 	leaveWhileStillListed,
 	mainWidget,
@@ -169,6 +170,11 @@ describe("재접속", () => {
 		assert.equal(seat.role, role);
 		assert.equal(seat.connected, true);
 		assert.equal(leaver.disableAttack, true, "진행 중 재접속인데 기본 공격 잠금이 복구되지 않았습니다");
+		// 끊기기 전 HUD는 클라이언트와 함께 죽었다. 새로 열려 지금 단계를 받아야 한다
+		const hud = hudWidget(leaver);
+		assert.equal(hud.destroyed, false, "HUD가 다시 열리지 않았습니다");
+		assert.equal(hud.fileName, WidgetFile.HUD);
+		assert.equal(hud.lastOfType("init")?.phase, room(1).phase);
 	});
 
 	it("밤에 돌아오면 자기 직업의 밤 화면을 다시 받는다", () => {
@@ -182,10 +188,32 @@ describe("재접속", () => {
 		reconnect(player);
 
 		const widget = freshMain(player);
-		assert.equal(widget.fileName, WidgetFile.ROLE_ACTION, "밤 능력 화면이 열리지 않았습니다");
+		assert.equal(widget.fileName, WidgetFile.BOARD, "밤 능력 화면이 열리지 않았습니다");
 		const init = widget.lastOfType("init");
 		assert.ok(init, "init 페이로드를 받지 못했습니다");
 		assert.equal(init.myNum, mafia.index);
+		assert.equal(init.picked, 0);
+		assert.equal(init.locked, false);
+	});
+
+	it("밤에 지목한 뒤 돌아오면 그 지목이 바꿀 수 있는 채로 보인다", () => {
+		startPlainGame(MIN_PLAYERS);
+		const target = room(1);
+		finishPhase(target); // → NIGHT
+
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		const player = playerOf(mafia);
+		send(player, { type: "select", num: victim.index });
+		disconnect(player);
+		reconnect(player);
+
+		const init = freshMain(player).lastOfType("init");
+		assert.ok(init, "init 페이로드를 받지 못했습니다");
+		assert.equal(init.mode, "action", "지목한 사람에게 격자 대신 대기 화면이 갔습니다");
+		assert.equal(init.picked, victim.index, "끊기기 전 지목이 화면에서 사라졌습니다");
+		// 밤이 끝나기 전에는 대상을 바꿀 수 있다. 돌아왔다고 그 권리가 사라지면 안 된다
+		assert.equal(init.locked, false, "돌아오자 대상을 바꿀 수 없게 잠겼습니다");
 	});
 
 	it("낮에 돌아오면 아침 화면을 다시 받는다", () => {
@@ -199,7 +227,7 @@ describe("재접속", () => {
 		reconnect(player);
 
 		const widget = freshMain(player);
-		assert.equal(widget.fileName, WidgetFile.PHASE);
+		assert.equal(widget.fileName, WidgetFile.BOARD);
 		const payload = widget.lastOfType("init");
 		assert.ok(payload, "아침 화면이 payload 없이 열렸습니다");
 		assert.equal(payload.phase, "day");
@@ -219,9 +247,14 @@ describe("재접속", () => {
 		disconnect(player);
 		reconnect(player);
 
-		assert.equal(freshMain(player).fileName, WidgetFile.VOTE);
+		assert.equal(freshMain(player).fileName, WidgetFile.BOARD);
 		vote(player, victim.index);
 		assert.ok(victim.voteCount > 0, "재접속 후 투표가 집계되지 않았습니다");
+
+		// 한 번 더 끊겨도 찍어 둔 표가 화면에 살아난다
+		disconnect(player);
+		reconnect(player);
+		assert.equal(freshMain(player).lastOfType("init")?.picked, victim.index, "찍어 둔 표가 화면에서 사라졌습니다");
 	});
 
 	it("직업 공개 중에 돌아오면 직업 카드를 다시 받는다", () => {
@@ -261,7 +294,7 @@ describe("재접속", () => {
 		assert.equal(ghost.name, `${victim.index}번 참가자`);
 		assert.equal(ghost.title, "");
 		const widget = freshMain(ghost);
-		assert.equal(widget.fileName, WidgetFile.PHASE);
+		assert.equal(widget.fileName, WidgetFile.BOARD);
 		const payload = widget.lastOfType("init");
 		assert.ok(payload, "아침 화면이 payload 없이 열렸습니다");
 		assert.equal(payload.alive, false, "유령이 산 사람 화면을 보고 있습니다");
@@ -306,7 +339,7 @@ describe("재접속", () => {
 
 		// 투표와 개표는 같은 파일이다. 구분은 payload의 type이 한다
 		const widget = freshMain(player);
-		assert.equal(widget.fileName, WidgetFile.VOTE);
+		assert.equal(widget.fileName, WidgetFile.BOARD);
 		const board = widget.lastOfType("result");
 		assert.ok(board, "개표판을 받지 못했습니다");
 		assert.equal(

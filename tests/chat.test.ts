@@ -19,6 +19,7 @@ import { CHAT_RATE, MAX_PLAYERS, MIN_PLAYERS, ROOM_COUNT } from "../src/constant
 import { isInsideRoom, seatPosition } from "../src/constants/RoomLayout.ts";
 import { ChatChannel } from "../src/domain/chat/ChatChannel.ts";
 import { maskProfanity } from "../src/domain/chat/ChatFilter.ts";
+import { quickFor } from "../src/domain/chat/QuickPhrases.ts";
 import { MessageKind } from "../src/domain/chat/ChatMessage.ts";
 import type { ChatContext } from "../src/domain/chat/ChatPermission.ts";
 import {
@@ -64,6 +65,7 @@ import {
 	startPlainGame,
 	switchChannel,
 	tick,
+	vote,
 	world,
 } from "./helpers/Harness.ts";
 
@@ -149,7 +151,12 @@ function killOnSecondNight(target: Room, mafia: FakePlayer, victim: Seat): void 
 describe("채널 권한 표", () => {
 	it("직업 카드 공개 중에는 어느 채널로도 말할 수 없다", () => {
 		const reveal = ctx({ phase: GamePhase.ROLE_REVEAL, mafiaChat: true });
-		for (const channel of [ChatChannel.GLOBAL, ChatChannel.ROOM, ChatChannel.MAFIA, ChatChannel.GHOST]) {
+		for (const channel of [
+			ChatChannel.GLOBAL,
+			ChatChannel.ROOM,
+			ChatChannel.MAFIA,
+			ChatChannel.GHOST,
+		]) {
 			assert.equal(accessOf(reveal, channel).write, false, `${channel}이 열려 있습니다`);
 		}
 	});
@@ -157,7 +164,12 @@ describe("채널 권한 표", () => {
 	it("밤의 시민은 어느 채널로도 말할 수 없다", () => {
 		// 이 판정이 무너지면 밤이 만드는 정보 비대칭이 통째로 사라진다.
 		const night = ctx({ phase: GamePhase.NIGHT });
-		for (const channel of [ChatChannel.GLOBAL, ChatChannel.ROOM, ChatChannel.MAFIA, ChatChannel.GHOST]) {
+		for (const channel of [
+			ChatChannel.GLOBAL,
+			ChatChannel.ROOM,
+			ChatChannel.MAFIA,
+			ChatChannel.GHOST,
+		]) {
 			assert.equal(accessOf(night, channel).write, false, `${channel}이 열려 있습니다`);
 		}
 		// 다만 듣는 것은 막지 않는다 — 시스템 안내가 그 길로 온다
@@ -169,10 +181,13 @@ describe("채널 권한 표", () => {
 			read: true,
 			write: false,
 		});
-		assert.deepEqual(rw(accessOf(ctx({ mafiaChat: true, phase: GamePhase.NIGHT }), ChatChannel.MAFIA)), {
-			read: true,
-			write: true,
-		});
+		assert.deepEqual(
+			rw(accessOf(ctx({ mafiaChat: true, phase: GamePhase.NIGHT }), ChatChannel.MAFIA)),
+			{
+				read: true,
+				write: true,
+			}
+		);
 	});
 
 	it("죽은 사람은 낮 토론을 보되 끼어들 수 없다", () => {
@@ -195,13 +210,19 @@ describe("채널 권한 표", () => {
 		assert.equal(accessOf(onTrial, ChatChannel.ROOM).write, false);
 		// 유혹이 없으면 같은 자리에서 말할 수 있어야 한다 — 위 결과가
 		// DEFENSE 규칙이 아니라 유혹 때문임을 못 박는다
-		assert.equal(accessOf(ctx({ phase: GamePhase.DEFENSE, nominee: true }), ChatChannel.ROOM).write, true);
+		assert.equal(
+			accessOf(ctx({ phase: GamePhase.DEFENSE, nominee: true }), ChatChannel.ROOM).write,
+			true
+		);
 	});
 
 	it("영매는 밤에만 유령의 말을 듣는다", () => {
 		const shaman = ctx({ ghostChat: true });
 		assert.equal(accessOf(shaman, ChatChannel.GHOST).read, false);
-		assert.equal(accessOf(ctx({ ghostChat: true, phase: GamePhase.NIGHT }), ChatChannel.GHOST).read, true);
+		assert.equal(
+			accessOf(ctx({ ghostChat: true, phase: GamePhase.NIGHT }), ChatChannel.GHOST).read,
+			true
+		);
 	});
 
 	it("판이 끝나면 유령도 방 채팅으로 모인다", () => {
@@ -243,6 +264,21 @@ describe("채널 권한 표", () => {
 		assert.equal(preferredChannel(lobby, ChatChannel.GLOBAL), ChatChannel.GLOBAL);
 		assert.equal(preferredChannel(lobby, ChatChannel.ROOM), ChatChannel.ROOM);
 	});
+
+	it("빠른 문구는 보고 있는 탭을 따른다", () => {
+		// 칩은 활성 탭으로 나간다. 밤의 연인·영매는 상황만 보면 "말 못 하는 밤"이라
+		// 칩이 비었고, 유령에게는 알 수 없는 사실("봤어요")을 퍼뜨리는 칩이 있었다
+		const night = { phase: GamePhase.NIGHT };
+		assert.ok(quickFor(ctx({ ...night, mafiaChat: true }), ChatChannel.MAFIA).length > 0);
+		assert.ok(quickFor(ctx({ ...night, loverChat: true }), ChatChannel.LOVER).length > 0);
+		assert.ok(quickFor(ctx({ ...night, ghostChat: true }), ChatChannel.GHOST).length > 0);
+		const ghost = quickFor(ctx({ alive: false }), ChatChannel.GHOST);
+		assert.ok(ghost.length > 0);
+		assert.equal(ghost.indexOf("누가 죽였는지 봤어요"), -1);
+		assert.notDeepEqual(quickFor(ctx({ ...night, loverChat: true }), ChatChannel.LOVER), ghost);
+		// 쓸 수 없는 탭에는 칩이 없다 — 낮에 방 탭을 보는 유령
+		assert.deepEqual(quickFor(ctx({ alive: false }), ChatChannel.ROOM), []);
+	});
 });
 
 describe("게스트 채팅", () => {
@@ -262,7 +298,10 @@ describe("게스트 채팅", () => {
 		sendChat(guest, { type: "send", channel: ChatChannel.GLOBAL, text: "우회 발언" });
 
 		assert.equal(chatSaw(listener, "우회 발언"), false);
-		assert.equal(spokenAloud(guest).some(line => line.text === "우회 발언"), false);
+		assert.equal(
+			spokenAloud(guest).some(line => line.text === "우회 발언"),
+			false
+		);
 		assert.ok(guest.labels.some(text => text.indexOf("로그인 후 채팅") >= 0));
 	});
 });
@@ -273,12 +312,17 @@ describe("채널 격리", () => {
 		const target = room(1);
 		const citizen = playerOf(seatsWithRole(target, Role.CITIZEN)[0]);
 
-		assert.equal(chatChannels(citizen).some(channel => channel.id === ChatChannel.GLOBAL), false);
+		assert.equal(
+			chatChannels(citizen).some(channel => channel.id === ChatChannel.GLOBAL),
+			false
+		);
 		finishPhase(target); // ROLE_REVEAL → NIGHT
 
 		assert.equal(activeChannel(citizen), ChatChannel.ROOM);
 		assert.ok(
-			chatLines(citizen, ChatChannel.ROOM).some(line => line.text === "🌙 밤에는 채팅을 할 수 없습니다.")
+			chatLines(citizen, ChatChannel.ROOM).some(
+				line => line.text === "🌙 밤에는 채팅을 할 수 없습니다."
+			)
 		);
 		assert.equal(
 			chatLines(citizen, ChatChannel.GLOBAL).some(line => line.text.indexOf("밤에는 채팅") >= 0),
@@ -304,7 +348,9 @@ describe("채널 격리", () => {
 
 		chat(sender, "번호로 불러주세요", ChatChannel.ROOM);
 
-		const line = chatLines(sender, ChatChannel.ROOM).find(message => message.text === "번호로 불러주세요");
+		const line = chatLines(sender, ChatChannel.ROOM).find(
+			message => message.text === "번호로 불러주세요"
+		);
 		assert.ok(line, "게임 중 발언이 채팅에 도착하지 않았습니다");
 		assert.equal(line.num, target.seats[0].index);
 		assert.equal(line.name, `${target.seats[0].index}번 참가자`);
@@ -315,7 +361,11 @@ describe("채널 격리", () => {
 
 		chat(mafia, "3번 칩시다");
 
-		assert.equal(activeChannel(mafia), ChatChannel.MAFIA, "밤이 되면 탭이 밀담으로 옮겨가야 합니다");
+		assert.equal(
+			activeChannel(mafia),
+			ChatChannel.MAFIA,
+			"밤이 되면 탭이 밀담으로 옮겨가야 합니다"
+		);
 		assert.ok(chatSaw(mafia, "3번 칩시다"));
 		for (const player of everyone) {
 			if (player === mafia) continue;
@@ -396,6 +446,130 @@ describe("채널 격리", () => {
 		assert.equal(chatSaw(doctor, "저를 죽인 건 1번입니다"), false, "영매가 아닌데 들었습니다");
 	});
 
+	it("영매의 채팅 창은 유령 탭이 처음 열릴 때만 다시 열고, 낮의 유령 말은 채워 준다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.SHAMAN, Role.DOCTOR, Role.POLICE, Role.CITIZEN]);
+		const target = room(1);
+		const mafia = playerOf(seatsWithRole(target, Role.MAFIA)[0]);
+		const shaman = playerOf(seatsWithRole(target, Role.SHAMAN)[0]);
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+		finishPhase(target); // ROLE_REVEAL → NIGHT (유령 탭이 처음 열린다)
+		const firstNight = chatWidget(shaman);
+		killOnSecondNight(target, mafia, victim); // 둘째 밤에 죽고 낮으로 나온다
+		chat(playerOf(victim), "낮에 남기는 유령의 추측", ChatChannel.GHOST);
+		assert.equal(
+			chatSaw(shaman, "낮에 남기는 유령의 추측"),
+			false,
+			"영매가 낮에 유령 말을 들었습니다"
+		);
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT
+		finishPhase(target); // → NIGHT (셋째 밤)
+		assert.equal(target.phase, GamePhase.NIGHT);
+		// 밤마다 다시 열면 쓰던 스크롤·메모가 밤마다 날아간다
+		assert.equal(chatWidget(shaman), firstNight, "다음 밤에 채팅 창을 다시 열었습니다");
+		assert.ok(
+			chatSaw(shaman, "낮에 남기는 유령의 추측"),
+			"닫혀 있던 사이의 유령 말이 채워지지 않았습니다"
+		);
+	});
+
+	/*
+	 * 성불 결과는 밤 정산에서 나온다. 단계를 넘기기 전에 전하면 아직 밤이라
+	 * 영매가 볼 탭이 유령 탭이고, 아침이 오면 그 탭은 영매에게 닫힌다 —
+	 * 결과가 읽을 수 없는 채널에 묻혀 능력 하나가 통째로 헛것이 됐다.
+	 */
+	it("영매의 성불 결과는 낮의 방 탭에서 보인다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.SHAMAN, Role.CITIZEN, Role.CITIZEN, Role.DOCTOR]);
+		const target = room(1);
+		const mafia = playerOf(seatsWithRole(target, Role.MAFIA)[0]);
+		const shaman = playerOf(seatsWithRole(target, Role.SHAMAN)[0]);
+		const victim = seatsWithRole(target, Role.CITIZEN)[0];
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		killOnSecondNight(target, mafia, victim);
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT
+		finishPhase(target); // → NIGHT (셋째 밤)
+		send(shaman, { type: "select", num: victim.index });
+		finishPhase(target); // → 정산 → DAY
+
+		assert.equal(target.phase, GamePhase.DAY);
+		assert.equal(activeChannel(shaman), ChatChannel.ROOM);
+		assert.ok(
+			chatLines(shaman, ChatChannel.ROOM).some(line => line.text.indexOf("🔮") === 0),
+			"성불 결과가 낮의 방 탭에 없습니다"
+		);
+	});
+
+	it("밤 안내는 그 밤에 볼 탭에 놓인다", () => {
+		startGame(6, 1, [Role.MAFIA, Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		const mafia = playerOf(seatsWithRole(target, Role.MAFIA)[0]);
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+
+		assert.equal(activeChannel(mafia), ChatChannel.MAFIA);
+		assert.ok(
+			chatLines(mafia, ChatChannel.MAFIA).some(line => line.text.indexOf("팀원과 대화") >= 0),
+			"마피아의 밤 안내가 밀담 탭에 없습니다"
+		);
+	});
+
+	/*
+	 * 위젯은 받은 줄만 들고 있다. 탭 목록만 보내면 막 죽은 사람의 유령 탭은
+	 * 먼저 죽은 사람들이 나눈 대화 없이 빈 채로 열린다.
+	 */
+	it("막 죽은 사람의 유령 탭에는 앞서 나눈 대화가 있다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		const mafia = playerOf(seatsWithRole(target, Role.MAFIA)[0]);
+		const [first, second] = seatsWithRole(target, Role.CITIZEN);
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		killOnSecondNight(target, mafia, first);
+		chat(playerOf(first), "먼저 와 있었어요", ChatChannel.GHOST);
+		finishPhase(target); // → VOTE
+		finishPhase(target); // → VOTE_RESULT
+		finishPhase(target); // → NIGHT (셋째 밤)
+		send(mafia, { type: "select", num: second.index });
+		finishPhase(target); // → 정산 → DAY
+
+		assert.equal(second.alive, false, "지목 대상이 죽지 않았습니다");
+		const ghost = playerOf(second);
+		assert.equal(activeChannel(ghost), ChatChannel.GHOST);
+		const lines = chatLines(ghost, ChatChannel.GHOST);
+		assert.ok(
+			lines.some(line => line.text === "먼저 와 있었어요"),
+			"유령 탭이 기록 없이 열렸습니다"
+		);
+		assert.ok(
+			lines.some(line => line.text.indexOf("ZEP 기본 채팅창") >= 0),
+			"사망 안내가 유령 탭에 없습니다"
+		);
+	});
+
+	it("밀담에 합류한 스파이는 낮의 방 탭에서 그 사실을 듣는다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.SPY, Role.CITIZEN, Role.CITIZEN, Role.DOCTOR]);
+		const target = room(1);
+		const mafiaSeat = seatsWithRole(target, Role.MAFIA)[0];
+		const spy = playerOf(seatsWithRole(target, Role.SPY)[0]);
+
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		passPeacefulFirstNight(target); // 첫 밤에는 능력을 쓰지 않는다 → 둘째 밤
+		send(spy, { type: "select", num: mafiaSeat.index });
+		finishPhase(target); // → 정산 → DAY
+
+		assert.equal(target.phase, GamePhase.DAY);
+		assert.ok(
+			chatChannels(spy).some(tab => tab.id === ChatChannel.MAFIA),
+			"밀담 탭이 열리지 않았습니다"
+		);
+		const notices = chatLines(spy, ChatChannel.ROOM).filter(
+			line => line.text.indexOf("마피아 탭에서 팀과") >= 0
+		);
+		assert.equal(notices.length, 1, "합류 안내가 방 탭에 한 번 오지 않았습니다");
+	});
+
 	it("전체 채팅은 방을 넘어 닿지만 방 채팅은 넘지 않는다", () => {
 		const outside = connect("바깥사람");
 		const inside = connect("방사람");
@@ -458,9 +632,7 @@ describe("ZEP 기본 채팅으로 내보내기", () => {
 		chat(doctor, "3번이 수상해요", ChatChannel.ROOM);
 
 		assert.ok(chatSaw(doctor, "3번이 수상해요"), "토론 자체는 방 화면에 떠야 합니다");
-		assert.deepEqual(spokenAloud(doctor), [
-			{ text: "3번이 수상해요", area: "PRIVATE_AREA" },
-		]);
+		assert.deepEqual(spokenAloud(doctor), [{ text: "3번이 수상해요", area: "PRIVATE_AREA" }]);
 	});
 
 	/*
@@ -614,11 +786,7 @@ describe("맵 자가 점검", () => {
 		paintPrivateArea(1);
 		paintPrivateArea(3);
 
-		assert.deepEqual(
-			auditRoomAreas(),
-			[2, 4, 5, 6, 7, 8],
-			"칠하지 않은 방을 찾지 못했습니다"
-		);
+		assert.deepEqual(auditRoomAreas(), [2, 4, 5, 6, 7, 8], "칠하지 않은 방을 찾지 못했습니다");
 		assert.equal(world.staffSays.length, 1, "스태프에게 알리지 않았습니다");
 		assert.match(world.staffSays[0], /2, 4, 5, 6, 7, 8번/);
 	});
@@ -732,8 +900,12 @@ describe("탭과 미확인 표시", () => {
 		joinRoom(player, 1);
 
 		const summary = room(1).ruleSet.summary;
-		const inRoom = chatLines(player, ChatChannel.ROOM).filter(line => line.text.indexOf(summary) >= 0);
-		const inGlobal = chatLines(player, ChatChannel.GLOBAL).filter(line => line.text.indexOf(summary) >= 0);
+		const inRoom = chatLines(player, ChatChannel.ROOM).filter(
+			line => line.text.indexOf(summary) >= 0
+		);
+		const inGlobal = chatLines(player, ChatChannel.GLOBAL).filter(
+			line => line.text.indexOf(summary) >= 0
+		);
 		assert.equal(inRoom.length, 1);
 		assert.equal(inGlobal.length, 0, "방 규칙 안내가 로비 광장에 떨어졌습니다");
 	});
@@ -790,17 +962,22 @@ describe("알림과 기록", () => {
 		const system = lines.filter(line => line.kind === MessageKind.SYSTEM);
 		const events = lines.filter(line => line.kind === MessageKind.EVENT);
 
-		for (const mark of ["게임을 시작합니다", "밤이 되었습니다", "아침이 밝았습니다", "투표가 시작"]) {
+		for (const mark of [
+			"게임을 시작합니다",
+			"밤이 되었습니다",
+			"아침이 밝았습니다",
+			"투표가 시작",
+		]) {
 			assert.ok(
 				system.some(line => line.text.indexOf(mark) >= 0),
-				`단계 안내에 "${mark}"가 없습니다`,
+				`단계 안내에 "${mark}"가 없습니다`
 			);
 		}
 		// 사건 목록에는 실제로 벌어진 일만 남는다
 		assert.ok(events.length > 0, "사건 기록이 하나도 없습니다");
 		assert.ok(
 			events.every(line => line.text.indexOf("되었습니다.") < 0 || line.text.indexOf("☠️") >= 0),
-			"단계 안내가 사건으로 분류되어 있습니다",
+			"단계 안내가 사건으로 분류되어 있습니다"
 		);
 	});
 
@@ -965,8 +1142,17 @@ describe("채팅 명령어", () => {
 		chat(guest, "/도움말");
 		chat(admin, "/도움말");
 
-		assert.equal(cardShown(guest).cards.map(card => card.title).indexOf("/경험치"), -1);
-		assert.ok(cardShown(admin).cards.map(card => card.title).indexOf("/경험치") >= 0);
+		assert.equal(
+			cardShown(guest)
+				.cards.map(card => card.title)
+				.indexOf("/경험치"),
+			-1
+		);
+		assert.ok(
+			cardShown(admin)
+				.cards.map(card => card.title)
+				.indexOf("/경험치") >= 0
+		);
 	});
 
 	it("모르는 명령어는 안내를 돌려준다", () => {
@@ -1359,5 +1545,73 @@ describe("채팅 필터", () => {
 
 	it("영어 욕은 대소문자를 가리지 않는다", () => {
 		assert.equal(maskProfanity("What the FUCK"), "What the ●●●●");
+	});
+});
+
+/*
+ * 채팅 리뉴얼. 화면이 "누가 읽는가"를 미리 보여 주고, 판의 사실(누가 투표를
+ * 마쳤나, 무슨 컷이 지나갔나)이 방 기록에 남는다.
+ */
+describe("채팅 — 청중과 사건 기록", () => {
+	it("모든 탭이 누가 읽는지를 싣는다", () => {
+		const [player] = startPlainGame(MIN_PLAYERS);
+		const tabs = chatChannels(player);
+		assert.ok(tabs.length > 0);
+		for (const tab of tabs) assert.ok(tab.audience !== "", `${tab.id} 탭에 청중이 없습니다`);
+		assert.equal(tabs.filter(tab => tab.id === ChatChannel.ROOM)[0].audience, "같은 방 모두");
+	});
+
+	it("투표를 마친 사실은 한 번만, 누구를 찍었는지는 빼고 방에 남는다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // → DAY
+		finishPhase(target); // → VOTE
+		assert.equal(target.phase, GamePhase.VOTE);
+
+		const mafia = playerOf(seatsWithRole(target, Role.MAFIA)[0]);
+		const [voter, picked] = seatsWithRole(target, Role.CITIZEN);
+		const doctor = seatsWithRole(target, Role.DOCTOR)[0];
+		vote(playerOf(voter), picked.index);
+		vote(playerOf(voter), doctor.index); // 바꿔 찍어도 한 줄이다
+
+		const logs = chatLines(mafia).filter(line => line.text.indexOf("투표를 마쳤습니다") >= 0);
+		assert.equal(logs.length, 1, "투표 기록이 한 번이 아닙니다");
+		assert.equal(logs[0].channel, ChatChannel.ROOM);
+		for (const seat of [picked, doctor]) {
+			assert.equal(logs[0].text.indexOf(seat.name), -1, "찍은 사람이 드러났습니다");
+		}
+		assert.equal(
+			chatLines(mafia, ChatChannel.MAFIA).some(line => line.text.indexOf("투표를 마쳤습니다") >= 0),
+			false,
+			"행동 기록이 마피아 밀담 탭에 섞였습니다"
+		);
+	});
+
+	it("토론 시간 조절 기록은 방에만 남는다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.DOCTOR, Role.POLICE, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // → DAY
+		const mafia = playerOf(seatsWithRole(target, Role.MAFIA)[0]);
+		send(mafia, { type: "time", delta: 15 });
+
+		assert.ok(
+			chatLines(mafia, ChatChannel.ROOM).some(line => line.text.indexOf("15초 늘렸습니다") >= 0)
+		);
+		assert.equal(
+			chatLines(mafia, ChatChannel.MAFIA).some(line => line.text.indexOf("15초 늘렸습니다") >= 0),
+			false
+		);
+	});
+
+	it("컷이 지나가면 같은 내용이 방에 사건 카드로 남는다", () => {
+		const [player] = startPlainGame(MIN_PLAYERS);
+		const card = chatLines(player, ChatChannel.ROOM).filter(
+			line => line.text === "🎭 게임 시작"
+		)[0];
+		assert.ok(card, "게임 시작 컷이 기록에 없습니다");
+		assert.equal(card.kind, MessageKind.EVENT);
+		assert.ok(card.rows.some(row => row.label === `${MIN_PLAYERS}명이 참가합니다.`));
 	});
 });

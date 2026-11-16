@@ -27,6 +27,7 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 		widget: null,
 		mainBox: null,
 		mainStamp: null,
+		hudWidget: null,
 		cardWidget: null,
 		cutWidget: null,
 		profileWidget: null,
@@ -51,6 +52,8 @@ export function tagOf(player: ScriptPlayer): PlayerTag {
 		actionRate: newBucket(ACTION_RATE, Time.getUtcTime()),
 		blocked: {},
 		reported: {},
+		ftueStartedAt: 0,
+		ftueChanges: 0,
 	};
 	player.tag = created;
 	return created;
@@ -62,6 +65,10 @@ export function destroyWidgets(player: ScriptPlayer): void {
 	if (tag.widget) {
 		tag.widget.destroy();
 		tag.widget = null;
+	}
+	if (tag.hudWidget) {
+		tag.hudWidget.destroy();
+		tag.hudWidget = null;
 	}
 	if (tag.cardWidget) {
 		tag.cardWidget.destroy();

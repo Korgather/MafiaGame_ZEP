@@ -235,3 +235,83 @@ function setGlyph(el, glyph) {
 
 /** 마크업에 박힌 글리프(data-glyph)를 그림으로 바꾼다. shared는 body 끝에 들어가 DOM이 이미 있다 */
 qsa('[data-glyph="auto"]').forEach(el => setGlyph(el, el.textContent.trim()));
+
+/** 방에 공개된 사건 기록을 날(밤·낮)마다 접어 그린다. 보드(유령·관전)와 종료 화면이 함께 쓴다.
+ * 마지막 묶음만 펼친다 — 방금 일어난 일이 먼저 눈에 들어와야 한다 */
+function replayHtml(entries) {
+	const groups = [];
+	for (const entry of Array.isArray(entries) ? entries : []) {
+		const last = groups[groups.length - 1];
+		if (last && last.when === entry.when) last.lines.push(entry.text);
+		else groups.push({ when: entry.when, lines: [entry.text] });
+	}
+	return html`${groups.map(
+		(group, i) => html`<details ${flag(i === groups.length - 1, "open")}>
+			<summary>${group.when} <span class="n">${group.lines.length}건</span></summary>
+			${group.lines.map(line => html`<p>${line}</p>`)}
+		</details>`
+	)}`;
+}
+
+/*
+ * 처음 하는 사람이 막히는 낱말. 단계 이름·모드 제목·직업 칩에 마우스를 올리면
+ * 뜻이 뜬다(title). 위젯 셋(HUD·보드·찬반)이 같은 낱말을 쓰므로 한 표에 둔다.
+ */
+const TERMS = {
+	"직업 확인": "카드를 뒤집어 이번 판의 내 직업과 능력을 확인하는 시간",
+	밤: "마피아와 능력이 있는 직업이 몰래 대상을 고르는 시간",
+	낮: "밤사이 일을 듣고 채팅으로 누가 마피아인지 토론하는 시간",
+	투표: "처형 후보를 한 명 지목하는 투표. 가장 많이 받은 사람이 단상에 오른다",
+	개표: "투표 결과를 공개한다. 동률이거나 '투표 없음'이 많으면 아무도 오르지 않는다",
+	"최후의 반론": "단상에 오른 사람이 처형 전에 해명하는 시간. 나머지는 듣는다",
+	"찬반 투표": "단상에 오른 사람을 처형할지 찬성(O)·반대(X)로 정한다",
+	지목: "투표나 밤 능력으로 대상을 고르는 일",
+	유령: "죽은 사람. 유령끼리만 대화할 수 있고 투표·능력은 쓸 수 없다",
+	영매: "밤마다 유령과 대화하고, 그중 한 명을 성불시켜 직업을 보는 시민 직업",
+	여론조사: "낮 토론 중 의심 가는 사람을 표시한다. 투표·처형과는 무관한 참고용이다",
+};
+
+/** 낱말이 표에 없으면 title을 비운다. 지난 단계의 설명이 남지 않게 */
+function termTitle(el, word) {
+	el.title = TERMS[word] || "";
+}
+
+/*
+ * 내 추정 메모. 채팅이 적고(명단 칩·말한 사람 번호) 보드가 읽는다(칸의 점선 칩).
+ *
+ * 판마다 따로 적는다(gameId). Parent.store는 위젯을 다시 열어도 남고,
+ * localStorage는 새로고침(재접속)에도 남는다. 교차 출처라 store가 위젯마다
+ * 따로 놀아도 localStorage는 같은 출처의 두 위젯이 함께 본다. 서버로는 보내지 않는다.
+ */
+const MEMO_KEY = "mafia.memo";
+
+function memoLoad(gameId) {
+	try {
+		const memo = Parent.store.memo && Parent.store.memo[gameId];
+		if (memo) return memo;
+	} catch (e) {
+		// 아래 localStorage가 받는다
+	}
+	try {
+		const saved = JSON.parse(localStorage.getItem(MEMO_KEY) || "null");
+		// 지난 판 메모는 버린다. 한 판 것만 두므로 저장소가 자라지 않는다
+		if (saved && saved.gameId === gameId && saved.memo) return saved.memo;
+	} catch (e) {
+		// 사생활 보호 모드에서는 localStorage가 던진다
+	}
+	return {};
+}
+
+function memoSave(gameId, memo) {
+	try {
+		if (!Parent.store.memo) Parent.store.memo = {};
+		Parent.store.memo[gameId] = memo;
+	} catch (e) {
+		// 아래 localStorage가 받는다
+	}
+	try {
+		localStorage.setItem(MEMO_KEY, JSON.stringify({ gameId, memo }));
+	} catch (e) {
+		// 둘 다 막히면 이 위젯이 살아 있는 동안만 남는다
+	}
+}

@@ -85,6 +85,19 @@ export function nightActionBlockedReason(
 }
 
 /**
+ * 이번 밤에 이미 고른 대상을 다른 사람으로 바꿀 수 있는가.
+ *
+ * 지목은 밤 끝에 정산되므로(NightPipeline) 그 전까지 바꿔도 잃는 것이 없다.
+ * 횟수(usesSpent)도 정산 때 오른다. 두 흐름만 뺀다 — 쪽지는 문구까지 골라
+ * 이미 보낸 것이고, 접선한 스파이는 둘째 지목이라는 따로 된 길이 있다.
+ */
+export function canRetarget(seat: Seat): boolean {
+	if (!seat.usedSkill) return false;
+	if (effectiveDef(seat).nightAction === NightActionKind.NOTE) return false;
+	return !hasExtraProbe(seat);
+}
+
+/**
  * 이 좌석이 이번 판에 추가 첩보를 아직 들고 있는가.
  *
  * "지금 한 명을 더 고를 수 있는가"와는 다르다 — 그쪽에는 이번 밤에 이미

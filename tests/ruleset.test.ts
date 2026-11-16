@@ -338,8 +338,8 @@ describe("침묵전의 낮", () => {
 	});
 
 	it("준비된 문구가 여덟 개 나온다", () => {
-		assert.equal(quickFor(silentDay).length, 8);
-		assert.ok(quickFor(silentDay).includes("의심됩니다"));
+		assert.equal(quickFor(silentDay, ChatChannel.ROOM).length, 8);
+		assert.ok(quickFor(silentDay, ChatChannel.ROOM).includes("의심됩니다"));
 	});
 
 	it("표준전 낮은 자유 입력이 열려 있다", () => {

@@ -32,6 +32,7 @@ import {
 	disconnect,
 	findMainWidget,
 	findSeatOf,
+	hudWidget,
 	finishPhase,
 	hasCard,
 	hasCut,
@@ -434,7 +435,7 @@ describe("밤 단계", () => {
 		const widget = mainWidget(playerOf(politician));
 
 		// 밤과 아침은 같은 파일이다. 어느 쪽인지는 payload의 phase가 정한다
-		assert.equal(widget.fileName, WidgetFile.PHASE);
+		assert.equal(widget.fileName, WidgetFile.BOARD);
 		// 마지막 메시지가 아니라 "열릴 때 받은 것"을 본다. 단계 화면은 열린 뒤에도
 		// 진행률 같은 갱신을 계속 받으므로 last()로 잡으면 무엇이 잡힐지 그때그때 다르다
 		const payload = widget.lastOfType("init");
@@ -459,7 +460,7 @@ describe("밤 단계", () => {
 		const mafia = seatsWithRole(target, Role.MAFIA)[0];
 		const widget = mainWidget(playerOf(mafia));
 
-		assert.equal(widget.fileName, WidgetFile.ROLE_ACTION);
+		assert.equal(widget.fileName, WidgetFile.BOARD);
 		// 지목 화면은 열리자마자 진행률(progress)을 한 줄 더 받는다. 여는 payload는
 		// init 하나뿐이므로 그것을 집어서 본다
 		const payload = widget.lastOfType("init");
@@ -529,7 +530,7 @@ describe("밤 단계", () => {
 		assert.equal(target.phase, GamePhase.DAY);
 	});
 
-	it("같은 밤에 두 번 지목할 수 없다", () => {
+	it("같은 밤에 다시 지목하면 능력을 두 번 쓰는 대신 대상이 바뀐다", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = room(1);
 		finishPhase(target);
@@ -540,12 +541,11 @@ describe("밤 단계", () => {
 		send(playerOf(mafia), { type: "select", num: others[0].index });
 		send(playerOf(mafia), { type: "select", num: others[1].index });
 
-		// 두 번째 클릭은 nightActionBlockedReason이 막으므로 지목이 하나만 남는다.
-		// putIntent가 교체하기 때문이 아니라 애초에 두 번째가 오지 않는 것이다
+		// 두 번째 클릭은 첫 지목을 갈아 끼운다(canRetarget). 지목이 둘 쌓이면 능력을 두 번 쓴 것이다
 		assert.deepEqual(
 			target.nightIntents,
-			[{ actor: mafia.index, target: others[0].index }],
-			"능력을 두 번 썼습니다"
+			[{ actor: mafia.index, target: others[1].index }],
+			"능력을 두 번 썼거나 대상이 바뀌지 않았습니다"
 		);
 	});
 
@@ -574,7 +574,7 @@ describe("밤 단계", () => {
 		// payload에 seats가 있는지로는 더 이상 구분되지 않는다
 		assert.equal(
 			mainWidget(playerOf(vigilante)).fileName,
-			WidgetFile.PHASE,
+			WidgetFile.BOARD,
 			"첫 밤에 지목 격자가 열렸습니다"
 		);
 		assert.ok(
@@ -591,7 +591,7 @@ describe("밤 단계", () => {
 		assert.ok(secondNight, "둘째 밤 화면이 payload 없이 열렸습니다");
 		assert.equal(
 			mainWidget(playerOf(vigilante)).fileName,
-			WidgetFile.ROLE_ACTION,
+			WidgetFile.BOARD,
 			"낮을 보냈는데도 지목 격자가 열리지 않았습니다"
 		);
 		assert.ok(secondNight.seats, "지목 격자가 대상 목록 없이 열렸습니다");
@@ -1103,7 +1103,10 @@ describe("스킵 · 재판 · 시간 조절", () => {
 		startPlainGame(MIN_PLAYERS, 5);
 		const target = reachVote(5);
 		assert.equal(target.ruleSet.judgementTie, "execute", "표준전의 동수는 처형이어야 합니다");
-		(target as { ruleSet: typeof target.ruleSet }).ruleSet = { ...target.ruleSet, judgementTie: "spare" };
+		(target as { ruleSet: typeof target.ruleSet }).ruleSet = {
+			...target.ruleSet,
+			judgementTie: "spare",
+		};
 		const nominee = seatsWithRole(target, Role.CITIZEN)[0];
 		const others = target.seats.filter(seat => seat.index !== nominee.index);
 
@@ -1218,6 +1221,12 @@ describe("스킵 · 재판 · 시간 조절", () => {
 
 		const before = target.phaseTimer;
 		const [user, other] = target.seats;
+		// 단추는 낮 보드 머리말에 있다. HUD 한 줄에 끼어 있을 때는 아무도 찾지 못했다
+		assert.equal(
+			mainWidget(playerOf(user)).lastOfType("init")?.timeVote,
+			true,
+			"낮 보드에 시간 단추가 없습니다"
+		);
 
 		send(playerOf(user), { type: "time", delta: 15 });
 		assert.equal(target.phaseTimer, before + 15, "연장이 반영되지 않았습니다");
@@ -1228,10 +1237,20 @@ describe("스킵 · 재판 · 시간 조절", () => {
 		);
 
 		// 위젯은 시계를 스스로 돌리므로 바깥에서 바뀐 시간은 한 번 맞춰 준다
-		const synced = mainWidget(playerOf(other)).lastOfType("timer");
+		const synced = hudWidget(playerOf(other)).lastOfType("timer");
 		assert.ok(synced, "바뀐 시간이 화면에 전달되지 않았습니다");
 		assert.equal(synced.timer, before + 15);
-		assert.equal(synced.timeVote, true, "아직 안 쓴 사람의 버튼이 사라졌습니다");
+		assert.equal(synced.delta, 15, "시계 옆에 바뀐 만큼이 뜨지 않습니다");
+		assert.equal(
+			mainWidget(playerOf(other)).lastOfType("timer")?.timeVote,
+			true,
+			"아직 안 쓴 사람의 버튼이 사라졌습니다"
+		);
+		assert.equal(
+			mainWidget(playerOf(user)).lastOfType("timer")?.timeSpent,
+			true,
+			"쓴 사람에게 썼다는 표시가 없습니다"
+		);
 
 		// 같은 사람의 두 번째는 방향을 바꿔도 막힌다
 		send(playerOf(user), { type: "time", delta: -15 });
@@ -1248,7 +1267,7 @@ describe("스킵 · 재판 · 시간 조절", () => {
 		startPlainGame(MIN_PLAYERS);
 		const target = reachVote();
 
-		// 투표 단계다. 낮 화면은 이미 닫혔지만 조작된 메시지는 올 수 있다
+		// 투표 단계다. 낮 보드에서 늦게 도착한 메시지가 올 수 있다
 		const before = target.phaseTimer;
 		const seat = target.seats[0];
 		send(playerOf(seat), { type: "time", delta: 15 });
@@ -1899,6 +1918,125 @@ describe("진행 화면의 좌석 목록", () => {
 });
 
 /**
+ * 밤 지목은 밤 끝에 정산된다. 그 전까지는 마음을 바꿀 수 있어야 한다 —
+ * 잘못 누른 한 번이 그 밤을 통째로 버리게 하지 않는다.
+ */
+describe("밤 지목 바꾸기", () => {
+	function openNight() {
+		startGame(5, 1, [Role.MAFIA, Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		return {
+			target,
+			doctor: seatsWithRole(target, Role.DOCTOR)[0],
+			police: seatsWithRole(target, Role.POLICE)[0],
+			citizen: seatsWithRole(target, Role.CITIZEN)[0],
+		};
+	}
+
+	function intentOf(target: ReturnType<typeof room>, seat: Seat): number {
+		const found = target.nightIntents.filter(intent => intent.actor === seat.index)[0];
+		return found ? found.target : 0;
+	}
+
+	it("고른 뒤 다른 칸을 누르면 지목이 바뀌고 화면은 잠기지 않는다", () => {
+		const { target, doctor, police, citizen } = openNight();
+		const widget = mainWidget(playerOf(doctor));
+
+		send(playerOf(doctor), { type: "select", num: police.index });
+		assert.equal(
+			widget.lastOfType("selectResponse")?.changeable,
+			true,
+			"고르자마자 격자가 잠겼습니다"
+		);
+
+		send(playerOf(doctor), { type: "select", num: citizen.index });
+		assert.equal(intentOf(target, doctor), citizen.index, "바꾼 대상이 기록되지 않았습니다");
+		assert.equal(widget.lastOfType("selectResponse")?.num, citizen.index);
+		assert.equal(target.nightIntents.length, 1, "지목이 하나 더 쌓였습니다");
+	});
+
+	it("바꿔도 총성은 처음 한 번만 울린다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const [first, second] = target.seats.filter(seat => seat !== mafia);
+		const listener = playerOf(first);
+
+		send(playerOf(mafia), { type: "select", num: first.index });
+		const heard = listener.sounds.length;
+		assert.ok(heard > 0, "첫 지목의 총성이 들리지 않았습니다");
+		send(playerOf(mafia), { type: "select", num: second.index });
+		// 두 번 울리면 마피아가 마음을 바꿨다는 것이 온 방에 들린다
+		assert.equal(listener.sounds.length, heard, "지목을 바꿨더니 방 전체에 소리가 또 났습니다");
+	});
+
+	it("쪽지는 문구를 고르기 전이면 대상을 다시 고를 수 있다", () => {
+		const { target, citizen, police, doctor } = openNight();
+		const widget = mainWidget(playerOf(citizen));
+
+		send(playerOf(citizen), { type: "select", num: police.index });
+		send(playerOf(citizen), { type: "select", num: doctor.index });
+		assert.equal(
+			widget.lastOfType("phrases")?.num,
+			doctor.index,
+			"다시 고른 대상의 문구 화면이 오지 않았습니다"
+		);
+		send(playerOf(citizen), { type: "phrase", index: 0 });
+		assert.equal(intentOf(target, citizen), doctor.index);
+	});
+
+	it("한 번뿐인 능력은 밤이 끝나기 전에 거둘 수 있고 횟수가 남는다", () => {
+		startGame(5, 1, [Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.REPORTER, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		finishPhase(target); // → DAY
+		const reporter = seatsWithRole(target, Role.REPORTER)[0];
+		const police = seatsWithRole(target, Role.POLICE)[0];
+		while (target.phase !== GamePhase.NIGHT) finishPhase(target);
+		const widget = mainWidget(playerOf(reporter));
+		assert.equal(widget.lastOfType("init")?.final, true);
+
+		send(playerOf(reporter), { type: "select", num: police.index });
+		assert.equal(widget.lastOfType("selectResponse")?.changeable, true);
+
+		send(playerOf(reporter), { type: "cancel" });
+		assert.ok(widget.lastOfType("cancelled"), "취소가 화면에 전달되지 않았습니다");
+		assert.equal(intentOf(target, reporter), 0, "거둔 지목이 남았습니다");
+		assert.equal(reporter.usedSkill, false);
+
+		finishPhase(target); // 정산
+		assert.equal(reporter.usesSpent, 0, "거뒀는데 한 번뿐인 횟수가 사라졌습니다");
+	});
+
+	it("횟수 없는 능력은 취소를 받지 않는다 — 다시 고르면 바뀐다", () => {
+		startGame(4, 1, [Role.MAFIA, Role.POLICE, Role.DOCTOR, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const police = seatsWithRole(target, Role.POLICE)[0];
+		const widget = mainWidget(playerOf(mafia));
+		assert.equal(widget.lastOfType("init")?.final, false);
+
+		send(playerOf(mafia), { type: "select", num: police.index });
+		send(playerOf(mafia), { type: "cancel" });
+		assert.equal(widget.lastOfType("cancelled"), undefined, "마피아 지목이 취소되었습니다");
+		assert.equal(intentOf(target, mafia), police.index);
+	});
+
+	it("다 쓴 쪽지는 바꿀 수 없다", () => {
+		const { target, citizen, police, doctor } = openNight();
+
+		send(playerOf(citizen), { type: "select", num: police.index });
+		send(playerOf(citizen), { type: "phrase", index: 0 });
+		assert.notEqual(mainWidget(playerOf(citizen)).lastOfType("selectResponse")?.changeable, true);
+		send(playerOf(citizen), { type: "select", num: doctor.index });
+		assert.equal(intentOf(target, citizen), police.index, "보낸 쪽지의 대상이 바뀌었습니다");
+	});
+});
+
+/**
  * 시민의 익명 쪽지는 클릭이 두 번이다. 대상을 고르면 격자가 잠기는 대신
  * 문구 목록이 오고, 문구를 고르는 두 번째 클릭에서야 확정된다.
  *
@@ -2271,5 +2409,46 @@ describe("밤에 알아낸 것의 배달", () => {
 		send(playerOf(police), { type: "select", num: mafia.index });
 		finishPhase(target);
 		assert.ok(chatSaw(playerOf(police), answer), "차단이 풀린 밤에도 답이 오지 않았습니다");
+	});
+});
+
+describe("밤의 답은 낮 보드에 남는다", () => {
+	it("경찰의 조사 결과는 그날 낮 보드에 그 사람에게만 붙는다", () => {
+		// 채팅 한 줄로만 오면 토론에 밀려 올라가 버린다. 낮 내내 보드에 못 박는다
+		startGame(5, 1, [Role.POLICE, Role.MAFIA, Role.DOCTOR, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		const police = seatsWithRole(target, Role.POLICE)[0];
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+		const citizen = seatsWithRole(target, Role.CITIZEN)[0];
+
+		send(playerOf(police), { type: "select", num: mafia.index });
+		finishPhase(target); // NIGHT → DAY
+
+		const answer = target.nightReveals.find(reveal => reveal.seat === police.index);
+		assert.ok(answer, "경찰에게 갈 밤의 답이 없습니다");
+		const mine = mainWidget(playerOf(police)).lastOfType("init")?.mine as string[];
+		assert.deepEqual(mine, [answer.line]);
+		const theirs = mainWidget(playerOf(citizen)).lastOfType("init")?.mine as string[];
+		assert.deepEqual(theirs, [], "조사 결과가 다른 사람 보드에 샜습니다");
+	});
+
+	it("그 밤에 죽은 경찰도 마지막 답을 본다", () => {
+		// 유령 보드는 판 기록(timeline)을 펼치고 사건 목록을 접는다. 나만 받은 답은
+		// 판 기록에 없으니 따로 실려야 한다. 7인인 이유는 6인 이하 첫 밤이 무사라서다
+		startGame(7, 1, [Role.POLICE, Role.MAFIA, Role.DOCTOR, Role.CITIZEN, Role.CITIZEN, Role.CITIZEN, Role.CITIZEN]);
+		const target = room(1);
+		finishPhase(target); // ROLE_REVEAL → NIGHT
+		const police = seatsWithRole(target, Role.POLICE)[0];
+		const mafia = seatsWithRole(target, Role.MAFIA)[0];
+
+		send(playerOf(police), { type: "select", num: mafia.index });
+		send(playerOf(mafia), { type: "select", num: police.index });
+		finishPhase(target); // NIGHT → DAY
+
+		assert.equal(police.alive, false, "경찰이 죽지 않아 이 테스트가 무의미합니다");
+		const view = mainWidget(playerOf(police)).lastOfType("init");
+		assert.ok((view?.timeline as unknown[]).length > 0, "유령인데 판 기록이 없습니다");
+		assert.equal((view?.mine as string[]).length, 1, "죽은 경찰의 보드에 조사 결과가 없습니다");
 	});
 });

@@ -19,7 +19,9 @@
  * 넓어지는 것이 전부이고, 배달 쪽은 바뀔 이유가 없다.
  */
 import { GamePhase } from "../../types/Game.types.ts";
+import { ChatChannel } from "./ChatChannel.ts";
 import type { ChatContext } from "./ChatPermission.ts";
+import { accessOf } from "./ChatPermission.ts";
 
 const QUICK_WORLD: string[] = ["안녕하세요", "같이 하실 분?", "ㅋㅋㅋ"];
 const QUICK_LOBBY: string[] = ["준비 완료", "잠깐만요", "한 명만 더!"];
@@ -40,7 +42,15 @@ const QUICK_DEFENSE: string[] = [
 /** 찬반투표 5초. 버튼은 위젯에 있고 여기는 이유를 한 줄 붙이는 자리다 */
 const QUICK_JUDGE: string[] = ["찬성합니다", "반대합니다", "잘 모르겠습니다"];
 const QUICK_MAFIA: string[] = ["이 사람 칩시다", "오늘은 넘기죠", "제가 갈게요"];
-const QUICK_GHOST: string[] = ["누가 죽였는지 봤어요", "억울합니다", "잘 싸웠습니다"];
+/*
+ * 유령은 자기를 누가 죽였는지 모른다(밤 정산은 사망만 알린다). 그래서
+ * "봤어요" 같은 문구는 거짓 정보를 칩 하나로 퍼뜨리는 버튼이 된다.
+ * 무덤의 대화는 추측과 복기다.
+ */
+const QUICK_GHOST: string[] = ["마피아는 누구 같아요?", "억울합니다", "잘 싸웠습니다"];
+/** 영매는 산 채로 유령 탭에 들어온 사람이다. 묻고 전하는 쪽이다 */
+const QUICK_MEDIUM: string[] = ["무슨 일이 있었나요?", "의심 가는 사람 있어요?", "제가 전할게요"];
+const QUICK_LOVER: string[] = ["누가 수상해요?", "내일 같이 투표해요", "조심하세요"];
 const QUICK_NONE: string[] = [];
 
 /**
@@ -87,15 +97,24 @@ export const QUICK_SILENCE_DAY: string[] = [
 	"잘 모르겠습니다",
 ];
 
-export function quickFor(ctx: ChatContext): string[] {
-	if (!ctx.seated) return QUICK_WORLD;
-	if (!ctx.alive) return QUICK_GHOST;
-	// 밤에 마피아가 아니면 말할 곳 자체가 없다 — 칩을 띄우면 눌러도 아무 일이 없다
-	if (ctx.phase === GamePhase.NIGHT) return ctx.mafiaChat ? QUICK_MAFIA : QUICK_NONE;
+/**
+ * 칩은 지금 보고 있는 탭(channel)으로 나간다 — 위젯이 활성 채널로 send한다.
+ *
+ * 그래서 상황(단계·생사)만 보고 고르면 어긋난다. 밤의 영매와 연인은
+ * "마피아가 아닌 밤"으로 분류돼 칩이 없었고, 낮에 방 탭을 보는 유령은
+ * 쓸 수도 없는 방 탭 위에 유령 문구를 받았다. 탭이 정하고, 그 탭에 쓸 수
+ * 없으면 비운다 — 눌러도 아무 일이 없는 칩은 없느니만 못하다.
+ */
+export function quickFor(ctx: ChatContext, channel: ChatChannel): string[] {
+	if (!accessOf(ctx, channel).write) return QUICK_NONE;
+	if (channel === ChatChannel.MAFIA) return QUICK_MAFIA;
+	if (channel === ChatChannel.LOVER) return QUICK_LOVER;
+	if (channel === ChatChannel.GHOST) return ctx.alive ? QUICK_MEDIUM : QUICK_GHOST;
+	if (channel === ChatChannel.GLOBAL) return QUICK_WORLD;
+	// 여기부터 방 탭. 쓸 수 있다는 것은 위 accessOf가 이미 확인했다 —
+	// 반론 중이면 단상 위 본인이고, 밤이나 직업 공개 중일 수는 없다
 	if (ctx.phase === GamePhase.LOBBY) return QUICK_LOBBY;
-	// 반론 중에 말할 수 있는 사람은 단상 위 한 명뿐이다. 나머지에게 칩을
-	// 내밀면 눌러도 아무 일이 없다 — 밤의 비마피아와 같은 이유로 비운다
-	if (ctx.phase === GamePhase.DEFENSE) return ctx.nominee ? QUICK_DEFENSE : QUICK_NONE;
+	if (ctx.phase === GamePhase.DEFENSE) return QUICK_DEFENSE;
 	if (ctx.phase === GamePhase.JUDGEMENT) return QUICK_JUDGE;
 	if (ctx.phase === GamePhase.VOTE || ctx.phase === GamePhase.VOTE_RESULT) return QUICK_VOTE;
 	if (ctx.phase === GamePhase.DAY) {

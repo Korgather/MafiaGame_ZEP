@@ -100,8 +100,16 @@ export interface ChannelDef {
 	 * 아래 zepAudienceFor 한 곳에서만 지킨다.
 	 */
 	readonly speaksInto: ZepAudience | null;
-	/** 입력창 안내 문구 */
+	/**
+	 * 입력창 안내 문구.
+	 *
+	 * 짧게 둔다. 누가 읽는지는 옆의 audience 칩이 이미 말한다 — 여기서
+	 * "마피아 팀에게만…"을 또 적으면 같은 말이 두 번 보이고, 380px 폰에서는
+	 * 칩과 문구가 입력칸을 나눠 먹어 정작 칠 자리가 좁아진다.
+	 */
 	readonly placeholder: string;
+	/** 입력창 옆 칩. 보내기 전에 "누가 읽는가"를 보여 준다 — 탭 이름만으로는 영매·관전자가 듣는지 모른다 */
+	readonly audience: string;
 }
 
 export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
@@ -110,7 +118,8 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 		glyph: "🌐",
 		revealsRole: false,
 		speaksInto: "PUBLIC_AREA",
-		placeholder: "전체에게 보내기",
+		placeholder: "할 말",
+		audience: "월드 전체",
 	},
 	ROOM: {
 		label: "방",
@@ -126,7 +135,8 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 		 * 그 방 사람들이 되어 이 채널의 청중과 정확히 겹친다.
 		 */
 		speaksInto: "PRIVATE_AREA",
-		placeholder: "같은 방 사람들에게",
+		placeholder: "할 말",
+		audience: "같은 방 모두",
 	},
 	MAFIA: {
 		label: "마피아",
@@ -139,7 +149,8 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 		 * ZEP에 "이 사람들에게만"이라는 청중은 없다.
 		 */
 		speaksInto: null,
-		placeholder: "마피아 팀에게만",
+		placeholder: "팀에게 할 말",
+		audience: "마피아 팀만",
 	},
 	GHOST: {
 		label: "유령",
@@ -149,7 +160,8 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 		revealsRole: false,
 		// 죽은 사람의 말풍선은 같은 방의 산 사람에게 보인다. 그 순간 판이 끝난다.
 		speaksInto: null,
-		placeholder: "죽은 사람들에게",
+		placeholder: "할 말",
+		audience: "죽은 사람과 영매",
 	},
 	LOVER: {
 		label: "연인",
@@ -159,7 +171,8 @@ export const CHANNEL_DEFS: Record<ChatChannel, ChannelDef> = {
 		revealsRole: false,
 		// MAFIA와 같은 이유다. 방 안에 연인 아닌 사람들이 앉아 있다.
 		speaksInto: null,
-		placeholder: "연인에게만",
+		placeholder: "연인에게 할 말",
+		audience: "연인끼리",
 	},
 };
 

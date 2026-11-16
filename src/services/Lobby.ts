@@ -44,11 +44,11 @@ import { asInt, field, messageType } from "../types/Widget.types.ts";
 import { centerLabel, forEachSpectator, label, playSoundTo } from "./Broadcast.ts";
 import { needsGuide, showBook, showGuide } from "./Cards.ts";
 import * as Chat from "./ChatService.ts";
-import { FtueEvent, trackBeforeFirstGame } from "./FtueAnalytics.ts";
+import { FtueEvent, trackBeforeFirstGame, trackDuringFirstGame } from "./FtueAnalytics.ts";
 import { countAbandon, rankOf } from "./Rewards.ts";
 import * as Screen from "./Screen.ts";
 import type { PhasePayload } from "./Widgets.ts";
-import { bindMessage, openLobby, openPhase, pushLobby, updateMain } from "./Widgets.ts";
+import { bindMessage, openBoard, openLobby, pollView, pushLobby, syncHud, updateMain } from "./Widgets.ts";
 
 /**
  * 강퇴 쿨다운. player.tag가 아니라 여기에 둔다.
@@ -381,7 +381,8 @@ function spectate(player: ScriptPlayer, room: Room): void {
  * 진행 화면 하나를 띄워두고 내용만 다시 그린다(refreshSpectators).
  */
 function openSpectateView(room: Room, player: ScriptPlayer): void {
-	bindMessage(openPhase(player, room, spectateView(room, player)), "spectate", (sender, data) => {
+	syncHud(player, room, null);
+	bindMessage(openBoard(player, room, spectateView(room, player)), "spectate", (sender, data) => {
 		switch (messageType(data)) {
 			case "spectate-quit":
 				if (!spend(tagOf(sender).actionRate, ACTION_RATE, Time.getUtcTime())) return;
@@ -399,6 +400,8 @@ function spectateView(room: Room, player: ScriptPlayer): PhasePayload {
 	const night = room.phase === GamePhase.NIGHT;
 	return {
 		type: "init",
+		mode: "status",
+		gameId: room.gameId,
 		phase: night ? "night" : "day",
 		turn: night ? room.turnCount + 1 : room.turnCount,
 		total: room.total,
@@ -418,7 +421,7 @@ function spectateView(room: Room, player: ScriptPlayer): PhasePayload {
 		 * 직업 칩 자리에 "지금 나는 무엇인가"를 넣는다. alive:false는 유령이라는
 		 * 뜻이 아니라 "이 판의 바깥"을 나타내는 회색 표시를 그대로 쓰는 것이다 —
 		 * 관전자와 유령은 화면상 똑같이 "볼 수만 있는 사람"이고, 둘을 다른 색으로
-		 * 나누려면 phase.html에 관전 전용 클래스가 하나 더 필요해진다.
+		 * 나누려면 board.html에 관전 전용 클래스가 하나 더 필요해진다.
 		 */
 		role: "관전",
 		team: Team.CITIZEN,
@@ -428,9 +431,10 @@ function spectateView(room: Room, player: ScriptPlayer): PhasePayload {
 		lead: SPECTATE_LEAD,
 		note: spectateNote(room, player.isGuest),
 		deaths: room.nightReport,
+		timeline: room.timeline,
 		spectating: true,
-		// 판 바깥에서 남의 토론 시간을 늘릴 수는 없다
-		timeVote: false,
+		// 관전자는 집계만 본다. 표시할 수는 없다
+		poll: pollView(room, null),
 	};
 }
 
@@ -470,7 +474,10 @@ function spectateNote(room: Room, guest: boolean): string {
  */
 export function refreshSpectators(room: Room): void {
 	if (room.spectators.length === 0) return;
-	forEachSpectator(room, player => updateMain(player, spectateView(room, player)));
+	forEachSpectator(room, player => {
+		updateMain(player, spectateView(room, player));
+		syncHud(player, room, null);
+	});
 }
 
 /** 관전자 목록에서만 뺀다. 화면을 어떻게 되돌릴지는 부르는 쪽이 정한다 */
@@ -623,7 +630,11 @@ export function handleDisconnect(player: ScriptPlayer): void {
 		found.seat.connected = false;
 		// 승패가 이미 난 뒤 결과 화면에서 나가는 것은 중도 이탈이 아니다.
 		// 이 시점에는 보상도 정산됐고 플레이어가 할 게임 행동도 남아 있지 않다.
-		if (found.room.phase !== GamePhase.GAME_OVER) countAbandon(player);
+		if (found.room.phase !== GamePhase.GAME_OVER) {
+			countAbandon(player);
+			// 첫 판을 끝내지 못하고 나간 사람. 퍼널에서 어디서 끊겼는지와 함께 본다
+			trackDuringFirstGame(player, FtueEvent.FIRST_GAME_DROPOUT);
+		}
 		centerLabel(found.room, `${participantLabel(found.seat)}의 접속이 끊겼습니다.`);
 		// 라벨은 3초 뒤 사라진다. 판이 끝난 뒤 "저 사람 언제 나갔지"를
 		// 되짚을 수 있으려면 기록으로도 남아야 한다.

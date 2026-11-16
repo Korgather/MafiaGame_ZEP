@@ -52,6 +52,7 @@ export function createRoom(num: number): Room {
 		rejected: [],
 		voteRound: 0,
 		nightReport: [],
+		timeline: [],
 		nightIntents: [],
 		nightReveals: [],
 		seats: [],
@@ -82,8 +83,10 @@ export function createSeat(playerId: string, name: string, rank: string): Seat {
 		praised: false,
 		votedFor: 0,
 		voteCount: 0,
+		suspect: 0,
 		judgement: Judgement.NONE,
 		timeVoteSpent: false,
+		voteLogged: false,
 		healed: false,
 		attackedBy: [],
 		armored: false,
@@ -131,8 +134,10 @@ export function assignRole(seat: Seat, index: number, role: Role): void {
 	seat.usedSkill = false;
 	seat.votedFor = 0;
 	seat.voteCount = 0;
+	seat.suspect = 0;
 	seat.judgement = Judgement.NONE;
 	seat.timeVoteSpent = false;
+	seat.voteLogged = false;
 	seat.healed = false;
 	seat.attackedBy = [];
 	seat.blocked = false;
@@ -337,7 +342,8 @@ export function resetRound(room: Room): void {
 	room.voteRound = 0;
 	// 지난밤의 지목은 남겨두면 다음 밤에 그대로 다시 적용된다
 	room.nightIntents = [];
-	// 정상 경로에서는 이미 비어 있다. 게임이 중간에 리셋된 경우를 위한 것이다
+	// 지난밤의 답은 낮 보드가 그날 내내 띄우다가(Voting.openDayView) 여기서 지운다.
+	// 남기면 밤에 화면을 다시 여는 사람이 지난밤 답을 오늘 것으로 읽는다
 	room.nightReveals = [];
 	for (const seat of room.seats) {
 		seat.usedSkill = false;
@@ -408,9 +414,10 @@ export function resetRoom(room: Room): void {
 	room.rejected = [];
 	room.voteRound = 0;
 	room.nightReport = [];
+	// 지난 판의 사건이 다음 판 재접속 요약에 섞이면 없던 일을 읽게 된다
+	room.timeline = [];
 	room.nightIntents = [];
-	// 정상 경로에서는 배달이 이미 비웠다. 사고 복구로 밤 도중에 방이 끝나면
-	// 배달 전의 답이 남는데, 그건 지난 판의 정보라 다음 판으로 넘길 것이 아니다
+	// 마지막 낮의 답이 남아 있다. 지난 판의 정보라 다음 판으로 넘길 것이 아니다
 	room.nightReveals = [];
 	room.seats = [];
 	// 관전자를 좌석으로 승격하는 것은 returnToLobby의 일이다. 여기서는 지운다 —

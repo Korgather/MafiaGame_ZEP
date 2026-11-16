@@ -58,7 +58,7 @@ describe("게임 중 난입", () => {
 
 		assert.equal(findSeatOf(watcher), undefined, "관전자에게 좌석이 생겼습니다");
 		assert.equal(room(1).spectators.length, 1);
-		assert.equal(mainWidget(watcher).fileName, WidgetFile.PHASE);
+		assert.equal(mainWidget(watcher).fileName, WidgetFile.BOARD);
 		assert.equal(watcher.disableAttack, true, "관전 중 기본 공격이 열려 있습니다");
 		assert.deepEqual(watcher.cameraShots[watcher.cameraShots.length - 1], { tileX: 30, tileY: 26 });
 	});
@@ -231,7 +231,7 @@ describe("게스트 정책", () => {
 		assert.equal(room(1).seats.length, seatCount);
 		assert.equal(findSeatOf(guest), undefined);
 		assert.equal(room(1).spectators.length, 1);
-		assert.equal(mainWidget(guest).fileName, WidgetFile.PHASE);
+		assert.equal(mainWidget(guest).fileName, WidgetFile.BOARD);
 
 		changeName(guest, "바꾼 이름");
 		assert.equal(guest.name, assigned, "게스트가 익명 이름을 벗어났습니다");

@@ -7,6 +7,7 @@
  * 방 전체(때로는 서버 전체)의 진행을 멈출 수 있었다.
  */
 import type { ScriptPlayer } from "zep-script";
+import type { RoleRecord } from "../domain/Progression.ts";
 
 /**
  * 저장소에 남는 전적. 이 파일이 읽고 쓰는 유일한 모양이다.
@@ -43,6 +44,8 @@ export interface PlayerStorage {
 	title?: string;
 	/** 장착한 유언의 id */
 	lastWord?: string;
+	/** 직업별 판 수·승수. 키는 Role id다 (Rewards.settleMatch가 쌓는다) */
+	roles?: { [role: string]: RoleRecord };
 }
 
 /** playCount가 생기기 전 전적도 기존 사용자로 판별한다. */
@@ -88,11 +91,26 @@ export function read(player: ScriptPlayer): PlayerStorage {
 				: undefined,
 			title: parsed.title,
 			lastWord: parsed.lastWord,
+			roles: readRoles(parsed.roles),
 		};
 	} catch (e) {
 		// 깨진 저장소는 초기값으로 취급한다. 한 명 때문에 게임이 멈추는 것보다 낫다.
 		return { exp: 0 };
 	}
+}
+
+/** 숫자가 아닌 줄은 버린다. 남겨 두면 프로필 정렬과 +1이 NaN을 만든다 */
+function readRoles(raw: unknown): { [role: string]: RoleRecord } | undefined {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+	const source = raw as { [role: string]: Partial<RoleRecord> | null };
+	const roles: { [role: string]: RoleRecord } = {};
+	for (const role of Object.keys(source)) {
+		const row = source[role];
+		if (row && typeof row.games === "number" && typeof row.wins === "number") {
+			roles[role] = { games: row.games, wins: row.wins };
+		}
+	}
+	return roles;
 }
 
 /**

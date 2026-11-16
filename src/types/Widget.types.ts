@@ -147,6 +147,8 @@ export interface ChatChannelView {
 	/** 미확인 메시지 수 */
 	unread: number;
 	placeholder: string;
+	/** 이 탭에 쓴 말을 읽는 사람들 (ChannelDef.audience) */
+	audience: string;
 }
 
 /**
